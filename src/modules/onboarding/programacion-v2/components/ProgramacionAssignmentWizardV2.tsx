@@ -11,7 +11,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo, useRef, lazy, Suspense, useCallback } from 'react'
-import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw, ArrowLeftRight } from 'lucide-react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw, ArrowLeftRight, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase'
 import { useAuth } from '../../../../contexts/AuthContext'
 // Lazy import para que un fallo de Google Maps no tumbe todo el wizard
@@ -71,6 +71,9 @@ interface LeadProgramacion {
  *    conductores. Listarlo en ambas sería el mismo candidato duplicado.
  */
 const ESTADOS_LEAD_FUERA_DE_PROGRAMACION = new Set(['Descartado', 'Conductor'])
+
+/** Lugar que ocupa una persona en la programacion. */
+type SlotConductor = 'cargo' | 'diurno' | 'nocturno'
 
 interface ProgramacionData {
   sede_id: string
@@ -1254,7 +1257,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
       // Cargar conductores del vehiculo antes de pasar al paso 3
       setLoadingMensaje('Cargando conductores del vehiculo...')
       setLoading(true)
-      await loadConductoresDelVehiculo(formData.vehiculo_id)
+      const idsDelVehiculo = await loadConductoresDelVehiculo(formData.vehiculo_id)
 
       // Si es devolución, auto-setear tipo de asignación y documento N/A (no genera documentos)
       if (formData.devolucion_vehiculo) {
@@ -1275,10 +1278,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           ...prev,
           tipo_asignacion_cargo: 'cambio_auto' as TipoAsignacion,
           documento_cargo: 'anexo' as TipoDocumento,
-          tipo_asignacion_diurno: prev.conductor_diurno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_diurno,
-          documento_diurno: prev.conductor_diurno_id ? 'anexo' as TipoDocumento : prev.documento_diurno,
-          tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_nocturno,
-          documento_nocturno: prev.conductor_nocturno_id ? 'anexo' as TipoDocumento : prev.documento_nocturno,
+          tipo_asignacion_diurno: prev.conductor_diurno_id && esConductorDelVehiculoOrigen(prev.conductor_diurno_id, idsDelVehiculo) ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_diurno,
+          documento_diurno: prev.conductor_diurno_id && esConductorDelVehiculoOrigen(prev.conductor_diurno_id, idsDelVehiculo) ? 'anexo' as TipoDocumento : prev.documento_diurno,
+          tipo_asignacion_nocturno: prev.conductor_nocturno_id && esConductorDelVehiculoOrigen(prev.conductor_nocturno_id, idsDelVehiculo) ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_nocturno,
+          documento_nocturno: prev.conductor_nocturno_id && esConductorDelVehiculoOrigen(prev.conductor_nocturno_id, idsDelVehiculo) ? 'anexo' as TipoDocumento : prev.documento_nocturno,
         }))
       }
 
@@ -1386,7 +1389,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
   }
 
   // Cargar conductores asignados al vehiculo seleccionado (llamado en handleNext del paso 2)
-  const loadConductoresDelVehiculo = async (vehiculoId: string) => {
+  const loadConductoresDelVehiculo = async (vehiculoId: string): Promise<string[]> => {
+    let idsDelVehiculo: string[] = []
     try {
       const { data: asignacionData } = await supabase
         .from('asignaciones')
@@ -1428,6 +1432,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           .map((c: any) => c.conductor_id)
           .filter((id: string) => id)
         setConductoresDelVehiculoActual(conductorIds)
+        idsDelVehiculo = conductorIds
 
         // Si es devolución o cambio de vehículo y la modalidad aún no fue seteada, usar la modalidad real del vehículo
         const modalidadVehiculo: 'turno' | 'a_cargo' = asigData.horario === 'todo_dia' ? 'a_cargo' : 'turno'
@@ -1539,6 +1544,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
       // Si no hay asignacion activa, limpiar lista
       setConductoresDelVehiculoActual([])
     }
+    return idsDelVehiculo
   }
 
   // Para modo A CARGO
@@ -1600,7 +1606,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         if (prev.devolucion_vehiculo) {
           updates.tipo_asignacion_diurno = 'devolucion_vehiculo'
           updates.documento_diurno = 'na'
-        } else if (prev.cambio_vehiculo) {
+        } else if (prev.cambio_vehiculo && esConductorDelVehiculoOrigen(conductorId)) {
+          // Quien se suma desde otro vehiculo no cambia de auto: queda vacio
+          // para que autoDetectarTipos le ponga los defaults de su candidato.
           updates.tipo_asignacion_diurno = 'cambio_auto'
           updates.documento_diurno = 'anexo'
         }
@@ -1641,7 +1649,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         if (prev.devolucion_vehiculo) {
           updates.tipo_asignacion_nocturno = 'devolucion_vehiculo'
           updates.documento_nocturno = 'na'
-        } else if (prev.cambio_vehiculo) {
+        } else if (prev.cambio_vehiculo && esConductorDelVehiculoOrigen(conductorId)) {
+          // Quien se suma desde otro vehiculo no cambia de auto: queda vacio
+          // para que autoDetectarTipos le ponga los defaults de su candidato.
           updates.tipo_asignacion_nocturno = 'cambio_auto'
           updates.documento_nocturno = 'anexo'
         }
@@ -1768,14 +1778,43 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     return { asignacion: 'asignacion_companero', documento: 'na' }
   }
 
+  /**
+   * En un cambio de vehículo solo cambian de auto los conductores que ya
+   * manejaban el vehículo origen. Sin asignación activa en el origen no hay
+   * contra qué comparar y se mantiene el criterio anterior: todos cambian.
+   */
+  function esConductorDelVehiculoOrigen(conductorId: string, ids: string[] = conductoresDelVehiculoActual) {
+    return ids.length === 0 || ids.includes(conductorId)
+  }
+
+  /**
+   * Cambio de vehículo: la persona del slot se suma en el paso 3 (un conductor
+   * de otro vehículo o un lead) y por lo tanto NO está haciendo cambio de auto.
+   * Sus campos se editan libremente y se muestra un aviso para revisarlos.
+   */
+  const seSumaEnCambio = (slot: SlotConductor) => {
+    if (!formData.cambio_vehiculo) return false
+    const leadId = slot === 'cargo' ? formData.lead_cargo_id : slot === 'diurno' ? formData.lead_diurno_id : formData.lead_nocturno_id
+    if (leadId) return true
+    const conductorId = slot === 'cargo' ? formData.conductor_id : slot === 'diurno' ? formData.conductor_diurno_id : formData.conductor_nocturno_id
+    return !!conductorId && !esConductorDelVehiculoOrigen(conductorId)
+  }
+
+  const avisoNoCambiaAuto = (slot: SlotConductor) => seSumaEnCambio(slot) && (
+    <p className="conductor-aviso-no-cambio">
+      <AlertTriangle size={14} />
+      Verifica los campos de este conductor ya que él no está haciendo cambio de auto
+    </p>
+  )
+
   // Obtener defaults de tipo_asignacion y documento según tipo de candidato
   /**
    * En un cambio de vehículo el tipo de asignación queda fijo en "Cambio de auto",
    * salvo que el conductor se marque como Nuevo: ahí puede ser una entrega de auto.
    * En devolución queda siempre fijo.
    */
-  const asignacionBloqueada = (tipoCandidato: TipoCandidatoV2 | '') =>
-    formData.devolucion_vehiculo || (formData.cambio_vehiculo && tipoCandidato !== 'nuevo')
+  const asignacionBloqueada = (tipoCandidato: TipoCandidatoV2 | '', slot: SlotConductor) =>
+    formData.devolucion_vehiculo || (formData.cambio_vehiculo && !seSumaEnCambio(slot) && tipoCandidato !== 'nuevo')
 
   /** Cambio de vehículo: al pasar a Nuevo sugiere Entrega de auto; al salir de Nuevo vuelve a Cambio de auto. */
   const asignacionPorCandidatoEnCambio = (tipo: TipoCandidatoV2 | ''): { asignacion: TipoAsignacion; documento: TipoDocumento } =>
@@ -1812,7 +1851,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
       if (formData.modalidad === 'a_cargo' && formData.conductor_id && !formData.tipo_candidato_cargo) {
         const tipo = await detectarTipoCandidato(formData.conductor_id)
         updates.tipo_candidato_cargo = tipo
-        if (!isDevolucionOCambio) {
+        if (!isDevolucionOCambio || seSumaEnCambio('cargo')) {
           const defaults = getDefaultsPorCandidato(tipo)
           // En modalidad A Cargo "asignacion_companero" no aplica → caer a "entrega_auto".
           updates.tipo_asignacion_cargo = defaults.asignacion === 'asignacion_companero' ? 'entrega_auto' : defaults.asignacion
@@ -1824,7 +1863,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         if (formData.conductor_diurno_id && !formData.tipo_candidato_diurno) {
           const tipo = await detectarTipoCandidato(formData.conductor_diurno_id)
           updates.tipo_candidato_diurno = tipo
-          if (!isDevolucionOCambio) {
+          if (!isDevolucionOCambio || seSumaEnCambio('diurno')) {
             const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_diurno_id, 'diurno', getDefaultsPorCandidato(tipo))
             updates.tipo_asignacion_diurno = ajustado.asignacion
             updates.documento_diurno = ajustado.documento
@@ -1834,7 +1873,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         if (formData.conductor_nocturno_id && !formData.tipo_candidato_nocturno) {
           const tipo = await detectarTipoCandidato(formData.conductor_nocturno_id)
           updates.tipo_candidato_nocturno = tipo
-          if (!isDevolucionOCambio) {
+          if (!isDevolucionOCambio || seSumaEnCambio('nocturno')) {
             const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_nocturno_id, 'nocturno', getDefaultsPorCandidato(tipo))
             updates.tipo_asignacion_nocturno = ajustado.asignacion
             updates.documento_nocturno = ajustado.documento
@@ -2604,7 +2643,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     const updates: Record<string, unknown> = { [campoTarifa]: tarifa }
 
     // Devolución y cambio de vehículo tienen su propia operación: no se tocan.
-    const operacionFija = formData.devolucion_vehiculo || formData.cambio_vehiculo
+    const operacionFija = formData.devolucion_vehiculo || (formData.cambio_vehiculo && !seSumaEnCambio(slot))
     if (!operacionFija && tarifa === 'nueva' && persona?.tieneAsignacionActiva && persona?.tieneTarifaAntiguaActiva) {
       updates[campoAsig] = 'actualizacion_carta_oferta'
       updates[campoDoc] = 'carta_oferta'
@@ -3690,6 +3729,20 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         .conductor-form-card.diurno h4 { color: #92400E; }
         .conductor-form-card.nocturno h4 { color: #1E40AF; }
         .conductor-form-card.cargo h4 { color: #065F46; }
+        .conductor-aviso-no-cambio {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: -4px 0 16px 0;
+          padding: 10px 12px;
+          border-radius: 8px;
+          border: 1px solid #FCD34D;
+          background: #FFFBEB;
+          color: #92400E;
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .conductor-aviso-no-cambio svg { flex-shrink: 0; }
         
         .conductor-form-card label {
           display: block;
@@ -3808,6 +3861,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           border-color: transparent !important;
         }
         [data-theme="dark"] .conductor-asignacion-activa {
+          color: #FCD34D;
+        }
+        [data-theme="dark"] .conductor-aviso-no-cambio {
+          background: rgba(245, 158, 11, 0.12);
+          border-color: rgba(245, 158, 11, 0.4);
           color: #FCD34D;
         }
       `}</style>
@@ -5257,6 +5315,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                   {!isTurnoMode && conductorCargo && (
                     <div className="conductor-form-card cargo">
                       <h4>{conductorCargo.nombres} {conductorCargo.apellidos}</h4>
+                      {avisoNoCambiaAuto('cargo')}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
                           <label>Tipo de Candidato *</label>
@@ -5264,10 +5323,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                             value={formData.tipo_candidato_cargo}
                             onChange={(e) => {
                               const tipo = e.target.value as TipoCandidatoV2
-                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                              if (tipo && !formData.devolucion_vehiculo && (!formData.cambio_vehiculo || seSumaEnCambio('cargo'))) {
                                 const defaults = getDefaultsPorCandidato(tipo)
-                                setFormData({ ...formData, tipo_candidato_cargo: tipo, tipo_asignacion_cargo: defaults.asignacion, documento_cargo: defaults.documento })
-                              } else if (formData.cambio_vehiculo) {
+                                setFormData({ ...formData, tipo_candidato_cargo: tipo, tipo_asignacion_cargo: defaults.asignacion === 'asignacion_companero' ? 'entrega_auto' : defaults.asignacion, documento_cargo: defaults.documento })
+                              } else if (formData.cambio_vehiculo && !seSumaEnCambio('cargo')) {
                                 const enCambio = asignacionPorCandidatoEnCambio(tipo)
                                 setFormData({ ...formData, tipo_candidato_cargo: tipo, tipo_asignacion_cargo: enCambio.asignacion, documento_cargo: enCambio.documento })
                               } else {
@@ -5287,7 +5346,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           <select
                             value={formData.tipo_asignacion_cargo}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_cargo', 'documento_cargo')}
-                            disabled={asignacionBloqueada(formData.tipo_candidato_cargo)}
+                            disabled={asignacionBloqueada(formData.tipo_candidato_cargo, 'cargo')}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
@@ -5370,6 +5429,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                   {isTurnoMode && conductorDiurno && (
                     <div className="conductor-form-card diurno">
                       <h4><Sun size={16} /> Conductor Diurno: {conductorDiurno.nombres} {conductorDiurno.apellidos}</h4>
+                      {avisoNoCambiaAuto('diurno')}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
                           <label>Tipo de Candidato *</label>
@@ -5377,10 +5437,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                             value={formData.tipo_candidato_diurno}
                             onChange={(e) => {
                               const tipo = e.target.value as TipoCandidatoV2
-                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                              if (tipo && !formData.devolucion_vehiculo && (!formData.cambio_vehiculo || seSumaEnCambio('diurno'))) {
                                 const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_diurno_id, 'diurno', getDefaultsPorCandidato(tipo))
                                 setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: ajustado.asignacion, documento_diurno: ajustado.documento })
-                              } else if (formData.cambio_vehiculo) {
+                              } else if (formData.cambio_vehiculo && !seSumaEnCambio('diurno')) {
                                 const enCambio = asignacionPorCandidatoEnCambio(tipo)
                                 setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: enCambio.asignacion, documento_diurno: enCambio.documento })
                               } else {
@@ -5400,7 +5460,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           <select
                             value={formData.tipo_asignacion_diurno}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_diurno', 'documento_diurno')}
-                            disabled={asignacionBloqueada(formData.tipo_candidato_diurno)}
+                            disabled={asignacionBloqueada(formData.tipo_candidato_diurno, 'diurno')}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
@@ -5485,6 +5545,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                   {isTurnoMode && conductorNocturno && (
                     <div className="conductor-form-card nocturno">
                       <h4><Moon size={16} /> Conductor Nocturno: {conductorNocturno.nombres} {conductorNocturno.apellidos}</h4>
+                      {avisoNoCambiaAuto('nocturno')}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
                           <label>Tipo de Candidato *</label>
@@ -5492,10 +5553,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                             value={formData.tipo_candidato_nocturno}
                             onChange={(e) => {
                               const tipo = e.target.value as TipoCandidatoV2
-                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                              if (tipo && !formData.devolucion_vehiculo && (!formData.cambio_vehiculo || seSumaEnCambio('nocturno'))) {
                                 const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_nocturno_id, 'nocturno', getDefaultsPorCandidato(tipo))
                                 setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: ajustado.asignacion, documento_nocturno: ajustado.documento })
-                              } else if (formData.cambio_vehiculo) {
+                              } else if (formData.cambio_vehiculo && !seSumaEnCambio('nocturno')) {
                                 const enCambio = asignacionPorCandidatoEnCambio(tipo)
                                 setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: enCambio.asignacion, documento_nocturno: enCambio.documento })
                               } else {
@@ -5518,7 +5579,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               const val = e.target.value as TipoAsignacion
                               setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
                             }}
-                            disabled={asignacionBloqueada(formData.tipo_candidato_nocturno)}
+                            disabled={asignacionBloqueada(formData.tipo_candidato_nocturno, 'nocturno')}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
