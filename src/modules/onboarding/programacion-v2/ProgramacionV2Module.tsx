@@ -2670,6 +2670,7 @@ export function ProgramacionV2Module() {
                   <option value="listo_cabify">Listo Cabify</option>
                   <option value="asignar_auto">Asignar Auto</option>
                   <option value="crear_cuenta">Crear Cuenta</option>
+                  <option value="confirmacion_didi">Confirmación DIDI</option>
                 </select>
               </div>
               <div className="prog-cabify-row">
@@ -2684,6 +2685,7 @@ export function ProgramacionV2Module() {
                   <option value="listo_cabify">Listo Cabify</option>
                   <option value="asignar_auto">Asignar Auto</option>
                   <option value="crear_cuenta">Crear Cuenta</option>
+                  <option value="confirmacion_didi">Confirmación DIDI</option>
                 </select>
               </div>
             </div>
@@ -2702,6 +2704,7 @@ export function ProgramacionV2Module() {
             <option value="listo_cabify">Listo Cabify</option>
             <option value="asignar_auto">Asignar Auto</option>
             <option value="crear_cuenta">Crear Cuenta</option>
+            <option value="confirmacion_didi">Confirmación DIDI</option>
           </select>
         )
       }
