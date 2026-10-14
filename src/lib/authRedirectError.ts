@@ -15,6 +15,12 @@ const CLAVE = 'toshify_auth_error'
 export const MENSAJE_CUENTA_INEXISTENTE =
   'Esa cuenta no existe en Toshify. Pedile a un administrador que te cree el usuario.'
 
+export const MENSAJE_ENLACE_VENCIDO =
+  'El enlace del correo expiró o ya fue usado. Pedile a un administrador que te lo reenvíe, o usá "¿Olvidaste tu contraseña?".'
+
+export const MENSAJE_USUARIO_INACTIVO =
+  'Tu usuario está desactivado. Si creés que es un error, contactá a un administrador.'
+
 export function guardarErrorAuth(mensaje: string): void {
   try {
     sessionStorage.setItem(CLAVE, mensaje)
@@ -45,11 +51,17 @@ function capturarErrorDeUrl(): void {
     const codigo = query.get('error_code') || hash.get('error_code') || ''
     // GoTrue con DISABLE_SIGNUP: "Signups not allowed for this instance" / error_code signup_disabled
     const sinCuenta = /signup|sign up|not allowed/i.test(`${descripcion} ${codigo}`)
+    // Enlace del correo de invitacion / restablecer contraseña vencido o ya usado
+    const enlaceVencido = /otp_expired|link is invalid|expired/i.test(`${descripcion} ${codigo}`)
 
     guardarErrorAuth(
       sinCuenta
         ? MENSAJE_CUENTA_INEXISTENTE
-        : `No se pudo iniciar sesión con Google${descripcion ? `: ${descripcion}` : '.'}`
+        : /banned/i.test(descripcion)
+          ? MENSAJE_USUARIO_INACTIVO
+          : enlaceVencido
+          ? MENSAJE_ENLACE_VENCIDO
+          : `No se pudo iniciar sesión con Google${descripcion ? `: ${descripcion}` : '.'}`
     )
 
     // Limpiar la URL para que el error no se repita al recargar.
