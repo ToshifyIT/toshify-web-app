@@ -599,6 +599,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="No tiene">No tiene</option>
                   <option value="en revision">en revision</option>
                   <option value="Verificar Activa">Verificar Activa</option>
+                  <option value="Cuenta de DIDI activa">Cuenta de DIDI activa</option>
                 </select>
               </div>
             </div>
