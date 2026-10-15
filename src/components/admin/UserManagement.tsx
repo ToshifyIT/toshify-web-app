@@ -6,7 +6,7 @@ import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Users, UserCheck, UserX, Shield, KeyRound, Mail, Pencil, ToggleLeft, ToggleRight, Building2 } from 'lucide-react'
+import { Users, UserCheck, UserX, Shield, KeyRound, Mail, Pencil, ToggleLeft, ToggleRight, Building2, Trash2 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { validarEmail } from '../../utils/validacionesCampos'
@@ -351,6 +351,39 @@ export function UserManagement() {
 
   // Reenviar invitacion (si nunca activo la cuenta) o enlace para restablecer la contraseña.
   // El usuario define su clave desde el correo: el admin no la ve ni la escribe.
+  // Eliminar de verdad (Auth + perfil). El servidor lo rechaza si el usuario
+  // tiene registros a su nombre: en ese caso corresponde desactivarlo.
+  const eliminarUsuario = async (user: UserWithRole) => {
+    const userName = (user.full_name || user.email || 'Usuario') as string
+
+    const confirmacion = await Swal.fire({
+      icon: 'warning',
+      title: 'Eliminar usuario',
+      html: `Se eliminará <strong>${escaparHtml(userName)}</strong>${user.email ? ` (${escaparHtml(user.email as string)})` : ''} junto con sus permisos.<br><br>Esta acción no se puede deshacer.`,
+      showCancelButton: true,
+      confirmButtonText: 'Eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      reverseButtons: true,
+      focusCancel: true,
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading(),
+      preConfirm: async () => {
+        try {
+          await llamarApiUsuarios('delete', { userId: user.id })
+          return true
+        } catch (err: unknown) {
+          Swal.showValidationMessage(err instanceof Error ? err.message : String(err))
+          return false
+        }
+      },
+    })
+    if (!confirmacion.isConfirmed) return
+
+    await loadData()
+    showSuccess('Usuario eliminado', `${userName} fue eliminado correctamente`)
+  }
+
   const enviarAcceso = async (user: UserWithRole) => {
     const userName = (user.full_name || user.email || 'Usuario') as string
     const email = user.email as string | null
@@ -517,6 +550,14 @@ export function UserManagement() {
                 data-tooltip={esUsuarioActual ? 'No podés desactivar tu propio usuario' : isActive ? 'Desactivar' : 'Activar'}
               >
                 {isActive ? <ToggleRight size={17} /> : <ToggleLeft size={17} />}
+              </button>
+              <button
+                className="dt-btn-action dt-btn-delete"
+                onClick={() => eliminarUsuario(row.original)}
+                disabled={esUsuarioActual}
+                data-tooltip={esUsuarioActual ? 'No podés eliminar tu propio usuario' : 'Eliminar'}
+              >
+                <Trash2 size={15} />
               </button>
             </div>
           )
