@@ -1050,6 +1050,101 @@ app.post('/api/admin/users/set-active', async (req, res) => {
   }
 })
 
+/**
+ * Tablas que guardan al usuario como autor o responsable y NO se borran con el.
+ * Algunas bloquean el borrado en la BD y otras perderian el dato (SET NULL):
+ * en ambos casos se pide desactivarlo, para no perder la trazabilidad.
+ * Perfil, permisos y sesiones se borran solos en cascada desde auth.users.
+ */
+const REFERENCIAS_USUARIO = [
+  { tabla: 'programaciones_onboarding', columna: 'created_by', etiqueta: 'Programaciones' },
+  { tabla: 'programaciones_onboarding', columna: 'especialista_id', etiqueta: 'Programaciones (especialista)' },
+  { tabla: 'asignaciones', columna: 'created_by', etiqueta: 'Asignaciones' },
+  { tabla: 'devoluciones', columna: 'created_by', etiqueta: 'Devoluciones' },
+  { tabla: 'garantias_conductores', columna: 'created_by', etiqueta: 'Garantías' },
+  { tabla: 'abonos_conductores', columna: 'created_by', etiqueta: 'Abonos' },
+  { tabla: 'tickets_favor', columna: 'created_by', etiqueta: 'Tickets a favor' },
+  { tabla: 'siniestros_seguimientos', columna: 'created_by', etiqueta: 'Seguimientos de siniestros' },
+  { tabla: 'penalidades_rechazos', columna: 'created_by', etiqueta: 'Penalidades' },
+  { tabla: 'penalidades_rechazos', columna: 'updated_by', etiqueta: 'Penalidades' },
+  { tabla: 'penalidades_rechazos', columna: 'rechazado_por', etiqueta: 'Penalidades' },
+  { tabla: 'visitas', columna: 'citador_id', etiqueta: 'Visitas' },
+  { tabla: 'visitas_atendedores', columna: 'user_id', etiqueta: 'Visitas (atendedor)' },
+  { tabla: 'titulares', columna: 'updated_by', etiqueta: 'Titulares' },
+  { tabla: 'ofertas_locacion', columna: 'updated_by', etiqueta: 'Ofertas de locación' },
+  { tabla: 'periodos_facturacion', columna: 'created_by', etiqueta: 'Períodos de facturación' },
+  { tabla: 'periodos_facturacion', columna: 'cerrado_por', etiqueta: 'Períodos de facturación' },
+  { tabla: 'movimientos', columna: 'usuario_id', etiqueta: 'Movimientos de inventario' },
+  { tabla: 'movimientos', columna: 'usuario_aprobador_id', etiqueta: 'Movimientos de inventario' },
+  { tabla: 'pedidos_inventario', columna: 'usuario_registro_id', etiqueta: 'Pedidos de inventario' },
+  { tabla: 'productos', columna: 'created_by', etiqueta: 'Productos' },
+  { tabla: 'categorias', columna: 'created_by', etiqueta: 'Categorías' },
+  { tabla: 'proveedores', columna: 'created_by', etiqueta: 'Proveedores' },
+  { tabla: 'productos_proveedores', columna: 'created_by', etiqueta: 'Productos de proveedores' },
+  { tabla: 'zonas_peligrosas', columna: 'created_by', etiqueta: 'Zonas peligrosas' },
+  { tabla: 'hellosign_envios', columna: 'enviado_por', etiqueta: 'Envíos HelloSign' },
+  { tabla: 'user_menu_permissions', columna: 'created_by', etiqueta: 'Permisos otorgados' },
+  { tabla: 'user_submenu_permissions', columna: 'created_by', etiqueta: 'Permisos otorgados' },
+]
+
+// Eliminar usuario: solo si no tiene registros a su nombre (si los tiene, se desactiva)
+app.post('/api/admin/users/delete', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg, adminId } = ctx
+    const { userId } = req.body || {}
+    if (!UUID_RE.test(String(userId || ''))) {
+      return res.status(400).json({ error: 'Parametros invalidos' })
+    }
+    if (userId === adminId) {
+      return res.status(400).json({ error: 'No podes eliminar tu propio usuario' })
+    }
+
+    const usos = await Promise.all(REFERENCIAS_USUARIO.map(async ({ tabla, columna, etiqueta }) => {
+      const r = await fetch(
+        `${cfg.url}/rest/v1/${tabla}?${columna}=eq.${userId}&select=${columna}&limit=1`,
+        { headers: cfg.headers }
+      )
+      if (!r.ok) throw new Error(`No se pudo verificar ${tabla}.${columna}: HTTP ${r.status}`)
+      const filas = await r.json()
+      return filas.length > 0 ? etiqueta : null
+    }))
+    const conRegistros = [...new Set(usos.filter(Boolean))]
+    if (conRegistros.length > 0) {
+      return res.status(409).json({
+        error: `El usuario tiene registros a su nombre (${conRegistros.join(', ')}). Desactivalo en lugar de eliminarlo.`,
+        registros: conRegistros,
+      })
+    }
+
+    // Borrar en Auth arrastra en cascada el perfil, los permisos y las sesiones.
+    const delRes = await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: cfg.headers,
+    })
+    if (delRes.status === 404) {
+      // Perfil sin usuario de Auth (quedo huerfano): se borra directo.
+      const profRes = await fetch(`${cfg.url}/rest/v1/user_profiles?id=eq.${userId}`, {
+        method: 'DELETE',
+        headers: { ...cfg.headers, Prefer: 'return=minimal' },
+      })
+      if (!profRes.ok) {
+        return res.status(409).json({ error: 'No se pudo eliminar el perfil: tiene registros asociados. Desactivalo en lugar de eliminarlo.' })
+      }
+    } else if (!delRes.ok) {
+      const detalle = await leerErrorGotrue(delRes)
+      console.error('[usuarios] delete auth:', detalle)
+      return res.status(409).json({ error: 'No se pudo eliminar: el usuario tiene registros asociados. Desactivalo en lugar de eliminarlo.' })
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('[usuarios] delete:', error)
+    res.status(500).json({ error: 'Error interno al eliminar el usuario' })
+  }
+})
+
 // =====================================================
 // CONTRACT GENERATION
 // =====================================================
