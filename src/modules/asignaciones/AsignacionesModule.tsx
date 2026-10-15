@@ -19,6 +19,8 @@ import { tieneGncEnFecha, armarMapaGncHistorial, type GncHistorialEntry } from '
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type ModalidadTarifa } from '../onboarding/tarifaConceptos'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import { completeControl } from '../../services/controlService'
+import { generateContracts, type ContractGenerationRequest } from '../../services/contractService'
+import { avisarDatosIncompletos, avisarTarifasFaltantes, esBarilocheTurno, validarDatosDocumento, validarTarifasDocumento } from '../onboarding/validacionDocumento'
 import {
   ErrorPasoConfirmacion,
   exigirOk,
@@ -181,6 +183,11 @@ function ultimoConductorPorFecha(arr: any[]): any {
  */
 const INICIO_REGISTRO_DOCUMENTOS = '2026-04-20'
 
+/** Bariloche en turno no tiene plantillas: ahí nunca se genera documento. */
+function noGeneraDocumento(a: any): boolean {
+  return esBarilocheTurno(a?.sede_id, a?.horario === 'todo_dia' ? 'a_cargo' : 'turno')
+}
+
 /**
  * El conductor no tiene el documento (carta oferta / anexo) de la programación
  * que originó esta asignación. Que tenga carpeta en Drive no alcanza: la
@@ -188,6 +195,7 @@ const INICIO_REGISTRO_DOCUMENTOS = '2026-04-20'
  * haberse generado. Sin programación vinculada no hay contra qué comparar.
  */
 function conductorSinDocumento(a: any, conductorId: string | null | undefined): boolean {
+  if (noGeneraDocumento(a)) return false
   const conDocumento: string[] | null = a?._conductoresConDocumento ?? null
   if (!conDocumento || !conductorId) return false
   if (String(a.created_at || '') < INICIO_REGISTRO_DOCUMENTOS) return false
@@ -1239,12 +1247,156 @@ export function AsignacionesModule() {
    *    se puede hacer a medias.
    */
   const asignacionSinCarpeta = (a: any): boolean => {
-    if (!a || a.estado === 'cancelada') return false
+    if (!a || a.estado === 'cancelada' || noGeneraDocumento(a)) return false
     const ocupantes = a.asignaciones_conductores || []
     return ocupantes.some((ac: any) => {
       if (!ac?.conductor_id) return false
       if (ac.documento === 'NA' || ac.documento === 'N/A') return false
       return !(ac.conductores as any)?.drive_contract_folder_url || conductorSinDocumento(a, ac.conductor_id)
+    })
+  }
+
+  /**
+   * Vuelve a generar el documento (carta oferta / anexo) de UN conductor cuya
+   * generación falló al enviar la programación a entrega. Usa los mismos datos
+   * de la programación que dio origen a la asignación y el mismo endpoint que
+   * Programación, así que el documento sale igual que si no hubiera fallado.
+   */
+  const regenerarDocumento = async (asig: any, conductorId: string) => {
+    const { data: prog, error: progError } = await (supabase.from('programaciones_onboarding') as any)
+      .select('id, modalidad, conductor_id, conductor_diurno_id, conductor_nocturno_id, tipo_documento, documento_diurno, documento_nocturno, tipo_tarifa, tipo_tarifa_diurno, tipo_tarifa_nocturno, tipo_asignacion, tipo_asignacion_diurno, tipo_asignacion_nocturno, vehiculo_entregar_id, vehiculo_cambio_id, sede_id, propietario')
+      .eq('asignacion_id', asig.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (progError || !prog) {
+      Swal.fire('Sin programación', 'No se encontró la programación de esta asignación, no se puede generar el documento desde acá.', 'warning')
+      return
+    }
+
+    const slot: 'cargo' | 'diurno' | 'nocturno' | null =
+      prog.modalidad === 'a_cargo' && prog.conductor_id === conductorId ? 'cargo'
+        : prog.conductor_diurno_id === conductorId ? 'diurno'
+          : prog.conductor_nocturno_id === conductorId ? 'nocturno'
+            : null
+    const documento = slot === 'cargo' ? prog.tipo_documento : slot === 'diurno' ? prog.documento_diurno : slot === 'nocturno' ? prog.documento_nocturno : null
+    if (!slot || !documento || documento === 'na') {
+      Swal.fire('No corresponde', 'Según la programación, este conductor no lleva documento o ya no forma parte de ella.', 'warning')
+      return
+    }
+
+    if (esBarilocheTurno(prog.sede_id || asig.sede_id, prog.modalidad)) {
+      Swal.fire('No corresponde', 'En Bariloche no se generan documentos para la modalidad turno.', 'info')
+      return
+    }
+
+    // Mismas validaciones que Programación antes de generar: sin esto el
+    // documento puede salir con campos en blanco o sin importe.
+    const tarifaSlot = (slot === 'cargo' ? prog.tipo_tarifa
+      : slot === 'diurno' ? (prog.tipo_tarifa_diurno || prog.tipo_tarifa)
+        : (prog.tipo_tarifa_nocturno || prog.tipo_tarifa)) || 'antigua'
+    const etiquetaSlot = slot === 'cargo' ? 'Conductor' : slot === 'diurno' ? 'Conductor Diurno' : 'Conductor Nocturno'
+    const vehiculoDocumentoId = prog.vehiculo_entregar_id || asig.vehiculo_id
+
+    Swal.fire({
+      title: 'Validando datos',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => { Swal.showLoading() },
+    })
+    const validacion = await validarDatosDocumento({
+      vehiculoId: vehiculoDocumentoId,
+      usaTarifaNueva: tarifaSlot === 'nueva',
+      conductores: [{ id: conductorId, label: etiquetaSlot }],
+    })
+    if (validacion.camposFaltantes.length > 0) {
+      await avisarDatosIncompletos(
+        validacion.camposFaltantes,
+        'generar el documento',
+        'Complete estos datos en el módulo correspondiente (Vehículos o Conductores) y vuelva a intentar.',
+      )
+      return
+    }
+    const tarifasFaltantes = await validarTarifasDocumento(
+      [{ modalidad: slot, tarifa: tarifaSlot, label: etiquetaSlot }],
+      validacion.vehiculoTieneGnc,
+    )
+    if (tarifasFaltantes.length > 0) {
+      await avisarTarifasFaltantes(
+        tarifasFaltantes,
+        'generar el documento',
+        'Cargue el importe en Facturación → Conceptos y vuelva a intentar.',
+      )
+      return
+    }
+
+    // Solo el turno de este conductor: el compañero (si tiene su documento) no se duplica.
+    const params: ContractGenerationRequest = {
+      conductor_id: slot === 'cargo' ? conductorId : null,
+      conductor_diurno_id: slot === 'diurno' ? conductorId : null,
+      conductor_nocturno_id: slot === 'nocturno' ? conductorId : null,
+      vehiculo_id: vehiculoDocumentoId,
+      tipo_documento: slot === 'cargo' ? documento : null,
+      documento_diurno: slot === 'diurno' ? documento : null,
+      documento_nocturno: slot === 'nocturno' ? documento : null,
+      tipo_tarifa: slot === 'cargo' ? tarifaSlot : null,
+      tipo_tarifa_diurno: slot === 'diurno' ? tarifaSlot : null,
+      tipo_tarifa_nocturno: slot === 'nocturno' ? tarifaSlot : null,
+      tipo_asignacion: prog.tipo_asignacion || null,
+      tipo_asignacion_diurno: prog.tipo_asignacion_diurno || prog.tipo_asignacion || null,
+      tipo_asignacion_nocturno: prog.tipo_asignacion_nocturno || prog.tipo_asignacion || null,
+      vehiculo_devuelto_id: prog.vehiculo_cambio_id || null,
+      modalidad: slot === 'cargo' ? 'a_cargo' : 'turno',
+      sede_id: prog.sede_id || asig.sede_id || sedeActualId || null,
+      programacion_id: prog.id,
+      propietario: prog.propietario || null,
+      created_by: profile?.id || null,
+      created_by_name: profile?.full_name || 'Sistema',
+    }
+
+    // Cerrar o recargar a mitad de camino deja el documento a medio armar en Drive.
+    const avisarAntesDeSalir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', avisarAntesDeSalir)
+    Swal.fire({
+      title: 'Generando documento',
+      html: '<b>No cierre la ventana</b>, se está generando el documento.<br><span style="font-size:13px;color:#6B7280">Puede tardar hasta un minuto.</span>',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => { Swal.showLoading() },
+    })
+
+    let resultado: Awaited<ReturnType<typeof generateContracts>>
+    try {
+      resultado = await generateContracts(params)
+    } finally {
+      window.removeEventListener('beforeunload', avisarAntesDeSalir)
+    }
+
+    const doc = resultado.documents.find(d => d.conductor_id === conductorId)
+    if (!resultado.success || !doc) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo generar el documento',
+        text: resultado.error || 'El servidor no devolvió el documento. Intentá de nuevo en unos minutos.',
+      })
+      return
+    }
+
+    // Se refleja en el modal abierto sin esperar la recarga del listado.
+    setViewDriveUrls(prev => ({ ...prev, [conductorId]: doc.folderUrl }))
+    setViewAsignacion(prev => prev && prev.id === asig.id ? {
+      ...prev,
+      _conductoresConDocumento: [...((prev as any)._conductoresConDocumento || []), conductorId],
+    } as any : prev)
+    loadAsignaciones()
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Documento generado',
+      html: `<a href="${doc.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a>`,
+      confirmButtonText: 'Entendido',
     })
   }
 
@@ -4243,7 +4395,10 @@ export function AsignacionesModule() {
                           const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_contract_folder_url
                           // Tiene carpeta (de una programación anterior) pero no el documento de esta
                           const sinDocumento = !!driveUrl && conductorSinDocumento(viewAsignacion, ac.conductor_id)
+                          const puedeRegenerar = canEdit && !!ac.conductor_id && !noGeneraDocumento(viewAsignacion)
+                            && (viewAsignacion.estado === 'programado' || viewAsignacion.estado === 'activa')
                           const showDrive = ac.documento !== 'NA' && ac.documento !== 'N/A'
+                            && (!!driveUrl || !noGeneraDocumento(viewAsignacion))
                           return (
                           <div key={ac.id} className="asig-conductor-card" style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
                             {/* Datos del conductor */}
@@ -4350,6 +4505,15 @@ export function AsignacionesModule() {
                                     >
                                       No se generó el documento, por favor volver a generar la programación
                                     </span>
+                                    {puedeRegenerar && (
+                                      <button
+                                        type="button"
+                                        onClick={() => regenerarDocumento(viewAsignacion, ac.conductor_id)}
+                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                      >
+                                        Generar documento
+                                      </button>
+                                    )}
                                     <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text-tertiary)', textDecoration: 'none' }}>
                                       Abrir carpeta
                                     </a>
@@ -4383,6 +4547,15 @@ export function AsignacionesModule() {
                                     >
                                       No se generó el documento, por favor volver a generar la programación
                                     </span>
+                                    {puedeRegenerar && (
+                                      <button
+                                        type="button"
+                                        onClick={() => regenerarDocumento(viewAsignacion, ac.conductor_id)}
+                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                      >
+                                        Generar documento
+                                      </button>
+                                    )}
                                   </>
                                 )}
                               </div>

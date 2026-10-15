@@ -42,7 +42,8 @@ import { ProgramacionAssignmentWizardV2 } from './components/ProgramacionAssignm
 import type { PrecargaParMapa } from '../../../types/programacionPrecarga.types'
 import { tomarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../../types/onboarding.types'
-import { cargarConceptosTarifa, getEtiquetaTarifa, validarPreciosSemanales, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
+import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
+import { avisarDatosIncompletos, avisarTarifasFaltantes, esBarilocheTurno, validarDatosDocumento, validarTarifasDocumento, type ConductorAValidar } from '../validacionDocumento'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import { generateContracts } from '../../../services/contractService'
@@ -192,14 +193,6 @@ const tipoCandidatoAGuardar = (
 
 const SEDE_BUENOS_AIRES_ID = '80587298-b799-4a98-87a9-2f74890da443'
 
-/**
- * Número de póliza válido para la plantilla OCT-26: solo dígitos (admite espacios,
- * guiones, puntos y barras). Mismo criterio que esNumeroPoliza de server.js.
- * Hay vehículos con el nombre de la aseguradora ("Sancor") cargado en este campo.
- */
-function esNumeroPoliza(valor: string): boolean {
-  return /^[\d\s\-./]+$/.test(valor) && /\d/.test(valor)
-}
 const KAREN_ATENDEDOR_ID = '503e3df5-5d5e-4c27-b90c-93128a670673'
 
 // Resuelve un atendedor activo desde la tabla visitas_atendedores.
@@ -1711,8 +1704,6 @@ export function ProgramacionV2Module() {
     // Antes de crear la asignación, verificar que los datos necesarios para
     // las plantillas de contrato estén completos en la base de datos.
     {
-      const camposFaltantes: string[] = []
-
       // Documento con tarifa nueva (OCT-26): usa la plantilla Toshipass, que
       // imprime los datos de la póliza, así que esos datos pasan a ser obligatorios.
       const generaDoc = (doc?: string | null) => !!doc && doc !== 'na'
@@ -1723,87 +1714,24 @@ export function ProgramacionV2Module() {
           || (generaDoc(prog.documento_nocturno)
             && (tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa) === 'nueva')
 
-      // 1) Validar vehículo
-      if (prog.vehiculo_entregar_id) {
-        const { data: veh } = await supabase
-          .from('vehiculos')
-          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular, cobertura, gnc, seguro_numero, seguro_vigencia')
-          .eq('id', prog.vehiculo_entregar_id)
-          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null; cobertura: string | null; gnc: boolean | null; seguro_numero: string | null; seguro_vigencia: string | null } | null }
+      const conductoresAValidar: ConductorAValidar[] = []
+      if (prog.conductor_id) conductoresAValidar.push({ id: prog.conductor_id, label: 'Conductor' })
+      if (prog.conductor_diurno_id) conductoresAValidar.push({ id: prog.conductor_diurno_id, label: 'Conductor Diurno' })
+      if (prog.conductor_nocturno_id) conductoresAValidar.push({ id: prog.conductor_nocturno_id, label: 'Conductor Nocturno' })
 
-        if (veh) {
-          vehiculoTieneGnc = veh.gnc === true
-          if (!veh.numero_motor?.trim()) camposFaltantes.push('Vehículo → Número de Motor')
-          if (!veh.numero_chasis?.trim()) camposFaltantes.push('Vehículo → Número de Chasis')
-          if (!veh.marca?.trim()) camposFaltantes.push('Vehículo → Marca')
-          if (!veh.modelo?.trim()) camposFaltantes.push('Vehículo → Modelo')
-          if (!veh.anio) camposFaltantes.push('Vehículo → Año')
-          if (!veh.color?.trim()) camposFaltantes.push('Vehículo → Color')
-          if (!veh.titular?.trim()) camposFaltantes.push('Vehículo → Titular')
-          if (!veh.cobertura?.trim()) camposFaltantes.push('Vehículo → Cobertura')
-          if (usaTarifaNueva) {
-            const poliza = (veh.seguro_numero || '').trim()
-            if (!poliza) {
-              camposFaltantes.push('Vehículo → Número de Póliza')
-            } else if (!esNumeroPoliza(poliza)) {
-              camposFaltantes.push(`Vehículo → Número de Póliza: "${poliza}" no es un número, revisarlo`)
-            }
-            if (!veh.seguro_vigencia) camposFaltantes.push('Vehículo → Vigencia Seguro')
-          }
-        }
-      }
+      const validacion = await validarDatosDocumento({
+        vehiculoId: prog.vehiculo_entregar_id,
+        usaTarifaNueva,
+        conductores: conductoresAValidar,
+      })
+      vehiculoTieneGnc = validacion.vehiculoTieneGnc
 
-      // 2) Validar conductor(es)
-      const conductorIds: { id: string; label: string }[] = []
-      if (prog.conductor_id) {
-        conductorIds.push({ id: prog.conductor_id, label: 'Conductor' })
-      }
-      if (prog.conductor_diurno_id) {
-        conductorIds.push({ id: prog.conductor_diurno_id, label: 'Conductor Diurno' })
-      }
-      if (prog.conductor_nocturno_id) {
-        conductorIds.push({ id: prog.conductor_nocturno_id, label: 'Conductor Nocturno' })
-      }
-
-      for (const { id, label } of conductorIds) {
-        const { data: cond } = await supabase
-          .from('conductores')
-          .select('numero_dni, fecha_nacimiento, direccion, email, telefono_contacto, nacionalidad_id, estado_civil_id')
-          .eq('id', id)
-          .single() as { data: { numero_dni: string | null; fecha_nacimiento: string | null; direccion: string | null; email: string | null; telefono_contacto: string | null; nacionalidad_id: string | null; estado_civil_id: string | null } | null }
-
-        if (cond) {
-          if (!cond.numero_dni?.trim()) camposFaltantes.push(`${label} → DNI`)
-          if (!cond.fecha_nacimiento) camposFaltantes.push(`${label} → Fecha de Nacimiento`)
-          if (!cond.direccion?.trim()) camposFaltantes.push(`${label} → Dirección`)
-          if (!cond.email?.trim()) camposFaltantes.push(`${label} → Email`)
-          if (!cond.telefono_contacto?.trim()) camposFaltantes.push(`${label} → Teléfono`)
-          if (!cond.nacionalidad_id) camposFaltantes.push(`${label} → Nacionalidad`)
-          if (!cond.estado_civil_id) camposFaltantes.push(`${label} → Estado Civil`)
-        }
-      }
-
-      if (camposFaltantes.length > 0) {
-        await Swal.fire({
-          title: 'Datos obligatorios incompletos',
-          html: `
-            <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
-              <p style="margin-bottom: 10px; color: #6B7280;">
-                No se puede enviar la programación porque faltan los siguientes datos obligatorios:
-              </p>
-              <ul style="list-style: none; padding: 0; margin: 0;">
-                ${camposFaltantes.map(c => `<li style="padding: 4px 0; border-bottom: 1px solid #f3f4f6;">&#x2022; <strong>${c}</strong></li>`).join('')}
-              </ul>
-              <p style="margin-top: 12px; color: #9CA3AF; font-size: 12px;">
-                Complete estos datos en el módulo correspondiente (Vehículos o Conductores) antes de enviar, para generar el documento Carta Oferta.
-              </p>
-            </div>
-          `,
-          icon: 'warning',
-          confirmButtonText: 'Entendido',
-          confirmButtonColor: '#F59E0B',
-          width: 480,
-        })
+      if (validacion.camposFaltantes.length > 0) {
+        await avisarDatosIncompletos(
+          validacion.camposFaltantes,
+          'enviar la programación',
+          'Complete estos datos en el módulo correspondiente (Vehículos o Conductores) antes de enviar, para generar el documento Carta Oferta.',
+        )
         return
       }
     }
@@ -1881,11 +1809,9 @@ export function ProgramacionV2Module() {
     // Bariloche no tiene plantillas para turnos, se excluye de la generación.
     // Se resuelve acá (y no al momento de generar) porque la validación de
     // tarifas de más abajo depende de esto.
-    const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
     const sedeDelProg = prog.sede_id || sedeActualId || sedeUsuario?.id || null
-    const esBarilocheTurno = sedeDelProg === SEDE_BARILOCHE_ID && prog.modalidad === 'turno'
 
-    const needsDocGeneration = esBarilocheTurno ? false : (
+    const needsDocGeneration = esBarilocheTurno(sedeDelProg, prog.modalidad) ? false : (
       prog.modalidad === 'a_cargo'
         ? (prog.tipo_documento && prog.tipo_documento !== 'na')
         : ((prog.documento_diurno && prog.documento_diurno !== 'na') ||
@@ -1926,29 +1852,14 @@ export function ProgramacionV2Module() {
         }
       }
 
-      const tarifasFaltantes = await validarPreciosSemanales(tarifasRequeridas, vehiculoTieneGnc)
+      const tarifasFaltantes = await validarTarifasDocumento(tarifasRequeridas, vehiculoTieneGnc)
 
       if (tarifasFaltantes.length > 0) {
-        await Swal.fire({
-          title: 'Tarifa sin precio cargado',
-          html: `
-            <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
-              <p style="margin-bottom: 10px; color: #6B7280;">
-                No se puede enviar la programación porque el documento no podría expresar el importe:
-              </p>
-              <ul style="list-style: none; padding: 0; margin: 0;">
-                ${tarifasFaltantes.map(c => `<li style="padding: 4px 0; border-bottom: 1px solid #f3f4f6;">&#x2022; <strong>${c}</strong></li>`).join('')}
-              </ul>
-              <p style="margin-top: 12px; color: #9CA3AF; font-size: 12px;">
-                Cargue el importe en Facturación → Conceptos antes de enviar.
-              </p>
-            </div>
-          `,
-          icon: 'warning',
-          confirmButtonText: 'Entendido',
-          confirmButtonColor: '#F59E0B',
-          width: 480,
-        })
+        await avisarTarifasFaltantes(
+          tarifasFaltantes,
+          'enviar la programación',
+          'Cargue el importe en Facturación → Conceptos antes de enviar.',
+        )
         return
       }
     }
