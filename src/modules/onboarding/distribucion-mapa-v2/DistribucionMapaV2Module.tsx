@@ -696,6 +696,55 @@ export function DistribucionMapaV2Module() {
     visiblesRef.current = visibles
   }, [visibles])
 
+  // ---------- Compañero actual ----------
+
+  /**
+   * Compañero actual de la persona seleccionada: el conductor del turno
+   * complementario de su asignación activa. Se busca entre TODOS los
+   * conductores cargados, no sólo los visibles: un filtro (p. ej. Turno =
+   * Diurno) puede ocultarlo, pero sigue siendo su compañero.
+   */
+  const companeroActual = useMemo(() => {
+    const id = entidadActiva?.companeroId
+    if (!id) return null
+    const c = conductores.find((x) => x.id === id)
+    return c && coordsValidas(c.lat, c.lng) ? c : null
+  }, [entidadActiva, conductores])
+
+  /**
+   * Distancia y tiempo entre la persona seleccionada y su compañero actual.
+   * Usa `medirPar`, el mismo camino que el emparejamiento manual: comparte el
+   * caché en memoria y el persistente (`mediciones_rutas`), así que un tramo ya
+   * medido no se vuelve a consultar. Con Distance Matrix apagado es una
+   * estimación en línea recta y no consume API.
+   */
+  const [parActual, setParActual] = useState<ParSugerido | null>(null)
+  useEffect(() => {
+    if (!entidadActiva || !companeroActual) {
+      setParActual(null)
+      return
+    }
+    const clave = clavePar(entidadActiva, companeroActual)
+    const cacheado = cacheParesRef.current.get(clave)
+    if (cacheado) {
+      setParActual(cacheado)
+      return
+    }
+    let cancelado = false
+    setParActual(null)
+    medirPar(entidadActiva, companeroActual)
+      .then((par) => {
+        cacheParesRef.current.set(clave, par)
+        if (!cancelado) setParActual(par)
+      })
+      .catch((err) => {
+        console.error('[DistribucionMapaV2] Error midiendo compañero actual:', err)
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [entidadActiva, companeroActual])
+
   // ---------- Emparejamiento manual ----------
 
   /** Mide base ↔ b y lo deja como par dibujado. Reemplaza la línea anterior. */
@@ -1321,6 +1370,8 @@ export function DistribucionMapaV2Module() {
                 onSoltarBase={soltarBase}
                 onCopiarPar={copiarPar}
                 onProgramarPar={programarPar}
+                parActual={parActual}
+                companeroActual={companeroActual}
               />
 
 
@@ -1400,6 +1451,7 @@ export function DistribucionMapaV2Module() {
             maxLineasMapa={MAX_LINEAS_MAPA}
             onCopiarPar={copiarPar}
             onProgramar={programarPar}
+            parActual={parActual}
             onCerrar={() => {
               setDrawerAbierto(false)
               setParSeleccionado(null)
@@ -1754,6 +1806,11 @@ function FilaLista({
           <span style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c' }}>Sin compañero</span>
         )}
       </div>
+      {e.companeroNombre && (
+        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 21 }}>
+          Compañero: <b style={{ color: 'var(--text-secondary)' }}>{e.companeroNombre}</b>
+        </div>
+      )}
     </div>
   )
 }
