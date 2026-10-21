@@ -63,6 +63,10 @@ interface Props {
   onSoltarBase: () => void
   onCopiarPar: (p: ParSugerido) => void
   onProgramarPar: (p: ParSugerido) => void
+  /** Persona seleccionada ↔ su compañero actual (asignación activa), ya medido. */
+  parActual?: ParSugerido | null
+  /** El compañero actual, para dibujarlo aunque un filtro lo oculte. */
+  companeroActual?: EntidadMapa | null
 }
 
 export function MapaCanvas({
@@ -87,6 +91,8 @@ export function MapaCanvas({
   onSoltarBase,
   onCopiarPar,
   onProgramarPar,
+  parActual = null,
+  companeroActual = null,
 }: Props) {
   const mapRef = useRef<google.maps.Map | null>(null)
 
@@ -142,6 +148,30 @@ export function MapaCanvas({
     radar.conexiones.forEach((c) => bounds.extend({ lat: c.entidad.lat, lng: c.entidad.lng }))
     mapRef.current.fitBounds(bounds, 90)
   }, [radar])
+
+  // Si el compañero actual queda fuera de la vista, se encuadra a los dos. Sólo
+  // cuando está afuera: si ya se ve, se respeta el zoom que eligió el operador.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !parActual) return
+    const bounds = map.getBounds()
+    const puntos = [parActual.a, parActual.b]
+    if (bounds && puntos.every((p) => bounds.contains({ lat: p.lat, lng: p.lng }))) return
+    const nuevo = new google.maps.LatLngBounds()
+    puntos.forEach((p) => nuevo.extend({ lat: p.lat, lng: p.lng }))
+    map.fitBounds(nuevo, 140)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parActual?.id])
+
+  // La línea del compañero actual se dibuja salvo que ese mismo par ya esté
+  // dibujado como sugerencia, o que esté activo el modo "Ver todos en mapa".
+  const dibujarParActual =
+    !!parActual && !radar && !paresDibujados.some((p) => p.id === parActual.id)
+
+  // Si un filtro oculta al compañero, igual se pinta su marcador: si no, la
+  // línea terminaría en un punto vacío.
+  const companeroOculto =
+    !!companeroActual && !entidades.some((e) => e.id === companeroActual.id)
 
   const destacados = new Set<string>()
   for (const p of paresDibujados) {
@@ -274,6 +304,67 @@ export function MapaCanvas({
             />
           ))}
 
+        {/* Línea del compañero actual: mismo trazo que un par, con su etiqueta. */}
+        {dibujarParActual && parActual && (
+          <PolylineF
+            key={`actual-${parActual.id}`}
+            path={[
+              { lat: parActual.a.lat, lng: parActual.a.lng },
+              { lat: parActual.b.lat, lng: parActual.b.lng },
+            ]}
+            options={{
+              strokeColor: '#ff0033',
+              strokeOpacity: 0,
+              zIndex: 4,
+              icons: [
+                {
+                  icon: {
+                    path: 'M 0,-1 0,1',
+                    strokeOpacity: 0.95,
+                    strokeColor: '#ff0033',
+                    strokeWeight: 3,
+                    scale: 3,
+                  },
+                  offset: '0',
+                  repeat: '14px',
+                },
+              ],
+            }}
+          />
+        )}
+        {dibujarParActual && parActual && (
+          <MarkerF
+            key={`actuallbl-${parActual.id}`}
+            position={{
+              lat: (parActual.a.lat + parActual.b.lat) / 2,
+              lng: (parActual.a.lng + parActual.b.lng) / 2,
+            }}
+            clickable={false}
+            zIndex={5}
+            icon={{
+              url: urlEtiquetaPill(
+                `Compañero actual · ${formatKm(parActual.distanciaKm)} · ${formatMin(parActual.tiempoMinutos)}`,
+                '#ff0033'
+              ),
+              anchor: new google.maps.Point(0, 10),
+            }}
+          />
+        )}
+        {companeroOculto && companeroActual && (
+          <MarkerF
+            key={`companero-${companeroActual.id}`}
+            position={{ lat: companeroActual.lat, lng: companeroActual.lng }}
+            clickable={false}
+            title={`${companeroActual.nombre} (compañero actual, fuera del filtro)`}
+            zIndex={20}
+            icon={{
+              url: urlIconoMarcador(companeroActual.tipo, colorEntidad(companeroActual), false, false),
+              scaledSize: new google.maps.Size(28, 36),
+              anchor: new google.maps.Point(14, 36),
+            }}
+          />
+        )}
+
         {/* Halo bajo la persona seleccionada: el borde rojo del pin no alcanza
             para encontrarla entre 180 marcadores; el disco grande sí. */}
         {entidadActiva && (
@@ -335,6 +426,12 @@ export function MapaCanvas({
               midiendo={midiendoManual && entidadActiva.id !== baseManual?.id}
               onCopiarPar={onCopiarPar}
               onProgramarPar={onProgramarPar}
+              parActual={
+                parActual &&
+                (parActual.a.id === entidadActiva.id || parActual.b.id === entidadActiva.id)
+                  ? parActual
+                  : null
+              }
             />
           </InfoWindowF>
         )}
@@ -497,6 +594,7 @@ function InfoEntidad({
   midiendo,
   onCopiarPar,
   onProgramarPar,
+  parActual,
 }: {
   entidad: EntidadMapa
   onVerFicha: (e: EntidadMapa) => void
@@ -510,6 +608,8 @@ function InfoEntidad({
   midiendo: boolean
   onCopiarPar: (p: ParSugerido) => void
   onProgramarPar: (p: ParSugerido) => void
+  /** Medición con el compañero actual (null mientras se mide o si no tiene). */
+  parActual: ParSugerido | null
 }) {
   const esBase = !!baseManual && baseManual.id === e.id
   const badge =
@@ -564,6 +664,20 @@ function InfoEntidad({
         {e.zona && ` · ${e.zona}`}
         {e.patenteAsignacion && ` · ${e.patenteAsignacion}`}
       </p>
+
+      {e.companeroNombre && (
+        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>
+          <span style={{ color: '#6B7280' }}>Compañero actual: </span>
+          <b>{e.companeroNombre}</b>
+          {parActual && (
+            <span style={{ color: '#6B7280' }}>
+              {' · '}
+              {formatKm(parActual.distanciaKm)} · {formatMin(parActual.tiempoMinutos)}
+              {parActual.fuenteTiempo === 'estimado' && ' (estimado)'}
+            </span>
+          )}
+        </p>
+      )}
 
       {/* Los badges descriptivos de la ficha van todos en azul (info): describen
           la situación de la persona, no la califican. El juicio bueno/malo lo

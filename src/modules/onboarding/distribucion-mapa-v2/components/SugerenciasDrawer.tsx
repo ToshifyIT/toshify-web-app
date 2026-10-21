@@ -39,6 +39,11 @@ interface Props {
   onProgramar: (p: ParSugerido) => void
   onCerrar: () => void
   onRecalcular: () => void
+  /**
+   * Persona seleccionada ↔ su compañero actual. Se muestra como primera tarjeta
+   * cuando involucra a la base, para comparar las sugerencias contra lo que hay.
+   */
+  parActual?: ParSugerido | null
 }
 
 export function SugerenciasDrawer({
@@ -60,7 +65,19 @@ export function SugerenciasDrawer({
   onProgramar,
   onCerrar,
   onRecalcular,
+  parActual = null,
 }: Props) {
+  // Sólo tiene sentido con una base concreta y si el par es de esa base.
+  const actualDeLaBase =
+    parActual &&
+    base &&
+    (clavePersona(parActual.a) === clavePersona(base) ||
+      clavePersona(parActual.b) === clavePersona(base))
+      ? parActual
+      : null
+  // Si el compañero actual también salió como sugerencia, no se repite.
+  const paresVisibles = actualDeLaBase ? pares.filter((p) => p.id !== actualDeLaBase.id) : pares
+
   return (
     <div
       style={{
@@ -98,7 +115,7 @@ export function SugerenciasDrawer({
             Compañeros sugeridos
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Badge tono="neutro">{pares.length} pares</Badge>
+            <Badge tono="neutro">{paresVisibles.length} pares</Badge>
             <button
               type="button"
               onClick={onCerrar}
@@ -269,7 +286,20 @@ export function SugerenciasDrawer({
           </div>
         )}
 
-        {!cargando && pares.length === 0 && (
+        {actualDeLaBase && (
+          <TarjetaPar
+            key={`actual-${actualDeLaBase.id}`}
+            par={actualDeLaBase}
+            base={base}
+            seleccionado={false}
+            esActual
+            onSeleccionar={() => undefined}
+            onCopiar={() => onCopiarPar(actualDeLaBase)}
+            onProgramar={() => undefined}
+          />
+        )}
+
+        {!cargando && paresVisibles.length === 0 && (
           <div
             style={{
               padding: 22,
@@ -285,7 +315,7 @@ export function SugerenciasDrawer({
           </div>
         )}
 
-        {pares.map((par) => {
+        {paresVisibles.map((par) => {
           // Elegir un par no bloquea a los demás: "Ver en mapa" en otra tarjeta
           // reemplaza la línea dibujada. El operador compara alternativas antes
           // de decidir; la exclusividad real se resuelve al programar la entrega.
@@ -341,6 +371,7 @@ function TarjetaPar({
   onSeleccionar,
   onCopiar,
   onProgramar,
+  esActual = false,
 }: {
   par: ParSugerido
   base: EntidadMapa | null
@@ -348,6 +379,12 @@ function TarjetaPar({
   onSeleccionar: () => void
   onCopiar: () => void
   onProgramar: () => void
+  /**
+   * Tarjeta del compañero actual: misma lectura que una sugerencia, pero sin
+   * "Programar entrega" (ya están asignados) ni "Ver en mapa" (su línea ya se
+   * dibuja mientras la persona esté seleccionada).
+   */
+  esActual?: boolean
 }) {
   // Con una base fija, su nombre ya está en la cabecera del panel: repetirlo en
   // cada tarjeta hacía parecer que la misma persona estaba duplicada. En ese
@@ -360,10 +397,11 @@ function TarjetaPar({
     <div
       // Tocar la tarjeta en cualquier parte dibuja el par en el mapa (lo mismo
       // que "Ver en mapa"). Los botones de acción frenan la propagación.
-      onClick={onSeleccionar}
-      role="button"
-      tabIndex={0}
+      onClick={esActual ? undefined : onSeleccionar}
+      role={esActual ? undefined : 'button'}
+      tabIndex={esActual ? undefined : 0}
       onKeyDown={(e) => {
+        if (esActual) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onSeleccionar()
@@ -371,14 +409,28 @@ function TarjetaPar({
       }}
       style={{
         background: 'var(--bg-primary)',
-        border: `1px solid ${seleccionado ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
+        border: `1px solid ${seleccionado || esActual ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
         boxShadow: seleccionado ? '0 0 0 3px rgba(255,0,51,.10)' : undefined,
         borderRadius: 11,
         padding: '11px 12px',
         marginBottom: 10,
-        cursor: 'pointer',
+        cursor: esActual ? 'default' : 'pointer',
       }}
     >
+      {esActual && (
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: '.4px',
+            textTransform: 'uppercase',
+            color: 'var(--color-primary, #ff0033)',
+            marginBottom: 6,
+          }}
+        >
+          Compañero actual
+        </div>
+      )}
       {soloCandidato ? (
         <ExtremoTarjeta entidad={soloCandidato} />
       ) : (
@@ -415,9 +467,9 @@ function TarjetaPar({
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
-        <BotonSecundario onClick={onSeleccionar}>Ver en mapa</BotonSecundario>
+        {!esActual && <BotonSecundario onClick={onSeleccionar}>Ver en mapa</BotonSecundario>}
         <BotonSecundario onClick={onCopiar}>Copiar</BotonSecundario>
-        <BotonPrimario onClick={onProgramar}>Programar entrega</BotonPrimario>
+        {!esActual && <BotonPrimario onClick={onProgramar}>Programar entrega</BotonPrimario>}
       </div>
     </div>
   )
