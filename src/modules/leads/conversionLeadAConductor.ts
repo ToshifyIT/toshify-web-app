@@ -151,12 +151,12 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
 
 /**
  * Busca un conductor que ya represente a esta persona, comparando DNI y CUIT
- * sin espacios ni guiones (el DNI tambien puede venir dentro del CUIT).
+ * solo por sus digitos (el DNI tambien puede venir dentro del CUIT).
  */
 export async function buscarConductorExistente(lead: Lead): Promise<Record<string, unknown> | null> {
     // Verificar si ya existe un conductor con el mismo DNI o CUIT
-    // Normalizamos quitando espacios y guiones para comparar correctamente
-    const normalizarDoc = (val: string) => val.replace(/[\s-]/g, '')
+    // Normalizamos dejando solo digitos (sin puntos, espacios ni guiones)
+    const normalizarDoc = (val: string) => val.replace(/\D/g, '')
     let conductorExistente: Record<string, unknown> | null = null
 
     const dniLimpio = lead.dni?.trim() ? normalizarDoc(lead.dni.trim()) : ''
@@ -293,8 +293,8 @@ export async function convertirLeadAConductor(
     const leadMappedData: Record<string, unknown> = {
       nombres: (nombres || lead.primer_nombre || '').toUpperCase(),
       apellidos: (apellidos || lead.apellido || '').toUpperCase(),
-      numero_dni: lead.dni || '',
-      numero_cuit: lead.cuit || '',
+      numero_dni: (lead.dni || '').replace(/\D/g, ''),
+      numero_cuit: (lead.cuit || '').replace(/\D/g, ''),
       telefono_contacto: lead.phone || '',
       email: lead.email || '',
       direccion: lead.direccion || '',
