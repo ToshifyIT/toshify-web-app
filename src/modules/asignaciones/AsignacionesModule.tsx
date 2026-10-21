@@ -471,23 +471,17 @@ export function AsignacionesModule() {
     setControlVehiculoKmNotFound(false)
     setControlDevueltoPatente(null)
 
-    // Prefill desde la tabla vehiculos: kilometraje (kilometraje_actual) y
-    // observaciones (notas del vehiculo, como sugerencia editable). Las
-    // observaciones ya no se llenan al generar el contrato: llegan al
-    // documento solo con lo que el usuario confirma aca.
+    // Prefill del kilometraje desde la tabla vehiculos (kilometraje_actual).
+    // Observaciones arranca siempre vacio: al documento llega solo lo que el
+    // usuario escribe aca.
     let kmPrefill = ''
-    let observacionesPrefill = ''
     if (asig.vehiculo_id) {
       try {
         const { data: vehData, error: vehError } = await supabase
           .from('vehiculos')
-          .select('kilometraje_actual, notas')
+          .select('kilometraje_actual')
           .eq('id', asig.vehiculo_id)
           .single()
-        const notasVehiculo = (vehData as { notas: string | null } | null)?.notas
-        if (!vehError && typeof notasVehiculo === 'string' && notasVehiculo.trim()) {
-          observacionesPrefill = notasVehiculo.trim()
-        }
         const kmActual = (vehData as { kilometraje_actual: number | null } | null)?.kilometraje_actual
         if (!vehError && typeof kmActual === 'number' && kmActual > 0) {
           kmPrefill = String(kmActual)
@@ -513,7 +507,7 @@ export function AsignacionesModule() {
       console.error('No se pudo resolver el vehículo devuelto:', err)
     }
 
-    setControlForm({ km: kmPrefill, ltnafta: '', observations: observacionesPrefill, cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '', km_change: kmDevueltoPrefill })
+    setControlForm({ km: kmPrefill, ltnafta: '', observations: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '', km_change: kmDevueltoPrefill })
     // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
