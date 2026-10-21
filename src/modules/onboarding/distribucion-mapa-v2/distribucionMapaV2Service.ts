@@ -161,6 +161,8 @@ interface AsignacionActiva {
   patente: string | null
   turnoDiurnoOcupado: boolean
   turnoNocturnoOcupado: boolean
+  /** Conductores del turno complementario de la misma asignación (sin el propio). */
+  companeroIds: string[]
 }
 
 // Función que aplica el filtro de sede (viene del SedeContext del caller).
@@ -283,8 +285,9 @@ async function fetchAsignacionesActivas(
   sedeActualId?: string | null
 ): Promise<Map<string, AsignacionActiva>> {
   const porConductor = new Map<string, AsignacionActiva>()
-  // asignacion_id -> { diurno, nocturno } ocupados por conductores activos
-  const ocupacion = new Map<string, { diurno: boolean; nocturno: boolean }>()
+  // asignacion_id -> conductores activos en cada turno. Se guarda QUIÉN ocupa
+  // cada turno (no sólo si está ocupado) para poder mostrar el compañero.
+  const ocupacion = new Map<string, { diurno: string[]; nocturno: string[] }>()
   // Filas válidas, para resolver la ocupación en una segunda pasada.
   const filas: Array<{
     conductorId: string
@@ -333,9 +336,10 @@ async function fetchAsignacionesActivas(
 
       const horarioConductor = (row.horario || '').toLowerCase() || null
 
-      const slot = ocupacion.get(asignacionId) || { diurno: false, nocturno: false }
-      if (horarioConductor === 'diurno') slot.diurno = true
-      if (horarioConductor === 'nocturno') slot.nocturno = true
+      const conductorId = row.conductor_id as string
+      const slot = ocupacion.get(asignacionId) || { diurno: [], nocturno: [] }
+      if (horarioConductor === 'diurno' && !slot.diurno.includes(conductorId)) slot.diurno.push(conductorId)
+      if (horarioConductor === 'nocturno' && !slot.nocturno.includes(conductorId)) slot.nocturno.push(conductorId)
       ocupacion.set(asignacionId, slot)
 
       filas.push({
@@ -352,14 +356,21 @@ async function fetchAsignacionesActivas(
 
   for (const fila of filas) {
     if (porConductor.has(fila.conductorId)) continue
-    const slot = ocupacion.get(fila.asignacionId) || { diurno: false, nocturno: false }
+    const slot = ocupacion.get(fila.asignacionId) || { diurno: [], nocturno: [] }
+    const complementario =
+      fila.horarioConductor === 'diurno'
+        ? slot.nocturno
+        : fila.horarioConductor === 'nocturno'
+          ? slot.diurno
+          : []
     porConductor.set(fila.conductorId, {
       asignacionId: fila.asignacionId,
       horarioAsignacion: fila.horarioAsignacion,
       horarioConductor: fila.horarioConductor,
       patente: fila.patente,
-      turnoDiurnoOcupado: slot.diurno,
-      turnoNocturnoOcupado: slot.nocturno,
+      turnoDiurnoOcupado: slot.diurno.length > 0,
+      turnoNocturnoOcupado: slot.nocturno.length > 0,
+      companeroIds: complementario.filter((id) => id !== fila.conductorId),
     })
   }
 
@@ -399,6 +410,12 @@ function derivarCompanero(asig: AsignacionActiva | undefined): {
 // Conductores
 // =====================================================
 
+/** "APELLIDO, Nombre" con el mismo formato que la lista y la ficha. */
+function nombreConductor(r: Pick<ConductorRow, 'apellidos' | 'nombres'>): string {
+  const nombre = `${r.apellidos || ''}, ${r.nombres || ''}`.trim().replace(/^,|,$/g, '').trim()
+  return nombre || 'Sin nombre'
+}
+
 export async function fetchConductoresMapa(
   aplicarFiltroSede: AplicarFiltroSede,
   sedeActualId?: string | null,
@@ -430,9 +447,13 @@ export async function fetchConductoresMapa(
   }
   const turnoLeadPorDni = await fetchTurnoLeadPorDni(dnisFallback)
 
+  // Nombre por id, para resolver el compañero sin otra consulta a la base.
+  const nombrePorId = new Map<string, string>()
+  for (const r of rows) nombrePorId.set(r.id, nombreConductor(r))
+
   return rows.map((r) => {
     const codigo = r.conductores_estados?.codigo?.toLowerCase() || null
-    const nombre = `${r.apellidos || ''}, ${r.nombres || ''}`.trim().replace(/^,|,$/g, '').trim()
+    const nombre = nombreConductor(r)
 
     const horario = ultimoHorario.get(r.id) || null
     const turnoAsig = horarioATurno(horario)
@@ -459,6 +480,11 @@ export async function fetchConductoresMapa(
 
     const asig = asignacionesActivas.get(r.id)
     const companero = derivarCompanero(asig)
+    // Sólo los compañeros que están entre los conductores cargados (misma sede).
+    const companerosConocidos =
+      companero.estado === 'con_companero'
+        ? (asig?.companeroIds || []).filter((id) => nombrePorId.has(id))
+        : []
 
     const datos: DatosPersona = {
       edad: calcularEdad(r.fecha_nacimiento),
@@ -478,7 +504,7 @@ export async function fetchConductoresMapa(
     return {
       id: r.id,
       tipo: 'conductor' as const,
-      nombre: nombre || 'Sin nombre',
+      nombre,
       documento: r.numero_dni || null,
       lat: r.direccion_lat as number,
       lng: r.direccion_lng as number,
@@ -495,6 +521,11 @@ export async function fetchConductoresMapa(
       estadoCompanero: companero.estado,
       patenteAsignacion: asig?.patente || null,
       turnoLibreAsignacion: companero.turnoLibre,
+      companeroId: companerosConocidos[0] ?? null,
+      companeroNombre:
+        companerosConocidos.length > 0
+          ? companerosConocidos.map((id) => nombrePorId.get(id)).join(' / ')
+          : null,
       estadoLead: null,
       turnoLead: null,
       creadoEn: null,
@@ -659,6 +690,8 @@ export async function fetchLeadsMapa(
       estadoCompanero: 'no_aplica' as const,
       patenteAsignacion: null,
       turnoLibreAsignacion: null,
+      companeroId: null,
+      companeroNombre: null,
       estadoLead: r.estado_de_lead || null,
       turnoLead: r.turno || null,
       creadoEn: r.created_at || null,

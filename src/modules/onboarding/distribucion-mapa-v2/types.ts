@@ -93,6 +93,15 @@ export interface EntidadMapa {
   patenteAsignacion: string | null
   /** Turno que queda libre en la asignación activa ('diurno' | 'nocturno'). */
   turnoLibreAsignacion: 'diurno' | 'nocturno' | null
+  /**
+   * Compañero actual (sólo con estadoCompanero === 'con_companero'): el
+   * conductor que cubre el turno complementario de la misma asignación.
+   * null si no tiene, o si no está entre los conductores cargados (p. ej. otra
+   * sede): en ese caso se muestra "Con compañero" sin nombre.
+   */
+  companeroId?: string | null
+  /** "APELLIDO, Nombre" del compañero. Si hubiera más de uno, separados por " / ". */
+  companeroNombre?: string | null
 
   // --- Lead ---
   estadoLead: string | null
