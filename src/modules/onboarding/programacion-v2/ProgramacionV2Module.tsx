@@ -237,6 +237,14 @@ export function ProgramacionV2Module() {
    * operador no sabia si habia pasado algo y podia volver a tocar el boton.
    */
   const [enviandoEntrega, setEnviandoEntrega] = useState(false)
+  // Mientras se envia, el navegador pregunta antes de cerrar o recargar la
+  // pestaña: cortar a mitad de camino deja sin visita o sin documento.
+  useEffect(() => {
+    if (!enviandoEntrega) return
+    const avisarAntesDeSalir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', avisarAntesDeSalir)
+    return () => window.removeEventListener('beforeunload', avisarAntesDeSalir)
+  }, [enviandoEntrega])
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'pendientes' | 'historico'>('pendientes')
   
@@ -1423,7 +1431,14 @@ export function ProgramacionV2Module() {
       .in('estado', ['pendiente', 'completado'])
       .limit(1)
     if (devExistente && devExistente.length > 0) {
-      Swal.fire('Atención', 'Ya existe una devolución creada para esta programación', 'warning')
+      // Un envío anterior creó la devolución pero se cortó (pestaña cerrada)
+      // antes de completar la programación: se completa ahora.
+      await (supabase.from('programaciones_onboarding') as any)
+        .update({ estado: 'completado', fecha_asignacion_creada: new Date().toISOString() })
+        .eq('id', prog.id)
+        .neq('estado', 'completado')
+      setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
+      Swal.fire('Atención', 'Ya existe una devolución creada para esta programación. Se marcó como enviada.', 'warning')
       return
     }
 
@@ -1542,6 +1557,16 @@ export function ProgramacionV2Module() {
 
       if (devError) throw devError
 
+      // Marcar programación como completada ENSEGUIDA de crear la devolución
+      // (antes iba después de la visita): si se corta acá, el reenvío lo repara.
+      const { error: progError } = await (supabase.from('programaciones_onboarding') as any)
+        .update({
+          estado: 'completado',
+          fecha_asignacion_creada: new Date().toISOString(),
+        })
+        .eq('id', prog.id)
+      if (progError) throw progError
+
       // Crear visita automática con categoría "Asignaciones"
       try {
         const CATEGORIA_ASIGNACIONES_ID = '76514b14-b403-4587-993e-d64bad874594'
@@ -1592,14 +1617,6 @@ export function ProgramacionV2Module() {
       } catch {
         // No bloquear el flujo principal si falla la creación de visita
       }
-
-      // Marcar programación como completada
-      await (supabase.from('programaciones_onboarding') as any)
-        .update({
-          estado: 'completado',
-          fecha_asignacion_creada: new Date().toISOString(),
-        })
-        .eq('id', prog.id)
 
       setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
       showSuccess('Devolución Creada', `${prog.vehiculo_entregar_patente}`)
@@ -1956,90 +1973,77 @@ export function ProgramacionV2Module() {
       // y no debe afectar asignaciones existentes. La finalización ocurre en
       // AsignacionesModule.handleConfirmProgramacion cuando la asignación pasa a "activa".
 
-      const { data: asignacion, error: asignacionError } = await (supabase
-        .from('asignaciones') as any)
-        .insert({
-          codigo,
-          vehiculo_id: prog.vehiculo_entregar_id,
-          modalidad: esTurno ? 'turno' : 'a_cargo',
-          horario: esTurno ? 'turno' : 'todo_dia',
-          fecha_programada: fechaProgramada,
-          estado: 'programado',
-          notas: notasBase,
-          // Tarifa de cobro heredada de la programacion (default 'antigua')
+      // Conductores de la asignacion segun modalidad. Solo los que se envian
+      // (confirmaron, o todos si no hay filtro). La logica especial de
+      // companero se ejecuta al CONFIRMAR la asignacion.
+      const conductoresAsignacion: { conductor_id: string; horario: string; documento: string; tipo_tarifa: string }[] = []
+      if (prog.conductor_diurno_id && enviarDiurno) {
+        conductoresAsignacion.push({
+          conductor_id: prog.conductor_diurno_id,
+          horario: 'diurno',
+          documento: mapDocumento(prog.documento_diurno),
           tipo_tarifa: tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa || 'antigua',
-          zona: prog.zona || prog.zona_diurno || prog.zona_nocturno || null,
-          created_by: user?.id || null,
-          created_by_name: profile?.full_name || 'Sistema',
-          sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
         })
-        .select()
-        .single()
+      }
+      if (prog.conductor_nocturno_id && enviarNocturno) {
+        conductoresAsignacion.push({
+          conductor_id: prog.conductor_nocturno_id,
+          horario: 'nocturno',
+          documento: mapDocumento(prog.documento_nocturno),
+          tipo_tarifa: tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa || 'antigua',
+        })
+      }
+      // Si no hay conductores duales, conductor legacy (A CARGO), salvo companero
+      if (conductoresAsignacion.length === 0 && prog.conductor_id && !legacyEsCompanero) {
+        conductoresAsignacion.push({
+          conductor_id: prog.conductor_id,
+          horario: 'todo_dia',
+          documento: mapDocumento(prog.tipo_documento),
+          tipo_tarifa: tarifaProg.tipo_tarifa || 'antigua',
+        })
+      }
+
+      // Asignacion + conductores + programacion 'completado' en UNA transaccion
+      // (sql/crear_asignacion_desde_programacion.sql). Antes eran 3 pedidos: si se
+      // cerraba la pestaña en el medio quedaba la asignacion sin programacion y
+      // la programacion pendiente, y reenviarla duplicaba la asignacion.
+      const { data: asignacionRpc, error: asignacionError } = await (supabase as any)
+        .rpc('crear_asignacion_desde_programacion', {
+          p_programacion_id: prog.id,
+          p_asignacion: {
+            codigo,
+            vehiculo_id: prog.vehiculo_entregar_id,
+            modalidad: esTurno ? 'turno' : 'a_cargo',
+            horario: esTurno ? 'turno' : 'todo_dia',
+            fecha_programada: fechaProgramada,
+            notas: notasBase,
+            // Tarifa de cobro heredada de la programacion (default 'antigua')
+            tipo_tarifa: tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa || 'antigua',
+            zona: prog.zona || prog.zona_diurno || prog.zona_nocturno || null,
+            created_by: user?.id || null,
+            created_by_name: profile?.full_name || 'Sistema',
+            sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id || null,
+          },
+          p_conductores: conductoresAsignacion,
+        })
 
       if (asignacionError) throw asignacionError
+      const asignacion = asignacionRpc as { id: string; codigo: string; ya_existia: boolean }
 
-      // Crear asignacion_conductor(es) segun modalidad
-      // NOTA: Solo insertamos conductores que confirmaron (o todos si no hay filtro)
-      // La lógica especial de companero se ejecuta al CONFIRMAR la asignación
-      let conductoresInsertados = 0
-
-      // Insertar conductor diurno (solo si debe enviarse)
-      if (prog.conductor_diurno_id && enviarDiurno) {
-        const { error: diurnoError } = await (supabase
-          .from('asignaciones_conductores') as any)
-          .insert({
-            asignacion_id: asignacion.id,
-            conductor_id: prog.conductor_diurno_id,
-            horario: 'diurno',
-            estado: 'asignado',
-            documento: mapDocumento(prog.documento_diurno),
-            tipo_tarifa: tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa || 'antigua'
-          })
-        if (diurnoError) throw diurnoError
-        conductoresInsertados++
-      }
-
-      // Insertar conductor nocturno (solo si debe enviarse)
-      if (prog.conductor_nocturno_id && enviarNocturno) {
-        const { error: nocturnoError } = await (supabase
-          .from('asignaciones_conductores') as any)
-          .insert({
-            asignacion_id: asignacion.id,
-            conductor_id: prog.conductor_nocturno_id,
-            horario: 'nocturno',
-            estado: 'asignado',
-            documento: mapDocumento(prog.documento_nocturno),
-            tipo_tarifa: tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa || 'antigua'
-          })
-        if (nocturnoError) throw nocturnoError
-        conductoresInsertados++
-      }
-
-      // Si no hay conductores duales, intentar con conductor legacy (A CARGO)
-      // Solo si NO es asignacion_companero (aunque este caso ya se maneja arriba con todosEsCompanero)
-      if (conductoresInsertados === 0 && prog.conductor_id && !legacyEsCompanero) {
-        const { error: conductorError } = await (supabase
-          .from('asignaciones_conductores') as any)
-          .insert({
-            asignacion_id: asignacion.id,
-            conductor_id: prog.conductor_id,
-            horario: 'todo_dia',
-            estado: 'asignado',
-            documento: mapDocumento(prog.tipo_documento),
-            tipo_tarifa: tarifaProg.tipo_tarifa || 'antigua'
-          })
-        if (conductorError) throw conductorError
-        conductoresInsertados++
-      }
-
-      // Actualizar programacion con referencia a la asignacion y marcar como completado
-      await (supabase.from('programaciones_onboarding') as any)
-        .update({
-          asignacion_id: asignacion.id,
-          fecha_asignacion_creada: new Date().toISOString(),
-          estado: 'completado' // Marcar como completado para que no se liste mas
+      // Ya se habia enviado (otra pestaña, otro usuario o un reintento): no se
+      // repite la visita ni el documento.
+      if (asignacion.ya_existia) {
+        setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
+        setEnviandoEntrega(false)
+        await new Promise((r) => setTimeout(r, 0))
+        await Swal.fire({
+          icon: 'info',
+          title: 'Ya estaba enviada',
+          html: `Esta programación ya tenía la asignación <strong>${asignacion.codigo}</strong>. No se creó otra.`,
+          confirmButtonText: 'Entendido',
         })
-        .eq('id', prog.id)
+        return
+      }
 
       // Crear visita automática con categoría "Asignaciones"
       try {
@@ -2981,7 +2985,7 @@ export function ProgramacionV2Module() {
       <LoadingOverlay
         show={enviandoEntrega}
         message="Creando asignación y generando documentos…"
-        submessage="Espere la respuesta de confirmación"
+        submessage="No cierre ni recargue la ventana hasta la confirmación"
         size="lg"
       />
 
