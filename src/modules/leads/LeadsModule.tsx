@@ -525,7 +525,11 @@ function formatDateParts(dateStr: string | undefined | null): { date: string; ti
     const d = new Date(dateStr)
     if (isNaN(d.getTime())) return { date: '-', time: '' }
     const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
-    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+    // 00:00:00.000 exacto en hora Argentina = fecha sin hora (la carga de Sellium solo
+    // trae el día). No se muestra una hora que no existe.
+    const hms = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone: 'America/Argentina/Buenos_Aires' })
+    if (hms === '00:00:00' && d.getMilliseconds() === 0) return { date, time: '' }
+    const time = hms.slice(0, 5)
     return { date, time }
   } catch {
     return { date: '-', time: '' }
