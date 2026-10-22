@@ -331,6 +331,17 @@ body.device-touch .show-touch-only {
   padding-top: 2.5rem !important;
 }
 
+/* Modal ancho para tablas de detalle (ej. Detalle del Total Proyectado):
+   levanta el tope de 900px y deja la tabla como tabla real (sin display:block)
+   para que las columnas usen todo el ancho. */
+.swal2-popup.swal-popup-ancho {
+  width: 98vw !important;
+  max-width: 1700px !important;
+}
+.swal-popup-ancho .swal2-html-container table {
+  display: table;
+}
+
 /* Inputs en SweetAlert: 16px en todos los viewports para prevenir zoom iOS */
 .swal2-input,
 .swal2-select,

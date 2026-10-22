@@ -23,8 +23,11 @@
  * - Casillas (0/1): 1 → Sí; 0 → no se toca (el CRM pone 0 también cuando no hay dato).
  * - Leads EXISTENTES (2026-09-30): solo se completan campos vacíos del lead; lo que ya
  *   tiene valor no se toca (estado, fuente y observaciones incluidos). Excepción:
- *   created_at, que siempre toma la "Fecha de creación" del Excel.
+ *   created_at y fecha_carga, que siempre toman la "Fecha de creación" del Excel.
  * - Leads NUEVOS: fuente SELLIUM, created_at y fecha_carga = "Fecha de creación" del Excel.
+ * - Guía (2026-10-07): "Propietario del contacto" → entrevistador_asignado, solo si es
+ *   Ali, Eunice o Carla (por primer nombre). Otro propietario: no se carga. En leads
+ *   existentes sigue la regla general (solo si la Guía está vacía).
  * - Se ignoran: Interés, Mayor de 21, Equipo asignado, Requires Human Intervention,
  *   Last Lead Interaction, Última modificación por, Última actividad,
  *   Anuncio de origen (pauta), Asignación, Valoración.
@@ -62,7 +65,9 @@ export function leerLibroExcel(XLSX: typeof import('xlsx'), buffer: ArrayBuffer)
   } catch {
     texto = new TextDecoder('windows-1252').decode(bytes)
   }
-  return XLSX.read(texto, { type: 'string' })
+  // raw: las celdas quedan como texto. Sin esto SheetJS convierte "11/10/2026" a fecha
+  // leyéndola como mes/día (10 de noviembre); fechaISO ya interpreta día/mes.
+  return XLSX.read(texto, { type: 'string', raw: true })
 }
 
 // ───────────────────────── Columnas ─────────────────────────
@@ -94,7 +99,25 @@ const COL = {
   vehKm: 'km del auto',
   vehPatente: 'patente',
   link: 'link del anuncio (pauta)',
+  propietario: 'propietario del contacto',
 } as const
+
+/**
+ * Guías que se toman de "Propietario del contacto" (pedido 2026-10-07). Clave: primer
+ * nombre normalizado; valor: cómo se guarda en entrevistador_asignado (columna Guía),
+ * igual que lo vienen cargando a mano. Cualquier otro propietario se ignora.
+ */
+const GUIAS_POR_PROPIETARIO: Record<string, string> = {
+  ali: 'Ali',
+  eunice: 'Eunice',
+  carla: 'Carla',
+}
+
+/** "Ali Verenzuela" → "Ali"; "Juan Manuel Garrido" → null. */
+export function guiaDesdePropietario(propietario: string | null): string | null {
+  const primerNombre = normalizarTexto(propietario || '').split(/\s+/)[0]
+  return GUIAS_POR_PROPIETARIO[primerNombre] ?? null
+}
 
 /** Columnas exclusivas que identifican el formato (no existen en Original ni Damaro). */
 export function esFormatoSellium(headers: string[]): boolean {
@@ -363,6 +386,8 @@ export function mapearFilasSellium(filas: Fila[], headers: string[]): FilaSelliu
     // fuente_pauta = canal (Facebook/Instagram/TikTok/Estado); id_fuente = link del anuncio (cambio 2026-09-30).
     poner('fuente_pauta', derivarCanalPauta(link))
     poner('id_fuente', link)
+    // Guía: solo Ali, Eunice y Carla; el resto de propietarios queda en blanco.
+    poner('entrevistador_asignado', guiaDesdePropietario(t(COL.propietario)))
 
     const casillas: FilaSellium['casillas'] = {}
     if (casilla(leer(fila, COL.aceptaOferta))) casillas.acepta_oferta = true
@@ -532,8 +557,8 @@ function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unkno
 
 /**
  * Lead EXISTENTE (regla 2026-09-30): solo se completan campos VACÍOS del lead; lo que
- * ya tiene valor no se toca (un "No" o false también es un valor). Única excepción:
- * created_at, que siempre toma la "Fecha de creación" del Excel.
+ * ya tiene valor no se toca (un "No" o false también es un valor). Excepción:
+ * created_at y fecha_carga, que siempre toman la "Fecha de creación" del Excel.
  */
 function payloadActualizacion(
   f: FilaSellium, l: LeadExistente, sedes: SedeRef[],
@@ -548,7 +573,8 @@ function payloadActualizacion(
     const nuevaCreacion = createdAtDesdeFecha(f.fechaCreacion)
     if (!mismoInstante(l.created_at, nuevaCreacion)) p.created_at = nuevaCreacion
   }
-  completar('fecha_carga', f.fechaCreacion)
+  // fecha_carga: misma regla que created_at (guardan la misma fecha del Excel).
+  if (f.fechaCreacion && !mismoInstante(l.fecha_carga, f.fechaCreacion)) p.fecha_carga = f.fechaCreacion
 
   // Columnas directas del Excel (zona, turno, edad, dirección, vehículo, pauta…).
   for (const [campo, valor] of Object.entries(f.campos)) completar(campo, valor)

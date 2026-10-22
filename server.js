@@ -767,6 +767,385 @@ app.post('/api/admin/toggle-function', async (req, res) => {
 })
 
 // =====================================================
+// GESTION DE USUARIOS (Administracion > Gestion de Usuarios)
+// =====================================================
+//
+// Alta por invitacion: el admin carga nombre, email y rol; Supabase Auth manda el
+// correo "Invite user" (SMTP propio, remitente noreply@toshify.com.ar) y el usuario
+// define su contraseña en /reset-password. El admin nunca ve ni escribe la clave.
+//
+// Desactivar = is_active false en user_profiles + ban en Auth: el usuario no
+// puede volver a iniciar sesion ni refrescar el token.
+
+/** Ban "permanente" de GoTrue (100 años). 'none' lo levanta. */
+const BAN_USUARIO_INACTIVO = '876000h'
+
+function supabaseAdminConfig() {
+  const url = process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return {
+    url,
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+  }
+}
+
+/**
+ * Valida que el request venga de un usuario con rol admin.
+ * Devuelve { cfg, adminId } o responde el error y devuelve null.
+ */
+async function requireAdmin(req, res) {
+  const cfg = supabaseAdminConfig()
+  if (!cfg) {
+    res.status(500).json({ error: 'Configuracion del servidor incompleta' })
+    return null
+  }
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'No autorizado' })
+    return null
+  }
+  const userRes = await fetch(`${cfg.url}/auth/v1/user`, {
+    headers: { Authorization: authHeader, apikey: cfg.headers.apikey },
+  })
+  if (!userRes.ok) {
+    res.status(401).json({ error: 'Sesion invalida, volve a iniciar sesion' })
+    return null
+  }
+  const user = await userRes.json()
+  const profileRes = await fetch(
+    `${cfg.url}/rest/v1/user_profiles?id=eq.${user.id}&select=is_active,roles(name)`,
+    { headers: cfg.headers }
+  )
+  const profiles = profileRes.ok ? await profileRes.json() : []
+  if (profiles[0]?.roles?.name !== 'admin' || profiles[0]?.is_active === false) {
+    res.status(403).json({ error: 'Solo un administrador puede gestionar usuarios' })
+    return null
+  }
+  return { cfg, adminId: user.id }
+}
+
+/** Origin del frontend para armar el link del correo (Supabase lo valida contra su allow-list). */
+function origenApp(origin) {
+  return typeof origin === 'string' && /^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/.test(origin)
+    ? origin
+    : 'https://app.toshify.com.ar'
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function leerErrorGotrue(resp) {
+  const body = await resp.json().catch(() => ({}))
+  return body.msg || body.message || body.error_description || body.error || `HTTP ${resp.status}`
+}
+
+/** Manda el correo de invitacion (usuario nuevo o que todavia no confirmo). */
+async function enviarInvitacion(cfg, email, fullName, origin) {
+  const redirect = encodeURIComponent(`${origenApp(origin)}/reset-password`)
+  return fetch(`${cfg.url}/auth/v1/invite?redirect_to=${redirect}`, {
+    method: 'POST',
+    headers: cfg.headers,
+    body: JSON.stringify({ email, data: { full_name: fullName } }),
+  })
+}
+
+/** Manda el correo de restablecer contraseña (Supabase "Reset password"). */
+async function enviarRecuperacion(cfg, email, origin) {
+  const redirect = encodeURIComponent(`${origenApp(origin)}/reset-password`)
+  return fetch(`${cfg.url}/auth/v1/recover?redirect_to=${redirect}`, {
+    method: 'POST',
+    headers: cfg.headers,
+    body: JSON.stringify({ email }),
+  })
+}
+
+async function obtenerUsuarioAuth(cfg, userId) {
+  const r = await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, { headers: cfg.headers })
+  if (!r.ok) return null
+  return r.json()
+}
+
+// Estado de Auth de todos los usuarios: si ya activaron la cuenta y si estan bloqueados.
+app.get('/api/admin/users/auth-status', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const estado = {}
+    for (let page = 1; page <= 20; page++) {
+      const r = await fetch(`${ctx.cfg.url}/auth/v1/admin/users?per_page=200&page=${page}`, {
+        headers: ctx.cfg.headers,
+      })
+      if (!r.ok) throw new Error(await leerErrorGotrue(r))
+      const { users = [] } = await r.json()
+      for (const u of users) {
+        estado[u.id] = {
+          last_sign_in_at: u.last_sign_in_at || null,
+          invited_at: u.invited_at || null,
+          banned: !!u.banned_until && new Date(u.banned_until) > new Date(),
+        }
+      }
+      if (users.length < 200) break
+    }
+    res.json({ success: true, usuarios: estado })
+  } catch (error) {
+    console.error('[usuarios] auth-status:', error)
+    res.status(500).json({ error: 'No se pudo leer el estado de los usuarios' })
+  }
+})
+
+// Alta de usuario por invitacion
+app.post('/api/admin/users/invite', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg } = ctx
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const fullName = String(req.body?.fullName || '').trim()
+    const roleId = req.body?.roleId || null
+    const sedeId = req.body?.sedeId || null
+
+    if (!fullName) return res.status(400).json({ error: 'El nombre es obligatorio' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return res.status(400).json({ error: 'El email no tiene un formato valido' })
+    }
+    if ((roleId && !UUID_RE.test(roleId)) || (sedeId && !UUID_RE.test(sedeId))) {
+      return res.status(400).json({ error: 'Rol o sede invalidos' })
+    }
+
+    const existeRes = await fetch(
+      `${cfg.url}/rest/v1/user_profiles?email=ilike.${encodeURIComponent(email)}&select=id`,
+      { headers: cfg.headers }
+    )
+    const existentes = existeRes.ok ? await existeRes.json() : []
+    if (existentes.length > 0) {
+      return res.status(409).json({ error: 'Ya existe un usuario con ese email' })
+    }
+
+    const inviteRes = await enviarInvitacion(cfg, email, fullName, req.body?.origin)
+    if (!inviteRes.ok) {
+      const msg = await leerErrorGotrue(inviteRes)
+      const yaRegistrado = /already|registered|exists/i.test(msg)
+      return res.status(yaRegistrado ? 409 : 502).json({
+        error: yaRegistrado
+          ? 'Ese email ya tiene una cuenta en Auth (sin perfil en Toshify). Revisarlo con sistemas.'
+          : `No se pudo enviar la invitacion: ${msg}`,
+      })
+    }
+    const authUser = await inviteRes.json()
+
+    // Perfil de Toshify. No se fuerza el cambio de contraseña: la define el propio
+    // usuario al aceptar la invitacion.
+    const perfil = {
+      id: authUser.id,
+      email,
+      full_name: fullName,
+      role_id: roleId,
+      sede_id: sedeId,
+      is_active: true,
+      must_change_password: false,
+    }
+    const profileRes = await fetch(`${cfg.url}/rest/v1/user_profiles?on_conflict=id`, {
+      method: 'POST',
+      headers: { ...cfg.headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(perfil),
+    })
+    if (!profileRes.ok) {
+      // Sin perfil el usuario no sirve: se deshace el alta en Auth.
+      const detalle = await profileRes.text()
+      await fetch(`${cfg.url}/auth/v1/admin/users/${authUser.id}`, {
+        method: 'DELETE',
+        headers: cfg.headers,
+      }).catch(() => {})
+      console.error('[usuarios] invite: perfil no creado:', detalle)
+      return res.status(500).json({ error: 'No se pudo crear el perfil del usuario' })
+    }
+
+    res.json({ success: true, id: authUser.id })
+  } catch (error) {
+    console.error('[usuarios] invite:', error)
+    res.status(500).json({ error: 'Error interno al crear el usuario' })
+  }
+})
+
+// Reenviar acceso: invitacion si nunca activo la cuenta, si no, correo de restablecer contraseña.
+app.post('/api/admin/users/send-access', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg } = ctx
+    const userId = req.body?.userId
+    if (!UUID_RE.test(String(userId || ''))) return res.status(400).json({ error: 'Usuario invalido' })
+
+    const authUser = await obtenerUsuarioAuth(cfg, userId)
+    if (!authUser?.email) return res.status(404).json({ error: 'El usuario no existe en Auth' })
+    if (authUser.banned_until && new Date(authUser.banned_until) > new Date()) {
+      return res.status(400).json({ error: 'El usuario esta desactivado. Activalo antes de enviarle acceso.' })
+    }
+
+    // Usuarios invitados que todavia no confirmaron: se reenvia la invitacion.
+    // Los ya confirmados (incluidos los creados con contraseña) reciben el de restablecer.
+    const pendienteInvitacion = !authUser.email_confirmed_at && !authUser.last_sign_in_at
+    const resp = pendienteInvitacion
+      ? await enviarInvitacion(cfg, authUser.email, authUser.user_metadata?.full_name, req.body?.origin)
+      : await enviarRecuperacion(cfg, authUser.email, req.body?.origin)
+
+    if (!resp.ok) {
+      const msg = await leerErrorGotrue(resp)
+      const limite = resp.status === 429 || /rate|seconds|security purposes/i.test(msg)
+      return res.status(limite ? 429 : 502).json({
+        error: limite
+          ? 'Ya se envio un correo hace poco a este usuario. Espera un minuto y volve a intentar.'
+          : `No se pudo enviar el correo: ${msg}`,
+      })
+    }
+    res.json({ success: true, tipo: pendienteInvitacion ? 'invitacion' : 'recuperacion', email: authUser.email })
+  } catch (error) {
+    console.error('[usuarios] send-access:', error)
+    res.status(500).json({ error: 'Error interno al enviar el correo' })
+  }
+})
+
+// Activar / desactivar: perfil + ban en Auth
+app.post('/api/admin/users/set-active', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg, adminId } = ctx
+    const { userId, isActive } = req.body || {}
+    if (!UUID_RE.test(String(userId || '')) || typeof isActive !== 'boolean') {
+      return res.status(400).json({ error: 'Parametros invalidos' })
+    }
+    if (!isActive && userId === adminId) {
+      return res.status(400).json({ error: 'No podes desactivar tu propio usuario' })
+    }
+
+    const banRes = await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: cfg.headers,
+      body: JSON.stringify({ ban_duration: isActive ? 'none' : BAN_USUARIO_INACTIVO }),
+    })
+    if (!banRes.ok) {
+      return res.status(502).json({ error: `No se pudo actualizar el acceso: ${await leerErrorGotrue(banRes)}` })
+    }
+
+    const profileRes = await fetch(`${cfg.url}/rest/v1/user_profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { ...cfg.headers, Prefer: 'return=minimal' },
+      body: JSON.stringify({ is_active: isActive, updated_at: new Date().toISOString() }),
+    })
+    if (!profileRes.ok) {
+      // Se vuelve el ban atras para no dejar Auth y perfil desalineados.
+      await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: cfg.headers,
+        body: JSON.stringify({ ban_duration: isActive ? BAN_USUARIO_INACTIVO : 'none' }),
+      }).catch(() => {})
+      return res.status(500).json({ error: 'No se pudo actualizar el estado del usuario' })
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('[usuarios] set-active:', error)
+    res.status(500).json({ error: 'Error interno al cambiar el estado' })
+  }
+})
+
+/**
+ * Tablas que guardan al usuario como autor o responsable y NO se borran con el.
+ * Algunas bloquean el borrado en la BD y otras perderian el dato (SET NULL):
+ * en ambos casos se pide desactivarlo, para no perder la trazabilidad.
+ * Perfil, permisos y sesiones se borran solos en cascada desde auth.users.
+ */
+const REFERENCIAS_USUARIO = [
+  { tabla: 'programaciones_onboarding', columna: 'created_by', etiqueta: 'Programaciones' },
+  { tabla: 'programaciones_onboarding', columna: 'especialista_id', etiqueta: 'Programaciones (especialista)' },
+  { tabla: 'asignaciones', columna: 'created_by', etiqueta: 'Asignaciones' },
+  { tabla: 'devoluciones', columna: 'created_by', etiqueta: 'Devoluciones' },
+  { tabla: 'garantias_conductores', columna: 'created_by', etiqueta: 'Garantías' },
+  { tabla: 'abonos_conductores', columna: 'created_by', etiqueta: 'Abonos' },
+  { tabla: 'tickets_favor', columna: 'created_by', etiqueta: 'Tickets a favor' },
+  { tabla: 'siniestros_seguimientos', columna: 'created_by', etiqueta: 'Seguimientos de siniestros' },
+  { tabla: 'penalidades_rechazos', columna: 'created_by', etiqueta: 'Penalidades' },
+  { tabla: 'penalidades_rechazos', columna: 'updated_by', etiqueta: 'Penalidades' },
+  { tabla: 'penalidades_rechazos', columna: 'rechazado_por', etiqueta: 'Penalidades' },
+  { tabla: 'visitas', columna: 'citador_id', etiqueta: 'Visitas' },
+  { tabla: 'visitas_atendedores', columna: 'user_id', etiqueta: 'Visitas (atendedor)' },
+  { tabla: 'titulares', columna: 'updated_by', etiqueta: 'Titulares' },
+  { tabla: 'ofertas_locacion', columna: 'updated_by', etiqueta: 'Ofertas de locación' },
+  { tabla: 'periodos_facturacion', columna: 'created_by', etiqueta: 'Períodos de facturación' },
+  { tabla: 'periodos_facturacion', columna: 'cerrado_por', etiqueta: 'Períodos de facturación' },
+  { tabla: 'movimientos', columna: 'usuario_id', etiqueta: 'Movimientos de inventario' },
+  { tabla: 'movimientos', columna: 'usuario_aprobador_id', etiqueta: 'Movimientos de inventario' },
+  { tabla: 'pedidos_inventario', columna: 'usuario_registro_id', etiqueta: 'Pedidos de inventario' },
+  { tabla: 'productos', columna: 'created_by', etiqueta: 'Productos' },
+  { tabla: 'categorias', columna: 'created_by', etiqueta: 'Categorías' },
+  { tabla: 'proveedores', columna: 'created_by', etiqueta: 'Proveedores' },
+  { tabla: 'productos_proveedores', columna: 'created_by', etiqueta: 'Productos de proveedores' },
+  { tabla: 'zonas_peligrosas', columna: 'created_by', etiqueta: 'Zonas peligrosas' },
+  { tabla: 'hellosign_envios', columna: 'enviado_por', etiqueta: 'Envíos HelloSign' },
+  { tabla: 'user_menu_permissions', columna: 'created_by', etiqueta: 'Permisos otorgados' },
+  { tabla: 'user_submenu_permissions', columna: 'created_by', etiqueta: 'Permisos otorgados' },
+]
+
+// Eliminar usuario: solo si no tiene registros a su nombre (si los tiene, se desactiva)
+app.post('/api/admin/users/delete', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg, adminId } = ctx
+    const { userId } = req.body || {}
+    if (!UUID_RE.test(String(userId || ''))) {
+      return res.status(400).json({ error: 'Parametros invalidos' })
+    }
+    if (userId === adminId) {
+      return res.status(400).json({ error: 'No podes eliminar tu propio usuario' })
+    }
+
+    const usos = await Promise.all(REFERENCIAS_USUARIO.map(async ({ tabla, columna, etiqueta }) => {
+      const r = await fetch(
+        `${cfg.url}/rest/v1/${tabla}?${columna}=eq.${userId}&select=${columna}&limit=1`,
+        { headers: cfg.headers }
+      )
+      if (!r.ok) throw new Error(`No se pudo verificar ${tabla}.${columna}: HTTP ${r.status}`)
+      const filas = await r.json()
+      return filas.length > 0 ? etiqueta : null
+    }))
+    const conRegistros = [...new Set(usos.filter(Boolean))]
+    if (conRegistros.length > 0) {
+      return res.status(409).json({
+        error: `El usuario tiene registros a su nombre (${conRegistros.join(', ')}). Desactivalo en lugar de eliminarlo.`,
+        registros: conRegistros,
+      })
+    }
+
+    // Borrar en Auth arrastra en cascada el perfil, los permisos y las sesiones.
+    const delRes = await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: cfg.headers,
+    })
+    if (delRes.status === 404) {
+      // Perfil sin usuario de Auth (quedo huerfano): se borra directo.
+      const profRes = await fetch(`${cfg.url}/rest/v1/user_profiles?id=eq.${userId}`, {
+        method: 'DELETE',
+        headers: { ...cfg.headers, Prefer: 'return=minimal' },
+      })
+      if (!profRes.ok) {
+        return res.status(409).json({ error: 'No se pudo eliminar el perfil: tiene registros asociados. Desactivalo en lugar de eliminarlo.' })
+      }
+    } else if (!delRes.ok) {
+      const detalle = await leerErrorGotrue(delRes)
+      console.error('[usuarios] delete auth:', detalle)
+      return res.status(409).json({ error: 'No se pudo eliminar: el usuario tiene registros asociados. Desactivalo en lugar de eliminarlo.' })
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('[usuarios] delete:', error)
+    res.status(500).json({ error: 'Error interno al eliminar el usuario' })
+  }
+})
+
+// =====================================================
 // CONTRACT GENERATION
 // =====================================================
 
@@ -782,6 +1161,9 @@ const CONTRACT_CONFIG = {
     cartaOfertaPedidosYa: '1Zo6INIVFjdZWhuOF8F91iEjAWkIBg61lcxMCxcoRRQY',
     cartaOfertaAutoCargoBariloche: '1hAVB6eQ6LcCE_7YfB9llQLdGXN7EByHLvy0lG5YRQ5I',
     actualizacionAutoCargoBariloche: '1b2XCDQ2CYZJbQBYWuBfU3wV_MVqnPt7c36RxKuTqhMU',
+    // Tarifa nueva (OCT-26 / Toshipass): una sola plantilla para todo documento
+    // con tarifa nueva (Carta Oferta y Anexo, Turno y A cargo, cualquier sede).
+    cartaOfertaToshipass: '1HX7OzmSlbVz8zu-MI_D3P0EwRIyMt1sycnktSztsYRM',
     // Plantillas de prueba (TB)
     cartaOfertaTurnoTB: '1rjSKaYDUqls9T-NQU22CvR6TDfhCeX_rSlPREXh8CRQ',
     actualizacionTurnoTB: '1xSfKu0QzyOUBiP3tSBoQkm79pFK1b9XVr0-JNlNdOoo',
@@ -857,16 +1239,75 @@ function getTemplateId(templateKey) {
   return CONTRACT_CONFIG.templates[templateKey]
 }
 
+const TEMPLATE_TARIFA_NUEVA = 'cartaOfertaToshipass'
+
 /**
- * Determina qué plantilla usar según tipo_documento + modalidad + sede
+ * {{TYPE_OF_MINUTES}} (Anexo II, "Tipo de acta") segun el tipo de asignacion
+ * elegido en Programacion.
  */
-function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
+const TIPO_ACTA_POR_ASIGNACION = {
+  entrega_auto: 'Entrega inicial',
+  entrega_auto_cargo: 'Entrega inicial',
+  asignacion_auto_cargo: 'Entrega inicial',
+  asignacion_companero: 'Entrega inicial',
+  cambio_auto: 'Cambio de vehículo',
+  cambio_turno: 'Cambio de turno o modalidad',
+  actualizacion_carta_oferta: 'Nuevo contrato (mismo vehículo)'
+}
+
+/**
+ * Documento OCT-26 de un cambio de vehiculo: lleva los datos del vehiculo
+ * devuelto ({{PLATE_CHANGE}} / {{KM_CHANGE}}), que se completan en Completar Control.
+ * Mismo criterio en generate-contract y complete-control.
+ */
+function esCambioDeVehiculo(tipoAsignacion, vehiculoDevueltoId) {
+  return tipoAsignacion === 'cambio_auto' && !!vehiculoDevueltoId
+}
+
+/** Numero de poliza valido: solo digitos (admite espacios, guiones, puntos y barras). */
+function esNumeroPoliza(valor) {
+  const v = String(valor || '').trim()
+  return /^[\d\s\-./]+$/.test(v) && /\d/.test(v)
+}
+
+/** 'YYYY-MM-DD' -> 'DD/MM/YYYY' sin pasar por Date (evita el corrimiento de zona horaria). */
+function formatFechaSolo(fecha) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fecha || ''))
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+}
+
+/**
+ * Proximo correlativo de documentos con tarifa nueva del conductor (000001, 000002...).
+ * Cada conductor tiene su propia secuencia y solo cuentan los documentos OCT-26.
+ */
+async function siguienteCorrelativo(conductorId) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const headers = { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` }
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductorId}&correlativo=not.is.null&select=correlativo&order=correlativo.desc&limit=1`,
+    { headers }
+  )
+  if (!res.ok) throw new Error(`No se pudo calcular el correlativo del documento: ${await res.text()}`)
+  const data = await res.json()
+  return (Number(data?.[0]?.correlativo) || 0) + 1
+}
+
+/**
+ * Determina qué plantilla usar según tipo_documento + modalidad + sede (+ tarifa)
+ */
+function resolveTemplateKey(tipoDocumento, modalidad, sedeCode, tipoTarifa) {
   if (tipoDocumento === 'na') return null
 
   const isBariloche = sedeCode && sedeCode.toUpperCase() === 'BRC'
 
   // Bariloche no tiene modalidad turno, no generar contrato
   if (isBariloche && modalidad === 'turno') return null
+
+  // Tarifa nueva (OCT-26): todo documento sale de la plantilla Toshipass
+  if (tipoTarifa === 'nueva' && (tipoDocumento === 'carta_oferta' || tipoDocumento === 'anexo')) {
+    return TEMPLATE_TARIFA_NUEVA
+  }
 
   if (tipoDocumento === 'carta_oferta') {
     if (isBariloche) return 'cartaOfertaAutoCargoBariloche'
@@ -992,7 +1433,7 @@ async function fetchVehiculoData(vehiculoId) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual,gnc,cobertura,notas`,
+    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual,gnc,cobertura,seguro_numero,seguro_vigencia,notas`,
     {
       headers: {
         'apikey': serviceKey,
@@ -1207,10 +1648,26 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc, tipoTarifa) {
  * Retorna { googleDocUrl, pdfUrl, folderUrl, folderId }
  */
 async function generateContractForConductor({
-  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad, propietario, tipoTarifa
+  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad, propietario, tipoTarifa,
+  tipoDocumento, tipoAsignacion, vehiculoDevueltoId
 }) {
   const templateId = getTemplateId(templateKey)
   if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
+  const esTarifaNueva = templateKey === TEMPLATE_TARIFA_NUEVA
+
+  // Plantilla OCT-26: la poliza es obligatoria y el numero tiene que ser numerico
+  // (Programacion ya lo valida antes de enviar; esto cubre cualquier otro camino).
+  if (esTarifaNueva) {
+    const faltan = []
+    if (!vehiculo.cobertura?.trim()) faltan.push('Cobertura')
+    if (!esNumeroPoliza(vehiculo.seguro_numero)) faltan.push('Número de Póliza (debe ser numérico)')
+    if (!formatFechaSolo(vehiculo.seguro_vigencia)) faltan.push('Vigencia Seguro')
+    if (faltan.length > 0) {
+      throw new Error(`Revisar datos del seguro del vehículo ${vehiculo.patente}: ${faltan.join(', ')}`)
+    }
+  }
+  // Correlativo por conductor, solo documentos OCT-26
+  const correlativo = esTarifaNueva ? await siguienteCorrelativo(conductor.id) : null
 
   console.log(`[Contract] Generando ${templateKey} para ${conductor.nombres} ${conductor.apellidos}`)
 
@@ -1259,6 +1716,19 @@ async function generateContractForConductor({
   addIfPresent('AMOUNT', amount)
   addIfPresent('AMMOUNT', amount)
   addIfPresent('COVERAGE', vehiculo.cobertura?.toUpperCase())
+  if (esTarifaNueva) {
+    addIfPresent('NUM_COVERAGE', String(vehiculo.seguro_numero).trim())
+    addIfPresent('VALIDITY_COVERAGE', formatFechaSolo(vehiculo.seguro_vigencia))
+    addIfPresent('VERSION', String(correlativo).padStart(6, '0'))
+    addIfPresent('TYPE_OF_MINUTES', TIPO_ACTA_POR_ASIGNACION[tipoAsignacion] || 'Entrega inicial')
+    // Vehiculo devuelto: en un cambio de vehiculo {{PLATE_CHANGE}} / {{KM_CHANGE}}
+    // quedan pendientes y se completan en /api/complete-control con el km real de
+    // la entrega. Si no es cambio de vehiculo van directamente como N/A.
+    if (!esCambioDeVehiculo(tipoAsignacion, vehiculoDevueltoId)) {
+      addIfPresent('PLATE_CHANGE', 'N/A')
+      addIfPresent('KM_CHANGE', 'N/A')
+    }
+  }
   addIfPresent('MODE', modalidad === 'a_cargo' ? 'A CARGO' : (turno === 'nocturno' ? 'NOCTURNO' : 'DIURNO'))
   // {{OBSERVATIONS}} NO se llena al generar el contrato: se completa en
   // /api/complete-control con lo que el usuario confirma en el modal
@@ -1314,7 +1784,9 @@ async function generateContractForConductor({
   //   Carta Oferta - A Cargo - NOMBRE
   //   Carta Oferta - Turno - Diurno - NOMBRE
   //   Actualizacion Carta Oferta - Auto a Cargo Bariloche - NOMBRE
-  const tipoLabel = templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Actualizacion Carta Oferta'
+  const tipoLabel = esTarifaNueva
+    ? `${tipoDocumento === 'anexo' ? 'Actualizacion Carta Oferta' : 'Carta Oferta'} OCT-26 N° ${String(correlativo).padStart(6, '0')}`
+    : templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Actualizacion Carta Oferta'
   const sedeLabel = sedeCode?.toUpperCase() === 'BRC' ? ' Bariloche' : ''
   const isAutoCargo = modalidad === 'a_cargo'
   const modalidadLabel = isAutoCargo ? `Auto a Cargo${sedeLabel}` : `Turno${sedeLabel}`
@@ -1347,6 +1819,7 @@ async function generateContractForConductor({
   console.log(`[Contract] OK: ${fileName} → doc: ${googleDoc.data.id}`)
 
   return {
+    correlativo,
     googleDocUrl: googleDoc.data.webViewLink,
     googleDocId: googleDoc.data.id,
     pdfUrl: null,
@@ -1369,6 +1842,10 @@ app.post('/api/generate-contract', async (req, res) => {
       tipo_tarifa,           // 'antigua' | 'nueva' (modo a_cargo)
       tipo_tarifa_diurno,    // 'antigua' | 'nueva' (modo turno)
       tipo_tarifa_nocturno,  // 'antigua' | 'nueva' (modo turno)
+      tipo_asignacion,          // tipo de asignacion de Programacion (modo a_cargo)
+      tipo_asignacion_diurno,   // (modo turno)
+      tipo_asignacion_nocturno, // (modo turno)
+      vehiculo_devuelto_id,     // vehiculo que se devuelve en un cambio de auto
       modalidad,           // 'turno' | 'a_cargo'
       sede_id,
       programacion_id,     // UUID de la programación creada
@@ -1390,12 +1867,15 @@ app.post('/api/generate-contract', async (req, res) => {
     if (modalidad === 'a_cargo' && conductor_id) {
       // Modo A CARGO: un solo conductor
       if (tipo_documento && tipo_documento !== 'na') {
-        const templateKey = resolveTemplateKey(tipo_documento, 'a_cargo', sedeCode)
+        const templateKey = resolveTemplateKey(tipo_documento, 'a_cargo', sedeCode, tipo_tarifa || 'antigua')
         if (templateKey) {
           const conductor = await fetchConductorData(conductor_id)
           const result = await generateContractForConductor({
             drive, conductor, vehiculo, templateKey, turno: null, sedeCode, modalidad: 'a_cargo', propietario,
-            tipoTarifa: tipo_tarifa || 'antigua'
+            tipoTarifa: tipo_tarifa || 'antigua',
+            tipoDocumento: tipo_documento,
+            tipoAsignacion: tipo_asignacion,
+            vehiculoDevueltoId: vehiculo_devuelto_id
           })
 
           await saveDocumentoGenerado({
@@ -1403,6 +1883,7 @@ app.post('/api/generate-contract', async (req, res) => {
             conductor_id,
             tipo_documento,
             plantilla_usada: templateKey,
+            ...(result.correlativo ? { correlativo: result.correlativo } : {}),
             turno: null,
             url_docx: result.googleDocUrl,
             url_pdf: result.pdfUrl,
@@ -1426,18 +1907,23 @@ app.post('/api/generate-contract', async (req, res) => {
     } else if (modalidad === 'turno') {
       // Modo TURNO: hasta 2 conductores
       const turnoConfigs = [
-        { id: conductor_diurno_id, doc: documento_diurno, turno: 'diurno', tarifa: tipo_tarifa_diurno || tipo_tarifa || 'antigua' },
-        { id: conductor_nocturno_id, doc: documento_nocturno, turno: 'nocturno', tarifa: tipo_tarifa_nocturno || tipo_tarifa || 'antigua' }
+        { id: conductor_diurno_id, doc: documento_diurno, turno: 'diurno', tarifa: tipo_tarifa_diurno || tipo_tarifa || 'antigua',
+          tipoAsignacion: tipo_asignacion_diurno || tipo_asignacion },
+        { id: conductor_nocturno_id, doc: documento_nocturno, turno: 'nocturno', tarifa: tipo_tarifa_nocturno || tipo_tarifa || 'antigua',
+          tipoAsignacion: tipo_asignacion_nocturno || tipo_asignacion }
       ]
 
       for (const cfg of turnoConfigs) {
         if (cfg.id && cfg.doc && cfg.doc !== 'na') {
-          const templateKey = resolveTemplateKey(cfg.doc, 'turno', sedeCode)
+          const templateKey = resolveTemplateKey(cfg.doc, 'turno', sedeCode, cfg.tarifa)
           if (templateKey) {
             const conductor = await fetchConductorData(cfg.id)
             const result = await generateContractForConductor({
               drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode, modalidad: 'turno', propietario,
-              tipoTarifa: cfg.tarifa
+              tipoTarifa: cfg.tarifa,
+              tipoDocumento: cfg.doc,
+              tipoAsignacion: cfg.tipoAsignacion,
+              vehiculoDevueltoId: vehiculo_devuelto_id
             })
 
             await saveDocumentoGenerado({
@@ -1445,6 +1931,7 @@ app.post('/api/generate-contract', async (req, res) => {
               conductor_id: cfg.id,
               tipo_documento: cfg.doc,
               plantilla_usada: templateKey,
+              ...(result.correlativo ? { correlativo: result.correlativo } : {}),
               turno: cfg.turno,
               url_docx: result.googleDocUrl,
               url_pdf: result.pdfUrl,
@@ -1515,7 +2002,9 @@ app.post('/api/complete-control', async (req, res) => {
       make_chains,
       status_chains,
       tensioners_chains,
-      others_kit
+      others_kit,
+      // Plantilla OCT-26, solo en cambio de vehiculo: km del vehiculo devuelto
+      km_change
     } = req.body
 
     if (!conductor_id) {
@@ -1551,11 +2040,12 @@ app.post('/api/complete-control', async (req, res) => {
     // 1.b — Buscar la programación origen vía la FK inversa (programaciones_onboarding.asignacion_id).
     // OJO: `asignaciones` NO tiene columna `programacion_id`. La relación es solo desde la programación.
     const progQuery = await fetch(
-      `${supabaseUrl}/rest/v1/programaciones_onboarding?asignacion_id=eq.${asignacion_id}&select=id&limit=1`,
+      `${supabaseUrl}/rest/v1/programaciones_onboarding?asignacion_id=eq.${asignacion_id}&select=id,tipo_asignacion,tipo_asignacion_diurno,tipo_asignacion_nocturno,vehiculo_cambio_id&limit=1`,
       { headers: authHeaders }
     )
     const progData = await progQuery.json()
-    const progId = (Array.isArray(progData) && progData[0]?.id) || null
+    const progRow = (Array.isArray(progData) && progData[0]) || null
+    const progId = progRow?.id || null
     if (!progId) {
       return res.status(404).json({ error: 'La asignación no tiene programación origen registrada. No se puede determinar el contrato correspondiente.' })
     }
@@ -1585,6 +2075,30 @@ app.post('/api/complete-control', async (req, res) => {
       { find: '{{LTNAFTA}}', replace: ltnafta },
       { find: '{{OBSERVATIONS}}', replace: observations || '-' }
     ]
+
+    // Plantilla OCT-26: vehiculo devuelto. La patente sale de la programacion (no
+    // se edita); el km lo carga el usuario en el modal. Si no es cambio de
+    // vehiculo el documento ya salio con N/A y estos reemplazos no encuentran nada.
+    if (plantillaUsada === TEMPLATE_TARIFA_NUEVA) {
+      const tipoAsig = (docRecord.turno === 'diurno' && progRow.tipo_asignacion_diurno)
+        || (docRecord.turno === 'nocturno' && progRow.tipo_asignacion_nocturno)
+        || progRow.tipo_asignacion
+      if (esCambioDeVehiculo(tipoAsig, progRow.vehiculo_cambio_id)) {
+        if (!String(km_change || '').trim()) {
+          return res.status(400).json({ error: 'Falta el kilometraje del vehículo devuelto' })
+        }
+        const devuelto = await fetchVehiculoData(progRow.vehiculo_cambio_id)
+        replacements.push(
+          { find: '{{PLATE_CHANGE}}', replace: String(devuelto.patente || 'N/A').toUpperCase() },
+          { find: '{{KM_CHANGE}}', replace: `${String(km_change).trim()} KM` }
+        )
+      } else {
+        replacements.push(
+          { find: '{{PLATE_CHANGE}}', replace: 'N/A' },
+          { find: '{{KM_CHANGE}}', replace: 'N/A' }
+        )
+      }
+    }
 
     // Campos adicionales para Bariloche
     const isBariloche = plantillaUsada && plantillaUsada.toLowerCase().includes('bariloche')

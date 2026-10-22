@@ -367,6 +367,8 @@ export function ConductorWizard({
               {errors.direccion && <span className="error-message">{errors.direccion}</span>}
               <AddressAutocomplete
                 value={formData.direccion}
+                lat={formData.direccion_lat}
+                lng={formData.direccion_lng}
                 onChange={(address, lat, lng, zona, ubicacion) => {
                   const sinCoordenadas = lat == null || lng == null
                   setFormData({

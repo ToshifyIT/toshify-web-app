@@ -19,6 +19,8 @@ import { tieneGncEnFecha, armarMapaGncHistorial, type GncHistorialEntry } from '
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type ModalidadTarifa } from '../onboarding/tarifaConceptos'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import { completeControl } from '../../services/controlService'
+import { generateContracts, type ContractGenerationRequest } from '../../services/contractService'
+import { avisarDatosIncompletos, avisarTarifasFaltantes, esBarilocheTurno, validarDatosDocumento, validarTarifasDocumento } from '../onboarding/validacionDocumento'
 import {
   ErrorPasoConfirmacion,
   exigirOk,
@@ -153,7 +155,7 @@ async function fetchProgramaciones(): Promise<any[]> {
   try {
     const res = await supabase
       .from('programaciones_onboarding')
-      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo')
+      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo, conductor_id, conductor_diurno_id, conductor_nocturno_id, tipo_asignacion_diurno, tipo_asignacion_nocturno, documentos_generados(conductor_id, google_doc_id)')
       .not('asignacion_id', 'is', null)
     if (res.error) throw res.error
     return res.data || []
@@ -174,8 +176,78 @@ function ultimoConductorPorFecha(arr: any[]): any {
     String(b?.fecha_inicio || b?.fecha_fin || '') >= String(a?.fecha_inicio || a?.fecha_fin || '') ? b : a)
 }
 
+/**
+ * Desde esta fecha cada documento del wizard queda registrado en
+ * `documentos_generados`. Las asignaciones anteriores no tienen ese registro,
+ * así que no se les puede exigir.
+ */
+const INICIO_REGISTRO_DOCUMENTOS = '2026-04-20'
+
+/** Bariloche en turno no tiene plantillas: ahí nunca se genera documento. */
+function noGeneraDocumento(a: any): boolean {
+  return esBarilocheTurno(a?.sede_id, a?.horario === 'todo_dia' ? 'a_cargo' : 'turno')
+}
+
+/**
+ * El conductor no tiene el documento (carta oferta / anexo) de la programación
+ * que originó esta asignación. Que tenga carpeta en Drive no alcanza: la
+ * carpeta puede venir de una programación anterior y el documento de esta no
+ * haberse generado. Sin programación vinculada no hay contra qué comparar.
+ */
+function conductorSinDocumento(a: any, conductorId: string | null | undefined): boolean {
+  if (noGeneraDocumento(a)) return false
+  const conDocumento: string[] | null = a?._conductoresConDocumento ?? null
+  if (!conDocumento || !conductorId) return false
+  if (String(a.created_at || '') < INICIO_REGISTRO_DOCUMENTOS) return false
+  return !conDocumento.includes(conductorId)
+}
+
+const TIPO_ASIGNACION_LABELS: Record<string, string> = {
+  entrega_auto: 'Entrega de auto',
+  asignacion_companero: 'Asig. compañero',
+  cambio_auto: 'Cambio de auto',
+  asignacion_auto_cargo: 'Asig. auto a cargo',
+  entrega_auto_cargo: 'Entrega a cargo',
+  cambio_turno: 'Cambio de turno',
+  devolucion_vehiculo: 'Devolución',
+  actualizacion_carta_oferta: 'Actualización carta oferta',
+}
+
+/**
+ * En un cambio de vehículo, el tipo de asignación del conductor que se sumó y
+ * NO cambió de auto (por ejemplo, una entrega de auto). Null si el conductor
+ * sí hizo el cambio o si la asignación no viene de un cambio de vehículo.
+ */
+function tipoAsignacionFueraDelCambio(a: any, conductorId: string | null | undefined): string | null {
+  if (!a?.motivoDetalle?.cambioVehiculo || !conductorId) return null
+  const tipo: string | undefined = a._tipoAsignacionPorConductor?.[conductorId]
+  if (!tipo || tipo === 'cambio_auto') return null
+  return TIPO_ASIGNACION_LABELS[tipo] || tipo
+}
+
 // Helper: mapear motivos de programación a asignaciones
 function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) {
+  // Conductores con documento generado, juntando todas las programaciones de la
+  // asignación. Solo se arma si la consulta trajo `documentos_generados`.
+  const documentosMap = new Map<string, Set<string>>()
+  // Tipo de asignación de cada conductor según su turno en la programación
+  const tiposMap = new Map<string, Record<string, string>>()
+  for (const p of programaciones) {
+    if (!p.asignacion_id) continue
+    const tipos = tiposMap.get(p.asignacion_id) || {}
+    if (p.conductor_diurno_id && p.tipo_asignacion_diurno) tipos[p.conductor_diurno_id] = p.tipo_asignacion_diurno
+    if (p.conductor_nocturno_id && p.tipo_asignacion_nocturno) tipos[p.conductor_nocturno_id] = p.tipo_asignacion_nocturno
+    if (p.conductor_id && p.tipo_asignacion) tipos[p.conductor_id] = p.tipo_asignacion
+    tiposMap.set(p.asignacion_id, tipos)
+  }
+  for (const p of programaciones) {
+    if (!p.asignacion_id || !Array.isArray(p.documentos_generados)) continue
+    const conDoc = documentosMap.get(p.asignacion_id) || new Set<string>()
+    for (const d of p.documentos_generados) {
+      if (d?.conductor_id && d?.google_doc_id) conDoc.add(d.conductor_id)
+    }
+    documentosMap.set(p.asignacion_id, conDoc)
+  }
   const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string }>()
   for (const p of programaciones) {
     if (p.asignacion_id && p.tipo_asignacion) {
@@ -184,8 +256,11 @@ function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) 
   }
   return asignaciones.map((a: any) => {
     const prog = motivosMap.get(a.id)
+    const conDoc = documentosMap.get(a.id)
     return {
       ...a,
+      _conductoresConDocumento: conDoc ? [...conDoc] : null,
+      _tipoAsignacionPorConductor: tiposMap.get(a.id) || null,
       motivo: prog?.tipo || null,
       motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor, cambioVehiculo: prog.cambioVehiculo, vehiculoCambioPatente: prog.vehiculoCambioPatente, vehiculoCambioModelo: prog.vehiculoCambioModelo, vehiculoCambioId: prog.vehiculoCambioId } : null,
     }
@@ -336,6 +411,9 @@ export function AsignacionesModule() {
   const [controlSaving, setControlSaving] = useState(false)
   const [isControlBariloche, setIsControlBariloche] = useState(false)
   const [controlVehiculoKmNotFound, setControlVehiculoKmNotFound] = useState(false)
+  // Plantilla OCT-26 en cambio de vehículo: patente del vehículo devuelto (solo
+  // lectura, sale de la programación). null = no aplica y la sección no se muestra.
+  const [controlDevueltoPatente, setControlDevueltoPatente] = useState<string | null>(null)
   const [controlForm, setControlForm] = useState({
     km: '',
     ltnafta: '',
@@ -349,29 +427,61 @@ export function AsignacionesModule() {
     status_chains: '',
     tensioners_chains: '',
     others_kit: '',
+    km_change: '',
   })
+
+  /**
+   * Vehículo devuelto de la asignación, si corresponde completarlo: algún
+   * documento OCT-26 (plantilla Toshipass) de la programación origen es de un
+   * cambio de vehículo. Mismo criterio que esCambioDeVehiculo en server.js.
+   */
+  async function cargarVehiculoDevuelto(asignacionId: string): Promise<{ patente: string; km: number | null } | null> {
+    const { data: prog } = await (supabase.from('programaciones_onboarding') as any)
+      .select('id, tipo_asignacion, tipo_asignacion_diurno, tipo_asignacion_nocturno, vehiculo_cambio_id')
+      .eq('asignacion_id', asignacionId)
+      .limit(1)
+      .maybeSingle()
+    if (!prog?.vehiculo_cambio_id) return null
+
+    const { data: docs } = await supabase
+      .from('documentos_generados')
+      .select('turno')
+      .eq('programacion_id', prog.id)
+      .eq('plantilla_usada', 'cartaOfertaToshipass')
+      .not('google_doc_id', 'is', null)
+    const tipoDeDoc = (turno: string | null) =>
+      (turno === 'diurno' && prog.tipo_asignacion_diurno)
+      || (turno === 'nocturno' && prog.tipo_asignacion_nocturno)
+      || prog.tipo_asignacion
+    const esCambio = ((docs || []) as Array<{ turno: string | null }>)
+      .some(d => tipoDeDoc(d.turno) === 'cambio_auto')
+    if (!esCambio) return null
+
+    const { data: veh } = await supabase
+      .from('vehiculos')
+      .select('patente, kilometraje_actual')
+      .eq('id', prog.vehiculo_cambio_id)
+      .single()
+    const v = veh as { patente: string | null; kilometraje_actual: number | null } | null
+    return { patente: (v?.patente || '').toUpperCase(), km: v?.kilometraje_actual ?? null }
+  }
 
   async function openControlModal(asig: ExpandedAsignacion) {
     setControlAsignacion(asig)
     setControlVehiculoKmNotFound(false)
+    setControlDevueltoPatente(null)
 
-    // Prefill desde la tabla vehiculos: kilometraje (kilometraje_actual) y
-    // observaciones (notas del vehiculo, como sugerencia editable). Las
-    // observaciones ya no se llenan al generar el contrato: llegan al
-    // documento solo con lo que el usuario confirma aca.
+    // Prefill del kilometraje desde la tabla vehiculos (kilometraje_actual).
+    // Observaciones arranca siempre vacio: al documento llega solo lo que el
+    // usuario escribe aca.
     let kmPrefill = ''
-    let observacionesPrefill = ''
     if (asig.vehiculo_id) {
       try {
         const { data: vehData, error: vehError } = await supabase
           .from('vehiculos')
-          .select('kilometraje_actual, notas')
+          .select('kilometraje_actual')
           .eq('id', asig.vehiculo_id)
           .single()
-        const notasVehiculo = (vehData as { notas: string | null } | null)?.notas
-        if (!vehError && typeof notasVehiculo === 'string' && notasVehiculo.trim()) {
-          observacionesPrefill = notasVehiculo.trim()
-        }
         const kmActual = (vehData as { kilometraje_actual: number | null } | null)?.kilometraje_actual
         if (!vehError && typeof kmActual === 'number' && kmActual > 0) {
           kmPrefill = String(kmActual)
@@ -385,7 +495,19 @@ export function AsignacionesModule() {
       setControlVehiculoKmNotFound(true)
     }
 
-    setControlForm({ km: kmPrefill, ltnafta: '', observations: observacionesPrefill, cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
+    // Vehículo devuelto (OCT-26, cambio de vehículo): km precargado con el del sistema
+    let kmDevueltoPrefill = ''
+    try {
+      const devuelto = await cargarVehiculoDevuelto(asig.id)
+      if (devuelto) {
+        setControlDevueltoPatente(devuelto.patente || '-')
+        if (typeof devuelto.km === 'number' && devuelto.km > 0) kmDevueltoPrefill = String(devuelto.km)
+      }
+    } catch (err) {
+      console.error('No se pudo resolver el vehículo devuelto:', err)
+    }
+
+    setControlForm({ km: kmPrefill, ltnafta: '', observations: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '', km_change: kmDevueltoPrefill })
     // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
@@ -446,7 +568,8 @@ export function AsignacionesModule() {
     const camposBariloche = isControlBariloche
       ? [controlForm.cristal_status, controlForm.carter, controlForm.tires, controlForm.others_docs, controlForm.other_accesory, controlForm.make_chains, controlForm.status_chains, controlForm.tensioners_chains, controlForm.others_kit]
       : []
-    const todosLosCampos = [...camposBase, ...camposBariloche]
+    const camposDevuelto = controlDevueltoPatente !== null ? [controlForm.km_change] : []
+    const todosLosCampos = [...camposBase, ...camposBariloche, ...camposDevuelto]
     if (todosLosCampos.some(c => !c.trim())) {
       Swal.fire('Campos requeridos', 'Todos los campos son obligatorios. En caso de no tener el dato, ingresa N/A o Sin observación.', 'warning')
       return
@@ -505,6 +628,7 @@ export function AsignacionesModule() {
         status_chains: isControlBariloche ? (controlForm.status_chains.trim() || null) : null,
         tensioners_chains: isControlBariloche ? (controlForm.tensioners_chains.trim() || null) : null,
         others_kit: isControlBariloche ? (controlForm.others_kit.trim() || null) : null,
+        km_change: controlDevueltoPatente !== null ? controlForm.km_change.trim() : null,
       }
 
       // Enviar control para cada conductor
@@ -1104,11 +1228,11 @@ export function AsignacionesModule() {
   }, [showHistorialCond, showControlModal, controlSaving, showConfirmModal, showCancelModal, showRegularizarModal, showViewModal])
 
   /**
-   * La asignacion tiene algun conductor SIN carpeta de contratos en Drive.
+   * La asignacion tiene algun conductor SIN carpeta de contratos en Drive o
+   * SIN el documento de su programacion (ver `conductorSinDocumento`).
    *
-   * Es la misma condicion que muestra "Sin carpeta" en el detalle: el conductor
-   * no tiene `drive_contract_folder_url`, o sea que el documento no llego a
-   * generarse y la programacion hay que rehacerla.
+   * Es la misma condicion que muestra la alerta roja en el detalle: el
+   * documento no llego a generarse y la programacion hay que rehacerla.
    *
    * Tres recortes, a proposito:
    *  - Documento 'NA' / 'N/A': no se espera carpeta, no se marca.
@@ -1117,12 +1241,156 @@ export function AsignacionesModule() {
    *    se puede hacer a medias.
    */
   const asignacionSinCarpeta = (a: any): boolean => {
-    if (!a || a.estado === 'cancelada') return false
+    if (!a || a.estado === 'cancelada' || noGeneraDocumento(a)) return false
     const ocupantes = a.asignaciones_conductores || []
     return ocupantes.some((ac: any) => {
       if (!ac?.conductor_id) return false
       if (ac.documento === 'NA' || ac.documento === 'N/A') return false
-      return !(ac.conductores as any)?.drive_contract_folder_url
+      return !(ac.conductores as any)?.drive_contract_folder_url || conductorSinDocumento(a, ac.conductor_id)
+    })
+  }
+
+  /**
+   * Vuelve a generar el documento (carta oferta / anexo) de UN conductor cuya
+   * generación falló al enviar la programación a entrega. Usa los mismos datos
+   * de la programación que dio origen a la asignación y el mismo endpoint que
+   * Programación, así que el documento sale igual que si no hubiera fallado.
+   */
+  const regenerarDocumento = async (asig: any, conductorId: string) => {
+    const { data: prog, error: progError } = await (supabase.from('programaciones_onboarding') as any)
+      .select('id, modalidad, conductor_id, conductor_diurno_id, conductor_nocturno_id, tipo_documento, documento_diurno, documento_nocturno, tipo_tarifa, tipo_tarifa_diurno, tipo_tarifa_nocturno, tipo_asignacion, tipo_asignacion_diurno, tipo_asignacion_nocturno, vehiculo_entregar_id, vehiculo_cambio_id, sede_id, propietario')
+      .eq('asignacion_id', asig.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (progError || !prog) {
+      Swal.fire('Sin programación', 'No se encontró la programación de esta asignación, no se puede generar el documento desde acá.', 'warning')
+      return
+    }
+
+    const slot: 'cargo' | 'diurno' | 'nocturno' | null =
+      prog.modalidad === 'a_cargo' && prog.conductor_id === conductorId ? 'cargo'
+        : prog.conductor_diurno_id === conductorId ? 'diurno'
+          : prog.conductor_nocturno_id === conductorId ? 'nocturno'
+            : null
+    const documento = slot === 'cargo' ? prog.tipo_documento : slot === 'diurno' ? prog.documento_diurno : slot === 'nocturno' ? prog.documento_nocturno : null
+    if (!slot || !documento || documento === 'na') {
+      Swal.fire('No corresponde', 'Según la programación, este conductor no lleva documento o ya no forma parte de ella.', 'warning')
+      return
+    }
+
+    if (esBarilocheTurno(prog.sede_id || asig.sede_id, prog.modalidad)) {
+      Swal.fire('No corresponde', 'En Bariloche no se generan documentos para la modalidad turno.', 'info')
+      return
+    }
+
+    // Mismas validaciones que Programación antes de generar: sin esto el
+    // documento puede salir con campos en blanco o sin importe.
+    const tarifaSlot = (slot === 'cargo' ? prog.tipo_tarifa
+      : slot === 'diurno' ? (prog.tipo_tarifa_diurno || prog.tipo_tarifa)
+        : (prog.tipo_tarifa_nocturno || prog.tipo_tarifa)) || 'antigua'
+    const etiquetaSlot = slot === 'cargo' ? 'Conductor' : slot === 'diurno' ? 'Conductor Diurno' : 'Conductor Nocturno'
+    const vehiculoDocumentoId = prog.vehiculo_entregar_id || asig.vehiculo_id
+
+    Swal.fire({
+      title: 'Validando datos',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => { Swal.showLoading() },
+    })
+    const validacion = await validarDatosDocumento({
+      vehiculoId: vehiculoDocumentoId,
+      usaTarifaNueva: tarifaSlot === 'nueva',
+      conductores: [{ id: conductorId, label: etiquetaSlot }],
+    })
+    if (validacion.camposFaltantes.length > 0) {
+      await avisarDatosIncompletos(
+        validacion.camposFaltantes,
+        'generar el documento',
+        'Complete estos datos en el módulo correspondiente (Vehículos o Conductores) y vuelva a intentar.',
+      )
+      return
+    }
+    const tarifasFaltantes = await validarTarifasDocumento(
+      [{ modalidad: slot, tarifa: tarifaSlot, label: etiquetaSlot }],
+      validacion.vehiculoTieneGnc,
+    )
+    if (tarifasFaltantes.length > 0) {
+      await avisarTarifasFaltantes(
+        tarifasFaltantes,
+        'generar el documento',
+        'Cargue el importe en Facturación → Conceptos y vuelva a intentar.',
+      )
+      return
+    }
+
+    // Solo el turno de este conductor: el compañero (si tiene su documento) no se duplica.
+    const params: ContractGenerationRequest = {
+      conductor_id: slot === 'cargo' ? conductorId : null,
+      conductor_diurno_id: slot === 'diurno' ? conductorId : null,
+      conductor_nocturno_id: slot === 'nocturno' ? conductorId : null,
+      vehiculo_id: vehiculoDocumentoId,
+      tipo_documento: slot === 'cargo' ? documento : null,
+      documento_diurno: slot === 'diurno' ? documento : null,
+      documento_nocturno: slot === 'nocturno' ? documento : null,
+      tipo_tarifa: slot === 'cargo' ? tarifaSlot : null,
+      tipo_tarifa_diurno: slot === 'diurno' ? tarifaSlot : null,
+      tipo_tarifa_nocturno: slot === 'nocturno' ? tarifaSlot : null,
+      tipo_asignacion: prog.tipo_asignacion || null,
+      tipo_asignacion_diurno: prog.tipo_asignacion_diurno || prog.tipo_asignacion || null,
+      tipo_asignacion_nocturno: prog.tipo_asignacion_nocturno || prog.tipo_asignacion || null,
+      vehiculo_devuelto_id: prog.vehiculo_cambio_id || null,
+      modalidad: slot === 'cargo' ? 'a_cargo' : 'turno',
+      sede_id: prog.sede_id || asig.sede_id || sedeActualId || null,
+      programacion_id: prog.id,
+      propietario: prog.propietario || null,
+      created_by: profile?.id || null,
+      created_by_name: profile?.full_name || 'Sistema',
+    }
+
+    // Cerrar o recargar a mitad de camino deja el documento a medio armar en Drive.
+    const avisarAntesDeSalir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', avisarAntesDeSalir)
+    Swal.fire({
+      title: 'Generando documento',
+      html: '<b>No cierre la ventana</b>, se está generando el documento.<br><span style="font-size:13px;color:#6B7280">Puede tardar hasta un minuto.</span>',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => { Swal.showLoading() },
+    })
+
+    let resultado: Awaited<ReturnType<typeof generateContracts>>
+    try {
+      resultado = await generateContracts(params)
+    } finally {
+      window.removeEventListener('beforeunload', avisarAntesDeSalir)
+    }
+
+    const doc = resultado.documents.find(d => d.conductor_id === conductorId)
+    if (!resultado.success || !doc) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo generar el documento',
+        text: resultado.error || 'El servidor no devolvió el documento. Intentá de nuevo en unos minutos.',
+      })
+      return
+    }
+
+    // Se refleja en el modal abierto sin esperar la recarga del listado.
+    setViewDriveUrls(prev => ({ ...prev, [conductorId]: doc.folderUrl }))
+    setViewAsignacion(prev => prev && prev.id === asig.id ? {
+      ...prev,
+      _conductoresConDocumento: [...((prev as any)._conductoresConDocumento || []), conductorId],
+    } as any : prev)
+    loadAsignaciones()
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Documento generado',
+      html: `<a href="${doc.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a>`,
+      confirmButtonText: 'Entendido',
     })
   }
 
@@ -1183,7 +1451,7 @@ export function AsignacionesModule() {
 
   // Etiqueta del chip de Tarifa de un conductor dentro de la asignacion abierta.
   // Devuelve el periodo y el monto semanal del concepto que le corresponde
-  // ("AGO-26 ($ 349.000)"), o la etiqueta generica si el concepto no esta cargado.
+  // ("OCT-26 ($ 349.000)"), o la etiqueta generica si el concepto no esta cargado.
   const getTarifaConductor = (ac: any) => {
     const tarifa = (ac?.tipo_tarifa || viewAsignacion?.tipo_tarifa || 'antigua') as 'antigua' | 'nueva'
     const modalidad: ModalidadTarifa =
@@ -2000,7 +2268,10 @@ export function AsignacionesModule() {
         }
       })
       const tieneCompaneros = companeroIds.size > 0
+      
 
+
+      //Esto es una prueba
       // Hasta activar, cada paso revisa su resultado: si falla (p. ej. corte de
       // red) se frena acá y se avisa, en vez de seguir con datos vacíos.
       exigirOk(
@@ -3060,6 +3331,7 @@ export function AsignacionesModule() {
       entrega_auto_cargo: 'Entrega a cargo',
       cambio_turno: 'Cambio de turno',
       devolucion_vehiculo: 'Devolución',
+      actualizacion_carta_oferta: 'Actualización carta oferta',
     }
     Swal.fire({
       title: labels[motivo] || motivo,
@@ -3127,6 +3399,7 @@ export function AsignacionesModule() {
           entrega_auto_cargo: 'Entrega a cargo',
           cambio_turno: 'Cambio de turno',
           devolucion_vehiculo: 'Devolución',
+          actualizacion_carta_oferta: 'Actualización carta oferta',
         }
         return row.motivo ? (labels[row.motivo] || row.motivo) : '-'
       },
@@ -3141,6 +3414,7 @@ export function AsignacionesModule() {
           entrega_auto_cargo: 'Entrega a cargo',
           cambio_turno: 'Cambio de turno',
           devolucion_vehiculo: 'Devolución',
+          actualizacion_carta_oferta: 'Actualización carta oferta',
         }
         const detalle = row.original.motivoDetalle
         const tieneDetalle = detalle && (detalle.observaciones || detalle.programadoPor)
@@ -3197,7 +3471,17 @@ export function AsignacionesModule() {
                 </span>
               )
             }
-            return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
+            const tipoFueraCargo = tipoAsignacionFueraDelCambio(row.original, conductorCargo.id)
+            return (
+              <span className="asig-conductor-compacto">
+                {conductorCargo.nombre}
+                {tipoFueraCargo && (
+                  <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
+                    · {tipoFueraCargo}
+                  </span>
+                )}
+              </span>
+            )
           }
           return <span className="asig-sin-conductor">Sin asignar</span>
         }
@@ -3215,6 +3499,11 @@ export function AsignacionesModule() {
             >
               <span className="asig-turno-label asig-label-diurno">D</span>
               {diurno ? diurno.nombre : 'Vacante'}
+              {diurno && tipoAsignacionFueraDelCambio(row.original, diurno.id) && (
+                <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
+                  · {tipoAsignacionFueraDelCambio(row.original, diurno.id)}
+                </span>
+              )}
             </span>
             <span 
               className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}
@@ -3223,6 +3512,11 @@ export function AsignacionesModule() {
             >
               <span className="asig-turno-label asig-label-nocturno">N</span>
               {nocturno ? nocturno.nombre : 'Vacante'}
+              {nocturno && tipoAsignacionFueraDelCambio(row.original, nocturno.id) && (
+                <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
+                  · {tipoAsignacionFueraDelCambio(row.original, nocturno.id)}
+                </span>
+              )}
             </span>
           </div>
         )
@@ -3930,6 +4224,12 @@ export function AsignacionesModule() {
                         if (docTipo === 'NA' || docTipo === 'N/A') return null
                         const cId = viewAsignacion.asignaciones_conductores?.[0]?.conductor_id
                         const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_contract_folder_url
+                        if (driveUrl && conductorSinDocumento(viewAsignacion, cId)) return (
+                          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <FolderOpen size={13} style={{ color: '#DC2626' }} />
+                            <span style={{ fontSize: '12px', color: '#B91C1C', fontWeight: 600 }}>No se generó el documento, por favor volver a generar la programación</span>
+                          </div>
+                        )
                         if (!driveUrl) return (
                           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
@@ -4087,7 +4387,12 @@ export function AsignacionesModule() {
                           return lista
                         })().map((ac) => {
                           const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_contract_folder_url
+                          // Tiene carpeta (de una programación anterior) pero no el documento de esta
+                          const sinDocumento = !!driveUrl && conductorSinDocumento(viewAsignacion, ac.conductor_id)
+                          const puedeRegenerar = canEdit && !!ac.conductor_id && !noGeneraDocumento(viewAsignacion)
+                            && (viewAsignacion.estado === 'programado' || viewAsignacion.estado === 'activa')
                           const showDrive = ac.documento !== 'NA' && ac.documento !== 'N/A'
+                            && (!!driveUrl || !noGeneraDocumento(viewAsignacion))
                           return (
                           <div key={ac.id} className="asig-conductor-card" style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
                             {/* Datos del conductor */}
@@ -4099,6 +4404,12 @@ export function AsignacionesModule() {
                                 )}
                               </p>
                               <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
+                              {tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id) && (
+                                <p className="asig-conductor-card-info" style={{ color: 'var(--text-tertiary)' }} title="Este conductor no fue parte del cambio de vehículo">
+                                  Asignación: <strong style={{ color: 'var(--text-secondary)' }}>{tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id)}</strong>
+                                  <span style={{ fontStyle: 'italic' }}> · no participó del cambio de vehículo</span>
+                                </p>
+                              )}
                               {ac.horario !== 'todo_dia' && (
                                 <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
                               )}
@@ -4171,7 +4482,37 @@ export function AsignacionesModule() {
                             {/* Documentos en Drive */}
                             {showDrive && (
                               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '130px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
-                                {driveUrl ? (
+                                {sinDocumento ? (
+                                  <>
+                                    <FolderOpen size={22} style={{ color: '#DC2626', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
+                                    <span style={{ fontSize: '12px', color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>Sin documento</span>
+                                    <span
+                                      style={{
+                                        marginTop: '6px',
+                                        maxWidth: '190px',
+                                        fontSize: '11px',
+                                        lineHeight: 1.35,
+                                        color: '#B91C1C',
+                                        fontWeight: 600,
+                                        textAlign: 'center',
+                                      }}
+                                    >
+                                      No se generó el documento, por favor volver a generar la programación
+                                    </span>
+                                    {puedeRegenerar && (
+                                      <button
+                                        type="button"
+                                        onClick={() => regenerarDocumento(viewAsignacion, ac.conductor_id)}
+                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                      >
+                                        Generar documento
+                                      </button>
+                                    )}
+                                    <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text-tertiary)', textDecoration: 'none' }}>
+                                      Abrir carpeta
+                                    </a>
+                                  </>
+                                ) : driveUrl ? (
                                   <>
                                     <FolderOpen size={22} style={{ color: '#2563EB', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
                                     <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 600, textAlign: 'center', lineHeight: '1.3' }}>
@@ -4200,6 +4541,15 @@ export function AsignacionesModule() {
                                     >
                                       No se generó el documento, por favor volver a generar la programación
                                     </span>
+                                    {puedeRegenerar && (
+                                      <button
+                                        type="button"
+                                        onClick={() => regenerarDocumento(viewAsignacion, ac.conductor_id)}
+                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                      >
+                                        Generar documento
+                                      </button>
+                                    )}
                                   </>
                                 )}
                               </div>
@@ -4718,6 +5068,25 @@ export function AsignacionesModule() {
                     <input type="text" placeholder="Ej: 30" value={controlForm.ltnafta} onChange={(e) => setControlForm(p => ({ ...p, ltnafta: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                   </div>
                 </div>
+
+                {/* Vehículo devuelto: solo plantilla OCT-26 en cambio de vehículo */}
+                {controlDevueltoPatente !== null && (
+                  <>
+                    <div style={{ ...sectionTitleStyle, marginTop: '16px' }}>
+                      <FileText size={14} /> Vehículo devuelto
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={labelStyle}>Patente</label>
+                        <input type="text" value={controlDevueltoPatente} readOnly disabled style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Kilometraje <span style={{ color: '#dc2626' }}>*</span></label>
+                        <input type="text" placeholder="Ej: 45.000" value={controlForm.km_change} onChange={(e) => setControlForm(p => ({ ...p, km_change: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <div style={{ marginTop: '12px', marginBottom: isControlBariloche ? '16px' : '0' }}>
                   <label style={labelStyle}>Observaciones <span style={{ color: '#dc2626' }}>*</span></label>

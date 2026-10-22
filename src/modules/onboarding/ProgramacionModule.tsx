@@ -1545,6 +1545,12 @@ export function ProgramacionModule() {
           tipo_tarifa_nocturno: (prog.modalidad === 'turno' && enviarNocturno)
             ? (tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa || 'antigua')
             : null,
+          // Plantilla OCT-26: "Tipo de acta" y vehículo devuelto (en un cambio de
+          // auto la BD guarda vehiculo_cambio = el que se devuelve).
+          tipo_asignacion: prog.tipo_asignacion || null,
+          tipo_asignacion_diurno: prog.tipo_asignacion_diurno || prog.tipo_asignacion || null,
+          tipo_asignacion_nocturno: prog.tipo_asignacion_nocturno || prog.tipo_asignacion || null,
+          vehiculo_devuelto_id: prog.vehiculo_cambio_id || null,
           modalidad: (prog.modalidad || 'turno') as 'turno' | 'a_cargo',
           sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id || null,
           programacion_id: prog.id,
@@ -1923,6 +1929,7 @@ export function ProgramacionModule() {
                   <option value="listo_cabify">Listo Cabify</option>
                   <option value="asignar_auto">Asignar Auto</option>
                   <option value="crear_cuenta">Crear Cuenta</option>
+                  <option value="confirmacion_didi">Confirmación DIDI</option>
                 </select>
               </div>
               <div className="prog-cabify-row">
@@ -1937,6 +1944,7 @@ export function ProgramacionModule() {
                   <option value="listo_cabify">Listo Cabify</option>
                   <option value="asignar_auto">Asignar Auto</option>
                   <option value="crear_cuenta">Crear Cuenta</option>
+                  <option value="confirmacion_didi">Confirmación DIDI</option>
                 </select>
               </div>
             </div>
@@ -1955,6 +1963,7 @@ export function ProgramacionModule() {
             <option value="listo_cabify">Listo Cabify</option>
             <option value="asignar_auto">Asignar Auto</option>
             <option value="crear_cuenta">Crear Cuenta</option>
+            <option value="confirmacion_didi">Confirmación DIDI</option>
           </select>
         )
       }

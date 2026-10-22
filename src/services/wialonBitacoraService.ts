@@ -11,7 +11,7 @@ import type {
 } from '../modules/integraciones/uss/bitacora/types/bitacora.types'
 // OPT-05: cache de patentes por sede COMPARTIDO con ussHistoricoService (evita doble fetch de
 // vehiculos?select=patente, cada uno ~530ms a EU).
-import { getPatentesPorSede } from './patentesSedeCache'
+import { getPatentesPorSede, normalizarPatente } from './patentesSedeCache'
 
 // Tipo para registro de bitácora
 export interface BitacoraRegistroTransformado {
@@ -129,6 +129,17 @@ class SimpleCache<T> {
 
 const bitacoraCache = new SimpleCache<BitacoraRegistroTransformado[]>(2) // Cache de 2 min para datos en tiempo real
 const statsCache = new SimpleCache<BitacoraStats>(2)
+const viajesCache = new SimpleCache<ViajeGeotab[]>(2)
+
+/** Viaje crudo de Geotab (geotab_historico). Los timestamps vienen en hora AR, sin offset. */
+export interface ViajeGeotab {
+  patente: string | null
+  conductor: string | null
+  ibutton: string | null
+  fecha_hora_inicio_gmt3: string | null
+  fecha_hora_fin_gmt3: string | null
+  kilometraje: number | string | null
+}
 
 // Helper para normalizar la hora que viene de la base.
 // Conserva los segundos si la columna los trae (Postgres `time` -> "09:46:53"):
@@ -418,6 +429,75 @@ export const wialonBitacoraService = {
     // Re-consolidar acá unía marcaciones distintas del mismo conductor en el mismo día.
     bitacoraCache.set(cacheKey, registros)
     return { data: registros, count: registros.length }
+  },
+
+  /**
+   * Viajes crudos de Geotab (geotab_historico) que tocan el rango [startDate, endDate]:
+   * terminan desde startDate y empiezan antes del dia siguiente a endDate. Con ellos
+   * la pantalla de Marcaciones arma 1 fila por conductor por dia (ver
+   * marcacionesPorDia.ts), en vez de las "cards" del reporte de Geotab, que pueden
+   * ser varias por dia o cruzar la medianoche.
+   * `tabla`: la version de prueba pasa geotab_historico_vprueba.
+   */
+  async getViajesGeotab(
+    startDate: string,
+    endDate: string,
+    options?: { sedeId?: string | null; tabla?: string }
+  ): Promise<ViajeGeotab[]> {
+    const tabla = options?.tabla ?? 'geotab_historico'
+    const cacheKey = `viajes_${tabla}_${startDate}_${endDate}_${options?.sedeId ?? ''}`
+    const cached = viajesCache.get(cacheKey)
+    if (cached) return cached
+
+    let patentesSede: Set<string> | null = null
+    if (options?.sedeId) {
+      const patentes = await getPatentesPorSede(options.sedeId)
+      if (!patentes) return []
+      patentesSede = new Set(patentes.map(normalizarPatente))
+    }
+
+    const endDateNext = (() => {
+      const d = new Date(endDate + 'T00:00:00Z')
+      d.setUTCDate(d.getUTCDate() + 1)
+      return d.toISOString().slice(0, 10)
+    })()
+
+    const PAGINA = 1000
+    const COLUMNAS = 'patente, conductor, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje'
+    const buildQuery = (conTotal = false) => supabase
+      .from(tabla)
+      .select(COLUMNAS, conTotal ? { count: 'exact' } : undefined)
+      .gte('fecha_hora_fin_gmt3', startDate)
+      .lt('fecha_hora_inicio_gmt3', endDateNext)
+
+    const primera = await buildQuery(true)
+      .order('id', { ascending: true })
+      .range(0, PAGINA - 1)
+    if (primera.error) {
+      console.warn(`[wialonBitacoraService] ${tabla} query falló:`, primera.error.message)
+      return []
+    }
+    const filas = [...(primera.data || [])] as ViajeGeotab[]
+    const total = primera.count ?? filas.length
+    const restantes: PromiseLike<ViajeGeotab[]>[] = []
+    for (let desde = PAGINA; desde < total; desde += PAGINA) {
+      restantes.push(
+        buildQuery()
+          .order('id', { ascending: true })
+          .range(desde, desde + PAGINA - 1)
+          .then(({ data, error }) => {
+            if (error) throw error
+            return (data || []) as ViajeGeotab[]
+          })
+      )
+    }
+    for (const pagina of await Promise.all(restantes)) filas.push(...pagina)
+
+    const viajes = patentesSede
+      ? filas.filter(v => patentesSede.has(normalizarPatente(v.patente || '')))
+      : filas
+    viajesCache.set(cacheKey, viajes)
+    return viajes
   },
 
   /**

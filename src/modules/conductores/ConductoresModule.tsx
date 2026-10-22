@@ -4770,6 +4770,8 @@ function ModalEditar({
           <div className={editErrors.direccion ? 'input-error' : ''} style={editErrors.direccion ? { borderRadius: 8 } : undefined}>
             <AddressAutocomplete
               value={formData.direccion}
+              lat={formData.direccion_lat}
+              lng={formData.direccion_lng}
               onChange={(address, lat, lng, zona, ubicacion) => {
                 const sinCoordenadas = lat == null || lng == null;
                 setFormData((prev: any) => ({

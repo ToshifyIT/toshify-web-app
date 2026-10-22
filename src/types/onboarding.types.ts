@@ -12,6 +12,8 @@ export type TipoAsignacion =
   | 'entrega_auto_cargo'
   | 'cambio_turno'
   | 'devolucion_vehiculo'
+  // Conductor con asignación en tarifa antigua que pasa a la tarifa nueva: firma carta oferta.
+  | 'actualizacion_carta_oferta'
 
 // Tipos de candidato
 export type TipoCandidato = 'nuevo' | 'antiguo' | 'reingreso'
@@ -43,7 +45,12 @@ export type ZonaOnboarding = 'norte' | 'sur' | 'caba' | 'oeste'
 export type ConfirmacionAsistencia = 'confirmo' | 'no_confirmo' | 'reprogramar' | 'sin_confirmar'
 
 // Estado Cabify
-export type EstadoCabify = 'pendiente' | 'listo_cabify' | 'asignar_auto' | 'crear_cuenta'
+export type EstadoCabify =
+  | 'pendiente'
+  | 'listo_cabify'
+  | 'asignar_auto'
+  | 'crear_cuenta'
+  | 'confirmacion_didi'
 
 // Tipo documento
 export type TipoDocumento = 'carta_oferta' | 'anexo' | 'na'
@@ -284,7 +291,8 @@ export const TIPO_ASIGNACION_LABELS: Record<TipoAsignacion, string> = {
   asignacion_auto_cargo: 'Asignación auto a cargo',
   entrega_auto_cargo: 'Entrega auto a cargo',
   cambio_turno: 'Cambio de turno',
-  devolucion_vehiculo: 'Devolución de Vehículo'
+  devolucion_vehiculo: 'Devolución de Vehículo',
+  actualizacion_carta_oferta: 'Actualización carta oferta'
 }
 
 export const TIPO_TARIFA_LABELS: Record<TipoTarifa, string> = {
@@ -318,7 +326,8 @@ export const ESTADO_CABIFY_LABELS: Record<EstadoCabify, string> = {
   pendiente: 'Pendiente',
   listo_cabify: 'Listo Cabify',
   asignar_auto: 'Asignar auto',
-  crear_cuenta: 'Crear cuenta'
+  crear_cuenta: 'Crear cuenta',
+  confirmacion_didi: 'Confirmación DIDI',
 }
 
 export const DOCUMENTO_LABELS: Record<TipoDocumento, string> = {

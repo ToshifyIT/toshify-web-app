@@ -31,6 +31,7 @@ const TIPO_LABEL: Record<string, string> = {
   pago_manual: 'Pago Manual',
   pago_cuota: 'Pago Cuota',
   ajuste_manual: 'Ajuste',
+  devolucion_garantia: 'Devolución Garantía',
   eliminacion_pago: 'Elim. Pago',
   edicion_pago: 'Edic. Pago',
   cargo: 'Cargo',
@@ -40,7 +41,7 @@ const TIPO_LABEL: Record<string, string> = {
 }
 
 const CARGOS_TIPOS = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
-const ABONOS_TIPOS = new Set(['pago_cabify', 'pago', 'pago_manual', 'pago_cuota', 'abono'])
+const ABONOS_TIPOS = new Set(['pago_cabify', 'pago', 'pago_manual', 'pago_cuota', 'abono', 'devolucion_garantia'])
 const ELIM_TIPOS = new Set(['eliminacion_pago', 'eliminacion_saldo'])
 
 type Clase = 'cargo' | 'abono' | 'elim' | null

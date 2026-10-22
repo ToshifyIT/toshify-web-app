@@ -75,6 +75,23 @@ export function montoNeto(item: LineaFacturable, iva: IvaPorCodigo): number {
 }
 
 /**
+ * IVA de UNA linea (bruto - neto, sobre los mismos montos redondeados que se muestran).
+ * Cada producto muestra su propio renglon de IVA debajo, con referencia al concepto
+ * (ej: "IVA 21% · P001 - Alquiler Turno Diurno"). La suma por linea da lo mismo que
+ * desglosarIvaCargos (mismo calculo, sin agrupar).
+ */
+export function ivaDeLinea(item: LineaFacturable, iva: IvaPorCodigo): { monto: number; porcentaje: number } {
+  const porcentaje = iva.get(item.concepto_codigo) ?? 0
+  return { monto: r2(montoBruto(item) - montoNeto(item, iva)), porcentaje }
+}
+
+/** Etiqueta del renglon de IVA de un producto: "IVA 21% · P001 - Alquiler Turno Diurno". */
+export function etiquetaIvaLinea(porcentaje: number, descripcionProducto: string): string {
+  const pct = Number.isInteger(porcentaje) ? String(porcentaje) : porcentaje.toFixed(2)
+  return `IVA ${pct}% · ${descripcionProducto}`
+}
+
+/**
  * IVA de los cargos, separado en dos: el del alquiler (que va pegado a sus lineas)
  * y el del resto de los conceptos. Cada uno aporta segun su propio iva_porcentaje,
  * NO es un 21% plano sobre el subtotal. Hoy solo el alquiler lleva IVA, pero si

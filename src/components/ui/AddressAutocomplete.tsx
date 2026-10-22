@@ -34,14 +34,27 @@ interface AddressAutocompleteProps {
    * padre no debe pisar lo que ya tenía (salvo que tampoco haya coordenadas).
    */
   onChange: (address: string, lat?: number, lng?: number, zona?: string, ubicacion?: UbicacionDireccion) => void
+  /**
+   * Coordenadas ya guardadas de `value`. Si se pasan (aunque sean null), el
+   * mapa se ubica con ellas y NO se geocodifica la dirección al abrir el
+   * formulario: cada geocodificación es una llamada paga a Google.
+   * Sin estas props se mantiene el comportamiento anterior (geocodificar).
+   */
+  lat?: number | null
+  lng?: number | null
   disabled?: boolean
   placeholder?: string
   className?: string
 }
 
+const coordsValidas = (lat?: number | null, lng?: number | null): lat is number =>
+  typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)
+
 export function AddressAutocomplete({
   value,
   onChange,
+  lat: latInicial,
+  lng: lngInicial,
   disabled = false,
   placeholder = 'Buscar dirección...',
   className = ''
@@ -58,6 +71,10 @@ export function AddressAutocomplete({
   // País/ciudad del punto que está en el marcador. Se guarda junto con el
   // marcador porque el blur vuelve a notificar con esas coordenadas.
   const ubicacionRef = useRef<UbicacionDireccion | undefined>(undefined)
+  // Texto de la direccion a la que corresponde el marcador. Si el usuario
+  // edita el texto, el marcador deja de valer y hay que volver a ubicarlo.
+  const direccionMarcadorRef = useRef<string | null>(null)
+  const coordsPorProps = latInicial !== undefined || lngInicial !== undefined
 
   // Sincronizar inputValue con value cuando cambia externamente
   useEffect(() => {
@@ -71,8 +88,28 @@ export function AddressAutocomplete({
     region: GOOGLE_MAPS_REGION,
   })
 
-  // Si hay un valor inicial y el mapa está cargado, mostrar el mapa y geocodificar
+  // Coordenadas guardadas: el mapa se ubica con ellas, sin llamar a Google.
   useEffect(() => {
+    if (!coordsPorProps) return
+    if (coordsValidas(latInicial, lngInicial)) {
+      const pos = { lat: latInicial, lng: lngInicial as number }
+      if (markerPosition?.lat === pos.lat && markerPosition?.lng === pos.lng) return
+      direccionMarcadorRef.current = value
+      setMarkerPosition(pos)
+      setMapCenter(pos)
+      setShowMap(true)
+    } else if (markerPosition && direccionMarcadorRef.current !== value) {
+      // Llego otro registro sin coordenadas: no dejar el marcador del anterior
+      direccionMarcadorRef.current = null
+      setMarkerPosition(null)
+      setShowMap(false)
+    }
+  }, [coordsPorProps, latInicial, lngInicial, value, markerPosition])
+
+  // Sin coordenadas por props (comportamiento anterior): mostrar el mapa
+  // geocodificando la direccion inicial.
+  useEffect(() => {
+    if (coordsPorProps) return
     if (isLoaded && value && !markerPosition) {
       setShowMap(true)
       const geocoder = new google.maps.Geocoder()
@@ -81,12 +118,13 @@ export function AddressAutocomplete({
           const location = results[0].geometry.location
           const newPosition = { lat: location.lat(), lng: location.lng() }
           ubicacionRef.current = ubicacionDeComponentes(results[0].address_components)
+          direccionMarcadorRef.current = value
           setMarkerPosition(newPosition)
           setMapCenter(newPosition)
         }
       })
     }
-  }, [isLoaded, value, markerPosition])
+  }, [coordsPorProps, isLoaded, value, markerPosition])
 
   const onAutocompleteLoad = useCallback((autocomplete: google.maps.places.Autocomplete) => {
     autocompleteRef.current = autocomplete
@@ -97,9 +135,11 @@ export function AddressAutocomplete({
     const zona = inferZona(address, lat, lng)
     if (lat == null || lng == null) {
       ubicacionRef.current = undefined
+      direccionMarcadorRef.current = null
       onChangeRef.current(address, lat, lng, zona || undefined)
       return
     }
+    direccionMarcadorRef.current = address
     if (ubicacion) ubicacionRef.current = ubicacion
     onChangeRef.current(address, lat, lng, zona || undefined, ubicacionRef.current)
   }, [])
@@ -163,8 +203,10 @@ export function AddressAutocomplete({
   const handleBlur = useCallback(() => {
     if (!inputValue) return
 
-    // Si ya tenemos marker con las coords de esta dirección, notificar con esas coords
-    if (markerPosition) {
+    // El marcador solo vale si el texto sigue siendo el de la dirección ubicada.
+    // Si el usuario lo editó, se geocodifica el texto nuevo: si no, se
+    // guardarían las coordenadas de la dirección anterior.
+    if (markerPosition && inputValue.trim() === (direccionMarcadorRef.current || '').trim()) {
       notifyChange(inputValue, markerPosition.lat, markerPosition.lng)
       return
     }
@@ -183,7 +225,10 @@ export function AddressAutocomplete({
         setInputValue(formattedAddress)
         notifyChange(formattedAddress, lat, lng, ubicacionDeComponentes(results[0].address_components))
       } else {
-        // Sin coords, intentar solo por texto
+        // Google no ubicó el texto nuevo: se quita el marcador viejo para no
+        // dejar coordenadas de otra dirección, y se guarda solo el texto.
+        setMarkerPosition(null)
+        setShowMap(false)
         notifyChange(inputValue)
       }
     })
@@ -194,6 +239,7 @@ export function AddressAutocomplete({
     setMarkerPosition(null)
     setShowMap(false)
     ubicacionRef.current = undefined
+    direccionMarcadorRef.current = null
     onChangeRef.current('', undefined, undefined, '')
   }, [])
 

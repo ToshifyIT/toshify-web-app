@@ -15,7 +15,8 @@
 import { supabase } from '../../lib/supabase'
 import { createLeadDriveFolder } from '../../services/driveService'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
-import { ubicacionDeComponentes } from '../../utils/ubicacionGoogle'
+import { cargarGoogleMaps, ubicacionDeComponentes, ubicacionDesdeCoordenadas } from '../../utils/ubicacionGoogle'
+import type { UbicacionDireccion } from '../../utils/ubicacionGoogle'
 import type { Lead } from '../../types/leads.types'
 
 /**
@@ -23,6 +24,22 @@ import type { Lead } from '../../types/leads.types'
  * contestar; si eso pasa se sigue sin coordenadas en vez de colgar la pantalla.
  */
 const TIMEOUT_GEOCODING_MS = 8000
+
+/**
+ * País y ciudad de un punto, para cuando el lead trae coordenadas pero no
+ * ubicación (leads ubicados antes de que existieran esos campos). Si Google
+ * falla devuelve null y la conversión sigue: no se bloquea por esto.
+ */
+async function calcularUbicacionDesdeCoordenadas(lat: number, lng: number): Promise<UbicacionDireccion | null> {
+  try {
+    await cargarGoogleMaps()
+    const resultado = await ubicacionDesdeCoordenadas(lat, lng)
+    return resultado.ok ? resultado.ubicacion : null
+  } catch {
+    console.warn('[Lead -> Conductor] No se pudo calcular país/ciudad desde coordenadas.')
+    return null
+  }
+}
 
 /** Fila de cualquiera de los catalogos que resuelve `matchCatalogo`. */
 export interface OpcionCatalogo {
@@ -134,12 +151,12 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
 
 /**
  * Busca un conductor que ya represente a esta persona, comparando DNI y CUIT
- * sin espacios ni guiones (el DNI tambien puede venir dentro del CUIT).
+ * solo por sus digitos (el DNI tambien puede venir dentro del CUIT).
  */
 export async function buscarConductorExistente(lead: Lead): Promise<Record<string, unknown> | null> {
     // Verificar si ya existe un conductor con el mismo DNI o CUIT
-    // Normalizamos quitando espacios y guiones para comparar correctamente
-    const normalizarDoc = (val: string) => val.replace(/[\s-]/g, '')
+    // Normalizamos dejando solo digitos (sin puntos, espacios ni guiones)
+    const normalizarDoc = (val: string) => val.replace(/\D/g, '')
     let conductorExistente: Record<string, unknown> | null = null
 
     const dniLimpio = lead.dni?.trim() ? normalizarDoc(lead.dni.trim()) : ''
@@ -260,14 +277,24 @@ export async function convertirLeadAConductor(
       }
     }
 
+    // Hay punto pero el lead no traía país/ciudad: se calculan desde ese punto
+    // (que salió de geocodificar su dirección).
+    if (latFinal != null && lngFinal != null && (!paisFinal || !ciudadFinal)) {
+      const ubicacion = await calcularUbicacionDesdeCoordenadas(latFinal, lngFinal)
+      if (ubicacion) {
+        paisFinal = paisFinal || ubicacion.pais
+        ciudadFinal = ciudadFinal || ubicacion.ciudad
+      }
+    }
+
     if (!zonaCalculada) zonaCalculada = lead.zona || ''
 
     // Datos del lead mapeados a campos de conductor
     const leadMappedData: Record<string, unknown> = {
       nombres: (nombres || lead.primer_nombre || '').toUpperCase(),
       apellidos: (apellidos || lead.apellido || '').toUpperCase(),
-      numero_dni: lead.dni || '',
-      numero_cuit: lead.cuit || '',
+      numero_dni: (lead.dni || '').replace(/\D/g, ''),
+      numero_cuit: (lead.cuit || '').replace(/\D/g, ''),
       telefono_contacto: lead.phone || '',
       email: lead.email || '',
       direccion: lead.direccion || '',
@@ -323,10 +350,18 @@ export async function convertirLeadAConductor(
 
       // País/ciudad describen el punto del LEAD: solo se copian si en esta fusión
       // también se copian sus coordenadas. Si el conductor ya tenía su propio
-      // punto, se completan después con el botón de Conductores.
+      // punto y le falta país/ciudad, se calculan desde ESE punto.
       if (!('direccion_lat' in updateData)) {
         delete updateData.direccion_pais
         delete updateData.direccion_ciudad
+        const latConductor = conductorExistente.direccion_lat
+        const lngConductor = conductorExistente.direccion_lng
+        const faltaUbicacion = !conductorExistente.direccion_pais || !conductorExistente.direccion_ciudad
+        if (typeof latConductor === 'number' && typeof lngConductor === 'number' && faltaUbicacion) {
+          const ubicacion = await calcularUbicacionDesdeCoordenadas(latConductor, lngConductor)
+          if (ubicacion?.pais && !conductorExistente.direccion_pais) updateData.direccion_pais = ubicacion.pais
+          if (ubicacion?.ciudad && !conductorExistente.direccion_ciudad) updateData.direccion_ciudad = ubicacion.ciudad
+        }
       }
 
       if (Object.keys(updateData).length > 0) {

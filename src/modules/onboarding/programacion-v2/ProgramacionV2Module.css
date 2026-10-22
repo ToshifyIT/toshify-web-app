@@ -1121,6 +1121,11 @@
   color: var(--badge-purple-text, #7C3AED);
 }
 
+.prog-inline-select.cabify.confirmacion_didi {
+  background: var(--badge-orange-bg, #FFEDD5);
+  color: var(--badge-orange-text, #C2410C);
+}
+
 /* Input inline para dirección */
 .prog-inline-input {
   width: 100%;
@@ -1348,6 +1353,11 @@
 .prog-inline-select-mini.cabify.crear_cuenta {
   background: var(--badge-purple-bg, #EDE9FE);
   color: var(--badge-purple-text, #7C3AED);
+}
+
+.prog-inline-select-mini.cabify.confirmacion_didi {
+  background: var(--badge-orange-bg, #FFEDD5);
+  color: var(--badge-orange-text, #C2410C);
 }
 
 /* Layout para Documento dual (TURNO) */

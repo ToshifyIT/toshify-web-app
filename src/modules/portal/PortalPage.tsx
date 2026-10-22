@@ -10,7 +10,7 @@ import { formatCurrency } from '../../types/facturacion.types'
 import { normalizeDni, normalizeCuit } from '../../utils/normalizeDocuments'
 import { getConceptoLabel } from '../../utils/conceptoLabels'
 import {
-  cargarIvaPorCodigo, desglosarIvaCargos, indiceUltimoAlquiler, montoBruto, montoNeto,
+  cargarIvaPorCodigo, etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto,
   type IvaPorCodigo,
 } from '../../utils/facturacionIva'
 import { calcularKmSemanasConductor } from './kmRecorridos'
@@ -1652,7 +1652,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       }
       const tipoLabelPdf: Record<string, string> = {
         pago_cabify: 'Pago Cabify', pago_manual: 'Pago Manual', pago: 'Pago',
-        pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste', pago_efectivo: 'Pago en efectivo',
+        pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste', pago_efectivo: 'Pago en efectivo', devolucion_garantia: 'Devolución Garantía',
       }
       const fechaCorta = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 
@@ -1664,9 +1664,8 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
       pdf.setFontSize(10)
       pdf.setFont('helvetica', 'normal')
-      // Mismo desglose que el modal: cada cargo en NETO y el IVA en su propio renglón.
-      const { ivaAlquiler: ivaAlqPdf, ivaOtros: ivaOtrosPdf } = desglosarIvaCargos(cargos, ivaPorCodigo)
-      const idxUltimoAlquilerPdf = indiceUltimoAlquiler(cargos)
+      // Mismo desglose que el modal: cada cargo en NETO y, debajo, su propio renglón de IVA
+      // con referencia al producto (ej: "IVA 21% · P001 - Alquiler Turno Diurno").
       const filaIvaPdf = (etiqueta: string, valor: number) => {
         checkPage(10)
         pdf.setTextColor(negro)
@@ -1674,7 +1673,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         pdf.text(formatCurrency(valor), pageWidth - margin, y, { align: 'right' })
         y += 5
       }
-      cargos.forEach((cargo, idxCargoPdf) => {
+      cargos.forEach((cargo) => {
         checkPage(10)
         pdf.setTextColor(negro)
         const cargoDesc = getConceptoLabel(cargo)
@@ -1684,10 +1683,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         pdf.text(cargoLabel, margin, y)
         pdf.text(formatCurrency(montoNeto(cargo, ivaPorCodigo)), pageWidth - margin, y, { align: 'right' })
         y += 5
-        if (idxCargoPdf === idxUltimoAlquilerPdf && ivaAlqPdf > 0) filaIvaPdf('IVA de alquiler', ivaAlqPdf)
+        const ivaCargoPdf = ivaDeLinea(cargo, ivaPorCodigo)
+        if (ivaCargoPdf.monto > 0) filaIvaPdf(etiquetaIvaLinea(ivaCargoPdf.porcentaje, `${cargo.concepto_codigo} - ${cargoDesc}`), ivaCargoPdf.monto)
       })
-      if (idxUltimoAlquilerPdf === -1 && ivaAlqPdf > 0) filaIvaPdf('IVA de alquiler', ivaAlqPdf)
-      if (ivaOtrosPdf > 0) filaIvaPdf('IVA', ivaOtrosPdf)
       descuentos.forEach(desc => {
         checkPage(10)
         pdf.setTextColor(negro)
@@ -2324,10 +2322,8 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     const subtotalCargos = Math.round(cargos.reduce((sum, d) => sum + montoBruto(d), 0) * 100) / 100
     const subtotalDescuentos = descuentos.reduce((sum, d) => sum + d.total, 0)
     const totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior
-    const { ivaAlquiler, ivaOtros } = desglosarIvaCargos(cargos, ivaPorCodigo)
-    // El renglón de IVA de alquiler va justo debajo de la última línea de alquiler.
-    // Si la semana no tiene alquiler, va al final de la lista.
-    const idxUltimoAlquiler = indiceUltimoAlquiler(cargos)
+    // Cada cargo con IVA lleva su propio renglón de IVA justo debajo, con referencia al
+    // producto (ej: "IVA 21% · P001 - Alquiler Turno Diurno").
     const filaIva = (etiqueta: string, valor: number) => (
       <div className="portal-detail-item">
         <span className="portal-detail-item-name">
@@ -2417,7 +2413,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                 <div className="portal-detail-section">
                   <div className="portal-detail-section-title cargos">Conceptos</div>
                   <div className="portal-detail-items">
-                    {cargos.map((item, idxCargo) => (
+                    {cargos.map((item) => (
                       <Fragment key={item.id}>
                       <div className="portal-detail-item">
                         <span className="portal-detail-item-name">
@@ -2440,11 +2436,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                         </span>
                         <span className="portal-detail-item-amount">{formatCurrency(montoNeto(item, ivaPorCodigo))}</span>
                       </div>
-                      {idxCargo === idxUltimoAlquiler && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
+                      {(() => {
+                        const ivaItem = ivaDeLinea(item, ivaPorCodigo)
+                        return ivaItem.monto > 0 && filaIva(etiquetaIvaLinea(ivaItem.porcentaje, `${item.concepto_codigo} - ${getConceptoLabel(item)}`), ivaItem.monto)
+                      })()}
                       </Fragment>
                     ))}
-                    {idxUltimoAlquiler === -1 && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
-                    {ivaOtros > 0 && filaIva('IVA', ivaOtros)}
                     {descuentos.map((item) => (
                       <div key={item.id} className="portal-detail-item">
                         <span className="portal-detail-item-name">
@@ -2498,6 +2495,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                                 pago_cabify: 'Pago Cabify',
                                 pago_cuota: 'Pago Cuota',
                                 ajuste_manual: 'Ajuste',
+                                devolucion_garantia: 'Devolución Garantía',
                               } as Record<string, string>)[detalleSaldoBreakdown.pagoTipo || ''] || 'Pago Manual'}
                               <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
                                 {detalleSaldoBreakdown.pagoRef ? `· ${detalleSaldoBreakdown.pagoRef}` : ''}
@@ -2535,6 +2533,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                     pago: 'Pago',
                     pago_cuota: 'Pago Cuota',
                     ajuste_manual: 'Ajuste',
+                    devolucion_garantia: 'Devolución Garantía',
                   }
                   const totalPagado = pagosAportes.reduce((s, p) => s + p.monto, 0)
                   return (

@@ -45,7 +45,7 @@ export function BitacoraModule({ tablaGeotab, tablaGeotabHistorico, soloGeotab }
     searchTerm,
     handleSearchChange,
     updateChecklist,
-  } = useUSSHistoricoData(sedeActualId, { tablaGeotab, soloGeotab });
+  } = useUSSHistoricoData(sedeActualId, { tablaGeotab, tablaGeotabHistorico, soloGeotab });
 
   // Stats removed from here - now computed inside MarcacionesTable from filtered data
 

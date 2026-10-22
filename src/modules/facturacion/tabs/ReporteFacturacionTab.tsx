@@ -7,6 +7,8 @@ import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { showSuccess } from '../../../utils/toast'
 import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
 import { evaluarCierre, timestampCierre, descuentoCierre, CIERRE_DEFAULTS, type ParamsCierre } from '../utils/cierreAsignacion'
+import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
+import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
 import {
@@ -38,6 +40,7 @@ import {
   Target,
   Zap,
   ZapOff,
+  Ticket,
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -146,7 +149,7 @@ const MODALIDAD_POR_CODIGO_ALQUILER: Record<string, string> = {
   P016: 'A Cargo Sin GNC',        P026: 'A Cargo Sin GNC',
 }
 
-/** Sufijo "(Tarifa Nueva)" / "(Tarifa Antigua)" -> "(Tarifa AGO-26)".
+/** Sufijo "(Tarifa Nueva)" / "(Tarifa Antigua)" -> "(Tarifa OCT-26)".
  *  El periodo sale de la descripcion del concepto en conceptos_nomina, no del
  *  texto guardado en facturacion_detalle: asi las semanas ya calculadas tambien
  *  muestran el periodo, sin necesidad de recalcular. Si el concepto no tiene
@@ -214,6 +217,8 @@ interface FacturacionConductor {
   monto_excesos?: number      // P006 - Excesos de KM
   km_exceso?: number          // KM de exceso
   monto_penalidades?: number  // P007 - Penalidades
+  monto_toshipass?: number    // P027 - Toshipass (régimen tarifa nueva, en lugar de garantía)
+  monto_devolucion_garantia?: number  // P028 - Devolución de garantía por cambio de tarifa (descuento)
   monto_tickets_favor?: number  // Tickets a favor
   // Detalle de peajes para validar con Cabify
   peajes_detalle?: Array<{ fecha: string; monto: number }>
@@ -363,6 +368,28 @@ async function upsertSaldoConductor(params: {
 }
 
 
+
+/**
+ * Cobertura de Toshipass de un conductor en la semana. Mismo criterio que la garantía:
+ * el cobro app de Cabify cubre primero el alquiler y lo que sobra cubre el Toshipass.
+ * null = el conductor no tiene Toshipass esta semana.
+ */
+function coberturaToshipass(f: { monto_toshipass?: number; subtotal_alquiler?: number; ganancia_cabify?: number }): 'cubrio' | 'no_cubrio' | 'sin_datos' | null {
+  const toshipass = f.monto_toshipass || 0
+  if (toshipass <= 0) return null
+  const cobroApp = f.ganancia_cabify || 0
+  if (cobroApp <= 0) return 'sin_datos'
+  return cobroApp - (f.subtotal_alquiler || 0) >= toshipass - 0.01 ? 'cubrio' : 'no_cubrio'
+}
+
+function contarCoberturaToshipass(src: Array<Parameters<typeof coberturaToshipass>[0]>) {
+  const estados = src.map(coberturaToshipass)
+  return {
+    toshipass_cubrio: estados.filter(e => e === 'cubrio').length,
+    toshipass_no_cubrio: estados.filter(e => e === 'no_cubrio').length,
+    toshipass_sin_datos: estados.filter(e => e === 'sin_datos').length,
+  }
+}
 
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
@@ -1848,12 +1875,13 @@ export function ReporteFacturacionTab() {
         monto_peajes: number; monto_penalidades: number; penalidades_count: number;
         penalidades_detalle: Array<{ monto: number; detalle: string }>;
         monto_tickets: number; tickets_detalle: Array<{ monto: number; detalle: string }>;
+        monto_toshipass: number;
       }>()
       ;(detallesData || []).forEach((d: any) => {
         if (!detallesMap.has(d.facturacion_id)) {
           detallesMap.set(d.facturacion_id, {
             monto_peajes: 0, monto_penalidades: 0, penalidades_count: 0, penalidades_detalle: [],
-            monto_tickets: 0, tickets_detalle: [],
+            monto_tickets: 0, tickets_detalle: [], monto_toshipass: 0,
           })
         }
         const entry = detallesMap.get(d.facturacion_id)!
@@ -1862,6 +1890,8 @@ export function ReporteFacturacionTab() {
           entry.tickets_detalle.push({ monto: Math.abs(parseFloat(d.total) || 0), detalle: d.concepto_descripcion || 'Ticket' })
         } else if (d.concepto_codigo === 'P005') {
           entry.monto_peajes += parseFloat(d.total) || 0
+        } else if (d.concepto_codigo === CODIGO_TOSHIPASS) {
+          entry.monto_toshipass += parseFloat(d.total) || 0
         } else if (d.concepto_codigo === 'P006' || d.concepto_codigo === 'P007') {
           entry.monto_penalidades += parseFloat(d.total) || 0
           entry.penalidades_count += 1
@@ -1893,6 +1923,7 @@ export function ReporteFacturacionTab() {
           penalidades_detalle: detalle?.penalidades_detalle || [],
           monto_tickets_favor: detalle?.monto_tickets || 0,
           tickets_detalle: detalle?.tickets_detalle || [],
+          monto_toshipass: detalle?.monto_toshipass || 0,
           _detalles: detallesRawMap.get(f.id) || [],
           _codigosAlquiler: codigosAlquilerMap.get(f.id) || [],
         }
@@ -2210,6 +2241,11 @@ export function ReporteFacturacionTab() {
 
       // 1.1 Cargar asignaciones_conductores para calcular prorrateo por días/modalidad/horario
       const conductorIds = (conductoresData || []).map((c: any) => c.id)
+      // Régimen Toshipass (tarifa nueva desde el corte): pagan Toshipass en lugar de garantía.
+      // Incluye conductores nuevos y cambios de tarifa (desde la semana del cambio).
+      const reglaToshipassVP = await cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin })
+      // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
+      const devolucionesGarantiaVP = await cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       const { data: asignacionesConductores } = await (supabase
         .from('asignaciones_conductores') as any)
         .select(`
@@ -2554,6 +2590,8 @@ export function ReporteFacturacionTab() {
       // Determinar conductores con asignación activa al cierre de la semana
       // Si tiene asignación sin fecha_fin o con fecha_fin >= fin de semana → Activo
       const conductoresConAsignacionAlCierreVP = new Set<string>()
+      // Toshipass: con alguna asignación sin fecha de fin = no devolvió el auto
+      const conductoresConAsignacionAbiertaVP = new Set<string>()
       ;(asignacionesConductores || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
         if (!asignacion) return
@@ -2561,6 +2599,7 @@ export function ReporteFacturacionTab() {
         if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
         const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
         const asigFin = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        if (!acFin && !asigFin) conductoresConAsignacionAbiertaVP.add(ac.conductor_id)
         const finEfectivo = acFin || asigFin
         if (!finEfectivo || finEfectivo >= semanaActual.fin) {
           conductoresConAsignacionAlCierreVP.add(ac.conductor_id)
@@ -3105,6 +3144,21 @@ export function ReporteFacturacionTab() {
           cuotaGarantiaNumero = 'NA'
         }
 
+        // Toshipass (conductor nuevo): reemplaza a la garantía. Monto semanal fijo si trabajó
+        // al menos un día (el día de la devolución final no cuenta). Ver utils/toshipass.ts
+        const esToshipass = reglaToshipassVP.conductores.has(conductorId)
+        let montoToshipass = 0
+        if (esToshipass) {
+          subtotalGarantia = 0
+          cuotaGarantiaNumero = 'NA'
+          const diasTrabajadosTP = diasTrabajadosToshipass(
+            diasContadosVP.get(conductorId),
+            maxAsigFinVP.get(conductorId),
+            conductoresConAsignacionAbiertaVP.has(conductorId),
+          )
+          montoToshipass = diasTrabajadosTP > 0 ? reglaToshipassVP.cuotaSemanal : 0
+        }
+
         // Datos por DNI del conductor (normalizado)
         const dniConductor = normalizeDni(conductor.numero_dni)
 
@@ -3125,10 +3179,12 @@ export function ReporteFacturacionTab() {
         const montoPenalidadesDescuento = penalidadesDescuentoMap.get(conductorId) || 0
 
         // Subtotal cargos (incluye P005, P006, P007)
-        const subtotalCargos = subtotalAlquiler + subtotalGarantia + montoExcesos + montoPeajes + montoPenalidades
+        const subtotalCargos = subtotalAlquiler + subtotalGarantia + montoToshipass + montoExcesos + montoPeajes + montoPenalidades
 
         // Tickets a favor (descuentos) + P004 de penalidades
-        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
+        // + Devolución de garantía por cambio de tarifa (P028): crédito que resta del total
+        const montoDevolucionGarantia = devolucionesGarantiaVP.get(conductorId) || 0
+        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento + montoDevolucionGarantia
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
         // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
@@ -3152,7 +3208,7 @@ export function ReporteFacturacionTab() {
 
         // Datos de Cabify - cobro_app semanal del conductor (para barras de cobertura)
         const cobroAppCabify = cabifyMap.get(dniConductor) || 0
-        const cuotaFijaSemanal = subtotalAlquiler + subtotalGarantia
+        const cuotaFijaSemanal = subtotalAlquiler + subtotalGarantia + montoToshipass
         const cubreCuota = cobroAppCabify >= cuotaFijaSemanal
 
         facturacionesProyectadas.push({
@@ -3196,6 +3252,8 @@ export function ReporteFacturacionTab() {
             monto_excesos: montoExcesos,     // P006
             km_exceso: kmExceso,
             monto_penalidades: montoPenalidades,  // P007
+            monto_toshipass: montoToshipass,  // P027
+            monto_devolucion_garantia: montoDevolucionGarantia,  // P028 (descuento)
             monto_tickets_favor: ticketsMap.get(conductorId) || 0,  // Tickets a favor
            // Prorrateo desglosado por modalidad
            prorrateo_cargo_dias: prorrateo.CARGO,
@@ -4125,6 +4183,8 @@ export function ReporteFacturacionTab() {
 
       // Determinar conductores con asignación activa al cierre de la semana
       const conductoresConAsignacionAlCierreRecalc = new Set<string>()
+      // Toshipass: con alguna asignación sin fecha de fin = no devolvió el auto
+      const conductoresConAsignacionAbiertaRecalc = new Set<string>()
       ;(asignacionesConductoresRecalc || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
         if (!asignacion) return
@@ -4132,6 +4192,7 @@ export function ReporteFacturacionTab() {
         if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadreR)) return
         const acFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
         const asigFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        if (!acFinR && !asigFinR) conductoresConAsignacionAbiertaRecalc.add(ac.conductor_id)
         const finEfectivoR = acFinR || asigFinR
         if (!finEfectivoR || finEfectivoR >= fechaFinSemanaRecalc) {
           conductoresConAsignacionAlCierreRecalc.add(ac.conductor_id)
@@ -4252,6 +4313,11 @@ export function ReporteFacturacionTab() {
       }
 
       const conductorIds = conductoresProcesados.map(c => c.conductor_id)
+      // Régimen Toshipass (tarifa nueva desde el corte): pagan Toshipass en lugar de garantía.
+      // Incluye conductores nuevos y cambios de tarifa (desde la semana del cambio).
+      const reglaToshipass = await cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin })
+      // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
+      const devolucionesGarantia = await cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin })
 
       // 4. Obtener conceptos (precios actuales)
       const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
@@ -4421,8 +4487,9 @@ export function ReporteFacturacionTab() {
 
       // Auto-crear garantias_conductores para conductores TURNO que no tienen registro aún.
       // Esto evita que el sistema cobre P003 sin dejar rastro en garantias_conductores.
+      // Los de régimen Toshipass no tienen garantía: no se les crea registro.
       const conductoresSinGarantia = conductoresProcesados.filter(
-        (c) => !garantiasMapById.has(c.conductor_id)
+        (c) => !garantiasMapById.has(c.conductor_id) && !reglaToshipass.conductores.has(c.conductor_id)
       )
       if (conductoresSinGarantia.length > 0) {
         const nuevasGarantias = conductoresSinGarantia.map((c) => ({
@@ -4598,6 +4665,17 @@ export function ReporteFacturacionTab() {
         // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
         // Si garantía completada o cuotas completas, cobrar $0
         const factorProporcional = conductor.total_dias / 7
+        // Toshipass (conductor nuevo): reemplaza a la garantía. Monto semanal fijo si trabajó
+        // al menos un día (el día de la devolución final no cuenta). Ver utils/toshipass.ts
+        const esToshipass = reglaToshipass.conductores.has(conductor.conductor_id)
+        const diasTrabajadosTP = esToshipass
+          ? diasTrabajadosToshipass(
+            diasContadosRecalc.get(conductor.conductor_id),
+            maxAsigFinRecalc.get(conductor.conductor_id),
+            conductoresConAsignacionAbiertaRecalc.has(conductor.conductor_id),
+          )
+          : 0
+        const montoToshipass = esToshipass && diasTrabajadosTP > 0 ? reglaToshipass.cuotaSemanal : 0
         const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
         const montoTotalGarantia = garantiaConductor?.monto_total || 1000000
         // Acumulado real: incluye la base histórica ya pagada ANTES de que facturación tomara
@@ -4610,7 +4688,7 @@ export function ReporteFacturacionTab() {
         const garantiaCompletada = garantiaConductor?.estado === 'completada' || acumuladoRealRecalc >= montoTotalGarantia
         const cuotaNormalRecalc = garantiaConductor?.monto_cuota_semanal || cuotaGarantia
         const pendienteRecalc = montoTotalGarantia - acumuladoRealRecalc
-        const cuotaGarantiaProporcional = Math.round((conductor.total_dias === 0 || garantiaCompletada
+        const cuotaGarantiaProporcional = Math.round((esToshipass || conductor.total_dias === 0 || garantiaCompletada
           ? 0
           : Math.min(cuotaNormalRecalc, Math.max(0, pendienteRecalc))) * 100) / 100
         const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
@@ -4680,8 +4758,10 @@ export function ReporteFacturacionTab() {
         const montoMora = 0
 
         // Totales (montoMultas será 0 mientras MULTAS_HABILITADAS = false)
-        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
-        const subtotalDescuentos = totalTickets + totalPenP004
+        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + montoToshipass + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
+        // Devolución de garantía por cambio de tarifa: crédito que resta del total (P028)
+        const montoDevolucionGarantia = devolucionesGarantia.get(conductor.conductor_id) || 0
+        const subtotalDescuentos = totalTickets + totalPenP004 + montoDevolucionGarantia
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagarRaw = subtotalNeto + saldoAnterior
         const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
@@ -4785,15 +4865,35 @@ export function ReporteFacturacionTab() {
           })
         }
 
-        // P003 - Garantía
-        const descripcionGarantia = garantiaCompletada
-          ? 'Garantía completada'
-          : `Cuota de Garantía ${cuotaActual}`
-        todosDetalles.push({
-          facturacion_id: facturacionId, concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
-          cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
-          subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
-        })
+        // P028 - Devolución de garantía por cambio de tarifa (descuento)
+        if (montoDevolucionGarantia > 0) {
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: CODIGO_DEVOLUCION_GARANTIA, concepto_descripcion: DESCRIPCION_DEVOLUCION_GARANTIA,
+            cantidad: 1, precio_unitario: montoDevolucionGarantia,
+            subtotal: montoDevolucionGarantia, total: montoDevolucionGarantia, es_descuento: true
+          })
+        }
+
+        if (esToshipass) {
+          // P027 - Toshipass (en lugar de la garantía)
+          if (montoToshipass > 0) {
+            todosDetalles.push({
+              facturacion_id: facturacionId, concepto_codigo: CODIGO_TOSHIPASS, concepto_descripcion: 'Toshipass',
+              cantidad: 1, precio_unitario: montoToshipass,
+              subtotal: montoToshipass, total: montoToshipass, es_descuento: false
+            })
+          }
+        } else {
+          // P003 - Garantía
+          const descripcionGarantia = garantiaCompletada
+            ? 'Garantía completada'
+            : `Cuota de Garantía ${cuotaActual}`
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
+            cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
+            subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
+          })
+        }
 
         // Penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
         const gruposPenalidades: { pens: any[]; codigo: string; esDescuento: boolean }[] = [
@@ -5504,6 +5604,14 @@ export function ReporteFacturacionTab() {
     setShowDetalle(true)
     setDetalleFacturacion(facturacion)
     setDetalleSaldoBreakdown(null)
+    // Releer los conceptos (IVA y periodo de cada uno): si se editaron en Conceptos de
+    // Facturacion con esta pantalla abierta, el detalle los muestra al dia sin recargar.
+    void supabase
+      .from('conceptos_nomina')
+      .select('id, codigo, descripcion, tipo, es_variable, iva_porcentaje, precio_base, precio_final')
+      .eq('activo', true)
+      .order('codigo')
+      .then(({ data }) => { if (data) setConceptosNomina(data as ConceptoNomina[]) })
 
     // En modo Vista Previa, generar detalles simulados desde los datos calculados
     if (modoVistaPrevia || facturacion.id.startsWith('preview-')) {
@@ -5580,6 +5688,40 @@ export function ReporteFacturacionTab() {
           subtotal: facturacion.subtotal_garantia,
           total: facturacion.subtotal_garantia,
           es_descuento: false,
+          referencia_id: null,
+          referencia_tipo: null
+        })
+      }
+
+      // P027 - Toshipass (régimen tarifa nueva, en lugar de la garantía)
+      if ((facturacion.monto_toshipass || 0) > 0) {
+        detallesSimulados.push({
+          id: `det-toshipass-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: CODIGO_TOSHIPASS,
+          concepto_descripcion: 'Toshipass',
+          cantidad: 1,
+          precio_unitario: facturacion.monto_toshipass || 0,
+          subtotal: facturacion.monto_toshipass || 0,
+          total: facturacion.monto_toshipass || 0,
+          es_descuento: false,
+          referencia_id: null,
+          referencia_tipo: null
+        })
+      }
+
+      // P028 - Devolución de garantía por cambio de tarifa (descuento)
+      if ((facturacion.monto_devolucion_garantia || 0) > 0) {
+        detallesSimulados.push({
+          id: `det-devgar-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: CODIGO_DEVOLUCION_GARANTIA,
+          concepto_descripcion: DESCRIPCION_DEVOLUCION_GARANTIA,
+          cantidad: 1,
+          precio_unitario: facturacion.monto_devolucion_garantia || 0,
+          subtotal: facturacion.monto_devolucion_garantia || 0,
+          total: facturacion.monto_devolucion_garantia || 0,
+          es_descuento: true,
           referencia_id: null,
           referencia_tipo: null
         })
@@ -7388,18 +7530,28 @@ export function ReporteFacturacionTab() {
       pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'normal')
 
+      // Mismo criterio que el detalle en pantalla: cada producto con su importe neto y,
+      // debajo, su propio renglon de IVA con referencia al concepto.
       const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0)
       cargos.forEach(cargo => {
-        pdf.text(descripcionSinNumeroCuota(descripcionConPeriodo(cargo.concepto_descripcion, cargo.concepto_codigo, periodoPorCodigo), cargo.concepto_codigo), margin, y)
-        pdf.text(formatCurrency(cargo.total), pageWidth - margin, y, { align: 'right' })
+        const desc = descripcionSinNumeroCuota(descripcionConPeriodo(cargo.concepto_descripcion, cargo.concepto_codigo, periodoPorCodigo), cargo.concepto_codigo)
+        const descConCodigo = cargo.concepto_codigo && cargo.concepto_codigo !== 'PEND' ? `${cargo.concepto_codigo} - ${desc}` : desc
+        pdf.text(descConCodigo, margin, y)
+        pdf.text(formatCurrency(montoNeto(cargo, ivaPorCodigo)), pageWidth - margin, y, { align: 'right' })
         y += 5
+        const ivaLinea = ivaDeLinea(cargo, ivaPorCodigo)
+        if (ivaLinea.monto > 0) {
+          pdf.text(etiquetaIvaLinea(ivaLinea.porcentaje, descConCodigo), margin, y)
+          pdf.text(formatCurrency(ivaLinea.monto), pageWidth - margin, y, { align: 'right' })
+          y += 5
+        }
       })
 
       // Saldo anterior y mora: NO se muestran en factura (se manejan en tab Saldos)
 
       y += 3
       pdf.setFont('helvetica', 'bold')
-      const subtotalCargosReal = cargos.reduce((sum, c) => sum + c.total, 0)
+      const subtotalCargosReal = Math.round(cargos.reduce((sum, c) => sum + montoBruto(c), 0) * 100) / 100
       pdf.text('SUBTOTAL CARGOS', margin, y)
       pdf.text(formatCurrency(subtotalCargosReal), pageWidth - margin, y, { align: 'right' })
       y += 10
@@ -10005,12 +10157,13 @@ export function ReporteFacturacionTab() {
       return {
         total_conductores: src.length,
         // Mismo criterio que el modal (showStatInfo 'proyectado'): alquiler proyectado + garantía de la semana
-        total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0), 0),
+        total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0), 0),
         total_cargos: totalCargos,
         total_descuentos: totalDescuentos,
         total_neto: totalCargos - totalDescuentos,
         conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
-        conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
+        conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
+        ...contarCoberturaToshipass(src),
       }
     }
     // Modo normal con período generado
@@ -10019,14 +10172,153 @@ export function ReporteFacturacionTab() {
     return {
       total_conductores: src.length,
       // Mismo criterio que el modal (showStatInfo 'proyectado'): alquiler proyectado + garantía de la semana
-      total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0), 0),
+      total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0), 0),
       total_cargos: src.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
       total_descuentos: src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0),
       total_neto: src.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
       conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
-      conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
+      conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
+      ...contarCoberturaToshipass(src),
     }
   }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroGrupoFlota])
+
+  // Detalle por conductor del Total Proyectado (se abre desde "Ver detalle").
+  // Usa exactamente los mismos campos que el total: proyectado_alquiler +
+  // subtotal_garantia, y ganancia_cabify para la cobertura.
+  function showDetalleProyectado(src: any[]) {
+    const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+
+    const filas = src
+      .map((f: any) => {
+        const dias = Number(f.turnos_cobrados) || 0
+        const alquiler = Number(f.subtotal_alquiler) || 0
+        const proyAlq = Number(f.proyectado_alquiler) || 0
+        // Garantía o Toshipass (son excluyentes: los conductores nuevos pagan Toshipass)
+        const garantia = (Number(f.subtotal_garantia) || 0) + (Number(f.monto_toshipass) || 0)
+        const total = proyAlq + garantia
+        // Cobro app con tope en el total proyectado del conductor (máx. 100%):
+        // lo que Cabify cobra de más no suma. Se guarda el real solo para mostrarlo.
+        const cobroAppReal = Number(f.ganancia_cabify) || 0
+        const cobroApp = Math.min(cobroAppReal, total)
+        const diasProy: number | null = typeof f._diasProyectados === 'number' ? f._diasProyectados : null
+        const esBaja = f.estado_billing === 'De baja'
+        // Misma prioridad que el cálculo de proyectado_alquiler
+        let regla: string
+        if (esBaja) regla = 'De baja: sin proyección (PROY = ALQ)'
+        else if (dias <= 0) regla = 'Sin días cobrados: PROY = 0'
+        else if (diasProy == null) regla = '-'
+        else if (dias >= diasProy) regla = `Ya cobró los ${diasProy} días proyectados`
+        else if (diasProy === 7) regla = 'Semana completa (7 días)'
+        else regla = `Desde su ingreso: ${diasProy} días`
+        return {
+          nombre: f.conductor_nombre || '-',
+          dni: f.conductor_dni || '',
+          esBaja,
+          dias,
+          precioDiario: dias > 0 ? alquiler / dias : 0,
+          alquiler,
+          diasProy,
+          proyAlq,
+          garantia,
+          total,
+          cobroApp,
+          cobroAppReal,
+          cobertura: total > 0 ? Math.round((cobroApp / total) * 100) : null,
+          regla,
+        }
+      })
+      .filter((r) => r.total > 0 || r.alquiler > 0)
+      .sort((a, b) => b.total - a.total)
+
+    const suma = (k: 'alquiler' | 'proyAlq' | 'garantia' | 'total' | 'cobroApp') => filas.reduce((s, r) => s + r[k], 0)
+    const totalProy = suma('total')
+    const totalCobro = suma('cobroApp')
+    const coberturaTotal = totalProy > 0 ? Math.round((totalCobro / totalProy) * 100) : 0
+    const colorCobertura = (p: number | null) =>
+      p == null ? 'var(--text-tertiary)' : p > 100 ? '#2563eb' : p >= 90 ? '#16a34a' : p >= 60 ? '#f59e0b' : '#dc2626'
+
+    const th = 'padding:8px 10px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;color:var(--text-secondary);border-bottom:1px solid var(--border-primary);white-space:nowrap;line-height:1.25;vertical-align:bottom;position:sticky;top:0;background:var(--bg-secondary);'
+    const td = 'padding:7px 10px;text-align:right;border-bottom:1px solid var(--border-primary);white-space:nowrap;'
+
+    const cuerpo = filas.map((r) => `
+      <tr data-buscar="${esc(`${r.nombre} ${r.dni}`.toLowerCase())}">
+        <td style="${td}text-align:left;white-space:normal;min-width:150px;">
+          <div style="font-weight:600;color:var(--text-primary);">${esc(r.nombre)}</div>
+          <div style="font-size:10px;color:var(--text-tertiary);">${esc(r.dni)}${r.esBaja ? ' · <span style="color:#f59e0b;font-weight:700;">BAJA</span>' : ''}</div>
+        </td>
+        <td style="${td}">${r.dias}</td>
+        <td style="${td}">${r.dias > 0 ? formatCurrency(r.precioDiario) : '-'}</td>
+        <td style="${td}">${formatCurrency(r.alquiler)}</td>
+        <td style="${td}">${r.diasProy ?? '-'}</td>
+        <td style="${td}">${formatCurrency(r.proyAlq)}</td>
+        <td style="${td}">${r.garantia > 0 ? formatCurrency(r.garantia) : '-'}</td>
+        <td style="${td}font-weight:700;color:var(--text-primary);">${formatCurrency(r.total)}</td>
+        <td style="${td}">
+          ${r.cobroApp > 0 ? formatCurrency(r.cobroApp) : '-'}
+          ${r.cobroAppReal > r.cobroApp ? `<div style="font-size:10px;color:var(--text-tertiary);" title="Cobrado por Cabify; solo cuenta hasta el total proyectado">real ${formatCurrency(r.cobroAppReal)}</div>` : ''}
+        </td>
+        <td style="${td}font-weight:700;color:${colorCobertura(r.cobertura)};">${r.cobertura == null ? '-' : `${r.cobertura}%`}</td>
+        <td style="${td}text-align:left;white-space:normal;min-width:140px;font-size:11px;color:var(--text-secondary);">${esc(r.regla)}</td>
+      </tr>`).join('')
+
+    const html = `
+      <div style="text-align:left;font-size:12px;color:var(--text-primary);">
+        <input id="buscar-detalle-proyectado" type="text" placeholder="Buscar conductor o DNI..."
+          style="width:100%;box-sizing:border-box;padding:8px 10px;margin-bottom:10px;border:1px solid var(--border-primary);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);font-size:12px;" />
+        <div style="max-height:60vh;overflow:auto;border:1px solid var(--border-primary);border-radius:8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+            <thead><tr>
+              <th style="${th}text-align:left;">Conductor</th>
+              <th style="${th}" title="Días ya cobrados en la semana">Días<br>cobrados</th>
+              <th style="${th}" title="Alquiler cobrado ÷ días cobrados">Precio<br>diario</th>
+              <th style="${th}" title="Alquiler devengado hasta hoy">Alq.<br>actual</th>
+              <th style="${th}" title="Días desde que tomó el vehículo hasta el domingo, menos descuentos">Días<br>proyectados</th>
+              <th style="${th}" title="Precio diario × días proyectados">Alq.<br>proyectado</th>
+              <th style="${th}" title="Cuota de garantía de la semana, o Toshipass si es conductor nuevo">Garantía /<br>Toshipass</th>
+              <th style="${th}">Total<br>proyectado</th>
+              <th style="${th}" title="cobro_app de Cabify en la semana, con tope en el total proyectado (máx. 100%)">Cobro app<br>Cabify</th>
+              <th style="${th}">Cobertura</th>
+              <th style="${th}text-align:left;">Regla aplicada</th>
+            </tr></thead>
+            <tbody>${cuerpo}</tbody>
+            <tfoot><tr style="font-weight:700;background:var(--bg-secondary);">
+              <td style="${td}text-align:left;">Total (${filas.length} cond.)</td>
+              <td style="${td}"></td><td style="${td}"></td>
+              <td style="${td}">${formatCurrency(suma('alquiler'))}</td>
+              <td style="${td}"></td>
+              <td style="${td}">${formatCurrency(suma('proyAlq'))}</td>
+              <td style="${td}">${formatCurrency(suma('garantia'))}</td>
+              <td style="${td}">${formatCurrency(totalProy)}</td>
+              <td style="${td}">${formatCurrency(totalCobro)}</td>
+              <td style="${td}color:${colorCobertura(coberturaTotal)};">${coberturaTotal}%</td>
+              <td style="${td}"></td>
+            </tr></tfoot>
+          </table>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
+          Total proyectado = Alq. proyectado + Garantía / Toshipass. Alq. proyectado = Precio diario × Días proy.
+        </div>
+      </div>`
+
+    Swal.fire({
+      title: 'Detalle del Total Proyectado',
+      html,
+      customClass: { popup: 'swal-popup-ancho' },
+      showCancelButton: true,
+      cancelButtonText: 'Volver',
+      confirmButtonText: 'Cerrar',
+      didOpen: (popup) => {
+        const input = popup.querySelector<HTMLInputElement>('#buscar-detalle-proyectado')
+        const filasTabla = Array.from(popup.querySelectorAll<HTMLTableRowElement>('tbody tr'))
+        input?.addEventListener('input', () => {
+          const q = input.value.trim().toLowerCase()
+          filasTabla.forEach((tr) => { tr.style.display = !q || (tr.dataset.buscar || '').includes(q) ? '' : 'none' })
+        })
+      },
+    }).then((r) => {
+      if (r.dismiss === Swal.DismissReason.cancel) showStatInfo('proyectado')
+    })
+  }
 
   // Info modal para stat cards
   function showStatInfo(stat: string) {
@@ -10044,11 +10336,12 @@ export function ReporteFacturacionTab() {
         html: (() => {
           // Total Proyectado = alquiler proyectado + garantía facturada de la semana
           // (la garantía es $50K fija por semana si el conductor no la completó)
-          const proyectadoConductor = (f: any) => (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0)
+          const proyectadoConductor = (f: any) => (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0)
           const conductoresConProyectado = src.filter(f => proyectadoConductor(f) > 0)
           const totalProyectado = src.reduce((s, f) => s + proyectadoConductor(f), 0)
           // Ya facturado se mide contra el cobro_app real de Cabify (ganancia_cabify)
-          const totalCobroApp = src.reduce((s, f) => s + ((f as any).ganancia_cabify || 0), 0)
+          // Con tope por conductor en su proyectado (máx. 100%): lo cobrado de más no suma.
+          const totalCobroApp = src.reduce((s, f) => s + Math.min((f as any).ganancia_cabify || 0, proyectadoConductor(f)), 0)
           const porcentaje = totalProyectado > 0 ? Math.round(totalCobroApp / totalProyectado * 100) : 0
           // Separar activos vs bajas usando el proyectado combinado
           const activos = conductoresConProyectado.filter(f => f.estado_billing !== 'De baja')
@@ -10070,6 +10363,12 @@ export function ReporteFacturacionTab() {
               <div style="display:flex;justify-content:center;margin-bottom:8px;">${iconTarget}</div>
               <div style="font-size:clamp(20px, 6vw, 26px);font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;">${formatCurrency(totalProyectado)}</div>
               <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Si todos cumplieran sus días asignados</div>
+              <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+                <button type="button" id="btn-detalle-proyectado"
+                  style="padding:6px 12px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-primary);color:var(--text-primary);cursor:pointer;">
+                  Ver detalle
+                </button>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
               <div style="padding:12px;border-radius:8px;text-align:center;background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.35);">
@@ -10098,8 +10397,18 @@ export function ReporteFacturacionTab() {
                 <span style="color:${barColor};">${porcentaje}% ${porcentaje > 100 ? '(sobrecubre)' : 'de cobertura'}</span>
               </div>
             </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg-secondary);border:1px solid var(--border-primary);border-left:3px solid #dc2626;padding:12px;border-radius:8px;margin-top:10px;">
+              <div>
+                <div style="font-size:13px;color:var(--text-secondary);">Pendiente por cobrar</div>
+                <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;">Proyectado − Cobro app Cabify</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:18px;font-weight:800;color:#dc2626;">${formatCurrency(Math.max(0, totalProyectado - totalCobroApp))}</div>
+                <div style="font-size:11px;font-weight:600;color:var(--text-secondary);">${Math.max(0, 100 - porcentaje)}% del proyectado</div>
+              </div>
+            </div>
             <div style="display:flex;gap:8px;align-items:flex-start;background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.35);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#3b82f6;line-height:1.5;">
-              ${iconInfo}<span>Total Proyectado = alquiler proyectado + garantía. El % compara lo que Cabify ya descontó (cobro app) vs ese objetivo. Puede superar 100% cuando Cabify cobra de más para cubrir deudas previas.</span>
+              ${iconInfo}<span>Total Proyectado = alquiler proyectado + garantía (o Toshipass en tarifa nueva: conductores nuevos y cambio de tarifa). El % compara lo que Cabify ya descontó (cobro app) vs ese objetivo. Por conductor, el cobro app cuenta como máximo hasta su proyectado (100%); lo cobrado de más no suma.</span>
             </div>
           </div>`
         })()
@@ -10207,14 +10516,16 @@ export function ReporteFacturacionTab() {
           const tickets = tieneDetalles ? (descMap['P004'] || 0) : src.reduce((s, f) => s + (f.monto_tickets_favor || 0), 0)
           const pubCabify = tieneDetalles ? (descMap['P011'] || 0) : 0
           const pubTablet = tieneDetalles ? (descMap['P012'] || 0) : 0
+          const devGarantia = tieneDetalles ? (descMap[CODIGO_DEVOLUCION_GARANTIA] || 0) : 0
           const descTotal = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
-          const conocidos = tickets + pubCabify + pubTablet
+          const conocidos = tickets + pubCabify + pubTablet + devGarantia
           const otrosDesc = Math.max(0, descTotal - conocidos)
           // Nuevo modal: hero verde + items destacados + nota
           const items: { codigo: string; nombre: string; subtitulo: string; monto: number }[] = []
           if (tickets > 0) items.push({ codigo: 'P004', nombre: 'Descuentos a favor', subtitulo: 'Tickets, ajustes manuales', monto: tickets })
           if (pubCabify > 0) items.push({ codigo: 'P011', nombre: 'Publicidad Cabify', subtitulo: 'Ingreso por publicidad', monto: pubCabify })
           if (pubTablet > 0) items.push({ codigo: 'P012', nombre: 'Publicidad Tablet', subtitulo: 'Ingreso por publicidad', monto: pubTablet })
+          if (devGarantia > 0) items.push({ codigo: CODIGO_DEVOLUCION_GARANTIA, nombre: 'Devolución de garantía', subtitulo: 'Cambio de tarifa', monto: devGarantia })
           if (otrosDesc > 0) items.push({ codigo: '—', nombre: 'Otros descuentos', subtitulo: 'Sin clasificar', monto: otrosDesc })
           const itemsHtml = items.map(it => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:rgba(34,197,94,0.08);border-radius:8px;border-left:3px solid #16a34a;">
@@ -10262,6 +10573,45 @@ export function ReporteFacturacionTab() {
                 <div style="font-size:11px;color:#3b82f6;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
                 <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#3b82f6;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
               </div>
+            </div>
+          </div>`
+        })()
+      },
+      toshipass: {
+        title: 'Cobertura de Toshipass',
+        html: (() => {
+          const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+          const etiqueta = { cubrio: ['Cubrió', '#16a34a'], no_cubrio: ['No cubrió', '#dc2626'], sin_datos: ['Sin datos', '#6B7280'] } as const
+          const orden = { no_cubrio: 0, sin_datos: 1, cubrio: 2 } as const
+          const filas = src
+            .map(f => ({ f, estado: coberturaToshipass(f as any) }))
+            .filter((x): x is { f: typeof src[number]; estado: 'cubrio' | 'no_cubrio' | 'sin_datos' } => x.estado !== null)
+            .sort((a, b) => orden[a.estado] - orden[b.estado])
+          const td = 'padding:6px 8px;border-bottom:1px solid var(--border-primary);'
+          const cuerpo = filas.map(({ f, estado }) => {
+            const cobroApp = (f as any).ganancia_cabify || 0
+            const sobrante = Math.max(0, cobroApp - (f.subtotal_alquiler || 0))
+            return `<tr>
+              <td style="${td}">${esc(f.conductor_nombre)}</td>
+              <td style="${td}text-align:right;">${formatCurrency(f.monto_toshipass || 0)}</td>
+              <td style="${td}text-align:right;" title="Cobro app menos alquiler">${cobroApp > 0 ? formatCurrency(sobrante) : '-'}</td>
+              <td style="${td}font-weight:700;color:${etiqueta[estado][1]};">${etiqueta[estado][0]}</td>
+            </tr>`
+          }).join('')
+          return `<div style="text-align:left;font-size:12px;color:var(--text-primary);">
+            <div style="max-height:50vh;overflow:auto;border:1px solid var(--border-primary);border-radius:8px;">
+              <table style="display:table;width:100%;border-collapse:collapse;">
+                <thead><tr style="background:var(--bg-secondary);">
+                  <th style="${td}text-align:left;">Conductor</th>
+                  <th style="${td}text-align:right;">Toshipass</th>
+                  <th style="${td}text-align:right;">Disponible</th>
+                  <th style="${td}text-align:left;">Estado</th>
+                </tr></thead>
+                <tbody>${cuerpo}</tbody>
+              </table>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
+              Disponible = cobro app de Cabify − alquiler. Cubrió si alcanza para el Toshipass.
             </div>
           </div>`
         })()
@@ -10456,7 +10806,16 @@ export function ReporteFacturacionTab() {
     }
     const info = descriptions[stat]
     if (!info) return
-    Swal.fire({ title: info.title, html: info.html, width: 'min(92vw, 520px)', confirmButtonText: 'Cerrar' })
+    Swal.fire({
+      title: info.title,
+      html: info.html,
+      width: 'min(92vw, 520px)',
+      confirmButtonText: 'Cerrar',
+      didOpen: (popup) => {
+        if (stat !== 'proyectado') return
+        popup.querySelector('#btn-detalle-proyectado')?.addEventListener('click', () => showDetalleProyectado(src))
+      },
+    })
   }
 
   // Helper para obtener excesos de un conductor
@@ -10553,7 +10912,7 @@ export function ReporteFacturacionTab() {
             {row.original.grupo_flota && (
               <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>{row.original.grupo_flota}</span>
             )}
-            {/* Tarifa con la que se le cobro el alquiler esta semana (ENE-26 / AGO-26).
+            {/* Tarifa con la que se le cobro el alquiler esta semana (ENE-26 / OCT-26).
                 Sale de los codigos de alquiler de su propia factura, asi que no puede
                 contradecir al detalle. Si en la semana hubo cambio de tarifa aparecen
                 las dos, en el mismo orden en que salen las lineas de la factura. */}
@@ -10747,55 +11106,20 @@ export function ReporteFacturacionTab() {
         )
       }
     },
+    /* Columna Peajes oculta (los peajes se siguen cobrando y sumando al total) */
     {
-      id: 'peajes',
-      header: 'Peajes',
-      accessorFn: (row) => row.monto_peajes || 0,
+      id: 'toshipass',
+      header: 'Toshipass',
+      accessorFn: (row) => row.monto_toshipass || 0,
       cell: ({ row }) => {
-        const peajes = row.original.monto_peajes || 0
-        const peajesDetalle = row.original.peajes_detalle || []
-
-        if (peajes === 0) {
+        const monto = row.original.monto_toshipass || 0
+        if (monto === 0) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
-
-        const handleClick = (e: React.MouseEvent) => {
-          e.stopPropagation()
-          const html = peajesDetalle.length > 0
-            ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
-                <thead><tr style="border-bottom:2px solid var(--border-primary);">
-                  <th style="padding:8px;">Fecha</th>
-                  <th style="padding:8px;text-align:right;">Monto</th>
-                </tr></thead>
-                <tbody>${[...peajesDetalle].sort((a: any, b: any) => a.fecha.localeCompare(b.fecha)).map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.fecha}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
-                <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
-                  <td style="padding:8px;">Total</td>
-                  <td style="padding:8px;text-align:right;">${formatCurrency(peajes)}</td>
-                </tr></tfoot>
-              </table>`
-            : `<p>Total peajes: <strong>${formatCurrency(peajes)}</strong></p>`
-
-          Swal.fire({
-            title: `Peajes - ${row.original.conductor_nombre}`,
-            html,
-            width: 450,
-            confirmButtonText: 'Cerrar',
-            confirmButtonColor: '#6B7280',
-            customClass: { popup: 'fact-modal' }
-          })
-        }
-
         return (
-          <button
-            onClick={handleClick}
-            style={{
-              fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)',
-              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-              textDecoration: 'underline'
-            }}
-          >
-            {formatCurrency(peajes)}
-          </button>
+          <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)' }} title="Toshipass (P027): conductor nuevo, en lugar de garantía">
+            {formatCurrency(monto)}
+          </span>
         )
       },
       enableSorting: true,
@@ -11691,6 +12015,26 @@ export function ReporteFacturacionTab() {
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
+                {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
+                  <>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify">
+                      <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
+                        <span className="stat-label">Cubrió Toshipass</span>
+                      </div>
+                    </div>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify)">
+                      <Ticket size={18} className="stat-icon red" />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
+                        <span className="stat-label">No cubrió Toshipass</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -11886,6 +12230,26 @@ export function ReporteFacturacionTab() {
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
+                {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
+                  <>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify">
+                      <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
+                        <span className="stat-label">Cubrió Toshipass</span>
+                      </div>
+                    </div>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify)">
+                      <Ticket size={18} className="stat-icon red" />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
+                        <span className="stat-label">No cubrió Toshipass</span>
+                      </div>
+                    </div>
+                  </>
+                )}
                 {/* Importe Generado: solo visible en semanas cerradas */}
                 {periodo?.estado === 'cerrado' && (() => {
                   // Calcular importe total que debió cobrarse
@@ -12499,7 +12863,7 @@ export function ReporteFacturacionTab() {
                                     }}>
                                       {d.gnc ? 'CON GNC' : 'SIN GNC'}
                                     </span>
-                                    {/* Periodo de la tarifa con la que se cobra ese dia (ENE-26 / AGO-26).
+                                    {/* Periodo de la tarifa con la que se cobra ese dia (ENE-26 / OCT-26).
                                         Sale del sufijo de la descripcion del concepto en conceptos_nomina,
                                         el mismo criterio que usa el detalle de facturacion. */}
                                     {(() => {
@@ -12949,31 +13313,9 @@ export function ReporteFacturacionTab() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                       {(() => {
-                      // El renglon de IVA se inserta JUSTO DEBAJO del ultimo concepto de
-                      // alquiler. Si la semana no tiene alquiler, va al final de la lista.
-                      const CODIGOS_ALQUILER = ['P001','P002','P013','P014','P015','P016','P021','P022','P023','P024','P025','P026']
-                      const idxUltimoAlquiler = detalleCargos.reduce(
-                        (idx, d, i) => (CODIGOS_ALQUILER.includes(d.concepto_codigo || '') ? i : idx), -1
-                      )
-                      // IVA separado en dos: el del alquiler (que va pegado a sus
-                      // lineas) y el del resto de los conceptos. Cada uno aporta segun
-                      // su propio iva_porcentaje (P003 Garantia esta al 0%), NO es un
-                      // 21% plano sobre el subtotal. Hoy solo el alquiler tiene IVA,
-                      // pero si manana otro concepto lo lleva, se muestra en su propia
-                      // fila en vez de quedar escondido dentro de "IVA de alquiler".
-                      let ivaAlquiler = 0
-                      let ivaOtros = 0
-                      for (const d of detalleCargos) {
-                        const cod = d.concepto_codigo || ''
-                        const bruto = Number(d.cantidad || 0) * Number(d.precio_unitario || 0) || Number(d.total || 0)
-                        const monto = Math.round(bruto * 100) / 100
-                        const pct = ivaPorCodigo.get(d.concepto_codigo) ?? 0
-                        const neto = pct > 0 ? Math.round((monto / (1 + pct / 100)) * 100) / 100 : monto
-                        if (CODIGOS_ALQUILER.includes(cod)) ivaAlquiler += monto - neto
-                        else ivaOtros += monto - neto
-                      }
-                      ivaAlquiler = Math.round(ivaAlquiler * 100) / 100
-                      ivaOtros = Math.round(ivaOtros * 100) / 100
+                      // Cada producto con IVA lleva su propio renglon de IVA justo debajo, con
+                      // referencia al concepto (ej: "IVA 21% · P001 - Alquiler Turno Diurno").
+                      // Cada uno segun su iva_porcentaje (P003 Garantia y P027 Toshipass al 0%).
                       const filaIvaDe = (etiqueta: string, valor: number) => (
                         <div style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -12989,9 +13331,8 @@ export function ReporteFacturacionTab() {
                           </span>
                         </div>
                       )
-                      const filaIva = ivaAlquiler > 0 ? filaIvaDe('IVA de alquiler', ivaAlquiler) : null
                       return (<>
-                      {detalleCargos.map((item, idxItem) => {
+                      {detalleCargos.map((item) => {
                         let desc = descripcionSinNumeroCuota(descripcionConPeriodo(item.concepto_descripcion, item.concepto_codigo, periodoPorCodigo), item.concepto_codigo);
                         // Prefijo con código de producto
                         const codigo = item.concepto_codigo
@@ -13051,17 +13392,14 @@ export function ReporteFacturacionTab() {
                               </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
-                              {/* Importe NETO del concepto. El IVA de todos los cargos
-                                  va agrupado en su propio renglon, mas abajo. */}
+                              {/* Importe NETO del concepto. Su IVA va en el renglon de abajo. */}
                               {formatCurrency(netoItem)}
                             </span>
                           </div>
-                          {idxItem === idxUltimoAlquiler && filaIva}
+                          {montoItem - netoItem > 0.005 && filaIvaDe(etiquetaIvaLinea(pctIvaItem, desc), Math.round((montoItem - netoItem) * 100) / 100)}
                           </Fragment>
                         );
                       })}
-                      {idxUltimoAlquiler === -1 && filaIva}
-                      {ivaOtros > 0 && filaIvaDe('IVA', ivaOtros)}
                       </>)
                       })()}
 

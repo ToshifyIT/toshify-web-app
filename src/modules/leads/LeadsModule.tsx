@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
 import { fechaISOART } from '../../utils/fechaArgentina'
 import { inferZona } from '../../utils/zonaUtils'
+import { normalizarCelularAR, validarCelularAR } from '../../utils/validacionesCampos'
 import {
   buscarConductorExistente,
   convertirLeadAConductor,
@@ -543,7 +544,11 @@ function formatDateParts(dateStr: string | undefined | null): { date: string; ti
     const d = new Date(dateStr)
     if (isNaN(d.getTime())) return { date: '-', time: '' }
     const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
-    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+    // 00:00:00.000 exacto en hora Argentina = fecha sin hora (la carga de Sellium solo
+    // trae el día). No se muestra una hora que no existe.
+    const hms = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone: 'America/Argentina/Buenos_Aires' })
+    if (hms === '00:00:00' && d.getMilliseconds() === 0) return { date, time: '' }
+    const time = hms.slice(0, 5)
     return { date, time }
   } catch {
     return { date: '-', time: '' }
@@ -1618,10 +1623,38 @@ export function LeadsModule() {
     }
   }
 
+  /**
+   * Valida y normaliza los celulares antes de guardar (+549 + area + numero).
+   * Al editar solo se exige el formato si el numero cambio: un lead viejo con
+   * el telefono mal cargado no tiene que trabar la edicion de otros campos.
+   * Devuelve false (y marca el error) si alguno es invalido.
+   */
+  function prepararTelefonos(fields: Record<string, unknown>, original: Lead | null): boolean {
+    const errores: Record<string, string> = {}
+    for (const campo of ['phone', 'whatsapp_number'] as const) {
+      const valor = String(fields[campo] ?? '').trim()
+      if (!valor) continue
+      if (original && valor === (original[campo] || '').trim()) continue
+      const normalizado = normalizarCelularAR(valor)
+      if (normalizado) fields[campo] = normalizado
+      else errores[campo] = validarCelularAR(valor) || 'Celular invalido'
+    }
+    setEditErrors(errores)
+    if (Object.keys(errores).length === 0) return true
+    const etiquetas: Record<string, string> = { phone: 'Teléfono', whatsapp_number: 'WhatsApp' }
+    Swal.fire(
+      'Celular inválido',
+      Object.entries(errores).map(([campo, msg]) => `${etiquetas[campo]}: ${msg}`).join('<br>'),
+      'warning'
+    )
+    return false
+  }
+
   async function handleSaveCreate() {
+    const fields = formDataToDbFields(formData)
+    if (!prepararTelefonos(fields, null)) return
     setSaving(true)
     try {
-      const fields = formDataToDbFields(formData)
       // Asignar sede actual (UUID) al crear
       if (sedeActual?.id) {
         fields.sede_id = sedeActual.id
@@ -1644,9 +1677,10 @@ export function LeadsModule() {
 
   async function handleSaveEdit() {
     if (!selectedLead) return
+    const fields = formDataToDbFields(formData)
+    if (!prepararTelefonos(fields, selectedLead)) return
     setSaving(true)
     try {
-      const fields = formDataToDbFields(formData)
       // Resolver sede_id si el campo sede texto cambió
       const textoSede = (formData.sede || '').trim().toLowerCase()
       if (textoSede && sedes.length > 0) {
@@ -2645,6 +2679,14 @@ export function LeadsModule() {
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
+                {phone && !normalizarCelularAR(phone) && (
+                  <span
+                    title="El teléfono no tiene formato de celular (+54 9 área número). Corregirlo desde Editar."
+                    style={{ marginLeft: '6px', color: 'var(--badge-red-text)', fontWeight: 600 }}
+                  >
+                    Tel. inválido
+                  </span>
+                )}
               </span>
               {enZonaRestringida && (
                 <span

@@ -12,6 +12,7 @@ import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import { partesART } from '../../../../../utils/fechaArgentina';
+import { esMarcacionPorDia } from '../utils/marcacionesPorDia';
 import * as XLSX from 'xlsx';
 import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
 import { ConductorHistorialModal } from './ConductorHistorialModal';
@@ -205,7 +206,9 @@ function sinMatchTurno(m: Marcacion): boolean {
  *   - 'En Curso' → turno aún abierto
  *   - 'OK'       → turno resuelto correctamente
  */
-function estadoVisual(m: Marcacion): 'Alerta' | 'En Curso' | 'OK' {
+function estadoVisual(m: Marcacion): 'Sin actividad' | 'Alerta' | 'En Curso' | 'OK' {
+  // Dia sin viajes (fila de relleno de la vista por dia): no hay nada que alertar
+  if (m.estado === 'Sin Actividad') return 'Sin actividad';
   if (sinMatchTurno(m)) return 'Alerta';
   if (m.estado === 'En Curso') return 'En Curso';
   return 'OK';
@@ -479,6 +482,14 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const m = row.original;
         const texto = textoEntrada(m);
+        if (m.estado === 'Sin Actividad') {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, color: 'var(--text-tertiary)' }}>
+              <span style={{ fontWeight: 600, fontSize: '12px' }}>{fechaCorta(m.fecha)}</span>
+              <span style={{ fontSize: '11px', fontStyle: 'italic' }}>Sin actividad</span>
+            </div>
+          );
+        }
         if (texto === '-') return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
         const [fechaPart, horaPart] = texto.split(' ');
         return (
@@ -607,6 +618,16 @@ export function MarcacionesTable({
       ),
       cell: ({ row }) => {
         const m = row.original;
+        if (m.estado === 'Sin Actividad') {
+          return (
+            <span style={{
+              fontSize: '11px', fontWeight: 600, padding: '2px 8px', whiteSpace: 'nowrap',
+              borderRadius: '10px', color: '#fff', background: getEstadoColor('Sin Actividad'),
+            }}>
+              Sin actividad
+            </span>
+          );
+        }
         // Sin match de turno/modalidad → badge clickeable que indica el TIPO de alerta
         // (Sin conductor / Sin asignación / No identificado), con su color. Abre el modal.
         if (sinMatchTurno(m)) {
@@ -656,6 +677,9 @@ export function MarcacionesTable({
       header: 'Checklist',
       cell: ({ row }) => {
         const m = row.original;
+        // Fila armada por dia desde los viajes: no existe en la base, no se puede marcar
+        const soloLectura = esMarcacionPorDia(m);
+        if (soloLectura) return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
         return (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button

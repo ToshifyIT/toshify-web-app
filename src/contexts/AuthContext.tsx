@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, useRef, useCallback, us
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { UserWithRole } from '../types/database.types'
-import { guardarErrorAuth, MENSAJE_CUENTA_INEXISTENTE } from '../lib/authRedirectError'
+import { guardarErrorAuth, MENSAJE_CUENTA_INEXISTENTE, MENSAJE_USUARIO_INACTIVO } from '../lib/authRedirectError'
 
 interface AuthContextType {
   user: User | null
@@ -156,6 +156,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSession(null)
           setUser(null)
         }
+        setProfile(null)
+        return
+      }
+      if ((data as UserWithRole).is_active === false) {
+        // Usuario desactivado en Gestion de Usuarios. El ban de Auth ya impide
+        // loguearse de nuevo; esto cubre una sesion que quedo abierta de antes.
+        guardarErrorAuth(MENSAJE_USUARIO_INACTIVO)
+        setTimeout(() => { void supabase.auth.signOut({ scope: 'local' }) }, 0)
+        setSession(null)
+        setUser(null)
         setProfile(null)
         return
       }

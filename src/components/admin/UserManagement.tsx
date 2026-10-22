@@ -1,39 +1,88 @@
 // src/components/admin/UserManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Users, UserCheck, UserX, Shield, KeyRound, Pencil, ToggleLeft, ToggleRight, Building2 } from 'lucide-react'
+import { Users, UserCheck, UserX, Shield, KeyRound, Mail, Pencil, ToggleLeft, ToggleRight, Building2, Trash2 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import { validarEmail } from '../../utils/validacionesCampos'
 import './UserManagement.css'
 import './AdminStyles.css'
 
+/** Estado de la cuenta en Supabase Auth (lo devuelve /api/admin/users/auth-status). */
+interface EstadoAuth {
+  last_sign_in_at: string | null
+  invited_at: string | null
+  banned: boolean
+}
+
+const USUARIO_VACIO = { email: '', fullName: '', roleId: '', sedeId: '' }
+
+function escaparHtml(texto: string): string {
+  return texto.replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ))
+}
+
+/**
+ * Llama a los endpoints de gestion de usuarios de server.js (verifican que sea admin
+ * y usan la service role: alta por invitacion, envio de correos, ban en Auth).
+ */
+async function llamarApiUsuarios<T = { success: boolean }>(
+  accion: string,
+  body?: Record<string, unknown>,
+): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('No hay sesión activa')
+
+  const response = await fetch(`/api/admin/users/${accion}`, {
+    method: body ? 'POST' : 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: body ? JSON.stringify({ ...body, origin: window.location.origin }) : undefined,
+  })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(result.error || 'Error en la operación')
+  return result as T
+}
+
 export function UserManagement() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<UserWithRole[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
+  const [estadoAuth, setEstadoAuth] = useState<Record<string, EstadoAuth>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [newUser, setNewUser] = useState({
-    email: '',
-    password: '',
-    fullName: '',
-    roleId: '',
-    mustChangePassword: true // Por defecto, forzar cambio de contraseña
-  })
+  const [newUser, setNewUser] = useState(USUARIO_VACIO)
 
   useEffect(() => {
     loadData()
   }, [])
 
+  // Estado de Auth (activo la cuenta / bloqueado). No bloquea la tabla si falla:
+  // solo se pierde el aviso de "pendiente de activación".
+  const loadEstadoAuth = async () => {
+    try {
+      const { usuarios } = await llamarApiUsuarios<{ usuarios: Record<string, EstadoAuth> }>('auth-status')
+      setEstadoAuth(usuarios || {})
+    } catch (err) {
+      console.error('No se pudo cargar el estado de Auth de los usuarios:', err)
+    }
+  }
+
   const loadData = async () => {
     setLoading(true)
     setError(null)
+    void loadEstadoAuth()
 
     try {
       // Cargar usuarios y roles en paralelo
@@ -61,69 +110,41 @@ export function UserManagement() {
     }
   }
 
+  /** Nunca inicio sesion: la invitacion sigue pendiente. */
+  const estaPendiente = (user: UserWithRole): boolean => {
+    const auth = estadoAuth[user.id]
+    return !!auth && !auth.last_sign_in_at
+  }
+
   const handleCreateUser = async () => {
-    if (!newUser.email || !newUser.password || !newUser.fullName) {
+    const email = newUser.email.trim()
+    const fullName = newUser.fullName.trim()
+    if (!email || !fullName) {
       Swal.fire({
         icon: 'error',
         title: 'Campos Incompletos',
-        text: 'Complete todos los campos requeridos'
+        text: 'Completá el nombre y el email'
       })
       return
     }
-
-    // Validación de contraseña segura (OWASP)
-    const passwordErrors: string[] = []
-    if (newUser.password.length < 8) {
-      passwordErrors.push('Mínimo 8 caracteres')
-    }
-    if (!/[A-Z]/.test(newUser.password)) {
-      passwordErrors.push('Al menos una mayúscula')
-    }
-    if (!/[a-z]/.test(newUser.password)) {
-      passwordErrors.push('Al menos una minúscula')
-    }
-    if (!/[0-9]/.test(newUser.password)) {
-      passwordErrors.push('Al menos un número')
-    }
-
-    if (passwordErrors.length > 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Contraseña débil',
-        html: `La contraseña debe cumplir:<br>• ${passwordErrors.join('<br>• ')}`
-      })
+    const errorEmail = validarEmail(email)
+    if (errorEmail) {
+      Swal.fire({ icon: 'error', title: 'Email inválido', text: errorEmail })
       return
     }
 
     setCreating(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      await llamarApiUsuarios('invite', {
+        email,
+        fullName,
+        roleId: newUser.roleId || null,
+        sedeId: newUser.sedeId || null,
+      })
 
-      if (!session) {
-        throw new Error('No hay sesión activa')
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
-          },
-          body: JSON.stringify(newUser)
-        }
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error creando usuario')
-      }
-
-      showSuccess('Usuario Creado', 'El usuario se ha creado exitosamente')
+      showSuccess('Invitación enviada', `${fullName} recibirá un correo en ${email} para activar su cuenta`)
       setShowCreateModal(false)
-      setNewUser({ email: '', password: '', fullName: '', roleId: '', mustChangePassword: true })
+      setNewUser(USUARIO_VACIO)
       await loadData()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
@@ -148,6 +169,21 @@ export function UserManagement() {
         return
       }
 
+      // El select guarda al instante: se confirma para que un clic sin querer no cambie permisos.
+      const usuario = users.find(u => u.id === userId)
+      const rolNuevo = roles.find(r => r.id === newRoleId)?.name || 'el nuevo rol'
+      const confirmacion = await Swal.fire({
+        icon: 'question',
+        title: 'Cambiar rol',
+        html: `¿Cambiar el rol de <strong>${escaparHtml((usuario?.full_name || usuario?.email || 'este usuario') as string)}</strong> a <strong>${escaparHtml(rolNuevo)}</strong>?`,
+        showCancelButton: true,
+        confirmButtonText: 'Cambiar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#FF0033',
+        reverseButtons: true,
+      })
+      if (!confirmacion.isConfirmed) return
+
       const { error } = await supabase
         .from('user_profiles')
         .update({ role_id: newRoleId })
@@ -171,17 +207,29 @@ export function UserManagement() {
     }
   }
 
-  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+  // Desactivar bloquea el acceso de verdad (ban en Supabase Auth), no solo el badge.
+  const toggleUserStatus = async (user: UserWithRole, currentStatus: boolean) => {
+    const activar = !currentStatus
+    const userName = (user.full_name || user.email || 'Usuario') as string
+
+    const confirmacion = await Swal.fire({
+      icon: 'warning',
+      title: activar ? 'Activar usuario' : 'Desactivar usuario',
+      html: activar
+        ? `<strong>${escaparHtml(userName)}</strong> va a poder volver a iniciar sesión.`
+        : `<strong>${escaparHtml(userName)}</strong> no va a poder iniciar sesión y se cerrará su acceso.`,
+      showCancelButton: true,
+      confirmButtonText: activar ? 'Activar' : 'Desactivar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#FF0033',
+      reverseButtons: true,
+    })
+    if (!confirmacion.isConfirmed) return
+
     try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ is_active: !currentStatus })
-        .eq('id', userId)
-
-      if (error) throw error
-
+      await llamarApiUsuarios('set-active', { userId: user.id, isActive: activar })
       await loadData()
-      showSuccess('Estado Actualizado', `Usuario ${!currentStatus ? 'activado' : 'desactivado'} correctamente`)
+      showSuccess('Estado Actualizado', `Usuario ${activar ? 'activado' : 'desactivado'} correctamente`)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
       Swal.fire({
@@ -243,11 +291,17 @@ export function UserManagement() {
 
     if (!formValues) return
 
-    await supabase.from('user_profiles').update({
+    const { error: sedeError } = await supabase.from('user_profiles').update({
       sede_id: formValues.sedeId || null,
       puede_cambiar_sede: formValues.puedeCambiar,
       ver_todas_sedes: formValues.verTodas,
     } as any).eq('id', user.id)
+
+    if (sedeError) {
+      console.error('Error guardando la sede del usuario:', sedeError)
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar la sede: ' + sedeError.message })
+      return
+    }
 
     setUsers(prev => prev.map(u => u.id === user.id
       ? { ...u, sede_id: formValues.sedeId || null, puede_cambiar_sede: formValues.puedeCambiar, ver_todas_sedes: formValues.verTodas } as any
@@ -295,208 +349,82 @@ export function UserManagement() {
     }
   }
 
-  // Generar contraseña aleatoria segura
-  const generatePassword = () => {
-    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    const lower = 'abcdefghijklmnopqrstuvwxyz'
-    const numbers = '0123456789'
-    const all = upper + lower + numbers
+  // Reenviar invitacion (si nunca activo la cuenta) o enlace para restablecer la contraseña.
+  // El usuario define su clave desde el correo: el admin no la ve ni la escribe.
+  // Eliminar de verdad (Auth + perfil). El servidor lo rechaza si el usuario
+  // tiene registros a su nombre: en ese caso corresponde desactivarlo.
+  const eliminarUsuario = async (user: UserWithRole) => {
+    const userName = (user.full_name || user.email || 'Usuario') as string
 
-    let password = ''
-    // Asegurar al menos uno de cada tipo
-    password += upper[Math.floor(Math.random() * upper.length)]
-    password += lower[Math.floor(Math.random() * lower.length)]
-    password += numbers[Math.floor(Math.random() * numbers.length)]
-
-    // Completar hasta 10 caracteres
-    for (let i = 0; i < 7; i++) {
-      password += all[Math.floor(Math.random() * all.length)]
-    }
-
-    // Mezclar
-    return password.split('').sort(() => Math.random() - 0.5).join('')
-  }
-
-  // Cifrar contraseña con XOR + base64 para no enviarla en texto plano al RPC
-  const encryptPassword = (password: string): string => {
-    const key = 'T0sh1fy-S3cur3-K3y-2025!'
-    let encrypted = ''
-    for (let i = 0; i < password.length; i++) {
-      encrypted += String.fromCharCode(password.charCodeAt(i) ^ key.charCodeAt(i % key.length))
-    }
-    return btoa(encrypted)
-  }
-
-  const forcePasswordChange = async (userId: string, userName: string, userEmail?: string) => {
-    // Generar contraseña
-    const newPassword = generatePassword()
-
-    // Modal 1: Confirmar reset
-    const result = await Swal.fire({
+    const confirmacion = await Swal.fire({
       icon: 'warning',
-      title: 'Resetear Contraseña',
+      title: 'Eliminar usuario',
+      html: `Se eliminará <strong>${escaparHtml(userName)}</strong>${user.email ? ` (${escaparHtml(user.email as string)})` : ''} junto con sus permisos.<br><br>Esta acción no se puede deshacer.`,
+      showCancelButton: true,
+      confirmButtonText: 'Eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      reverseButtons: true,
+      focusCancel: true,
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading(),
+      preConfirm: async () => {
+        try {
+          await llamarApiUsuarios('delete', { userId: user.id })
+          return true
+        } catch (err: unknown) {
+          Swal.showValidationMessage(err instanceof Error ? err.message : String(err))
+          return false
+        }
+      },
+    })
+    if (!confirmacion.isConfirmed) return
+
+    await loadData()
+    showSuccess('Usuario eliminado', `${userName} fue eliminado correctamente`)
+  }
+
+  const enviarAcceso = async (user: UserWithRole) => {
+    const userName = (user.full_name || user.email || 'Usuario') as string
+    const email = user.email as string | null
+    const pendiente = estaPendiente(user)
+
+    if (!email) {
+      Swal.fire({ icon: 'warning', title: 'Sin correo', text: 'Este usuario no tiene correo registrado.' })
+      return
+    }
+
+    const result = await Swal.fire({
+      icon: 'question',
+      title: pendiente ? 'Reenviar invitación' : 'Restablecer contraseña',
       html: `
-        <p style="color: #374151; margin-bottom: 8px;">Se generará una nueva contraseña para:</p>
-        <p style="font-weight: 700; font-size: 16px; color: #111827; margin-bottom: 16px;">${userName}</p>
-        <p style="font-size: 13px; color: #6b7280;">El usuario deberá cambiarla en el próximo inicio de sesión.</p>
+        <p style="color:#374151;margin-bottom:8px">
+          ${pendiente
+            ? 'Se reenviará el correo de bienvenida para que active su cuenta y cree su contraseña:'
+            : 'Se enviará un correo con un enlace para que cree una nueva contraseña:'}
+        </p>
+        <p style="font-weight:700;color:#111827;margin-bottom:4px">${escaparHtml(userName)}</p>
+        <p style="font-size:13px;color:#6b7280">${escaparHtml(email)}</p>
       `,
       showCancelButton: true,
-      confirmButtonText: 'Resetear',
+      confirmButtonText: 'Enviar correo',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#FF0033',
-      reverseButtons: true
+      reverseButtons: true,
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading(),
+      preConfirm: async () => {
+        try {
+          return await llamarApiUsuarios('send-access', { userId: user.id })
+        } catch (err: unknown) {
+          Swal.showValidationMessage(err instanceof Error ? err.message : String(err))
+          return false
+        }
+      },
     })
 
-    if (result.isDismissed) return
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.rpc as any)('admin_reset_user_password', {
-        target_user_id: userId,
-        new_password: newPassword
-      })
-
-      if (error) throw error
-      if (data && !data.success) throw new Error(data.error || 'Error desconocido')
-
-      await loadData()
-
-      // Modal 2: Resultado con acciones integradas (copiar + enviar correo)
-      const targetEmail = userEmail || ''
-
-      await Swal.fire({
-        iconHtml: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 8 10.5 14 8 11.5"/></svg>',
-        customClass: { icon: 'swal-no-border' },
-        title: 'Listo',
-        html: `
-          <style>.swal-no-border { border: none !important; }</style>
-          <div style="text-align: left;">
-            <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px;">Nueva contraseña de <strong style="color: #111827;">${userName}</strong></p>
-
-            <div style="position: relative; margin-bottom: 16px;">
-              <input type="text" id="swal-pwd" value="${newPassword}" readonly
-                style="width: 100%; box-sizing: border-box; background: #f9fafb; padding: 14px 16px; border-radius: 8px; font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 20px; letter-spacing: 3px; border: 1px solid #e5e7eb; text-align: center; color: #111827; font-weight: 600;" />
-            </div>
-
-            <div style="display: flex; gap: 8px; margin-bottom: ${targetEmail ? '16px' : '0'};">
-              <button type="button" id="swal-copy-btn"
-                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; background: white; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copiar
-              </button>
-              <button type="button" id="swal-email-btn"
-                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; background: #FF0033; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; ${!targetEmail ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                Enviar por Correo
-              </button>
-            </div>
-
-            ${targetEmail ? `
-            <p id="swal-email-hint" style="font-size: 12px; color: #9ca3af; text-align: center; margin: 0;">
-              Se enviara cifrada a <strong style="color: #6b7280;">${targetEmail}</strong>
-            </p>
-            ` : `
-            <p style="font-size: 12px; color: #f59e0b; text-align: center; margin-top: 8px;">
-              Este usuario no tiene correo registrado
-            </p>
-            `}
-          </div>
-        `,
-        showConfirmButton: true,
-        confirmButtonText: 'Cerrar',
-        confirmButtonColor: '#6b7280',
-        didOpen: () => {
-          // Copiar
-          const copyBtn = document.getElementById('swal-copy-btn')
-          const pwdInput = document.getElementById('swal-pwd') as HTMLInputElement
-          if (copyBtn && pwdInput) {
-            copyBtn.onclick = async () => {
-              try {
-                await navigator.clipboard.writeText(pwdInput.value)
-              } catch {
-                pwdInput.select()
-                document.execCommand('copy')
-              }
-              copyBtn.innerHTML = `
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Copiado!
-              `
-              copyBtn.style.background = '#d1fae5'
-              copyBtn.style.color = '#059669'
-              copyBtn.style.borderColor = '#6ee7b7'
-              setTimeout(() => {
-                copyBtn.innerHTML = `
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  Copiar
-                `
-                copyBtn.style.background = 'white'
-                copyBtn.style.color = '#374151'
-                copyBtn.style.borderColor = '#d1d5db'
-              }, 2000)
-            }
-          }
-
-          // Enviar por correo
-          const emailBtn = document.getElementById('swal-email-btn')
-          if (emailBtn) {
-            if (!targetEmail) {
-              // Sin email: deshabilitado
-              ;(emailBtn as HTMLButtonElement).disabled = true
-              return
-            }
-
-            emailBtn.onclick = async () => {
-              emailBtn.innerHTML = `
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                Enviando...
-              `
-              emailBtn.style.opacity = '0.7'
-              ;(emailBtn as HTMLButtonElement).disabled = true
-
-              try {
-                const encryptedPwd = encryptPassword(newPassword)
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const { data: emailData, error: emailError } = await (supabase.rpc as any)('send_password_email', {
-                  user_email: targetEmail,
-                  user_name: userName,
-                  user_password: encryptedPwd
-                })
-
-                if (emailError) throw emailError
-                if (emailData && !emailData.success) throw new Error(emailData.error || 'Error desconocido')
-
-                emailBtn.innerHTML = `
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Enviado!
-                `
-                emailBtn.style.background = '#059669'
-                emailBtn.style.opacity = '1'
-
-                const hint = document.getElementById('swal-email-hint')
-                if (hint) {
-                  hint.innerHTML = `<strong style="color: #059669;">Correo enviado exitosamente</strong>`
-                }
-              } catch {
-                emailBtn.innerHTML = `
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                  Error - Reintentar
-                `
-                emailBtn.style.background = '#dc2626'
-                emailBtn.style.opacity = '1'
-                ;(emailBtn as HTMLButtonElement).disabled = false
-              }
-            }
-          }
-        }
-      })
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al cambiar contraseña: ' + message,
-        confirmButtonColor: '#FF0033'
-      })
+    if (result.isConfirmed) {
+      showSuccess('Correo enviado', `Se envió el enlace a ${email}`)
     }
   }
 
@@ -554,8 +482,15 @@ export function UserManagement() {
       {
         accessorKey: 'is_active',
         header: 'Estado',
-        cell: ({ getValue }) => {
+        cell: ({ row, getValue }) => {
           const isActive = getValue() as boolean
+          if (isActive !== false && estaPendiente(row.original)) {
+            return (
+              <span className="dt-badge dt-badge-yellow" title="Todavía no activó su cuenta desde el correo de invitación">
+                Pendiente
+              </span>
+            )
+          }
           return (
             <span className={`dt-badge ${isActive !== false ? 'dt-badge-green' : 'dt-badge-red'}`}>
               {isActive !== false ? 'Activo' : 'Inactivo'}
@@ -579,7 +514,8 @@ export function UserManagement() {
         enableSorting: false,
         cell: ({ row }) => {
           const isActive = row.original.is_active !== false
-          const userName = (row.original.full_name || row.original.email || 'Usuario') as string
+          const pendiente = estaPendiente(row.original)
+          const esUsuarioActual = row.original.id === currentUser?.id
           return (
             <div className="dt-actions">
               <button
@@ -599,24 +535,36 @@ export function UserManagement() {
               </button>
               <button
                 className="dt-btn-action dt-btn-warning"
-                onClick={() => forcePasswordChange(row.original.id, userName, row.original.email ?? undefined)}
-                data-tooltip="Resetear contraseña"
+                onClick={() => enviarAcceso(row.original)}
+                disabled={!isActive}
+                data-tooltip={!isActive
+                  ? 'Activá el usuario para enviarle acceso'
+                  : pendiente ? 'Reenviar invitación' : 'Enviar enlace para restablecer contraseña'}
               >
-                <KeyRound size={15} />
+                {pendiente ? <Mail size={15} /> : <KeyRound size={15} />}
               </button>
               <button
                 className={`dt-btn-action ${isActive ? 'dt-btn-danger' : 'dt-btn-success'}`}
-                onClick={() => toggleUserStatus(row.original.id, isActive)}
-                data-tooltip={isActive ? 'Desactivar' : 'Activar'}
+                onClick={() => toggleUserStatus(row.original, isActive)}
+                disabled={esUsuarioActual}
+                data-tooltip={esUsuarioActual ? 'No podés desactivar tu propio usuario' : isActive ? 'Desactivar' : 'Activar'}
               >
                 {isActive ? <ToggleRight size={17} /> : <ToggleLeft size={17} />}
+              </button>
+              <button
+                className="dt-btn-action dt-btn-delete"
+                onClick={() => eliminarUsuario(row.original)}
+                disabled={esUsuarioActual}
+                data-tooltip={esUsuarioActual ? 'No podés eliminar tu propio usuario' : 'Eliminar'}
+              >
+                <Trash2 size={15} />
               </button>
             </div>
           )
         },
       },
     ],
-    [roles]
+    [roles, sedes, users, estadoAuth, currentUser?.id]
   )
 
   // Calcular estadísticas
@@ -722,18 +670,6 @@ pageSize={100}
             </div>
 
             <div className="um-form-group">
-              <label className="um-form-label">Contraseña *</label>
-              <input
-                type="password"
-                className="um-form-input"
-                value={newUser.password}
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                placeholder="Mínimo 8 caracteres, mayúscula, minúscula y número"
-                disabled={creating}
-              />
-            </div>
-
-            <div className="um-form-group">
               <label className="um-form-label">Rol</label>
               <select
                 className="um-form-input"
@@ -751,26 +687,33 @@ pageSize={100}
             </div>
 
             <div className="um-form-group">
-              <label className="um-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={newUser.mustChangePassword}
-                  onChange={(e) => setNewUser({ ...newUser, mustChangePassword: e.target.checked })}
-                  disabled={creating}
-                />
-                <span>Contraseña temporal (forzar cambio en primer inicio)</span>
-              </label>
-              <p className="um-form-hint">
-                Si está marcado, el usuario deberá cambiar su contraseña la primera vez que inicie sesión.
-              </p>
+              <label className="um-form-label">Sede por defecto</label>
+              <select
+                className="um-form-input"
+                value={newUser.sedeId}
+                onChange={(e) => setNewUser({ ...newUser, sedeId: e.target.value })}
+                disabled={creating}
+              >
+                <option value="">Sin sede asignada</option>
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>
+                    {sede.nombre}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <p className="um-form-hint">
+              Se enviará un correo de bienvenida al email indicado para que el usuario active su
+              cuenta y cree su propia contraseña.
+            </p>
 
             <div className="um-modal-actions">
               <button
                 className="btn-secondary"
                 onClick={() => {
                   setShowCreateModal(false)
-                  setNewUser({ email: '', password: '', fullName: '', roleId: '', mustChangePassword: true })
+                  setNewUser(USUARIO_VACIO)
                 }}
                 disabled={creating}
               >
@@ -781,7 +724,7 @@ pageSize={100}
                 onClick={handleCreateUser}
                 disabled={creating}
               >
-                {creating ? 'Creando...' : 'Crear Usuario'}
+                {creating ? 'Enviando invitación...' : 'Crear y enviar invitación'}
               </button>
             </div>
           </div>

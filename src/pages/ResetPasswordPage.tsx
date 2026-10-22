@@ -5,6 +5,31 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import Swal from 'sweetalert2'
 
+// Tipo de enlace del correo: 'invite' (bienvenida de un usuario nuevo) o 'recovery'
+// (restablecer contraseña). Se lee al cargar el modulo porque supabase-js procesa el
+// #hash de la URL y lo borra apenas inicializa la sesion.
+const HASH_INICIAL = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+const TIPO_ENLACE = HASH_INICIAL.get('type')
+const ES_INVITACION = TIPO_ENLACE === 'invite' || TIPO_ENLACE === 'signup'
+
+/**
+ * La pantalla solo sirve si se llego desde un enlace del correo (trae el token en
+ * el #hash). Sin esto, cualquiera con una sesion abierta que entrara a
+ * /reset-password cambiaria SU contraseña (ej: el admin que acaba de crear el usuario).
+ */
+const VIENE_DE_CORREO = !!HASH_INICIAL.get('access_token')
+  && (ES_INVITACION || TIPO_ENLACE === 'recovery')
+
+/** Mismas reglas que el alta de usuarios y el cambio forzado de contraseña. */
+function erroresPassword(password: string): string[] {
+  const errores: string[] = []
+  if (password.length < 8) errores.push('mínimo 8 caracteres')
+  if (!/[A-Z]/.test(password)) errores.push('una mayúscula')
+  if (!/[a-z]/.test(password)) errores.push('una minúscula')
+  if (!/[0-9]/.test(password)) errores.push('un número')
+  return errores
+}
+
 export function ResetPasswordPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -21,8 +46,9 @@ export function ResetPasswordPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
 
-      // Si hay sesión, el usuario puede cambiar su contraseña
-      if (session) {
+      // Sesion creada por el enlace del correo (supabase-js reemplaza cualquier
+      // sesion previa del navegador por la del usuario del enlace)
+      if (session && VIENE_DE_CORREO) {
         setIsValidSession(true)
       } else {
         setIsValidSession(false)
@@ -35,7 +61,7 @@ export function ResetPasswordPage() {
       if (event === 'PASSWORD_RECOVERY') {
         setIsValidSession(true)
         setCheckingSession(false)
-      } else if (session) {
+      } else if (session && VIENE_DE_CORREO) {
         setIsValidSession(true)
         setCheckingSession(false)
       }
@@ -53,8 +79,9 @@ export function ResetPasswordPage() {
     setError('')
 
     // Validaciones
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres')
+    const errores = erroresPassword(password)
+    if (errores.length > 0) {
+      setError(`La contraseña debe tener ${errores.join(', ')}`)
       return
     }
 
@@ -71,12 +98,27 @@ export function ResetPasswordPage() {
       })
 
       if (error) {
-        setError(error.message)
+        setError(
+          /different from the old/i.test(error.message)
+            ? 'La nueva contraseña tiene que ser distinta a la anterior'
+            : error.message
+        )
       } else {
+        // Si tenia pendiente el cambio forzado (contraseña temporal), ya quedo resuelto.
+        // La contraseña ya se guardo: si esto falla no se le muestra error al usuario.
+        // (el builder de supabase.rpc solo implementa then(), no tiene .catch())
+        try {
+          await (supabase.rpc as any)('mark_password_changed')
+        } catch (rpcError) {
+          console.error('No se pudo marcar el cambio de contraseña:', rpcError)
+        }
+
         await Swal.fire({
           icon: 'success',
-          title: 'Contraseña actualizada',
-          text: 'Tu contraseña ha sido actualizada correctamente. Ahora podés iniciar sesión.',
+          title: ES_INVITACION ? '¡Cuenta activada!' : 'Contraseña actualizada',
+          text: ES_INVITACION
+            ? 'Tu contraseña quedó creada. Ahora podés iniciar sesión en Toshify con tu email.'
+            : 'Tu contraseña ha sido actualizada correctamente. Ahora podés iniciar sesión.',
           confirmButtonText: 'Ir al login',
           confirmButtonColor: '#FF0033'
         })
@@ -109,7 +151,7 @@ export function ResetPasswordPage() {
             </div>
             <div className="form-header">
               <h1 className="form-title">Verificando...</h1>
-              <p className="form-subtitle">Estamos validando tu enlace de recuperación</p>
+              <p className="form-subtitle">Estamos validando tu enlace</p>
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
               <span className="spinner"></span>
@@ -131,7 +173,10 @@ export function ResetPasswordPage() {
             </div>
             <div className="form-header">
               <h1 className="form-title">Enlace inválido</h1>
-              <p className="form-subtitle">El enlace de recuperación ha expirado o es inválido. Por favor, solicitá uno nuevo.</p>
+              <p className="form-subtitle">
+                El enlace expiró o ya fue usado. Pedile a un administrador que te reenvíe la
+                invitación, o usá "¿Olvidaste tu contraseña?" en el login.
+              </p>
             </div>
             <button
               type="button"
@@ -156,13 +201,17 @@ export function ResetPasswordPage() {
           </div>
 
           <div className="form-header">
-            <h1 className="form-title">Nueva contraseña</h1>
-            <p className="form-subtitle">Ingresá tu nueva contraseña</p>
+            <h1 className="form-title">{ES_INVITACION ? 'Bienvenido a Toshify' : 'Nueva contraseña'}</h1>
+            <p className="form-subtitle">
+              {ES_INVITACION
+                ? 'Creá tu contraseña para activar tu cuenta'
+                : 'Ingresá tu nueva contraseña'}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Nueva contraseña</label>
+              <label className="form-label">{ES_INVITACION ? 'Contraseña' : 'Nueva contraseña'}</label>
               <div className="input-wrapper">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -172,6 +221,7 @@ export function ResetPasswordPage() {
                   placeholder="••••••••"
                   required
                   autoComplete="new-password"
+                  title="Mínimo 8 caracteres, con mayúscula, minúscula y número"
                 />
                 <button
                   type="button"
@@ -216,7 +266,9 @@ export function ResetPasswordPage() {
               className="btn-primary"
               disabled={loading}
             >
-              {loading ? <span className="spinner"></span> : 'Actualizar contraseña'}
+              {loading
+                ? <span className="spinner"></span>
+                : ES_INVITACION ? 'Activar cuenta' : 'Actualizar contraseña'}
             </button>
           </form>
 

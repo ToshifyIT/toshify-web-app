@@ -228,6 +228,8 @@ export interface ConceptoDetalle {
   total: number
   /** Importe NETO: el que se muestra en la linea. El IVA va en su propio renglon. */
   neto: number
+  /** % de IVA del concepto (0 si no lleva). Para el renglon de IVA de cada producto. */
+  ivaPorcentaje: number
   esDescuento: boolean
 }
 export interface PagoAporte {
@@ -303,6 +305,7 @@ export async function cargarDetalleSemana(
       cantidad: Number(d.cantidad) || 0,
       total: bruto,
       neto: esDescuento ? bruto : montoNeto(d, ivaPorCodigo),
+      ivaPorcentaje: esDescuento ? 0 : (ivaPorCodigo.get(d.concepto_codigo) ?? 0),
       esDescuento,
     }
   })

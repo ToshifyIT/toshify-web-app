@@ -201,6 +201,7 @@ const ETIQUETAS: Record<string, string> = {
   patente: 'Patente',
   fuente_pauta: 'Fuente pauta (canal)',
   id_fuente: 'Id fuente (link)',
+  entrevistador_asignado: 'Guía',
   observaciones: 'Observaciones',
   fuente_de_lead: 'Fuente',
   fecha_carga: 'Fecha carga',
@@ -238,11 +239,18 @@ function fechaLegible(v: unknown): string {
   return d.toLocaleString('es-AR', opciones)
 }
 
+/** Fecha sin hora (fecha_carga se guarda a las 00:00 UTC): se muestra el día tal cual. */
+function diaLegible(v: unknown): string {
+  if (v == null || v === '') return '(vacío)'
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v))
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(v)
+}
+
 function cambios(payload: Record<string, unknown>, lead: LeadExistente): string {
   return Object.keys(payload)
     .filter(k => !OCULTAS.has(k))
     .map(k => {
-      const fmt = k === 'created_at' ? fechaLegible : valorLegible
+      const fmt = k === 'created_at' ? fechaLegible : k === 'fecha_carga' ? diaLegible : valorLegible
       return `${ETIQUETAS[k] ?? k}: ${fmt(lead[k])} → ${fmt(payload[k])}`
     })
     .join('\n')
