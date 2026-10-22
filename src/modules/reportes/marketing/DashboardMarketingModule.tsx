@@ -118,6 +118,21 @@ function rangoUltimasSemanas(semanas: number): DateRange {
   return { startDate: r.desde, endDate: r.hasta, label: `Últimas ${semanas} semanas`, type: 'custom' }
 }
 
+/**
+ * Último mes: del mismo día del mes pasado a hoy (hora Argentina). Si ese día no
+ * existe en el mes pasado (31/03 → febrero), se usa el último día de ese mes.
+ * Es el período por defecto del dashboard.
+ */
+function rangoUltimoMes(): DateRange {
+  const hoy = hoyArgentina()
+  const [y, m, d] = hoy.split('-').map(Number)
+  const anio = m === 1 ? y - 1 : y
+  const mes = m === 1 ? 12 : m - 1
+  const diasMes = new Date(Date.UTC(anio, mes, 0)).getUTCDate()
+  const desde = `${anio}-${String(mes).padStart(2, '0')}-${String(Math.min(d, diasMes)).padStart(2, '0')}`
+  return { startDate: desde, endDate: hoy, label: 'Último mes', type: 'custom' }
+}
+
 function Filtros({ rango, d, filtro, cargando, onRango, onFiltro }: {
   rango: DateRange
   d: MarketingRaw | null
@@ -127,10 +142,13 @@ function Filtros({ rango, d, filtro, cargando, onRango, onFiltro }: {
   onFiltro: (f: FiltroSegmento) => void
 }) {
   const hoy = hoyArgentina()
-  const atajos = useMemo(() => [4, 12].map(n => {
-    const r = rangoUltimasSemanas(n)
-    return { id: `ultimas-${n}`, label: r.label, range: r }
-  }), [])
+  const atajos = useMemo(() => [
+    { id: 'ultimo-mes', label: 'Último mes', range: rangoUltimoMes() },
+    ...[4, 12].map(n => {
+      const r = rangoUltimasSemanas(n)
+      return { id: `ultimas-${n}`, label: r.label, range: r }
+    }),
+  ], [])
   const desde = rango.startDate
   const hasta = rango.endDate > hoy ? hoy : rango.endDate
   return (
@@ -392,7 +410,7 @@ function Canales({ d }: { d: MarketingRaw }) {
     <Card
       title="Rendimiento por canal"
       subtitle="Solo pauta en redes · leads del período"
-      info="Canal según el link del anuncio con que entró el lead (Facebook, Instagram, TikTok o Estado de WhatsApp). 'Sin canal identificado': el lead no trae el link del anuncio (se carga desde el 30/09/2026). Conductores nuevos: leads del período que ya recibieron su primer auto. Conversión = conductores nuevos ÷ leads. % Cumple: sobre los leads que llegaron a la propuesta."
+      info="Canal según el link del anuncio con que entró el lead (Facebook, Instagram, TikTok o Estado de WhatsApp). 'Sin canal identificado': el lead no trae el link del anuncio (llega en la carga masiva de Sellium). Conductores nuevos: leads del período que ya recibieron su primer auto. Conversión = conductores nuevos ÷ leads. % Cumple: sobre los leads que llegaron a la propuesta."
     >
       <TablaRendimiento filas={d.canales.map(c => ({ ...c, clave: c.canal }))} primeraColumna="Canal" renderPrimera={c => <span>{c}</span>} />
     </Card>
@@ -403,7 +421,7 @@ function Anuncios({ d }: { d: MarketingRaw }) {
   return (
     <Card
       title="Rendimiento por anuncio"
-      subtitle="Los 30 anuncios con más leads del período · el link se carga desde el 30/09/2026"
+      subtitle="Los 30 anuncios con más leads del período · solo leads con link del anuncio"
       info="Permite ver qué anuncio trae gente que llega a conductor, no solo conversaciones."
     >
       {d.anuncios.length === 0 ? (
@@ -585,7 +603,7 @@ function ControlDatos({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }
   const items = [
     { label: 'Sin zona', valor: c.sin_zona, base: c.leads, info: 'Sin zona cargada ni dirección para inferirla.' },
     { label: 'Sin canal identificado', valor: c.sin_canal, base: c.leads, info: 'Sin el canal del anuncio (Facebook, Instagram, TikTok o Estado).' },
-    { label: 'Sin link de anuncio', valor: c.sin_anuncio, base: c.con_link_posible, info: 'Solo leads desde el 30/09/2026, cuando se empezó a cargar el link del anuncio.' },
+    { label: 'Sin link de anuncio', valor: c.sin_anuncio, base: c.con_link_posible, info: 'Leads del período sin el link del anuncio. El link llega en la carga masiva de Sellium (columna "Link del anuncio (pauta)").' },
     { label: 'Sin edad', valor: c.sin_edad, base: c.leads, info: 'Sin la edad cargada.' },
     { label: 'Perfil sin datos', valor: c.perfil_sin_datos, base: c.calificables, info: 'Leads que llegaron a la propuesta pero no tienen cargados edad, licencia, monotributo o experiencia.' },
   ]
@@ -626,7 +644,8 @@ function Glosario() {
 // ───────────── Módulo ─────────────
 
 export function DashboardMarketingModule() {
-  const [rango, setRango] = useState<DateRange>(() => rangoUltimasSemanas(4))
+  // Por defecto, el último mes (pedido 2026-10-22; antes: últimas 4 semanas)
+  const [rango, setRango] = useState<DateRange>(rangoUltimoMes)
   const [filtro, setFiltro] = useState<FiltroSegmento>('Pauta redes')
   const { data, isLoading, error } = useMarketingData(rango.startDate, rango.endDate)
 

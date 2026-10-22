@@ -424,9 +424,11 @@ SELECT jsonb_build_object(
       SELECT segmento, COUNT(*) AS leads,
              COUNT(*) FILTER (WHERE sin_zona) AS sin_zona,
              COUNT(*) FILTER (WHERE canal = 'Sin canal identificado') AS sin_canal,
-             -- El link del anuncio se carga desde el 30/09/2026
-             COUNT(*) FILTER (WHERE ingreso >= DATE '2026-09-30') AS con_link_posible,
-             COUNT(*) FILTER (WHERE ingreso >= DATE '2026-09-30' AND id_fuente = '') AS sin_anuncio,
+             -- Link del anuncio: sobre TODOS los leads del período (antes solo desde
+             -- el 30/09/2026, y eso dejaba afuera justo a los que sí lo tienen).
+             -- con_link_posible se mantiene por compatibilidad con la pantalla: es la base.
+             COUNT(*) AS con_link_posible,
+             COUNT(*) FILTER (WHERE id_fuente = '') AS sin_anuncio,
              COUNT(*) FILTER (WHERE edad IS NULL) AS sin_edad,
              COUNT(*) FILTER (WHERE calificable) AS calificables,
              COUNT(*) FILTER (WHERE calificable AND perfil = 'Sin datos') AS perfil_sin_datos
