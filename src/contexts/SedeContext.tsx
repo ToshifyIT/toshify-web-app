@@ -30,6 +30,8 @@ export interface Sede {
   email: string | null
   es_principal: boolean
   activa: boolean
+  /** Sede visible solo para admin (p. ej. "Pruebas"): no aparece a otros usuarios ni suma en "Todas". */
+  solo_admin?: boolean
   created_at: string
   updated_at: string
 }
@@ -55,7 +57,7 @@ interface SedeContextType {
   puedeCambiarSede: boolean
   /**
    * Helper para aplicar filtro de sede a una query de supabase.
-   * Si verTodas = true, no agrega filtro.
+   * Si verTodas = true, filtra por las sedes reales (excluye las solo_admin, p. ej. "Pruebas").
    * Si verTodas = false, agrega .eq('sede_id', sedeActualId)
    */
   aplicarFiltroSede: <T>(query: T, campo?: string) => T
@@ -93,14 +95,16 @@ export function SedeProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await (supabase
           .from('sedes') as any)
-          .select('id, nombre, es_principal, activa')
+          // '*' para no depender de que la columna solo_admin ya exista en la base
+          .select('*')
           .eq('activa', true)
           .order('es_principal', { ascending: false })
           .order('nombre')
 
         if (error) throw error
 
-        const sedesData = (data || []) as Sede[]
+        // Las sedes solo_admin (p. ej. "Pruebas") solo las ven los admin por rol
+        const sedesData = ((data || []) as Sede[]).filter(s => verTodasPorRol || !s.solo_admin)
         setSedes(sedesData)
 
         // Determinar sede del usuario: priorizar sede del perfil, sino la principal (CABA)
@@ -143,7 +147,7 @@ export function SedeProvider({ children }: { children: ReactNode }) {
     }
 
     cargarSedes()
-  }, [profile, puedeVerTodasSedes])
+  }, [profile, puedeVerTodasSedes, verTodasPorRol])
 
   const cambiarSede = useCallback((sedeId: string) => {
     // Solo puede cambiar si tiene permiso
@@ -167,12 +171,19 @@ export function SedeProvider({ children }: { children: ReactNode }) {
 
   const sedeActualId = verTodas ? null : (sedeActual?.id || null)
 
+  // Sedes reales (sin las solo_admin): es lo que abarca "Todas las sedes"
+  const idsSedesReales = useMemo(
+    () => sedes.filter(s => !s.solo_admin).map(s => s.id),
+    [sedes]
+  )
+
   // Helper para aplicar filtro de sede a queries
   const aplicarFiltroSede = useCallback(<T,>(query: T, campo = 'sede_id'): T => {
-    if (verTodas) return query
+    // "Todas": solo sedes reales. Deja afuera la sede de pruebas (y los registros sin sede).
+    if (verTodas) return idsSedesReales.length > 0 ? (query as any).in(campo, idsSedesReales) : query
     if (!sedeActual?.id) return query
     return (query as any).eq(campo, sedeActual.id)
-  }, [verTodas, sedeActual])
+  }, [verTodas, sedeActual, idsSedesReales])
 
   const value = useMemo(() => ({
     sedes,

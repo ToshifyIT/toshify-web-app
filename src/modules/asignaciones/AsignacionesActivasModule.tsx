@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, TrendingUp, X, Filter } from 'lucide-react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { Eye, User, Car, Clock, ClipboardList, TrendingUp, X, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -28,6 +28,10 @@ interface AsignacionActiva {
     vehiculos_tipos?: {
       descripcion: string
     }
+    vehiculos_estados?: {
+      codigo: string
+      descripcion: string
+    }
   }
   asignaciones_conductores?: Array<{
     id: string
@@ -35,6 +39,7 @@ interface AsignacionActiva {
     estado: string
     horario: string
     confirmado: boolean
+    fecha_confirmacion?: string | null
     conductores: {
       id: string
       nombres: string
@@ -565,10 +570,14 @@ export function AsignacionesActivasModule() {
 
           // Para A CARGO o sin horario definido
           if (horario === 'todo_dia' || !horario) {
-            if (conductorCargo) {
-              return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
-            }
-            return <span className="asig-sin-conductor">Sin asignar</span>
+            return (
+              <div className="asig-conductores-compact">
+                <span className={conductorCargo ? 'asig-conductor-turno' : 'asig-turno-vacante asig-turno-cargo'} title="A cargo">
+                  <span className="asig-turno-label asig-label-cargo">C</span>
+                  {conductorCargo ? conductorCargo.nombre : 'Sin asignar'}
+                </span>
+              </div>
+            )
           }
 
           // Para TURNO - mostrar D/N con etiquetas
@@ -591,13 +600,15 @@ export function AsignacionesActivasModule() {
         enableSorting: true,
       },
       {
-        accessorKey: 'horario',
+        id: 'modalidad',
         header: 'Modalidad',
-        cell: ({ getValue }) => {
-          const horario = getValue() as string
+        // El valor del accessor es el que lista el filtro de la columna: "A Cargo" / "Turno"
+        accessorFn: (row) => etiquetaModalidad(row.horario),
+        cell: ({ row }) => {
+          const esCargo = row.original.horario === 'todo_dia'
           return (
-            <span className={horario === 'todo_dia' ? 'dt-badge dt-badge-blue' : 'dt-badge dt-badge-yellow'}>
-              {horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
+            <span className={esCargo ? 'dt-badge asig-badge-cargo' : 'dt-badge asig-badge-turno'}>
+              {etiquetaModalidad(row.original.horario)}
             </span>
           )
         },
@@ -949,192 +960,275 @@ export function AsignacionesActivasModule() {
 
       {/* Modal de Detalles */}
       {showDetailsModal && selectedAsignacion && (
-        <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
-                Detalles de la Asignación
-              </h2>
-              <button className="modal-close" onClick={() => setShowDetailsModal(false)}><X size={18} /></button>
-            </div>
-
-            <div className="modal-body">
-              {/* Información General */}
-              <div className="section-title">
-                <Info size={20} />
-                Información General
-              </div>
-              <div className="details-grid">
-                <div className="detail-item">
-                  <span className="detail-label">Número de Asignación</span>
-                  <span className="detail-value" style={{ color: 'var(--color-primary)', fontWeight: 700 }}>
-                    {selectedAsignacion.codigo}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Estado</span>
-                  <div>
-                    <span className="status-badge status-active">
-                      Activo
-                    </span>
-                  </div>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Modalidad</span>
-                  <span className="detail-value">
-                    {selectedAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Fecha de Programación</span>
-                  <span className="detail-value">
-                    <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    {new Date(selectedAsignacion.created_at).toLocaleDateString('es-AR')}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Fecha de Entrega</span>
-                  <span className="detail-value">
-                    <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    {selectedAsignacion.fecha_programada
-                      ? new Date(selectedAsignacion.fecha_programada).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
-                      : 'No definida'}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Fecha de Activación</span>
-                  <span className="detail-value">
-                    <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    {selectedAsignacion.fecha_inicio
-                      ? new Date(selectedAsignacion.fecha_inicio).toLocaleDateString('es-AR')
-                      : 'No activada'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Vehículo Asignado */}
-              <div className="section-title" style={{ marginTop: '32px' }}>
-                <Car size={20} />
-                Vehículo Asignado
-              </div>
-              {selectedAsignacion.vehiculos ? (
-                <div style={{
-                  background: 'var(--badge-blue-bg)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '8px',
-                  padding: '20px',
-                  marginBottom: '24px'
-                }}>
-                  <div className="details-grid">
-                    <div className="detail-item">
-                      <span className="detail-label">Patente</span>
-                      <span className="detail-value" style={{ fontSize: '18px', fontWeight: 700 }}>
-                        {selectedAsignacion.vehiculos.patente}
-                      </span>
-                    </div>
-                    <div className="detail-item">
-                      <span className="detail-label">Marca y Modelo</span>
-                      <span className="detail-value">
-                        {selectedAsignacion.vehiculos.marca} {selectedAsignacion.vehiculos.modelo}
-                      </span>
-                    </div>
-                    <div className="detail-item">
-                      <span className="detail-label">Año</span>
-                      <span className="detail-value">
-                        {selectedAsignacion.vehiculos.anio}
-                      </span>
-                    </div>
-                    <div className="detail-item">
-                      <span className="detail-label">Tipo de Vehículo</span>
-                      <span className="detail-value">
-                        {selectedAsignacion.vehiculos.vehiculos_tipos?.descripcion || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No hay información del vehículo</p>
-              )}
-
-              {/* Conductores Asignados */}
-              {(() => {
-                const conductoresActivos = (selectedAsignacion.asignaciones_conductores || [])
-                  .filter(ac => ac.conductores && !['completado', 'finalizado', 'cancelado'].includes(ac.estado))
-                return (
-                  <>
-                    <div className="section-title" style={{ marginTop: '32px' }}>
-                      <User size={20} />
-                      Conductores Asignados ({conductoresActivos.length})
-                    </div>
-                    {conductoresActivos.length > 0 ? (
-                      <div>
-                        {conductoresActivos.map((asigConductor, idx) => (
-                      <div key={idx} className="conductor-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
-                          <div>
-                            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                              {asigConductor.conductores?.nombres} {asigConductor.conductores?.apellidos}
-                            </div>
-                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                              Licencia: {asigConductor.conductores?.numero_licencia}
-                            </div>
-                          </div>
-                          {asigConductor.confirmado ? (
-                            <span className="status-badge status-confirmed">
-                              Confirmado
-                            </span>
-                          ) : (
-                            <span className="status-badge" style={{ background: '#FEF3C7', color: '#D97706', fontWeight: 600 }}>
-                              Pendiente
-                            </span>
-                          )}
-                        </div>
-                        <div className="details-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                          {asigConductor.horario !== 'todo_dia' && (
-                            <div className="detail-item">
-                              <span className="detail-label">Turno</span>
-                              <span className="detail-value" style={{ fontSize: '14px' }}>
-                                <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                                {asigConductor.horario}
-                              </span>
-                            </div>
-                          )}
-                          <div className="detail-item">
-                            <span className="detail-label">Teléfono</span>
-                            <span className="detail-value" style={{ fontSize: '14px' }}>
-                              {asigConductor.conductores?.telefono_contacto || 'No especificado'}
-                            </span>
-                          </div>
-                          <div className="detail-item">
-                            <span className="detail-label">Estado</span>
-                            <span className="detail-value" style={{ fontSize: '14px', color: 'var(--color-primary)', fontWeight: 700 }}>
-                              {asigConductor.estado || 'NULL'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    </div>
-                    ) : (
-                      <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No hay conductores asignados actualmente</p>
-                    )}
-                  </>
-                )
-              })()}
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="btn-secondary"
-                onClick={() => setShowDetailsModal(false)}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
+        <DetalleAsignacionModal
+          asignacion={selectedAsignacion}
+          onClose={() => setShowDetailsModal(false)}
+        />
       )}
 
+    </div>
+  )
+}
+
+// ===== Modalidad =====
+/** Etiqueta de la modalidad: misma en la celda, en el filtro de la columna y en el modal. */
+function etiquetaModalidad(horario: string | null | undefined): string {
+  return horario === 'todo_dia' ? 'A Cargo' : 'Turno'
+}
+
+// ===== Modal "Detalles de la Asignación" =====
+
+/** Datos del vehículo que no trae la query de la tabla: se piden al abrir el modal. */
+interface VehiculoDetalle {
+  color: string | null
+  kilometraje_actual: number | null
+  gnc: boolean | null
+  telepase: boolean | null
+  titular: string | null
+  grupo_flota: string | null
+  categoria: string | null
+  cantidad_llaves: number | null
+  lugar_radicacion: string | null
+  vencimiento_seguro: string | null
+  vto_vtv_aplica: boolean | null
+  vto_vtv_fecha: string | null
+  vto_gnc_aplica: boolean | null
+  vto_gnc_fecha: string | null
+  vto_matafuego_aplica: boolean | null
+  vto_matafuego_fecha: string | null
+}
+
+/** Datos del conductor que no trae la query de la tabla. */
+interface ConductorDetalle {
+  id: string
+  numero_dni: string | null
+  numero_cuit: string | null
+  licencia_vencimiento: string | null
+  zona: string | null
+  fecha_contratacion: string | null
+  conductores_estados?: { descripcion: string } | null
+}
+
+const TZ_AR = 'America/Argentina/Buenos_Aires'
+const SIN_DATO = '-'
+const ORDEN_HORARIO: Record<string, number> = { diurno: 0, nocturno: 1 }
+
+/** Fecha + hora (timestamps) en hora Argentina. */
+function fechaHoraAR(valor: string | null | undefined): string {
+  if (!valor || valor === '-') return SIN_DATO
+  const d = new Date(valor)
+  if (isNaN(d.getTime())) return SIN_DATO
+  return `${d.toLocaleDateString('es-AR', { timeZone: TZ_AR })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ_AR })}`
+}
+
+/** Fecha sola (columnas date): se toma el día tal cual, sin corrimiento por zona horaria. */
+function fechaAR(valor: string | null | undefined): string {
+  if (!valor) return SIN_DATO
+  const d = new Date(String(valor).substring(0, 10) + 'T12:00:00')
+  return isNaN(d.getTime()) ? SIN_DATO : d.toLocaleDateString('es-AR')
+}
+
+/** Clase según cuánto falta para un vencimiento: vencido (rojo) o vence en 30 días (naranja). */
+function claseVencimiento(valor: string | null | undefined): string {
+  if (!valor) return ''
+  const d = new Date(String(valor).substring(0, 10) + 'T12:00:00')
+  if (isNaN(d.getTime())) return ''
+  const dias = (d.getTime() - Date.now()) / 86400000
+  if (dias < 0) return 'efd-vencido'
+  if (dias <= 30) return 'efd-por-vencer'
+  return ''
+}
+
+function siNo(valor: boolean | null | undefined): string {
+  if (valor === null || valor === undefined) return SIN_DATO
+  return valor ? 'Sí' : 'No'
+}
+
+function Dato({ label, children, ancho, className }: { label: string; children: ReactNode; ancho?: boolean; className?: string }) {
+  return (
+    <div className={`efd-dato${ancho ? ' efd-dato-ancho' : ''}`}>
+      <span className="efd-label">{label}</span>
+      <span className={`efd-valor${className ? ` ${className}` : ''}`}>{children ?? SIN_DATO}</span>
+    </div>
+  )
+}
+
+function Vencimiento({ label, aplica, fecha }: { label: string; aplica?: boolean | null; fecha: string | null | undefined }) {
+  if (aplica === false) return <Dato label={label}><span className="efd-muted">No aplica</span></Dato>
+  return <Dato label={label} className={claseVencimiento(fecha)}>{fechaAR(fecha)}</Dato>
+}
+
+function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: AsignacionActiva; onClose: () => void }) {
+  const [vehiculo, setVehiculo] = useState<VehiculoDetalle | null>(null)
+  const [conductoresDet, setConductoresDet] = useState<Map<string, ConductorDetalle>>(new Map())
+  const [cargando, setCargando] = useState(true)
+
+  const esCargo = asignacion.horario === 'todo_dia'
+
+  // Conductores vigentes: diurno, nocturno y luego el resto (a cargo)
+  const conductores = useMemo(() =>
+    (asignacion.asignaciones_conductores || [])
+      .filter(ac => ac.conductores && !['completado', 'finalizado', 'cancelado'].includes(ac.estado))
+      .sort((a, b) => (ORDEN_HORARIO[a.horario] ?? 2) - (ORDEN_HORARIO[b.horario] ?? 2)),
+  [asignacion])
+
+  useEffect(() => {
+    let vigente = true
+    const ids = conductores.map(c => c.conductor_id).filter(Boolean)
+    setCargando(true)
+    Promise.all([
+      asignacion.vehiculo_id
+        ? supabase
+            .from('vehiculos')
+            .select('color, kilometraje_actual, gnc, telepase, titular, grupo_flota, categoria, cantidad_llaves, lugar_radicacion, vencimiento_seguro, vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha')
+            .eq('id', asignacion.vehiculo_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      ids.length > 0
+        ? supabase
+            .from('conductores')
+            .select('id, numero_dni, numero_cuit, licencia_vencimiento, zona, fecha_contratacion, conductores_estados (descripcion)')
+            .in('id', ids)
+        : Promise.resolve({ data: [] }),
+    ])
+      .then(([vRes, cRes]) => {
+        if (!vigente) return
+        setVehiculo((vRes.data as unknown as VehiculoDetalle) || null)
+        const mapa = new Map<string, ConductorDetalle>()
+        for (const c of ((cRes.data || []) as unknown as ConductorDetalle[])) mapa.set(c.id, c)
+        setConductoresDet(mapa)
+      })
+      .catch(() => { /* el modal sigue mostrando los datos básicos de la tabla */ })
+      .finally(() => { if (vigente) setCargando(false) })
+    return () => { vigente = false }
+  }, [asignacion, conductores])
+
+  // Cerrar con Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const v = asignacion.vehiculos
+  const estadoAsig = (asignacion.estado || '').toLowerCase()
+  const estadoLabel = estadoAsig === 'activo' || estadoAsig === 'activa' ? 'Activa' : (asignacion.estado || SIN_DATO)
+  const pendiente = cargando ? '…' : SIN_DATO
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content efd-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Detalles de la asignación">
+        {/* Encabezado */}
+        <div className="efd-header">
+          <div className="efd-header-main">
+            <span className="efd-titulo">Detalles de la Asignación</span>
+            <div className="efd-header-fila">
+              <span className="efd-codigo">{asignacion.codigo}</span>
+              <span className="dt-badge dt-badge-green">{estadoLabel}</span>
+              <span className={esCargo ? 'dt-badge asig-badge-cargo' : 'dt-badge asig-badge-turno'}>
+                {etiquetaModalidad(asignacion.horario)}
+              </span>
+            </div>
+          </div>
+          <button className="efd-close" onClick={onClose} title="Cerrar"><X size={18} /></button>
+        </div>
+
+        <div className="efd-body">
+          {/* Fechas */}
+          <div className="efd-fechas">
+            <Dato label="Creada">{fechaHoraAR(asignacion.created_at)}</Dato>
+            <Dato label="Programada">{fechaHoraAR(asignacion.fecha_programada)}</Dato>
+            <Dato label="Entrega real">{fechaHoraAR(asignacion.fecha_inicio)}</Dato>
+          </div>
+
+          {/* Vehículo */}
+          <section className="efd-seccion">
+            <div className="efd-seccion-titulo"><Car size={15} /> Vehículo</div>
+            {v ? (
+              <div className="efd-card">
+                <div className="efd-card-head">
+                  <div>
+                    <span className="efd-patente">{v.patente}</span>
+                    <span className="efd-sub">{[v.marca, v.modelo].filter(Boolean).join(' ')}{v.anio ? ` · ${v.anio}` : ''}</span>
+                  </div>
+                  {v.vehiculos_estados?.descripcion && (
+                    <span className="dt-badge dt-badge-gray">{v.vehiculos_estados.descripcion}</span>
+                  )}
+                </div>
+                <div className="efd-grid">
+                  <Dato label="Color">{vehiculo?.color || pendiente}</Dato>
+                  <Dato label="Categoría">{vehiculo?.categoria || pendiente}</Dato>
+                  <Dato label="Grupo de flota">{vehiculo?.grupo_flota || pendiente}</Dato>
+                  <Dato label="Kilometraje">
+                    {vehiculo?.kilometraje_actual != null ? `${Number(vehiculo.kilometraje_actual).toLocaleString('es-AR')} km` : pendiente}
+                  </Dato>
+                  <Dato label="GNC">{vehiculo ? siNo(vehiculo.gnc) : pendiente}</Dato>
+                  <Dato label="Telepase">{vehiculo ? (vehiculo.telepase ? 'Propio' : 'Toshify') : pendiente}</Dato>
+                  <Dato label="Llaves">{vehiculo?.cantidad_llaves ?? pendiente}</Dato>
+                  <Dato label="Radicación">{vehiculo?.lugar_radicacion || pendiente}</Dato>
+                  <Dato label="Titular" ancho>{vehiculo?.titular || pendiente}</Dato>
+                  <Dato label="Tipo">{v.vehiculos_tipos?.descripcion || SIN_DATO}</Dato>
+                </div>
+                {vehiculo && (
+                  <div className="efd-grid efd-vencimientos">
+                    <Vencimiento label="Vto. seguro" fecha={vehiculo.vencimiento_seguro} />
+                    <Vencimiento label="Vto. VTV" aplica={vehiculo.vto_vtv_aplica} fecha={vehiculo.vto_vtv_fecha} />
+                    <Vencimiento label="Vto. GNC" aplica={vehiculo.vto_gnc_aplica} fecha={vehiculo.vto_gnc_fecha} />
+                    <Vencimiento label="Vto. matafuego" aplica={vehiculo.vto_matafuego_aplica} fecha={vehiculo.vto_matafuego_fecha} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="efd-vacio">No hay información del vehículo</p>
+            )}
+          </section>
+
+          {/* Conductores */}
+          <section className="efd-seccion">
+            <div className="efd-seccion-titulo">
+              <User size={15} /> {conductores.length === 1 ? 'Conductor' : `Conductores (${conductores.length})`}
+            </div>
+            {conductores.length === 0 && <p className="efd-vacio">No hay conductores asignados actualmente</p>}
+            {conductores.map(ac => {
+              const det = conductoresDet.get(ac.conductor_id)
+              const letra = ac.horario === 'diurno' ? 'D' : ac.horario === 'nocturno' ? 'N' : 'C'
+              const claseLetra = letra === 'D' ? 'asig-label-diurno' : letra === 'N' ? 'asig-label-nocturno' : 'asig-label-cargo'
+              const turnoLabel = letra === 'D' ? 'Diurno' : letra === 'N' ? 'Nocturno' : 'A cargo'
+              return (
+                <div key={ac.id} className="efd-card">
+                  <div className="efd-card-head">
+                    <div className="efd-conductor-nombre">
+                      <span className={`asig-turno-label ${claseLetra}`} title={turnoLabel}>{letra}</span>
+                      <span>{`${ac.conductores?.nombres || ''} ${ac.conductores?.apellidos || ''}`.trim()}</span>
+                    </div>
+                    {ac.confirmado ? (
+                      <span className="dt-badge dt-badge-green" title={ac.fecha_confirmacion ? `Confirmado el ${fechaHoraAR(ac.fecha_confirmacion)}` : undefined}>Confirmado</span>
+                    ) : (
+                      <span className="dt-badge dt-badge-yellow">Pendiente</span>
+                    )}
+                  </div>
+                  <div className="efd-grid">
+                    <Dato label="DNI">{det?.numero_dni || pendiente}</Dato>
+                    <Dato label="CUIT">{det?.numero_cuit || pendiente}</Dato>
+                    <Dato label="Teléfono">{ac.conductores?.telefono_contacto || SIN_DATO}</Dato>
+                    <Dato label="Zona">{det?.zona || pendiente}</Dato>
+                    <Dato label="Licencia">{ac.conductores?.numero_licencia || SIN_DATO}</Dato>
+                    <Dato label="Vto. licencia" className={claseVencimiento(det?.licencia_vencimiento)}>
+                      {det ? fechaAR(det.licencia_vencimiento) : pendiente}
+                    </Dato>
+                    <Dato label="Estado conductor">{det?.conductores_estados?.descripcion || pendiente}</Dato>
+                    <Dato label="Ingreso">{det ? fechaAR(det.fecha_contratacion) : pendiente}</Dato>
+                  </div>
+                </div>
+              )
+            })}
+          </section>
+        </div>
+
+        <div className="efd-footer">
+          <button className="efd-btn-cerrar" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
     </div>
   )
 }

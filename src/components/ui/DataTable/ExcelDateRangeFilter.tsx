@@ -19,6 +19,12 @@ interface ExcelDateRangeFilterProps {
   openFilterId: string | null
   /** Callback para cambiar qué filtro está abierto */
   onOpenChange: (filterId: string | null) => void
+  /**
+   * Muestra "(*)" junto al título cuando hay un rango elegido (por defecto, sí).
+   * En columnas angostas se puede ocultar: el botón del calendario ya se marca
+   * como activo y el rango aparece en "Filtros activos".
+   */
+  mostrarIndicador?: boolean
 }
 
 interface DropdownPosition {
@@ -63,6 +69,7 @@ export function ExcelDateRangeFilter({
   filterId,
   openFilterId,
   onOpenChange,
+  mostrarIndicador = true,
 }: ExcelDateRangeFilterProps) {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -235,7 +242,7 @@ export function ExcelDateRangeFilter({
 
   return (
     <div className="dt-column-filter">
-      <span>{label} {hasSelection && `(*)`}</span>
+      <span>{label}{mostrarIndicador && hasSelection && ' (*)'}</span>
       <button
         ref={buttonRef}
         type="button"

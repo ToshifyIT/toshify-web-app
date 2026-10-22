@@ -30,6 +30,13 @@
  *   existentes sigue la regla general (solo si la Guía está vacía).
  *   Desde 2026-10-22 se guarda con el nombre homologado (guias.ts): Ali Verenzuela,
  *   Eunice D'Urso, Carla Noguera.
+ * - RECONTACTO (2026-10-22): lead EXISTENTE que venía de otra fuente (Intercom, Web,
+ *   etc.) y vuelve a aparecer en el reporte de Sellium:
+ *     · fuente_de_lead pasa a SELLIUM;
+ *     · toma el estado que trae Sellium (si trae alguno), aunque ya tuviera otro;
+ *     · se agrega a Observaciones una línea "Recontacto Sellium (fecha): ..." con la
+ *       fuente y el estado anteriores. Esa línea cuenta en la tarjeta "Recontacto".
+ *   Si ya era de Sellium, no es recontacto (el mismo lead aparece en cada reporte).
  * - Se ignoran: Interés, Mayor de 21, Equipo asignado, Requires Human Intervention,
  *   Last Lead Interaction, Última modificación por, Última actividad,
  *   Anuncio de origen (pauta), Asignación, Valoración.
@@ -529,6 +536,24 @@ function lineaCausal(causal: string): string {
   return `Causal de cierre: ${causal}`
 }
 
+/**
+ * Texto con el que empieza la marca de recontacto en Observaciones. LeadsModule lo
+ * busca para la tarjeta "Recontacto" (tieneAlertaRecontacto).
+ */
+export const MARCA_RECONTACTO_SELLIUM = 'Recontacto Sellium'
+
+/** Lead que ya vino por Sellium (valor actual o el viejo 'fuente_Sellium'). */
+function esFuenteSelliumLead(fuente: unknown): boolean {
+  const f = (texto(fuente) || '').toLowerCase()
+  return f === FUENTE_SELLIUM.toLowerCase() || f === FUENTE_SELLIUM_ANTERIOR.toLowerCase()
+}
+
+function lineaRecontacto(fecha: string | null, fuenteAnterior: string, estadoAnterior: string | null): string {
+  const cuando = fecha ? ` (${fecha.split('-').reverse().join('/')})` : ''
+  const estado = estadoAnterior ? ` Estado anterior: ${estadoAnterior}.` : ''
+  return `${MARCA_RECONTACTO_SELLIUM}${cuando}: volvió a contactarse. Fuente anterior: ${fuenteAnterior}.${estado}`
+}
+
 function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unknown> {
   const p: Record<string, unknown> = {
     ...f.campos,
@@ -593,10 +618,15 @@ function payloadActualizacion(
   if (f.casillas.monotributo) completar('monotributo', 'Si')
   if (f.casillas.experiencia_previa) completar('experiencia_previa', 'Si')
 
+  // Recontacto: el lead venía de otra fuente (Intercom, Web…) y vuelve por Sellium.
+  const fuenteAnterior = texto(l.fuente_de_lead)
+  const esRecontacto = !!fuenteAnterior && !esFuenteSelliumLead(fuenteAnterior)
+
   // Fuente: se completa si está vacía, y el valor viejo 'fuente_Sellium' se corrige
   // SIEMPRE a SELLIUM (pedido 2026-09-30: nunca debe quedar "fuente_Sellium").
-  const fuenteActual = (texto(l.fuente_de_lead) || '').toLowerCase()
-  if (fuenteActual === FUENTE_SELLIUM_ANTERIOR.toLowerCase()) p.fuente_de_lead = FUENTE_SELLIUM
+  // En un recontacto también pasa a SELLIUM (pedido 2026-10-22).
+  const fuenteActual = (fuenteAnterior || '').toLowerCase()
+  if (fuenteActual === FUENTE_SELLIUM_ANTERIOR.toLowerCase() || esRecontacto) p.fuente_de_lead = FUENTE_SELLIUM
   else completar('fuente_de_lead', FUENTE_SELLIUM)
 
   if (f.ubicacion.sede && vacio(l.sede_id)) {
@@ -605,14 +635,23 @@ function payloadActualizacion(
   }
 
   // Estado: solo si el lead no tiene. Si tiene otro, se informa como "no aplicado".
+  // En un recontacto se toma el de Sellium (el anterior queda en Observaciones).
   let estadoBloqueado = false
   const nuevo = f.estado.estado
   if (nuevo) {
-    if (vacio(l.estado_de_lead)) p.estado_de_lead = nuevo
+    if (vacio(l.estado_de_lead) || (esRecontacto && l.estado_de_lead !== nuevo)) p.estado_de_lead = nuevo
     else if (l.estado_de_lead !== nuevo) estadoBloqueado = true
   }
 
-  if (f.causal) completar('observaciones', lineaCausal(f.causal))
+  if (esRecontacto) {
+    // Se AGREGA a las observaciones que ya tenga (no se pisan), con la causal si viene.
+    const lineas = [lineaRecontacto(f.fechaCreacion, fuenteAnterior!, texto(l.estado_de_lead))]
+    if (f.causal) lineas.push(lineaCausal(f.causal))
+    const previas = texto(l.observaciones)
+    p.observaciones = previas ? `${previas}\n${lineas.join('\n')}` : lineas.join('\n')
+  } else if (f.causal) {
+    completar('observaciones', lineaCausal(f.causal))
+  }
 
   return { payload: p, estadoBloqueado }
 }

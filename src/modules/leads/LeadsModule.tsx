@@ -32,11 +32,11 @@ import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
-import { homologarGuia } from './guias'
+import { esGuiaActivo, homologarGuia } from './guias'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
 import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
-import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
+import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, MARCA_RECONTACTO_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 
@@ -268,13 +268,17 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: { lat: n
 // HELPERS
 // =====================================================
 
-/** Normaliza el valor de turno a Diurno/Nocturno/Indiferente o '-' */
+/** Normaliza el valor de turno a Diurno/Nocturno/A Cargo/Sin Pref. o '-' (Indiferente se homologó a Sin Pref., 2026-10-22) */
+const TURNO_SIN_PREF = 'Sin Pref.'
+const TURNO_A_CARGO = 'A Cargo'
+
 function normalizarTurno(turno: string | null | undefined): string {
   const t = (turno || '').toLowerCase().trim()
   if (!t) return '-'
   if (t.includes('diurno') || t === 'dia' || t === 'day') return 'Diurno'
   if (t.includes('nocturno') || t.includes('noche') || t === 'night') return 'Nocturno'
-  if (t.includes('indiferente') || t.includes('any') || t.includes('ambos') || t.includes('cualquier')) return 'Indiferente'
+  if (t.includes('cargo')) return TURNO_A_CARGO
+  if (t.includes('indiferente') || t.includes('any') || t.includes('ambos') || t.includes('cualquier') || t.includes('sin pref')) return TURNO_SIN_PREF
   return turno || '-'
 }
 
@@ -290,9 +294,13 @@ function normalizarTurno(turno: string | null | undefined): string {
 // Detecta si un lead tiene una observación de "se está intentando comunicar
 // nuevamente" (recontacto). Hoy vive como texto libre dentro de `observaciones`,
 // que puede acumular varias entradas con fecha, por eso se busca por subcadena.
+// También cuenta el lead que volvió por Sellium desde otra fuente: la carga masiva le
+// deja la marca "Recontacto Sellium" (ver MARCA_RECONTACTO_SELLIUM, 2026-10-22).
 const ALERTA_RECONTACTO_TEXTO = 'intentando comunicar'
 function tieneAlertaRecontacto(observaciones?: string | null): boolean {
-  return !!observaciones && observaciones.toLowerCase().includes(ALERTA_RECONTACTO_TEXTO)
+  if (!observaciones) return false
+  const o = observaciones.toLowerCase()
+  return o.includes(ALERTA_RECONTACTO_TEXTO) || o.includes(MARCA_RECONTACTO_SELLIUM.toLowerCase())
 }
 
 /** Lead que llegó por un archivo de Sellium (carga masiva formato Sellium). */
@@ -1342,7 +1350,9 @@ export function LeadsModule() {
           let turnoNorm: string | null = null
           if (tl.includes('diurno') || tl === 'dia' || tl === 'day') turnoNorm = 'Diurno'
           else if (tl.includes('nocturno') || tl.includes('noche') || tl === 'night') turnoNorm = 'Nocturno'
-          else if (tl.includes('indiferente') || tl.includes('any') || tl.includes('ambos') || tl.includes('cualquier')) turnoNorm = 'Indiferente'
+          else if (tl.includes('cargo')) turnoNorm = TURNO_A_CARGO
+          // "Indiferente" y variantes se guardan como "Sin Pref." (homologación 2026-10-22)
+          else if (tl.includes('indiferente') || tl.includes('any') || tl.includes('ambos') || tl.includes('cualquier') || tl.includes('sin pref')) turnoNorm = TURNO_SIN_PREF
           if (turnoNorm && turnoNorm !== lead.turno) {
             updateData.turno = turnoNorm
           }
@@ -1466,11 +1476,13 @@ export function LeadsModule() {
   , [leads])
 
   // Guías existentes (entrevistador_asignado), sin duplicados por mayúsculas/espacios.
+  // Son las opciones para asignar: sin los guías inactivos (el lead que ya tiene
+  // uno lo sigue mostrando).
   const uniqueGuias = useMemo(() => {
     const porClave = new Map<string, string>()
     for (const l of leads) {
       const g = (l.entrevistador_asignado || '').trim()
-      if (g && !porClave.has(g.toLowerCase())) porClave.set(g.toLowerCase(), g)
+      if (g && esGuiaActivo(g) && !porClave.has(g.toLowerCase())) porClave.set(g.toLowerCase(), g)
     }
     return [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'))
   }, [leads])
@@ -2588,6 +2600,9 @@ export function LeadsModule() {
 
   const columns = useMemo<ColumnDef<Lead>[]>(() => {
     const leadColumns: ColumnDef<Lead>[] = [
+    // 2026-10-22: sin Fuente Pauta, Id Fuente, Teléfono (ya va bajo el nombre), RNR ni
+    // Cert. Dir. Después de Fuente: Guía, Cta. Cabify, Cta. DiDi, Exp. previa,
+    // Exp. manejo y Edad.
     {
       id: 'fecha_creacion',
       accessorFn: (row) => row.created_at,
@@ -2606,6 +2621,9 @@ export function LeadsModule() {
           filterId="lead_creacion"
           openFilterId={openFilterId}
           onOpenChange={setOpenFilterId}
+          // Sin "(*)": la columna queda más angosta; el filtro activo ya se ve en
+          // el ícono del calendario y en "Filtros activos".
+          mostrarIndicador={false}
         />
       ),
       cell: ({ row }) => {
@@ -2869,72 +2887,6 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
-      id: 'fuente_pauta',
-      accessorFn: (row) => row.fuente_pauta || '-',
-      header: 'Fuente Pauta',
-      cell: ({ row }) => <span style={{ fontSize: '11px' }}>{row.original.fuente_pauta || '-'}</span>,
-      size: 100,
-      enableSorting: true,
-    },
-    {
-      id: 'id_fuente',
-      accessorFn: (row) => row.id_fuente || '-',
-      header: 'Id Fuente',
-      cell: ({ row }) => {
-        const link = row.original.id_fuente
-        if (!link) return <span style={{ fontSize: '11px' }}>-</span>
-        return (
-          <a
-            href={link}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            title={link}
-            style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '170px' }}
-          >
-            {link.replace(/^https?:\/\/(www\.)?/, '')}
-          </a>
-        )
-      },
-      size: 180,
-      enableSorting: true,
-    },
-    {
-      id: 'email',
-      accessorFn: (row) => row.email || '-',
-      header: 'Email',
-      cell: ({ row }) => {
-        const v = row.original.email || '-'
-        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '160px' }} title={v}>{v}</span>
-      },
-      size: 170,
-      enableSorting: true,
-    },
-    {
-      id: 'telefono',
-      accessorFn: (row) => row.phone || '-',
-      header: 'Teléfono',
-      cell: ({ row }) => {
-        const v = row.original.phone || '-'
-        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{v}</span>
-      },
-      size: 130,
-      meta: { cellAlign: 'center' },
-      enableSorting: true,
-    },
-    {
-      id: 'edad',
-      accessorFn: (row) => row.edad ?? '-',
-      header: 'Edad',
-      cell: ({ row }) => {
-        const v = row.original.edad
-        return <span style={{ fontSize: '11px' }}>{v != null ? v : '-'}</span>
-      },
-      size: 60,
-      meta: { cellAlign: 'center' },
-      enableSorting: true,
-    },
-    {
       id: 'entrevistador',
       accessorFn: (row) => row.entrevistador_asignado || '-',
       header: 'Guia',
@@ -2955,6 +2907,46 @@ export function LeadsModule() {
     },
     /* Columna Fase oculta */
     /* Columna Hireflix oculta */
+    {
+      id: 'cta_cabify',
+      accessorFn: (row) => row.cuenta_cabify || '-',
+      header: 'Cta. Cabify',
+      cell: ({ row }) => (
+        <GuiaDropdownCell
+          leadId={row.original.id}
+          field="cuenta_cabify"
+          value={row.original.cuenta_cabify}
+          guias={LABELS_CUENTA_APP}
+          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_cabify`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 100,
+      enableSorting: true,
+    },
+    {
+      id: 'cta_didi',
+      accessorFn: (row) => row.cuenta_didi || '-',
+      header: 'Cta. DiDi',
+      cell: ({ row }) => (
+        <GuiaDropdownCell
+          leadId={row.original.id}
+          field="cuenta_didi"
+          value={row.original.cuenta_didi}
+          guias={LABELS_CUENTA_APP}
+          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_didi`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 100,
+      enableSorting: true,
+    },
     {
       // Antes se titulaba "Exp. Manejo" pero muestra experiencia_previa (Sí/No),
       // igual que "Experiencia Previa" en el detalle del lead.
@@ -2997,81 +2989,26 @@ export function LeadsModule() {
     },
     /* Columna D1 oculta */
     {
-      id: 'rnr',
-      accessorFn: (row) => row.rnr || '-',
-      header: 'RNR',
-      cell: ({ row }) => (
-        <SiNoDropdownCell
-          leadId={row.original.id}
-          field="rnr"
-          value={row.original.rnr}
-          isOpen={sinoDropdownKey === `${row.original.id}::rnr`}
-          canEdit={canEdit}
-          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
-          onChange={handleInlineUpdate}
-          onClose={() => setSinoDropdownKey(null)}
-        />
-      ),
-      size: 55,
+      id: 'edad',
+      accessorFn: (row) => row.edad ?? '-',
+      header: 'Edad',
+      cell: ({ row }) => {
+        const v = row.original.edad
+        return <span style={{ fontSize: '11px' }}>{v != null ? v : '-'}</span>
+      },
+      size: 60,
+      meta: { cellAlign: 'center' },
       enableSorting: true,
     },
     {
-      id: 'cert_dir',
-      accessorFn: (row) => row.certificado_direccion || '-',
-      header: 'Cert. Dir.',
-      cell: ({ row }) => (
-        <SiNoDropdownCell
-          leadId={row.original.id}
-          field="certificado_direccion"
-          value={row.original.certificado_direccion}
-          isOpen={sinoDropdownKey === `${row.original.id}::certificado_direccion`}
-          canEdit={canEdit}
-          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
-          onChange={handleInlineUpdate}
-          onClose={() => setSinoDropdownKey(null)}
-        />
-      ),
-      size: 70,
-      enableSorting: true,
-    },
-    {
-      id: 'cta_cabify',
-      accessorFn: (row) => row.cuenta_cabify || '-',
-      header: 'Cta. Cabify',
-      cell: ({ row }) => (
-        <GuiaDropdownCell
-          leadId={row.original.id}
-          field="cuenta_cabify"
-          value={row.original.cuenta_cabify}
-          guias={LABELS_CUENTA_APP}
-          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_cabify`}
-          canEdit={canEdit}
-          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
-          onChange={handleInlineUpdate}
-          onClose={() => setSinoDropdownKey(null)}
-        />
-      ),
-      size: 100,
-      enableSorting: true,
-    },
-    {
-      id: 'cta_didi',
-      accessorFn: (row) => row.cuenta_didi || '-',
-      header: 'Cta. DiDi',
-      cell: ({ row }) => (
-        <GuiaDropdownCell
-          leadId={row.original.id}
-          field="cuenta_didi"
-          value={row.original.cuenta_didi}
-          guias={LABELS_CUENTA_APP}
-          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_didi`}
-          canEdit={canEdit}
-          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
-          onChange={handleInlineUpdate}
-          onClose={() => setSinoDropdownKey(null)}
-        />
-      ),
-      size: 100,
+      id: 'email',
+      accessorFn: (row) => row.email || '-',
+      header: 'Email',
+      cell: ({ row }) => {
+        const v = row.original.email || '-'
+        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '160px' }} title={v}>{v}</span>
+      },
+      size: 170,
       enableSorting: true,
     },
     {
