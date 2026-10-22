@@ -51,8 +51,18 @@
 --   Sin datos : no alcanza la información para clasificarlo.
 --   (Edad: campo edad; si falta, haber pasado los filtros cuenta como 21 o más.)
 --
--- MOTIVO DE DESCARTE: estado del lead + texto de la causal de cierre (campo
---   causal_de_cierre o la línea "Causal de cierre:" que deja la carga de Sellium).
+-- MOTIVO DE DESCARTE: solo con datos cargados en el lead, sin inferir por texto.
+--   Causal = campo causal_de_cierre, o la línea "Causal de cierre:" que deja la
+--   carga de Sellium, o motivo_desinteres. Reglas (gana la primera):
+--   Edad                     estado "No cumple edad"
+--   Auto del pueblo          estado "Auto del pueblo"
+--   Zona / sin cobertura     causal "Sin cobertura"
+--   Desacuerdo con la oferta estado "No le interesa", o causal "disagreement" /
+--                            "Desacuerdo con oferta"
+--   Otro                     todo lo demás (incluye sin causal, "Precio de
+--                            alquiler"/"price" fuera de No le interesa y
+--                            "No apto - Hireflix").
+--   Un motivo sin leads en el período no aparece.
 --
 -- Uso: supabase.rpc('get_dashboard_marketing', { p_sede_id, p_desde, p_hasta })
 -- Para quitarla: DROP FUNCTION IF EXISTS get_dashboard_marketing(uuid, date, date, date);
@@ -248,21 +258,17 @@ leads_v AS (
         AND (ln.tiene_licencia OR ln.tiene_monotributo OR ln.tiene_experiencia) THEN 'Medio'
       ELSE 'Sin datos'
     END AS perfil,
+    -- Motivo de descarte SOLO con datos cargados en el lead (estado y valor exacto
+    -- de la causal). No se infiere por palabras sueltas: lo que no corresponde a
+    -- ninguna regla, o no tiene causal, va a 'Otro'.
     CASE
       WHEN NOT ln.descartado THEN NULL
-      WHEN ln.estado = 'no cumple edad' OR ln.causal ~* '(edad|menor de|años|\mage\M|underage)' THEN 'Edad'
-      WHEN ln.estado = 'auto del pueblo' OR ln.causal ~* '(auto propio|veh[ií]culo propio|tiene auto|own car)' THEN 'Tiene auto propio'
-      WHEN ln.estado = 'no apto - hireflix' THEN 'No calificó'
-      WHEN ln.causal ~* '(zona|distancia|lejos|ubicaci|cobertura|fuera de|location|distance|coverage|area)' THEN 'Zona / sin cobertura'
-      WHEN ln.causal ~* '(licen|registro|\md1\M)' THEN 'Licencia'
-      WHEN ln.causal ~* 'monotribut' THEN 'Monotributo'
-      WHEN ln.causal ~* '(precio|caro|alquiler|tarifa|plata|dinero|cost|ganan|price|expensive)' THEN 'Precio / ganancia'
-      WHEN ln.causal ~* '(disagree|desacuerdo|condici|no (me )?conviene|oferta|acuerdo|requisito)' THEN 'Desacuerdo con la oferta'
-      WHEN ln.causal ~* '(turno|horario|schedule|shift)' THEN 'Turno / horario'
-      WHEN ln.timeout_wpp OR ln.causal ~* '(no respond|sin respuesta|inactiv|abandon|timeout|no contest|no response|unresponsive)' THEN 'No respondió'
-      WHEN ln.causal ~* '(antecedente|document|papeles)' THEN 'Documentación / antecedentes'
-      WHEN ln.estado = 'no le interesa' OR ln.causal ~* '(interes|no quiere|desist|not interested)' THEN 'No le interesa'
-      WHEN ln.causal IS NULL THEN 'Sin motivo cargado'
+      WHEN ln.estado = 'no cumple edad' THEN 'Edad'
+      WHEN ln.estado = 'auto del pueblo' THEN 'Auto del pueblo'
+      WHEN LOWER(ln.causal) = 'sin cobertura' THEN 'Zona / sin cobertura'
+      -- "No le interesa" es lo mismo que desacuerdo con la oferta
+      WHEN ln.estado = 'no le interesa'
+        OR LOWER(ln.causal) IN ('disagreement', 'desacuerdo con oferta') THEN 'Desacuerdo con la oferta'
       ELSE 'Otro'
     END AS motivo
   FROM leads_n ln
@@ -379,17 +385,30 @@ SELECT jsonb_build_object(
   ),
 
   'causales', (
-    -- Textos de causal más frecuentes (tal cual vienen), para revisar la clasificación
+    -- Causales más frecuentes, para revisar la clasificación. Los códigos en
+    -- inglés que manda el chatbot se muestran traducidos (disagreement, price,
+    -- other), para no duplicar el mismo concepto por idioma. Una fila por
+    -- causal Y motivo: si el mismo texto cae en dos motivos (p. ej. "price" en
+    -- un Descartado y en un No le interesa), sale en dos filas con su número.
     SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'causal', causal, 'motivo', motivo, 'cantidad', cantidad)
       ORDER BY segmento, cantidad DESC, causal), '[]'::jsonb)
     FROM (
       SELECT segmento, causal, motivo, cantidad,
              ROW_NUMBER() OVER (PARTITION BY segmento ORDER BY cantidad DESC, causal) AS rn
       FROM (
-        SELECT segmento, LEFT(causal, 120) AS causal, MIN(motivo) AS motivo, COUNT(*) AS cantidad
-        FROM leads_act
-        WHERE descartado AND causal IS NOT NULL
-        GROUP BY segmento, LEFT(causal, 120)
+        SELECT segmento, causal, motivo, COUNT(*) AS cantidad
+        FROM (
+          SELECT segmento, motivo,
+                 CASE LOWER(causal)
+                   WHEN 'disagreement' THEN 'Desacuerdo con oferta'
+                   WHEN 'price'        THEN 'Precio de alquiler'
+                   WHEN 'other'        THEN 'Otro'
+                   ELSE LEFT(causal, 120)
+                 END AS causal
+          FROM leads_act
+          WHERE descartado AND causal IS NOT NULL
+        ) t
+        GROUP BY segmento, causal, motivo
       ) c
     ) x
     WHERE rn <= 10

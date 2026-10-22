@@ -32,6 +32,7 @@ import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
+import { homologarGuia } from './guias'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
 import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
@@ -2070,6 +2071,8 @@ export function LeadsModule() {
     // - 'NO' / 'NÓ' / 'FALSE' / '0' (cualquier capitalización) → 'No'
     // - Cualquier otro valor con contenido (incluso códigos como 'A1.4', 'D1') → 'Si'
     //   (la presencia de texto/categoría implica que tiene licencia)
+    // Guía: con el nombre homologado (Ali → Ali Verenzuela, etc.; ver guias.ts)
+    if (dbCol === 'entrevistador_asignado') return homologarGuia(String(value))
     if (dbCol === 'licencia') {
       if (typeof value === 'boolean') return value ? 'Si' : 'No'
       const s = String(value).trim()

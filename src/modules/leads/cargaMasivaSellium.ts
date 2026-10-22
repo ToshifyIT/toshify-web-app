@@ -28,11 +28,14 @@
  * - Guía (2026-10-07): "Propietario del contacto" → entrevistador_asignado, solo si es
  *   Ali, Eunice o Carla (por primer nombre). Otro propietario: no se carga. En leads
  *   existentes sigue la regla general (solo si la Guía está vacía).
+ *   Desde 2026-10-22 se guarda con el nombre homologado (guias.ts): Ali Verenzuela,
+ *   Eunice D'Urso, Carla Noguera.
  * - Se ignoran: Interés, Mayor de 21, Equipo asignado, Requires Human Intervention,
  *   Last Lead Interaction, Última modificación por, Última actividad,
  *   Anuncio de origen (pauta), Asignación, Valoración.
  */
 import { inferirSedeDeLead, normalizarTexto, type SedeRef } from '../../utils/sedeMatch'
+import { homologarGuia } from './guias'
 
 /** Valor de fuente_de_lead para los leads creados Y actualizados por esta carga. */
 export const FUENTE_SELLIUM = 'SELLIUM'
@@ -103,20 +106,16 @@ const COL = {
 } as const
 
 /**
- * Guías que se toman de "Propietario del contacto" (pedido 2026-10-07). Clave: primer
- * nombre normalizado; valor: cómo se guarda en entrevistador_asignado (columna Guía),
- * igual que lo vienen cargando a mano. Cualquier otro propietario se ignora.
+ * Guías que se toman de "Propietario del contacto" (pedido 2026-10-07), por primer
+ * nombre normalizado. Cualquier otro propietario se ignora. Se guardan con el nombre
+ * homologado (guias.ts), igual que quedó la base: "Ali" → "Ali Verenzuela".
  */
-const GUIAS_POR_PROPIETARIO: Record<string, string> = {
-  ali: 'Ali',
-  eunice: 'Eunice',
-  carla: 'Carla',
-}
+const PROPIETARIOS_GUIA = new Set(['ali', 'eunice', 'carla'])
 
-/** "Ali Verenzuela" → "Ali"; "Juan Manuel Garrido" → null. */
+/** "Ali" o "Ali Verenzuela" → "Ali Verenzuela"; "Juan Manuel Garrido" → null. */
 export function guiaDesdePropietario(propietario: string | null): string | null {
   const primerNombre = normalizarTexto(propietario || '').split(/\s+/)[0]
-  return GUIAS_POR_PROPIETARIO[primerNombre] ?? null
+  return PROPIETARIOS_GUIA.has(primerNombre) ? homologarGuia(primerNombre) : null
 }
 
 /** Columnas exclusivas que identifican el formato (no existen en Original ni Damaro). */
