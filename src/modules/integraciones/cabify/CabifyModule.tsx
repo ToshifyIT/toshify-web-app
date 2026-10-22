@@ -443,8 +443,8 @@ function ProgressBanner({ isVisible, message }: ProgressBannerProps) {
   if (!isVisible) return null
 
   return (
-    <div className="cabify-progress-banner">
-      <div className="dt-loading-spinner" style={{ width: 20, height: 20 }} />
+    <div className="aviso aviso--info" style={{ marginBottom: 10 }}>
+      <div className="dt-loading-spinner" style={{ width: 14, height: 14 }} />
       <strong>{message}</strong>
     </div>
   )

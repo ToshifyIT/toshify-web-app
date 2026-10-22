@@ -61,6 +61,7 @@ import {
 } from '../../leads/cuentasApps'
 import { AvisoLeadsPendientes, type LeadPendiente } from './components/AvisoLeadsPendientes'
 import { calcularMinutosEntre, tieneCoordenadas, type Coordenada } from './distanciaParService'
+import { documentoSegunTarifa, permiteAnexo } from './documentoTarifa'
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   entrega_auto: 'Entrega de auto',
@@ -799,7 +800,7 @@ export function ProgramacionV2Module() {
     if (filas.length === 0) return filas
     try {
       const { data } = await (supabase.from('programaciones_onboarding') as any)
-        .select('id, lead_diurno_id, lead_nocturno_id, lead_cargo_id')
+        .select('id, lead_diurno_id, lead_nocturno_id, lead_cargo_id, tipo_tarifa, tipo_tarifa_diurno, tipo_tarifa_nocturno')
         .in('id', filas.map((f) => f.id))
       if (!data) return filas
       const porId = new Map<string, any>(data.map((r: any) => [r.id, r]))
@@ -811,6 +812,10 @@ export function ProgramacionV2Module() {
               lead_diurno_id: extra.lead_diurno_id || null,
               lead_nocturno_id: extra.lead_nocturno_id || null,
               lead_cargo_id: extra.lead_cargo_id || null,
+              // Tarifas: la tabla las usa para no ofrecer "Anexo" con tarifa nueva.
+              tipo_tarifa: extra.tipo_tarifa || undefined,
+              tipo_tarifa_diurno: extra.tipo_tarifa_diurno || undefined,
+              tipo_tarifa_nocturno: extra.tipo_tarifa_nocturno || undefined,
             }
           : f
       })
@@ -1297,7 +1302,7 @@ export function ProgramacionV2Module() {
         }
         if (leadDiurnoId !== undefined) updateData.lead_diurno_id = leadDiurnoId || null
         updateData.tipo_candidato_diurno = tipoCandidatoAGuardar(quickEditData.tipo_candidato_diurno, leadDiurnoId)
-        updateData.documento_diurno = quickEditData.documento_diurno
+        updateData.documento_diurno = documentoSegunTarifa(quickEditData.documento_diurno, quickEditData.tipo_tarifa_diurno)
         updateData.zona_diurno = quickEditData.zona_diurno
         updateData.distancia_diurno = quickEditData.distancia_diurno || null
         updateData.tipo_tarifa_diurno = quickEditData.tipo_tarifa_diurno || 'antigua'
@@ -1314,7 +1319,7 @@ export function ProgramacionV2Module() {
         }
         if (leadNocturnoId !== undefined) updateData.lead_nocturno_id = leadNocturnoId || null
         updateData.tipo_candidato_nocturno = tipoCandidatoAGuardar(quickEditData.tipo_candidato_nocturno, leadNocturnoId)
-        updateData.documento_nocturno = quickEditData.documento_nocturno
+        updateData.documento_nocturno = documentoSegunTarifa(quickEditData.documento_nocturno, quickEditData.tipo_tarifa_nocturno)
         updateData.zona_nocturno = quickEditData.zona_nocturno
         updateData.distancia_nocturno = quickEditData.distancia_nocturno || null
         updateData.tipo_tarifa_nocturno = quickEditData.tipo_tarifa_nocturno || 'antigua'
@@ -1343,7 +1348,7 @@ export function ProgramacionV2Module() {
         }
         if (leadCargoId !== undefined) updateData.lead_cargo_id = leadCargoId || null
         updateData.tipo_candidato = tipoCandidatoAGuardar(quickEditData.tipo_candidato, leadCargoId)
-        updateData.tipo_documento = quickEditData.tipo_documento
+        updateData.tipo_documento = documentoSegunTarifa(quickEditData.tipo_documento, quickEditData.tipo_tarifa)
         updateData.zona = quickEditData.zona
         updateData.distancia_minutos = quickEditData.distancia_minutos || null
         updateData.tipo_tarifa = quickEditData.tipo_tarifa || 'antigua'
@@ -2170,7 +2175,7 @@ export function ProgramacionV2Module() {
         conductoresAsignacion.push({
           conductor_id: prog.conductor_diurno_id,
           horario: 'diurno',
-          documento: mapDocumento(prog.documento_diurno),
+          documento: mapDocumento(documentoSegunTarifa(prog.documento_diurno, tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa)),
           tipo_tarifa: tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa || 'antigua',
         })
       }
@@ -2178,7 +2183,7 @@ export function ProgramacionV2Module() {
         conductoresAsignacion.push({
           conductor_id: prog.conductor_nocturno_id,
           horario: 'nocturno',
-          documento: mapDocumento(prog.documento_nocturno),
+          documento: mapDocumento(documentoSegunTarifa(prog.documento_nocturno, tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa)),
           tipo_tarifa: tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa || 'antigua',
         })
       }
@@ -2187,7 +2192,7 @@ export function ProgramacionV2Module() {
         conductoresAsignacion.push({
           conductor_id: prog.conductor_id,
           horario: 'todo_dia',
-          documento: mapDocumento(prog.tipo_documento),
+          documento: mapDocumento(documentoSegunTarifa(prog.tipo_documento, tarifaProg.tipo_tarifa)),
           tipo_tarifa: tarifaProg.tipo_tarifa || 'antigua',
         })
       }
@@ -2303,9 +2308,10 @@ export function ProgramacionV2Module() {
           conductor_diurno_id: (prog.modalidad === 'turno' && enviarDiurno) ? prog.conductor_diurno_id : null,
           conductor_nocturno_id: (prog.modalidad === 'turno' && enviarNocturno) ? prog.conductor_nocturno_id : null,
           vehiculo_id: prog.vehiculo_entregar_id as string,
-          tipo_documento: prog.modalidad === 'a_cargo' ? prog.tipo_documento : null,
-          documento_diurno: (prog.modalidad === 'turno' && enviarDiurno) ? prog.documento_diurno : null,
-          documento_nocturno: (prog.modalidad === 'turno' && enviarNocturno) ? prog.documento_nocturno : null,
+          // Tarifa nueva: "anexo" viaja como "carta_oferta" (misma plantilla).
+          tipo_documento: prog.modalidad === 'a_cargo' ? documentoSegunTarifa(prog.tipo_documento, tarifaProg.tipo_tarifa) : null,
+          documento_diurno: (prog.modalidad === 'turno' && enviarDiurno) ? documentoSegunTarifa(prog.documento_diurno, tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa) : null,
+          documento_nocturno: (prog.modalidad === 'turno' && enviarNocturno) ? documentoSegunTarifa(prog.documento_nocturno, tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa) : null,
           // Tarifa: define el concepto de alquiler del que sale el importe del
           // documento. En turno va por conductor, con respaldo en la de la
           // programación (mismo criterio que el insert de asignaciones).
@@ -2629,8 +2635,11 @@ export function ProgramacionV2Module() {
 
         // Para TURNO: mostrar 2 selects (diurno y nocturno)
         if (prog.modalidad === 'turno') {
-          const docDiurno = prog.documento_diurno || ''
-          const docNocturno = prog.documento_nocturno || ''
+          // Con tarifa nueva no hay "Anexo": se muestra como Carta oferta (misma plantilla).
+          const tarifaDiurno = prog.tipo_tarifa_diurno || prog.tipo_tarifa
+          const tarifaNocturno = prog.tipo_tarifa_nocturno || prog.tipo_tarifa
+          const docDiurno = documentoSegunTarifa(prog.documento_diurno || '', tarifaDiurno)
+          const docNocturno = documentoSegunTarifa(prog.documento_nocturno || '', tarifaNocturno)
 
           return (
             <div className="prog-documento-turno">
@@ -2643,7 +2652,7 @@ export function ProgramacionV2Module() {
                 >
                   <option value="">-</option>
                   <option value="carta_oferta">Carta Oferta</option>
-                  <option value="anexo">Anexo</option>
+                  {permiteAnexo(tarifaDiurno) && <option value="anexo">Anexo</option>}
                   <option value="na">N/A</option>
                 </select>
               </div>
@@ -2656,7 +2665,7 @@ export function ProgramacionV2Module() {
                 >
                   <option value="">-</option>
                   <option value="carta_oferta">Carta Oferta</option>
-                  <option value="anexo">Anexo</option>
+                  {permiteAnexo(tarifaNocturno) && <option value="anexo">Anexo</option>}
                   <option value="na">N/A</option>
                 </select>
               </div>
@@ -2665,16 +2674,17 @@ export function ProgramacionV2Module() {
         }
 
         // Para A CARGO: un solo select
+        const docCargo = documentoSegunTarifa(prog.tipo_documento || '', prog.tipo_tarifa)
         return (
           <select
-            className={`prog-inline-select documento ${prog.tipo_documento || 'sin_definir'}`}
-            value={prog.tipo_documento || ''}
+            className={`prog-inline-select documento ${docCargo || 'sin_definir'}`}
+            value={docCargo}
             onChange={(e) => handleUpdateField(prog.id, 'tipo_documento', e.target.value || null)}
             title="Tipo de documento"
           >
             <option value="">Sin definir</option>
             <option value="carta_oferta">Carta Oferta</option>
-            <option value="anexo">Anexo</option>
+            {permiteAnexo(prog.tipo_tarifa) && <option value="anexo">Anexo</option>}
             <option value="na">N/A</option>
           </select>
         )
@@ -3008,8 +3018,11 @@ export function ProgramacionV2Module() {
         }
 
         if (prog.modalidad === 'turno') {
-          const docDiurno = prog.documento_diurno || ''
-          const docNocturno = prog.documento_nocturno || ''
+          // Con tarifa nueva no hay "Anexo": se muestra como Carta oferta (misma plantilla).
+          const tarifaDiurno = prog.tipo_tarifa_diurno || prog.tipo_tarifa
+          const tarifaNocturno = prog.tipo_tarifa_nocturno || prog.tipo_tarifa
+          const docDiurno = documentoSegunTarifa(prog.documento_diurno || '', tarifaDiurno)
+          const docNocturno = documentoSegunTarifa(prog.documento_nocturno || '', tarifaNocturno)
 
           return (
             <div className="prog-documento-turno">
@@ -3027,7 +3040,7 @@ export function ProgramacionV2Module() {
           )
         }
 
-        const doc = prog.tipo_documento || ''
+        const doc = documentoSegunTarifa(prog.tipo_documento || '', prog.tipo_tarifa)
 
         return (
           <span className={`prog-inline-select documento ${doc || 'sin_definir'}`} style={{ cursor: 'default', border: 'none' }}>
@@ -3571,14 +3584,14 @@ export function ProgramacionV2Module() {
                       <div>
                         <label>Documento *</label>
                         <select
-                          value={quickEditData.documento_diurno || ''}
+                          value={documentoSegunTarifa(quickEditData.documento_diurno || '', quickEditData.tipo_tarifa_diurno)}
                           onChange={e => setQuickEditData(prev => ({ ...prev, documento_diurno: e.target.value as any }))}
                           className="prog-input"
                         >
                           <option value="">Seleccionar...</option>
                           <option value="contrato">Carta Oferta</option>
                           <option value="carta_oferta">Carta Oferta</option>
-                          <option value="anexo">Anexo</option>
+                          {permiteAnexo(quickEditData.tipo_tarifa_diurno) && <option value="anexo">Anexo</option>}
                           <option value="na">N/A</option>
                         </select>
                       </div>
@@ -3606,7 +3619,7 @@ export function ProgramacionV2Module() {
                         <label>Tarifa *</label>
                         <select
                           value={quickEditData.tipo_tarifa_diurno || 'antigua'}
-                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_diurno: e.target.value as TipoTarifa }))}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_diurno: e.target.value as TipoTarifa, documento_diurno: documentoSegunTarifa(prev.documento_diurno, e.target.value) }))}
                           className="prog-input"
                           title="Esquema de precios del alquiler para este conductor"
                         >
@@ -3709,14 +3722,14 @@ export function ProgramacionV2Module() {
                       <div>
                         <label>Documento *</label>
                         <select
-                          value={quickEditData.documento_nocturno || ''}
+                          value={documentoSegunTarifa(quickEditData.documento_nocturno || '', quickEditData.tipo_tarifa_nocturno)}
                           onChange={e => setQuickEditData(prev => ({ ...prev, documento_nocturno: e.target.value as any }))}
                           className="prog-input"
                         >
                           <option value="">Seleccionar...</option>
                           <option value="contrato">Carta Oferta</option>
                           <option value="carta_oferta">Carta Oferta</option>
-                          <option value="anexo">Anexo</option>
+                          {permiteAnexo(quickEditData.tipo_tarifa_nocturno) && <option value="anexo">Anexo</option>}
                           <option value="na">N/A</option>
                         </select>
                       </div>
@@ -3744,7 +3757,7 @@ export function ProgramacionV2Module() {
                         <label>Tarifa *</label>
                         <select
                           value={quickEditData.tipo_tarifa_nocturno || 'antigua'}
-                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_nocturno: e.target.value as TipoTarifa }))}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_nocturno: e.target.value as TipoTarifa, documento_nocturno: documentoSegunTarifa(prev.documento_nocturno, e.target.value) }))}
                           className="prog-input"
                           title="Esquema de precios del alquiler para este conductor"
                         >
@@ -3829,14 +3842,14 @@ export function ProgramacionV2Module() {
                     <div>
                       <label>Documento *</label>
                       <select
-                        value={quickEditData.tipo_documento || ''}
+                        value={documentoSegunTarifa(quickEditData.tipo_documento || '', quickEditData.tipo_tarifa)}
                         onChange={e => setQuickEditData(prev => ({ ...prev, tipo_documento: e.target.value as any }))}
                         className="prog-input"
                       >
                         <option value="">Seleccionar...</option>
                         <option value="contrato">Carta Oferta</option>
                         <option value="carta_oferta">Carta Oferta</option>
-                        <option value="anexo">Anexo</option>
+                        {permiteAnexo(quickEditData.tipo_tarifa) && <option value="anexo">Anexo</option>}
                         <option value="na">N/A</option>
                       </select>
                     </div>
@@ -3864,7 +3877,7 @@ export function ProgramacionV2Module() {
                       <label>Tarifa *</label>
                       <select
                         value={quickEditData.tipo_tarifa || 'antigua'}
-                        onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa: e.target.value as TipoTarifa }))}
+                        onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa: e.target.value as TipoTarifa, tipo_documento: documentoSegunTarifa(prev.tipo_documento, e.target.value) }))}
                         className="prog-input"
                         title="Esquema de precios del alquiler para este conductor"
                       >

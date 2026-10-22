@@ -151,22 +151,6 @@
   flex: 1;
 }
 
-.vencimientos-alert {
-  margin-top: 8px;
-  background: #FEF3C7;
-  border: 1px solid #FCD34D;
-  border-radius: 8px;
-  padding: 8px 12px;
-}
-
-.vencimientos-alert-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #92400E;
-}
-
 .vencimientos-search-wrapper {
   position: relative;
   display: flex;
