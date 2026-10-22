@@ -100,6 +100,14 @@ interface TripEnriched extends UssTripRaw {
   finMs: number
   kmNum: number
   gpsOrigen: GpsOrigen
+  /** Conductor estimado por asignación + horario (GEOTAB sin conductor identificado). */
+  estimado?: boolean
+}
+
+/** "06:00" -> 6. Valor invalido => fallback. */
+function horaDeParametro(valor: string | null | undefined, fallback: number): number {
+  const h = parseInt(String(valor || '').split(':')[0], 10)
+  return Number.isInteger(h) && h >= 0 && h <= 23 ? h : fallback
 }
 
 export interface ExcesoKmDateRange {
@@ -339,6 +347,75 @@ export function useExcesoKmData(sedeId?: string | null) {
       //    (Los del dia antes/despues solo sirvieron para resolver vecinos.)
       const tripsSemana = tripsArr.filter(t => t.inicioMs >= weekStartMs && t.inicioMs <= weekEndMs)
 
+      // 3b) GEOTAB sin conductor identificado: se ESTIMA el conductor por la asignación
+      //     del vehículo vigente en ese momento y el horario del turno (diurno entre
+      //     bitacora_turno_diurno_inicio y _fin; nocturno el resto; a cargo = su
+      //     conductor). No es el vecino más cercano (regla del 2026-09-16): solo se
+      //     atribuye si la asignación del vehículo tiene un conductor para ese horario.
+      //     El viaje queda marcado `estimado` y la tabla avisa que hay que verificarlo.
+      const huerfanosGeotab = tripsSemana.filter(t => t.gpsOrigen === 'GEOTAB' && !t.condEf)
+      if (huerfanosGeotab.length > 0) {
+        const { data: paramsTurno } = await supabase
+          .from('parametros_sistema')
+          .select('clave, valor')
+          .in('clave', ['bitacora_turno_diurno_inicio', 'bitacora_turno_diurno_fin'])
+        const valorParam = (clave: string) => ((paramsTurno || []) as any[]).find(p => p.clave === clave)?.valor
+        const horaDiurnoDesde = horaDeParametro(valorParam('bitacora_turno_diurno_inicio'), 6)
+        const horaDiurnoHasta = horaDeParametro(valorParam('bitacora_turno_diurno_fin'), 18)
+
+        const patentesHuerfanas = [...new Set(huerfanosGeotab.map(t => t.patente).filter(Boolean))]
+        const { data: vehHuerfanos } = await supabase
+          .from('vehiculos')
+          .select('id, patente')
+          .in('patente', patentesHuerfanas)
+        const patentePorVehiculo = new Map(((vehHuerfanos || []) as any[]).map(v => [v.id as string, normalizarPatente(v.patente)]))
+
+        type CandidatoEstimado = { patenteNorm: string; nombre: string; horario: string | null; modalidad: string | null; iniMs: number; finMs: number }
+        const candidatos: CandidatoEstimado[] = []
+        if (patentePorVehiculo.size > 0) {
+          const { data: asigVeh } = await supabase
+            .from('asignaciones')
+            .select('vehiculo_id, modalidad, estado, asignaciones_conductores(horario, estado, fecha_inicio, fecha_fin, conductores(nombres, apellidos))')
+            .in('vehiculo_id', [...patentePorVehiculo.keys()])
+            .in('estado', ['activa', 'activo', 'finalizada', 'finalizado'])
+          for (const a of (asigVeh || []) as any[]) {
+            for (const ac of (a.asignaciones_conductores || []) as any[]) {
+              if (!ac.fecha_inicio || !['asignado', 'completado', 'activo', 'activa', null].includes(ac.estado ?? null)) continue
+              const c = Array.isArray(ac.conductores) ? ac.conductores[0] : ac.conductores
+              const nombre = `${c?.nombres || ''} ${c?.apellidos || ''}`.toUpperCase().trim().replace(/\s+/g, ' ')
+              if (!nombre) continue
+              candidatos.push({
+                patenteNorm: patentePorVehiculo.get(a.vehiculo_id) || '',
+                nombre,
+                horario: ac.horario,
+                modalidad: a.modalidad,
+                iniMs: new Date(ac.fecha_inicio).getTime(),
+                finMs: ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY,
+              })
+            }
+          }
+        }
+
+        for (const t of huerfanosGeotab) {
+          const vigentes = candidatos
+            .filter(c => c.patenteNorm === t.patenteNorm && c.iniMs <= t.inicioMs && c.finMs >= t.inicioMs)
+            .sort((a, b) => b.iniMs - a.iniMs)
+          if (vigentes.length === 0) continue
+          let elegido: CandidatoEstimado | undefined
+          const aCargo = vigentes.find(c => c.modalidad === 'a_cargo' || c.horario === 'todo_dia')
+          if (aCargo) {
+            elegido = aCargo
+          } else {
+            const hora = parseInt(new Date(t.inicioMs).toLocaleTimeString('en-GB', { timeZone: TIMEZONE_ARGENTINA, hour: '2-digit', hour12: false }), 10)
+            const franja = hora >= horaDiurnoDesde && hora < horaDiurnoHasta ? 'diurno' : 'nocturno'
+            elegido = vigentes.find(c => c.horario === franja)
+          }
+          if (!elegido) continue
+          t.condEf = elegido.nombre
+          t.estimado = true
+        }
+      }
+
       // 4) Agrupar por (conductorEf + patente) y armar "marcaciones".
       //    En este modulo cada marcacion = 1 turno continuo del mismo conductor en la misma patente.
       //    Como vamos directo a trips, agrupamos consecutivos por condEf + patente.
@@ -348,6 +425,8 @@ export function useExcesoKmData(sedeId?: string | null) {
         patente: string
         gpsOrigen: GpsOrigen
         semanaKey: string
+        /** Todos sus viajes tienen el conductor estimado (ver paso 3b). */
+        estimado: boolean
         trips: TripEnriched[]
       }
       const turnos: Turno[] = []
@@ -380,9 +459,10 @@ export function useExcesoKmData(sedeId?: string | null) {
           if (t.gpsOrigen !== 'GEOTAB') continue
           cond = `${SIN_CONDUCTOR_PREFIX} · ${t.patente || t.patenteNorm}`
         }
-        if (!actual || actual.gpsOrigen !== t.gpsOrigen || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond || actual.semanaKey !== tSemanaKey) {
+        const estimado = t.estimado === true
+        if (!actual || actual.gpsOrigen !== t.gpsOrigen || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond || actual.semanaKey !== tSemanaKey || actual.estimado !== estimado) {
           if (actual) turnos.push(actual)
-          actual = { conductor: cond, patenteNorm: t.patenteNorm, patente: t.patente, gpsOrigen: t.gpsOrigen, semanaKey: tSemanaKey, trips: [t] }
+          actual = { conductor: cond, patenteNorm: t.patenteNorm, patente: t.patente, gpsOrigen: t.gpsOrigen, semanaKey: tSemanaKey, estimado, trips: [t] }
         } else {
           actual.trips.push(t)
         }
@@ -393,14 +473,17 @@ export function useExcesoKmData(sedeId?: string | null) {
       const { data: limiteParams } = await supabase
         .from('parametros_sistema')
         .select('clave, valor')
-        .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo'])
+        .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo', 'limite_km_semanal_a_cargo_nueva'])
       let limiteTurno = 1800
       let limiteACargo = 3600
+      // A cargo con tarifa nueva (OCT-26) tiene un límite propio, menor.
+      let limiteACargoNueva = 2200
       for (const p of (limiteParams || []) as any[]) {
         const v = parseFloat(p.valor)
         if (!isNaN(v) && v > 0) {
           if (p.clave === 'limite_km_semanal_turno') limiteTurno = v
           if (p.clave === 'limite_km_semanal_a_cargo') limiteACargo = v
+          if (p.clave === 'limite_km_semanal_a_cargo_nueva') limiteACargoNueva = v
         }
       }
 
@@ -465,7 +548,7 @@ export function useExcesoKmData(sedeId?: string | null) {
         }
       }
       // Mapa resultado: `${conductorId}|${semanaKey}` -> { modalidad, horario }
-      const asignByCondSemana = new Map<string, { modalidad: string | null; horario: string | null }>()
+      const asignByCondSemana = new Map<string, { modalidad: string | null; horario: string | null; tipoTarifa: 'antigua' | 'nueva' }>()
       // Mapa: `${conductorId}|${semanaKey}` -> Set de patentes que el conductor tenía
       // asignadas esa semana. Se usa para excluir del acumulado los km de patentes que
       // NO eran del conductor (manejó un vehículo ajeno => error/inconsistencia GPS).
@@ -474,16 +557,17 @@ export function useExcesoKmData(sedeId?: string | null) {
         // Traer todas las asignaciones_conductores de esos conductores + su asignación padre.
         const { data: acRows } = await supabase
           .from('asignaciones_conductores')
-          .select('conductor_id, horario, estado, fecha_inicio, fecha_fin, asignaciones(modalidad, estado, vehiculos(patente))')
+          .select('conductor_id, horario, estado, fecha_inicio, fecha_fin, tipo_tarifa, asignaciones(modalidad, estado, tipo_tarifa, vehiculos(patente))')
           .in('conductor_id', condIdsUnicos)
         type VehJoin = { patente: string | null }
-        type AsigJoin = { modalidad: string | null; estado: string | null; vehiculos: VehJoin | VehJoin[] | null }
+        type AsigJoin = { modalidad: string | null; estado: string | null; tipo_tarifa: string | null; vehiculos: VehJoin | VehJoin[] | null }
         type AcRow = {
           conductor_id: string
           horario: string | null
           estado: string | null
           fecha_inicio: string | null
           fecha_fin: string | null
+          tipo_tarifa: string | null
           // Supabase tipa la relación como array aunque la FK sea 1:1.
           asignaciones: AsigJoin | AsigJoin[] | null
         }
@@ -505,6 +589,8 @@ export function useExcesoKmData(sedeId?: string | null) {
             conductor_id: r.conductor_id,
             horario: r.horario,
             modalidad: asigDe(r)?.modalidad ?? null,
+            // Tarifa del conductor en la asignación (o la de la asignación). Default antigua.
+            tipoTarifa: ((r.tipo_tarifa || asigDe(r)?.tipo_tarifa) === 'nueva' ? 'nueva' : 'antigua') as 'antigua' | 'nueva',
             patenteNorm: normalizarPatente(patenteDe(asigDe(r))),
             iniMs: new Date(r.fecha_inicio as string).getTime(),
             finMs: r.fecha_fin ? new Date(r.fecha_fin).getTime() : Number.POSITIVE_INFINITY,
@@ -521,6 +607,7 @@ export function useExcesoKmData(sedeId?: string | null) {
             asignByCondSemana.set(`${condId}|${semanaKey}`, {
               modalidad: elegida.modalidad,
               horario: elegida.horario,
+              tipoTarifa: elegida.tipoTarifa,
             })
             // Set de TODAS las patentes que el conductor tuvo asignadas esa semana
             // (puede tener más de una asignación vigente). Se usa para NO contar km
@@ -622,6 +709,9 @@ export function useExcesoKmData(sedeId?: string | null) {
           lavadoRealizado: false,
           naftaCargada: false,
           gpsOrigen: t.gpsOrigen,
+          // null => sin asignación válida esa semana (no se muestra etiqueta)
+          tipoTarifa: asignInfo?.tipoTarifa ?? null,
+          conductorEstimado: t.estimado,
           excesoKmSemana: semanaInfo.semana,
           excesoKmAnio: semanaInfo.anio,
           excesoKmSemanaInicio: semanaInfo.inicio,
@@ -647,15 +737,21 @@ export function useExcesoKmData(sedeId?: string | null) {
 
       // 8) Calcular suma semanal por conductor para aplicar excedeLimite.
       //    Solo se acumulan los km de turnos en patente propia (asignada esa semana).
-      const sumKmPorConductor = new Map<string, { km: number; modalidad: string }>()
+      // Límite semanal según modalidad y tarifa de la asignación de esa semana
+      const limiteDe = (modalidad: string | null | undefined, tipoTarifa: string | null | undefined) =>
+        modalidad === 'a_cargo'
+          ? (tipoTarifa === 'nueva' ? limiteACargoNueva : limiteACargo)
+          : limiteTurno
+      const sumKmPorConductor = new Map<string, { km: number; modalidad: string; tipoTarifa: string | null }>()
       for (const m of marcs) {
         const conductorKey = m.conductorId || m.conductor || ''
         if (!conductorKey) continue
         if (!turnoEnPatentePropia(m)) continue // km de patente ajena: NO suma al exceso
         const key = `${m.excesoKmSemanaKey || 'sin-semana'}|${conductorKey}`
-        const prev = sumKmPorConductor.get(key) || { km: 0, modalidad: m.vehiculoModalidad || 'turno' }
+        const prev = sumKmPorConductor.get(key) || { km: 0, modalidad: m.vehiculoModalidad || 'turno', tipoTarifa: m.tipoTarifa ?? null }
         prev.km += m.kmTotal
         if (m.vehiculoModalidad === 'a_cargo') prev.modalidad = 'a_cargo'
+        if (m.tipoTarifa === 'nueva') prev.tipoTarifa = 'nueva'
         sumKmPorConductor.set(key, prev)
       }
       for (const m of marcs) {
@@ -672,12 +768,12 @@ export function useExcesoKmData(sedeId?: string | null) {
         const key = `${m.excesoKmSemanaKey || 'sin-semana'}|${conductorKey}`
         const acc = sumKmPorConductor.get(key)
         if (acc) {
-          const limite = acc.modalidad === 'a_cargo' ? limiteACargo : limiteTurno
+          const limite = limiteDe(acc.modalidad, acc.tipoTarifa)
           m.kmSemanaConductor = Math.round(acc.km * 100) / 100
           m.limiteSemanal = limite
           m.excedeLimite = acc.km > limite
         } else {
-          m.limiteSemanal = (m.vehiculoModalidad === 'a_cargo') ? limiteACargo : limiteTurno
+          m.limiteSemanal = limiteDe(m.vehiculoModalidad, m.tipoTarifa)
           m.kmSemanaConductor = 0
           m.excedeLimite = false
         }

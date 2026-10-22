@@ -2695,6 +2695,14 @@ export function LeadsModule() {
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
+                {phone && !normalizarCelularAR(phone) && (
+                  <span
+                    title="El teléfono no tiene formato de celular (+54 9 área número). Corregirlo desde Editar."
+                    style={{ marginLeft: '6px', color: 'var(--badge-red-text)', fontWeight: 600 }}
+                  >
+                    Tel. inválido
+                  </span>
+                )}
               </span>
               {enZonaRestringida && (
                 <span
