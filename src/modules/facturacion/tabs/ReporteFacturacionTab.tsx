@@ -613,6 +613,9 @@ export function ReporteFacturacionTab() {
 
   // Cerrar período
   const [cerrando, setCerrando] = useState(false)
+  // Período (id) que se recalculó completo en esta sesión. Cerrar Período exige
+  // haber recalculado antes (pedido 2026-10-22); un recálculo incompleto o con error no cuenta.
+  const [periodoRecalculadoId, setPeriodoRecalculadoId] = useState<string | null>(null)
 
   // Exportar SiFactura
   const [exportingSiFactura, setExportingSiFactura] = useState(false)
@@ -5174,6 +5177,7 @@ export function ReporteFacturacionTab() {
       await cargarFacturacion()
 
       if (totalErrores > 0 || conductoresConProblema.length > 0) {
+        setPeriodoRecalculadoId(null)
         const esc = (t: string) => t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
         const lista = conductoresConProblema
           .map(c => `<li style="margin-bottom:4px"><strong>${esc(c.nombre)}</strong>: ${esc(c.motivo)}</li>`)
@@ -5191,16 +5195,19 @@ export function ReporteFacturacionTab() {
           confirmButtonColor: '#f59e0b',
         })
       } else if (avisoPagos) {
+        setPeriodoRecalculadoId(periodoId)
         Swal.fire('Recálculo completado con pagos a revisar',
           `${conductoresProcesadosCount} conductores regenerados. ${avisoPagos}`,
           'warning')
       } else {
+        setPeriodoRecalculadoId(periodoId)
         showSuccess('Recálculo completado',
           `${conductoresProcesadosCount} conductores regenerados desde cero` +
           (reasignacion.reasignados > 0 ? ` · ${reasignacion.reasignados} pago(s) conservados` : ''))
       }
 
     } catch (error: any) {
+      setPeriodoRecalculadoId(null)
       // Recuperar estado en caso de error: liberar el candado con nuestra llave
       await (supabase.from('periodos_facturacion') as any)
         .update({
@@ -5405,18 +5412,11 @@ export function ReporteFacturacionTab() {
       return
     }
 
-    // Paso 1: Recordatorio de recalcular
-    const preCheck = await Swal.fire({
-      title: 'Antes de cerrar',
-      html: '<p>¿Se aseguró de presionar el botón de <strong>Recalcular</strong> antes de cerrar?</p><p>¿Desea continuar cerrando el período?</p>',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#f59e0b',
-      confirmButtonText: 'Sí',
-      cancelButtonText: 'Cancelar'
-    })
-
-    if (!preCheck.isConfirmed) return
+    // Paso 1: el período tiene que haberse recalculado completo en esta sesión
+    if (periodoRecalculadoId !== periodo.id) {
+      Swal.fire('Primero recalculá', 'Para cerrar el período primero tocá <strong>Recalcular</strong> y esperá a que termine sin errores.', 'info')
+      return
+    }
 
     // Paso 2: Confirmación final
     const result = await Swal.fire({
@@ -11940,8 +11940,10 @@ export function ReporteFacturacionTab() {
             <button
               className="fact-btn-primary fact-btn--cerrar"
               onClick={cerrarPeriodo}
-              disabled={recalculando || loading || cerrando}
-              title="Cerrar período y copiar conductores a la siguiente semana"
+              disabled={recalculando || loading || cerrando || periodoRecalculadoId !== periodo.id}
+              title={periodoRecalculadoId !== periodo.id
+                ? 'Primero tocá "Recalcular" y esperá a que termine sin errores'
+                : 'Cerrar período y copiar conductores a la siguiente semana'}
             >
               <Lock size={14} className={cerrando ? 'spinning' : ''} />
               {cerrando ? 'Cerrando...' : 'Cerrar Período'}

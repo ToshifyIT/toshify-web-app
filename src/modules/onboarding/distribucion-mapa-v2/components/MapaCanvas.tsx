@@ -8,16 +8,16 @@
 //   - modo "Ver todos en mapa": líneas desde la persona seleccionada hacia las
 //     más cercanas, con su tiempo real, para ver de un vistazo quién tiene cerca
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { GoogleMap, InfoWindowF, MarkerF, PolygonF, PolylineF } from '@react-google-maps/api'
-import { Pin, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { GoogleMap, MarkerF, OverlayViewF, PolygonF, PolylineF } from '@react-google-maps/api'
+import { Network, Pin, PinOff, X } from 'lucide-react'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
 import {
   getEstadoConductorDisplay,
   getEstadoConductorBadgeStyle,
 } from '../../../../utils/conductorUtils'
 import { IconoEntidad } from './iconos'
-import { TAMANO_HALO, URL_HALO_ACTIVO, urlEtiquetaPill, urlIconoMarcador } from './marcadores'
+import { HALO_SOBRE_PUNTA, TAMANO_HALO, URL_HALO_ACTIVO, urlEtiquetaPill, urlIconoMarcador } from './marcadores'
 import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
 import type { EntidadMapa, ParSugerido, Radar } from '../types'
@@ -103,6 +103,29 @@ export function MapaCanvas({
   useEffect(() => {
     setFichaVisible(true)
   }, [entidadActiva, enfoqueTick])
+
+  // Lado de la ficha flotante (2026-10-22): al costado del pin, del lado CONTRARIO a
+  // hacia donde van sus líneas (par, compañero actual, base o "ver todos"), para no
+  // tapar a las personas que se están comparando. Sin líneas, hacia el centro del mapa.
+  const ladoFicha = useMemo<'izquierda' | 'derecha'>(() => {
+    if (!entidadActiva) return 'derecha'
+    const id = entidadActiva.id
+    const otros: Array<{ lng: number }> = []
+    if (parDestacado && (parDestacado.a.id === id || parDestacado.b.id === id)) {
+      otros.push(parDestacado.a.id === id ? parDestacado.b : parDestacado.a)
+    }
+    if (parActual && (parActual.a.id === id || parActual.b.id === id)) {
+      otros.push(parActual.a.id === id ? parActual.b : parActual.a)
+    }
+    if (baseManual && baseManual.id !== id) otros.push(baseManual)
+    if (radar && radar.base.id === id) radar.conexiones.forEach((c) => otros.push(c.entidad))
+    if (otros.length > 0) {
+      const alEste = otros.filter((o) => o.lng > entidadActiva.lng).length
+      return alEste > otros.length - alEste ? 'izquierda' : 'derecha'
+    }
+    const centro = mapRef.current?.getCenter()
+    return centro && entidadActiva.lng > centro.lng() ? 'izquierda' : 'derecha'
+  }, [entidadActiva, parDestacado, parActual, baseManual, radar])
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map
@@ -365,18 +388,21 @@ export function MapaCanvas({
           />
         )}
 
-        {/* Halo bajo la persona seleccionada: el borde rojo del pin no alcanza
-            para encontrarla entre 180 marcadores; el disco grande sí. */}
+        {/* Aro bajo la persona seleccionada: el borde rojo del pin no alcanza
+            para encontrarla entre 180 marcadores. Rodea la cabeza del pin. */}
         {entidadActiva && (
           <MarkerF
+            // La key por persona fuerza a recrear el aro al cambiar la selección:
+            // reusar el mismo marcador dejaba a veces un aro "fantasma" en la anterior.
+            key={`halo-${entidadActiva.tipo}-${entidadActiva.id}`}
             position={{ lat: entidadActiva.lat, lng: entidadActiva.lng }}
             clickable={false}
             zIndex={998}
             icon={{
               url: URL_HALO_ACTIVO,
               scaledSize: new google.maps.Size(TAMANO_HALO, TAMANO_HALO),
-              // Centrado sobre la base del pin (donde apunta la punta del rombo).
-              anchor: new google.maps.Point(TAMANO_HALO / 2, TAMANO_HALO / 2),
+              // Centrado sobre la cabeza del pin (HALO_SOBRE_PUNTA px arriba de la punta).
+              anchor: new google.maps.Point(TAMANO_HALO / 2, TAMANO_HALO / 2 + HALO_SOBRE_PUNTA),
             }}
           />
         )}
@@ -402,12 +428,21 @@ export function MapaCanvas({
         })}
 
         {entidadActiva && fichaVisible && (
-          <InfoWindowF
+          // Ficha propia en lugar del InfoWindow de Google: el InfoWindow siempre se
+          // abre ARRIBA del punto y tapaba a los conductores cercanos. Esta va al
+          // costado (ver ladoFicha), centrada en la cabeza del pin, con ancho fijo.
+          <OverlayViewF
             position={{ lat: entidadActiva.lat, lng: entidadActiva.lng }}
-            onCloseClick={() => setFichaVisible(false)}
+            mapPaneName="floatPane"
+            getPixelPositionOffset={(ancho, alto) => ({
+              x: ladoFicha === 'derecha' ? SEPARACION_FICHA : -ancho - SEPARACION_FICHA,
+              y: -alto / 2 - HALO_SOBRE_PUNTA,
+            })}
           >
+            <FichaFlotante lado={ladoFicha}>
             <InfoEntidad
               entidad={entidadActiva}
+              onCerrar={() => setFichaVisible(false)}
               onVerFicha={onVerFicha}
               onSugerirDesde={onSugerirDesde}
               onVerTodosDesde={onVerTodosDesde}
@@ -432,26 +467,21 @@ export function MapaCanvas({
                   ? parActual
                   : null
               }
+              parEnCurso={
+                parDestacado &&
+                (parDestacado.a.id === entidadActiva.id || parDestacado.b.id === entidadActiva.id)
+                  ? parDestacado
+                  : null
+              }
+              onLimpiarPar={onLimpiarPar}
             />
-          </InfoWindowF>
+            </FichaFlotante>
+          </OverlayViewF>
         )}
       </GoogleMap>
 
-      {/* Barra del par en curso. Va ABAJO para dejar despejada la parte alta del
-          mapa (controles de zoom y ficha de la persona activa). */}
-      {parDestacado && (
-        <BarraFlotante onCerrar={onLimpiarPar} posicion="abajo">
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-            Emparejando:
-          </span>
-          <ExtremoPar entidad={parDestacado.a} />
-          <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>↔</span>
-          <ExtremoPar entidad={parDestacado.b} />
-          <Pildora>
-            {formatKm(parDestacado.distanciaKm)} · {formatMin(parDestacado.tiempoMinutos)}
-          </Pildora>
-        </BarraFlotante>
-      )}
+      {/* La barra "Emparejando" de abajo se quitó (2026-10-22): el par ya se ve en
+          el mapa (línea + etiqueta km/min) y se quita desde la ficha ("Quitar"). */}
 
       {/* Barra del modo "Dibujar todos los pares" */}
       {!parDestacado && paresDibujados.length > 1 && (
@@ -584,6 +614,7 @@ function ExtremoPar({ entidad }: { entidad: EntidadMapa }) {
  */
 function InfoEntidad({
   entidad: e,
+  onCerrar,
   onVerFicha,
   onSugerirDesde,
   onVerTodosDesde,
@@ -595,8 +626,11 @@ function InfoEntidad({
   onCopiarPar,
   onProgramarPar,
   parActual,
+  parEnCurso,
+  onLimpiarPar,
 }: {
   entidad: EntidadMapa
+  onCerrar: () => void
   onVerFicha: (e: EntidadMapa) => void
   onSugerirDesde: (e: EntidadMapa) => void
   onVerTodosDesde: (e: EntidadMapa) => void
@@ -610,6 +644,9 @@ function InfoEntidad({
   onProgramarPar: (p: ParSugerido) => void
   /** Medición con el compañero actual (null mientras se mide o si no tiene). */
   parActual: ParSugerido | null
+  /** Par dibujado en el mapa que incluye a esta persona (si lo hay). */
+  parEnCurso: ParSugerido | null
+  onLimpiarPar: () => void
 }) {
   const esBase = !!baseManual && baseManual.id === e.id
   const badge =
@@ -620,10 +657,22 @@ function InfoEntidad({
   const d = e.datos
 
   return (
-    <div style={{ padding: '4px 2px', minWidth: 214, maxWidth: 278 }}>
+    <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={17} />
-        <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>{e.nombre}</p>
+        <p style={{ margin: 0, fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>{e.nombre}</p>
+        <button
+          type="button"
+          onClick={onCerrar}
+          title="Cerrar"
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 22, height: 22, marginRight: -2, border: 'none', borderRadius: 6,
+            background: 'transparent', color: '#6B7280', cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          <X size={15} />
+        </button>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '6px 0 0', flexWrap: 'wrap' }}>
@@ -644,12 +693,22 @@ function InfoEntidad({
               })
             : e.estadoLead || 'Lead'}
         </span>
-        {e.tipo === 'conductor' && e.turnoEfectivo && (
+        {/* Turno + asignación en una sola etiqueta: antes "Nocturno · última
+            asignación" y "Sin asignación" iban separadas y se leían como contradicción. */}
+        {e.tipo === 'conductor' && !e.tieneAsignacionActiva && !e.esBaja ? (
+          <Badge tono="neutro">
+            Sin asignación
+            {e.turnoEfectivo &&
+              ` · ${e.turnoOrigen === 'asignacion' ? 'último turno' : e.turnoOrigen === 'preferencia' ? 'prefiere' : 'turno'} ${
+                turnoConductor(e) === 'A_CARGO' ? LABEL_TURNO_CONDUCTOR.A_CARGO : LABEL_TURNO[e.turnoEfectivo]
+              }`}
+          </Badge>
+        ) : e.tipo === 'conductor' && e.turnoEfectivo ? (
           <Badge tono="info">
             {turnoConductor(e) === 'A_CARGO' ? LABEL_TURNO_CONDUCTOR.A_CARGO : LABEL_TURNO[e.turnoEfectivo]} ·{' '}
             {ORIGEN_TURNO_LABEL[e.turnoOrigen] || 'sin dato'}
           </Badge>
-        )}
+        ) : null}
         {e.tipo === 'lead' && e.turnoLead && <Badge tono="info">{e.turnoLead}</Badge>}
         {e.estadoCompanero === 'sin_companero' && (
           <Badge tono="info">
@@ -657,11 +716,6 @@ function InfoEntidad({
           </Badge>
         )}
         {e.estadoCompanero === 'con_companero' && <Badge tono="info">Con compañero</Badge>}
-        {/* Sin asignación activa con vehículo, el compañero "no aplica": se dice
-            explícitamente para que no parezca un dato faltante. */}
-        {e.tipo === 'conductor' && !e.tieneAsignacionActiva && !e.esBaja && (
-          <Badge tono="neutro">Sin asignación</Badge>
-        )}
       </div>
 
       <p style={{ margin: '6px 0 0', fontSize: 11, color: '#6B7280' }}>
@@ -715,7 +769,30 @@ function InfoEntidad({
       </div>
 
       {e.direccion && (
-        <p style={{ margin: '6px 0 0', fontSize: 10, color: '#9CA3AF' }}>{e.direccion}</p>
+        <p
+          title={e.direccion}
+          style={{ margin: '6px 0 0', fontSize: 10, color: '#9CA3AF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          {e.direccion}
+        </p>
+      )}
+
+      {/* Par dibujado (desde sugerencias) que incluye a esta persona: reemplaza a la
+          barra "Emparejando" que había abajo del mapa. */}
+      {parEnCurso && !(baseManual && !esBase && (midiendo || parConBase)) && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '6px 8px',
+            borderRadius: 8, background: 'rgba(255,0,51,.05)', border: '1px solid rgba(255,0,51,.35)',
+            fontSize: 11, color: '#374151',
+          }}
+        >
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Emparejando con <b>{(parEnCurso.a.id === e.id ? parEnCurso.b : parEnCurso.a).nombre}</b>
+            {' · '}{formatKm(parEnCurso.distanciaKm)} · {formatMin(parEnCurso.tiempoMinutos)}
+          </span>
+          <BotonQuitar onClick={onLimpiarPar} />
+        </div>
       )}
 
       {/* Resultado contra la base fijada (emparejamiento manual) */}
@@ -729,8 +806,11 @@ function InfoEntidad({
             background: 'rgba(255,0,51,.05)',
           }}
         >
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: '#ff0033' }}>
-            Desde {baseManual.nombre.split(',')[0]}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: '#ff0033' }}>
+              Desde {baseManual.nombre.split(',')[0]}
+            </span>
+            {parConBase && <BotonQuitar onClick={onLimpiarPar} />}
           </div>
           {midiendo && !parConBase ? (
             <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 4 }}>Midiendo…</div>
@@ -766,20 +846,152 @@ function InfoEntidad({
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
-        {esBase ? (
-          <BotonPrimario onClick={onSoltarBase}>
-            <Pin size={12} /> Soltar base
-          </BotonPrimario>
-        ) : (
-          <BotonSecundario onClick={() => onFijarBase(e)}>
-            <Pin size={12} /> Fijar como base
-          </BotonSecundario>
-        )}
+      {/* Acciones en una fila: la principal destacada, la ficha como secundaria y
+          las de mapa (base / ver todos) como íconos con su texto al pasar el mouse. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
         <BotonPrimario onClick={() => onSugerirDesde(e)}>Sugerir compañero</BotonPrimario>
-        <BotonSecundario onClick={() => onVerTodosDesde(e)}>Ver todos en mapa</BotonSecundario>
         <BotonSecundario onClick={() => onVerFicha(e)}>Ver ficha →</BotonSecundario>
+        <span style={{ flex: 1 }} />
+        {esBase ? (
+          <BotonSoltarBase onClick={onSoltarBase} />
+        ) : (
+          <BotonIcono title="Fijar como base (medir distancias desde esta persona)" onClick={() => onFijarBase(e)}>
+            <Pin size={14} />
+          </BotonIcono>
+        )}
+        <BotonIcono title="Ver todos en mapa (líneas hacia los candidatos)" onClick={() => onVerTodosDesde(e)}>
+          <Network size={14} />
+        </BotonIcono>
       </div>
     </div>
+  )
+}
+
+/** En la ficha de la base: texto explícito en rojo en lugar del ícono suelto. */
+function BotonSoltarBase({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Soltar base y limpiar el mapa"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        height: 26,
+        padding: '0 10px',
+        flexShrink: 0,
+        border: '1px solid var(--color-primary, #ff0033)',
+        borderRadius: 8,
+        background: '#fff1f3',
+        color: 'var(--color-primary, #ff0033)',
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <PinOff size={13} /> Soltar base
+    </button>
+  )
+}
+
+/** Botón cuadrado solo con ícono (acciones secundarias de la ficha del mapa). */
+function BotonIcono({
+  onClick,
+  title,
+  activo,
+  children,
+}: {
+  onClick: () => void
+  title: string
+  activo?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 26,
+        height: 26,
+        flexShrink: 0,
+        border: `1px solid ${activo ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
+        borderRadius: 8,
+        background: activo ? '#fff1f3' : 'var(--bg-primary)',
+        color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)',
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** Separación (px) entre el pin y el costado de la ficha flotante. */
+const SEPARACION_FICHA = 22
+
+/**
+ * Contenedor de la ficha flotante del mapa: tarjeta blanca de ancho fijo con una
+ * flecha hacia el pin. Bloquea los clics/arrastres/rueda del mapa sobre la ficha
+ * (sin esto, hacer clic en un botón también movía o seleccionaba en el mapa).
+ */
+function FichaFlotante({ lado, children }: { lado: 'izquierda' | 'derecha'; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (ref.current) google.maps.OverlayView.preventMapHitsAndGesturesFrom(ref.current)
+  }, [])
+  const flecha: React.CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    width: 12,
+    height: 12,
+    background: '#fff',
+    transform: 'translateY(-50%) rotate(45deg)',
+    ...(lado === 'derecha'
+      ? { left: -6, borderLeft: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }
+      : { right: -6, borderRight: '1px solid #E5E7EB', borderTop: '1px solid #E5E7EB' }),
+  }
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'relative',
+        width: 344,
+        boxSizing: 'border-box',
+        padding: '10px 12px 12px',
+        background: '#fff',
+        border: '1px solid #E5E7EB',
+        borderRadius: 12,
+        boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+        cursor: 'default',
+      }}
+    >
+      <span style={flecha} />
+      <div style={{ position: 'relative' }}>{children}</div>
+    </div>
+  )
+}
+
+/** "Quitar" chico para limpiar el par dibujado desde la ficha. */
+function BotonQuitar({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Quitar la línea del mapa"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
+        padding: '2px 6px', border: 'none', borderRadius: 6, background: 'transparent',
+        color: '#6B7280', fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
+      }}
+    >
+      <X size={11} /> Quitar
+    </button>
   )
 }

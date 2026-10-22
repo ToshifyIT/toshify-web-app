@@ -104,11 +104,11 @@ export function CheckRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        fontSize: 13,
+        gap: 7,
+        fontSize: 12,
         color: 'var(--text-primary)',
         cursor: deshabilitado ? 'not-allowed' : 'pointer',
-        padding: '2px 0',
+        padding: '1px 0',
         opacity: deshabilitado ? 0.45 : 1,
       }}
     >
@@ -153,6 +153,10 @@ export function GrupoTitulo({ children, destacado }: { children: React.ReactNode
 /**
  * Acordeón de filtros. En la propuesta B los filtros de la izquierda se
  * colapsan para dejarle ancho al mapa y al panel de sugerencias.
+ *
+ * Filas planas separadas por una línea (sin tarjeta con borde por filtro):
+ * ocupan menos alto y el panel se lee como una lista. "Destacado" sólo pinta
+ * el título en rojo.
  */
 export function Acordeon({
   titulo,
@@ -171,15 +175,7 @@ export function Acordeon({
   const color = destacado ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)'
 
   return (
-    <div
-      style={{
-        border: `1px solid ${destacado ? '#ffc9d3' : 'var(--border-primary)'}`,
-        background: destacado ? '#fff5f7' : 'var(--bg-primary)',
-        borderRadius: 9,
-        marginTop: 7,
-        overflow: 'hidden',
-      }}
-    >
+    <div style={{ borderBottom: '1px solid var(--border-primary)' }}>
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
@@ -189,7 +185,7 @@ export function Acordeon({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 8,
-          padding: '8px 10px',
+          padding: '7px 2px',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
@@ -213,7 +209,7 @@ export function Acordeon({
         </span>
       </button>
       {abierto && (
-        <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ padding: '0 2px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {children}
         </div>
       )}
@@ -242,12 +238,12 @@ export function BotonPrimario({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        padding: '7px 13px',
+        padding: '5px 12px',
         border: 'none',
         borderRadius: 8,
         background: disabled ? '#f0a7b6' : 'var(--color-primary, #ff0033)',
         color: '#fff',
-        fontSize: 12.5,
+        fontSize: 12,
         fontWeight: 650,
         cursor: disabled ? 'not-allowed' : 'pointer',
         width: full ? '100%' : undefined,
@@ -277,7 +273,7 @@ export function BotonSecundario({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        padding: '6px 12px',
+        padding: '4px 11px',
         border: '1px solid var(--border-primary)',
         borderRadius: 8,
         background: 'var(--bg-primary)',
