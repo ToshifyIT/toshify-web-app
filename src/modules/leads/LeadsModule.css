@@ -71,9 +71,11 @@
   color: var(--text-primary);
 }
 
+/* Las tarjetas se acomodan solas al ancho: con 7 columnas fijas la última
+   ("Recontacto") quedaba cortada en pantallas medianas. */
 .leads-stats-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
 }
 
@@ -84,6 +86,7 @@
   padding: 8px 10px;
   background: var(--bg-secondary);
   border-radius: 6px;
+  min-width: 0;
 }
 
 .leads-stats .stat-card .stat-icon {
@@ -107,6 +110,8 @@
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .leads-stats .stat-card.stat-card-clickable {
@@ -143,18 +148,60 @@
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Barra de búsqueda + botones (escritorio): los botones van a la derecha del
+   buscador, en la misma fila. El contenedor del DataTable no se achica
+   (flex-shrink: 0) y los botones se salían de la pantalla: acá se le permite
+   achicarse y, si no entran, los botones pasan a una segunda fila del mismo
+   bloque, siempre a la derecha del buscador. Buscador y botones más bajos que
+   las tarjetas de métricas. */
+@media (min-width: 769px) {
+  .leads-module .dt-header-bar {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .leads-module .dt-search-wrapper {
+    min-width: 220px;
+  }
+
+  .leads-module .dt-search-input {
+    padding: 6px 12px 6px 36px;
+    font-size: 12.5px;
+    border-radius: 8px;
+  }
+
+  .leads-module .dt-header-action {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .leads-header-actions {
+    gap: 6px;
+  }
+
+  /* Más peso que botones.css (que usa #root) para achicar solo estos */
+  #root .leads-module .leads-header-actions :is(.btn-primary, .btn-secondary) {
+    min-height: 28px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+}
+
+/* Pantallas medianas: las acciones secundarias quedan solo con ícono (cada
+   botón conserva su title). Nuevo Lead, Ver todos y Descartados mantienen el
+   texto y los contadores. */
+@media (max-width: 1600px) {
+  .leads-btn-label--sec {
+    display: none;
+  }
 }
 
 /* =====================================================
    RESPONSIVE BREAKPOINTS
    ===================================================== */
-
-/* Laptop / pantalla mediana */
-@media (max-width: 1200px) {
-  .leads-stats-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
 
 /* Tablet */
 @media (max-width: 768px) {
