@@ -391,8 +391,8 @@ export function FiltrosSidebar({
               ))}
               <Hint>
                 Al abrir vienen marcados los estados de inducción y Listo Emparejar; sin
-                selección se muestran todos. Los leads descartados y los ubicados en zona restringida
-                no entran al mapa.
+                selección se muestran todos. Los leads descartados, “Auto del pueblo”, “No le interesa”
+                y los ubicados en zona restringida no entran al mapa.
               </Hint>
             </Acordeon>
 
@@ -443,8 +443,8 @@ export function FiltrosSidebar({
                 />
               </div>
               <Hint>
-                Fecha en que se creó el lead (columna “Creación” del módulo Leads). Ambos
-                extremos son inclusivos; se puede dejar uno vacío.
+                Fecha en que se creó el lead (columna “Creación” del módulo Leads). Por
+                defecto, el último mes. Ambos extremos son inclusivos; se puede dejar uno vacío.
               </Hint>
             </Acordeon>
 

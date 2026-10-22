@@ -475,7 +475,7 @@ function Descartes({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
     <Card
       title="Motivos de descarte"
       subtitle={`${fmtInt(total)} leads descartados en el período`}
-      info="Motivo según el estado del lead (No cumple edad, No le interesa, Auto del pueblo...) y el texto de la causal de cierre que viene de Sellium. Abajo, los textos más frecuentes tal cual se cargaron."
+      info="Motivo según los datos cargados en el lead: Edad (No cumple edad), Auto del pueblo, Zona (causal Sin cobertura) y Desacuerdo con la oferta (No le interesa o causal de desacuerdo). Lo demás, o sin causal, va a Otro. Solo se muestran los motivos con leads en el período. Abajo, las causales más frecuentes tal cual se cargaron."
     >
       {motivos.length === 0 ? (
         <p className="ddir-note">No hay leads descartados en el período.</p>
@@ -495,7 +495,7 @@ function Descartes({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
         <div className="ddir-motivos">
           <span className="ddir-causales-title">Causales más frecuentes</span>
           {causales.map(c => (
-            <div className="ddir-causal" key={c.causal}>
+            <div className="ddir-causal" key={`${c.causal}|${c.motivo}`}>
               <span>{c.causal} <span className="ddir-muted">· {c.motivo}</span></span>
               <span className="ddir-causal-pct">{fmtInt(c.cantidad)}</span>
             </div>

@@ -16,6 +16,7 @@
 // best-effort de direcciones sin coordenadas, igual que el v1.
 
 import { supabase } from '../../../lib/supabase'
+import { traerTodasLasPaginas } from '../../../utils/paginacionSupabase'
 import { cargarConceptosTarifa, getPeriodoTarifa } from '../tarifaConceptos'
 import type { TipoTarifa } from '../../../types/onboarding.types'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from '../../leads/leadEstados'
@@ -62,12 +63,17 @@ export const ESTADOS_LEAD_TODOS = ESTADOS_LEAD_FILTRO
 export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción', ESTADO_LISTO_EMPAREJAR] as const
 
 /**
- * Estados que NO entran al mapa bajo ningún filtro. Un lead descartado ya
- * salió del pipeline: no se lo ubica, no se lo empareja, no se lo cuenta.
- * Misma definición que usa el módulo de Leads para su contador "Descartados"
- * (estado_de_lead = 'Descartado', literal).
+ * Estados que NO entran al mapa bajo ningún filtro: ya salieron del pipeline,
+ * no se los ubica, no se los empareja, no se los cuenta, y tampoco se ofrecen
+ * en el filtro "Estado de lead". Se comparan literal contra estado_de_lead.
+ *  - Descartado: misma definición que el contador "Descartados" de Leads.
+ *  - Auto del pueblo / No le interesa: no se convocan (pedido de operación).
  */
-export const ESTADOS_LEAD_EXCLUIDOS: ReadonlySet<string> = new Set(['Descartado'])
+export const ESTADOS_LEAD_EXCLUIDOS: ReadonlySet<string> = new Set([
+  'Descartado',
+  'Auto del pueblo',
+  'No le interesa',
+])
 
 /** Etiqueta usada cuando un lead no tiene estado cargado. */
 export const SIN_ESTADO_LEAD = 'Sin estado'
@@ -300,6 +306,9 @@ async function fetchAsignacionesActivas(
         'conductor_id, estado, horario, tipo_tarifa, asignacion_id, asignaciones(id, estado, sede_id, horario, tipo_tarifa, vehiculos(id, patente))'
       )
       .not('conductor_id', 'is', null)
+      // Orden estable: sin orden, PostgreSQL puede devolver las páginas en
+      // distinto orden y saltear o repetir filas entre una y otra.
+      .order('id', { ascending: true })
       .range(desde, desde + pageSize - 1)
 
     if (error) {
@@ -422,17 +431,16 @@ export async function fetchConductoresMapa(
 
   // Más recientes primero, igual que los leads. Si la tabla no tuviera
   // created_at, se cae al orden anterior (apellido) en vez de no cargar nada.
-  const consultar = (conFecha: boolean) => {
-    const q = supabase
-      .from('conductores')
-      .select(conFecha ? `${COLUMNAS}, created_at` : COLUMNAS) as any
-    return aplicarFiltroSede(
-      conFecha
-        ? q.order('created_at', { ascending: false, nullsFirst: false })
-        : q.order('apellidos', { ascending: true }),
-      'sede_id'
-    )
-  }
+  // Por páginas (ver utils/paginacionSupabase); `id` desempata para paginar estable.
+  const consultar = (conFecha: boolean) =>
+    traerTodasLasPaginas<ConductorRow>((desde, hasta, contar) => {
+      const columnas = conFecha ? `${COLUMNAS}, created_at` : COLUMNAS
+      const q = (supabase.from('conductores') as any).select(columnas, contar ? { count: 'exact' } : undefined)
+      const ordenada = conFecha
+        ? q.order('created_at', { ascending: false, nullsFirst: false }).order('id', { ascending: true })
+        : q.order('apellidos', { ascending: true }).order('id', { ascending: true })
+      return aplicarFiltroSede(ordenada, 'sede_id').range(desde, hasta)
+    })
 
   let { data, error } = await consultar(true)
   if (error) ({ data, error } = await consultar(false))
@@ -645,18 +653,23 @@ export async function fetchLeadsMapa(
 ): Promise<EntidadMapa[]> {
   // Sin `.in('estado_de_lead', ...)`: el v2 trae todo el pipeline y la UI decide
   // qué estados mostrar (preseleccionados: los dos de inducción).
-  let query = supabase
-    .from('leads')
-    .select(
-      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, direccion_pais, direccion_ciudad, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at, entrevistador_asignado'
-    )
+  // Los estados excluidos por regla de negocio (Descartado) se filtran ya en la
+  // base para no bajarlos: igual se vuelven a filtrar abajo. Los leads sin
+  // estado se conservan (en SQL, NULL NOT IN (...) los dejaría afuera).
+  const excluidos = [...ESTADOS_LEAD_EXCLUIDOS].map((e) => `"${e}"`).join(',')
+  const COLUMNAS_LEAD =
+    'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, direccion_pais, direccion_ciudad, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at, entrevistador_asignado'
+
+  // Por páginas: hay más leads que el tope de filas por respuesta de Supabase
+  // (ver utils/paginacionSupabase).
+  const { data, error } = await traerTodasLasPaginas<LeadRow>((desde, hasta, contar) => {
+    let q = (supabase.from('leads') as any).select(COLUMNAS_LEAD, contar ? { count: 'exact' } : undefined)
+    if (excluidos) q = q.or(`estado_de_lead.is.null,estado_de_lead.not.in.(${excluidos})`)
     // Más recientes primero, igual que la tabla de Leads (columna "Creación").
-    // Los que no tienen fecha van al final.
-    .order('created_at', { ascending: false, nullsFirst: false }) as any
-
-  query = aplicarFiltroSede(query, 'sede_id')
-
-  const { data, error } = await query
+    // Los que no tienen fecha van al final; `id` desempata para paginar estable.
+    q = q.order('created_at', { ascending: false, nullsFirst: false }).order('id', { ascending: true })
+    return aplicarFiltroSede(q, 'sede_id').range(desde, hasta)
+  })
   if (error) throw error
 
   const rows = (data || []) as LeadRow[]

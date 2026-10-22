@@ -1,6 +1,7 @@
 // src/modules/leads/LeadsModule.tsx
 import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
 import { fechaISOART } from '../../utils/fechaArgentina'
+import { traerTodasLasPaginas } from '../../utils/paginacionSupabase'
 import { inferZona } from '../../utils/zonaUtils'
 import { normalizarCelularAR, validarCelularAR } from '../../utils/validacionesCampos'
 import {
@@ -31,6 +32,7 @@ import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
+import { homologarGuia } from './guias'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
 import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
@@ -776,19 +778,24 @@ export function LeadsModule() {
     if (!silent) setLoading(true)
     setError('')
     try {
-      let query = supabase
-        .from('leads')
-        .select('*')
-        .or('proceso.is.null,proceso.neq.Convertido')
-        .order('created_at', { ascending: false })
-        .limit(10000)
-
+      // Por páginas: antes era un .limit(10000) en un solo pedido, y con más de
+      // 10.000 leads los más antiguos no aparecían (además, Supabase corta cada
+      // respuesta en su "Max rows" sin avisar). Ver utils/paginacionSupabase.
+      // Mismo orden que antes (creación desc); `id` desempata para paginar estable.
       // Filtro por sede usando la FK sede_id (UUID), igual que el resto del sistema.
       // aplicarFiltroSede respeta el modo "Todas las sedes" para usuarios admin.
-      query = aplicarFiltroSede(query, 'sede_id')
+      const pedirLeads = (desde: number, hasta: number, contar: boolean) =>
+        aplicarFiltroSede(
+          (supabase.from('leads') as any)
+            .select('*', contar ? { count: 'exact' } : undefined)
+            .or('proceso.is.null,proceso.neq.Convertido')
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: true }),
+          'sede_id'
+        ).range(desde, hasta)
 
       const [leadsRes, catRes, estLicRes, tipLicRes, nacRes, ecRes] = await Promise.all([
-        query,
+        traerTodasLasPaginas<Lead>(pedirLeads),
         supabase.from('licencias_categorias').select('id, codigo, descripcion').order('descripcion'),
         supabase.from('licencias_estados').select('id, codigo, descripcion').order('descripcion'),
         supabase.from('licencias_tipos').select('id, codigo, descripcion').order('descripcion'),
@@ -2064,6 +2071,8 @@ export function LeadsModule() {
     // - 'NO' / 'NÓ' / 'FALSE' / '0' (cualquier capitalización) → 'No'
     // - Cualquier otro valor con contenido (incluso códigos como 'A1.4', 'D1') → 'Si'
     //   (la presencia de texto/categoría implica que tiene licencia)
+    // Guía: con el nombre homologado (Ali → Ali Verenzuela, etc.; ver guias.ts)
+    if (dbCol === 'entrevistador_asignado') return homologarGuia(String(value))
     if (dbCol === 'licencia') {
       if (typeof value === 'boolean') return value ? 'Si' : 'No'
       const s = String(value).trim()

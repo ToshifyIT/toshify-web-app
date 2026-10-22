@@ -190,11 +190,14 @@ export function descartesDe(d: MarketingRaw, filtro: FiltroSegmento): { motivo: 
 
 export function causalesDe(d: MarketingRaw, filtro: FiltroSegmento): { causal: string; motivo: string; cantidad: number }[] {
   const mapa = new Map<string, { causal: string; motivo: string; cantidad: number }>()
+  // Clave causal + motivo: el mismo texto puede caer en dos motivos (según el
+  // estado del lead) y cada uno se muestra con su propio número.
   for (const f of d.causales) {
     if (!enSegmento(f.segmento, filtro)) continue
-    const c = mapa.get(f.causal) ?? { causal: f.causal, motivo: f.motivo, cantidad: 0 }
+    const clave = `${f.causal}|${f.motivo}`
+    const c = mapa.get(clave) ?? { causal: f.causal, motivo: f.motivo, cantidad: 0 }
     c.cantidad += f.cantidad
-    mapa.set(f.causal, c)
+    mapa.set(clave, c)
   }
   return [...mapa.values()].sort((a, b) => b.cantidad - a.cantidad).slice(0, 10)
 }

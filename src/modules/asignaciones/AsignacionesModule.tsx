@@ -150,21 +150,62 @@ function getLocalDateStr(isoString: string): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-// Helper: cargar programaciones con fallback si columnas de cambio no existen
-async function fetchProgramaciones(): Promise<any[]> {
-  try {
-    const res = await supabase
+// Programaciones de las asignaciones cargadas, por lotes de IDs.
+// Antes se pedían TODAS las programaciones con asignación en un solo pedido, y
+// Supabase corta cada respuesta en "Max rows" (1000 por defecto) sin avisar:
+// al pasar ese número, algunas asignaciones se quedaban sin motivo, sin tipo
+// por conductor, sin documentos y sin el dato de cambio de vehículo.
+// Ahora: lotes de LOTE_PROGRAMACIONES IDs y, dentro de
+// cada lote, páginas hasta que una venga vacía (así no se pierde nada aunque el
+// tope del servidor sea menor que la página pedida).
+const COLUMNAS_PROGRAMACION =
+  'asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo, conductor_id, conductor_diurno_id, conductor_nocturno_id, tipo_asignacion_diurno, tipo_asignacion_nocturno, documentos_generados(conductor_id, google_doc_id)'
+// Fallback si las columnas de cambio de vehículo / documentos no existen
+const COLUMNAS_PROGRAMACION_BASICAS = 'asignacion_id, tipo_asignacion, observaciones, created_by_name'
+// 100 UUIDs ≈ 4 KB de URL: mismo tope que usa Distribución en mapa, donde
+// cientos de UUIDs en un `.in(...)` cortaban la conexión (URL demasiado larga).
+const LOTE_PROGRAMACIONES = 100
+const PAGINA_PROGRAMACIONES = 1000
+
+async function traerProgramacionesDeLote(columnas: string, asignacionIds: string[]): Promise<any[]> {
+  const filas: any[] = []
+  let desde = 0
+  for (;;) {
+    const res = await (supabase as any)
       .from('programaciones_onboarding')
-      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo, conductor_id, conductor_diurno_id, conductor_nocturno_id, tipo_asignacion_diurno, tipo_asignacion_nocturno, documentos_generados(conductor_id, google_doc_id)')
-      .not('asignacion_id', 'is', null)
+      .select(columnas)
+      .in('asignacion_id', asignacionIds)
+      .order('id', { ascending: true }) // orden estable para paginar sin saltear ni repetir
+      .range(desde, desde + PAGINA_PROGRAMACIONES - 1)
     if (res.error) throw res.error
-    return res.data || []
+    const data: any[] = res.data || []
+    if (data.length === 0) break
+    filas.push(...data)
+    desde += data.length
+  }
+  return filas
+}
+
+async function traerProgramaciones(columnas: string, asignacionIds: string[]): Promise<any[]> {
+  const lotes: string[][] = []
+  for (let i = 0; i < asignacionIds.length; i += LOTE_PROGRAMACIONES) {
+    lotes.push(asignacionIds.slice(i, i + LOTE_PROGRAMACIONES))
+  }
+  const resultados = await Promise.all(lotes.map((lote) => traerProgramacionesDeLote(columnas, lote)))
+  return resultados.flat()
+}
+
+async function fetchProgramaciones(asignacionIds: string[]): Promise<any[]> {
+  const ids = [...new Set(asignacionIds.filter(Boolean))]
+  if (ids.length === 0) return []
+  try {
+    return await traerProgramaciones(COLUMNAS_PROGRAMACION, ids)
   } catch {
-    const res = await supabase
-      .from('programaciones_onboarding')
-      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
-      .not('asignacion_id', 'is', null)
-    return res.data || []
+    try {
+      return await traerProgramaciones(COLUMNAS_PROGRAMACION_BASICAS, ids)
+    } catch {
+      return []
+    }
   }
 }
 
@@ -951,7 +992,7 @@ export function AsignacionesModule() {
 
       if (asignacionesRes.error) throw asignacionesRes.error
 
-      const programacionesData = await fetchProgramaciones()
+      const programacionesData = await fetchProgramaciones((asignacionesRes.data || []).map((a: any) => a.id))
       const asignacionesConMotivo = buildAsignacionesConMotivo(asignacionesRes.data || [], programacionesData)
 
       // PRE-RESOLVER conductores de todos los vehículos con devoluciones via query directa
@@ -1101,7 +1142,7 @@ export function AsignacionesModule() {
 
       if (asigRes.error) throw asigRes.error
 
-      const progData = await fetchProgramaciones()
+      const progData = await fetchProgramaciones((asigRes.data || []).map((a: any) => a.id))
       const asignacionesConMotivo = buildAsignacionesConMotivo(asigRes.data || [], progData)
 
       // Resolver conductores de devoluciones: query directa a la BD (igual que handleConfirmarDevolucion)
