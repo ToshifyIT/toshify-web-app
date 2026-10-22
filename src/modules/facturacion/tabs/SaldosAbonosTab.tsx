@@ -1528,7 +1528,9 @@ export function SaldosAbonosTab() {
     }
   }
 
-  // Editar mora acumulada inline (click en celda)
+  // Editar mora acumulada inline (click en celda). Sin uso desde 2026-10-22: se
+  // quitaron las columnas Días Mora y Mora Acum. de la tabla (no aportaban valor).
+  /* editarMoraAcumulada - inicio
   async function editarMoraAcumulada(saldo: SaldoConductor) {
     const diasActual = (saldo.dias_mora && saldo.dias_mora > 0) ? saldo.dias_mora : (saldo.ultima_actualizacion ? diasCalendario(saldo.ultima_actualizacion) : 0)
     const moraActual = (saldo.monto_mora_acumulada && saldo.monto_mora_acumulada > 0) ? saldo.monto_mora_acumulada : Math.round(Math.abs(saldo.saldo_actual) * 0.01 * diasActual * 100) / 100
@@ -1610,6 +1612,7 @@ export function SaldosAbonosTab() {
       Swal.fire('Error', error.message || 'No se pudo actualizar la mora', 'error')
     }
   }
+  editarMoraAcumulada - fin */
 
   // ====== EXPORTAR SALDOS A EXCEL ======
   function exportarSaldos() {
@@ -2107,6 +2110,7 @@ export function SaldosAbonosTab() {
   const columns = useMemo<ColumnDef<SaldoConductor>[]>(() => [
     {
       accessorKey: 'conductor_nombre',
+      meta: { info: 'Conductor y su CUIT o DNI.' },
       header: () => (
         <div className="dt-column-filter">
           <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
@@ -2154,6 +2158,7 @@ export function SaldosAbonosTab() {
     },
     {
       id: 'conductor_estado',
+      meta: { info: 'Estado actual del conductor (Activo, Baja, etc.).' },
       header: 'Estado Cond.',
       cell: ({ row }) => {
         const estado = row.original.conductor_estado
@@ -2179,6 +2184,7 @@ export function SaldosAbonosTab() {
     },
     {
       accessorKey: 'saldo_actual',
+      meta: { info: 'Cuenta corriente del conductor. Negativo: debe. Positivo: tiene saldo a favor.' },
       header: 'Saldo Actual',
       cell: ({ row }) => {
         const saldoVal = row.original.saldo_actual
@@ -2187,6 +2193,7 @@ export function SaldosAbonosTab() {
     },
     {
       id: 'estado_saldo',
+      meta: { info: 'A favor (saldo mayor a 0), Deuda (menor a 0) o Sin saldo (igual a 0).' },
       header: () => (
         <div className="dt-column-filter">
           <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
@@ -2228,40 +2235,12 @@ export function SaldosAbonosTab() {
         return <span className="fact-badge fact-badge-gray">Sin Saldo</span>
       }
     },
-    {
-      accessorKey: 'dias_mora',
-      header: 'Días Mora',
-      cell: ({ row }) => {
-        const s = row.original
-        // Usar el valor de BD directamente — no recalcular si fue seteado manualmente
-        const dias = s.dias_mora ?? 0
-        if (dias === 0) return <span className="text-gray-400">-</span>
-        return <span className={`fact-badge ${dias > 7 ? 'fact-badge-red' : dias > 3 ? 'fact-badge-yellow' : 'fact-badge-gray'}`}>{dias} días</span>
-      }
-    },
-    {
-      accessorKey: 'monto_mora_acumulada',
-      header: 'Mora Acum.',
-      cell: ({ row }) => {
-        const s = row.original
-        // Usar el valor de BD directamente — no recalcular si fue seteado manualmente
-        const mora = s.monto_mora_acumulada ?? 0
-        if (mora === 0) return <span className="text-gray-400">-</span>
-        return (
-          <span
-            className="fact-precio fact-precio-negative"
-            style={{ cursor: (isAdmin() || isAdministrativo()) ? 'pointer' : 'default', textDecoration: (isAdmin() || isAdministrativo()) ? 'underline dotted' : 'none' }}
-            onClick={() => { if (isAdmin() || isAdministrativo()) editarMoraAcumulada(s) }}
-            title={(isAdmin() || isAdministrativo()) ? 'Click para editar' : ''}
-          >
-            {formatCurrency(mora)}
-          </span>
-        )
-      }
-    },
+    // Días Mora y Mora Acum.: quitadas 2026-10-22 (no aportaban valor). El dato
+    // sigue en la base, en Exportar/Importar y en el editor de saldo.
     {
       accessorKey: 'ultima_actualizacion',
-      header: 'Última Act.',
+      meta: { info: 'Fecha de la última actualización del saldo.' },
+      header: 'Actualizado',
       cell: ({ row }) => (
         <span className="text-gray-500 text-sm">{row.original.ultima_actualizacion ? formatDate(row.original.ultima_actualizacion) : '-'}</span>
       )

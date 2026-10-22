@@ -245,7 +245,7 @@ export const GLOSARIO: { termino: string; definicion: string }[] = [
   { termino: 'Conversión', definicion: 'Conductores nuevos ÷ leads del período (los dos sobre los mismos leads).' },
   { termino: 'Perfil del lead', definicion: 'Se mide sobre los leads que llegaron a la propuesta: antes el chatbot no preguntó licencia, monotributo ni experiencia. Cumple: 21+, licencia D1, monotributo y experiencia. Medio: 21+ con parte de los requisitos. No cumple: menor de 21, sin licencia o sin experiencia.' },
   { termino: 'Pauta redes / Web', definicion: 'Pauta redes: leads con canal o link de anuncio, o que entraron por Sellium / Intercom. Web: formulario del sitio (orgánico), se mide aparte.' },
-  { termino: 'Sin canal identificado', definicion: 'Lead de pauta sin el link del anuncio, así que no se sabe si vino de Facebook o Instagram. El link se carga desde el 30/09/2026.' },
+  { termino: 'Sin canal identificado', definicion: 'Lead de pauta sin el link del anuncio, así que no se sabe si vino de Facebook o Instagram. El link llega en la carga masiva de Sellium.' },
 ]
 
 /** Suma de una lista con segmento, filtrada. */

@@ -557,6 +557,20 @@
   font-size: 12px;
 }
 
+/* Ícono (i) con la explicación de la columna (meta.info) */
+.dt-header-info {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  cursor: help;
+  opacity: 0.8;
+}
+
+.dt-header-info:hover {
+  color: var(--color-primary);
+  opacity: 1;
+}
+
 /* Body - Toshify Design System */
 .dt-table td {
   padding: 8px 8px;

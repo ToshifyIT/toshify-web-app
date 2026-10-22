@@ -160,6 +160,8 @@ export function FiltrosSidebar({
         display: 'flex',
         flexDirection: 'column',
         overflowY: 'auto',
+        // Al llegar al final de los filtros no se arrastra el scroll a la página.
+        overscrollBehavior: 'contain',
       }}
     >
       <div style={{ padding: 13, display: 'flex', flexDirection: 'column', gap: 12 }}>
