@@ -12,6 +12,7 @@
 //  - Entrada = inicio del primer viaje del dia, Salida = fin del ultimo,
 //    Tiempo conducido = suma de los viajes, Km = suma de los viajes.
 //  - Los dias del rango sin viajes salen igual, con estado 'Sin Actividad'.
+//    Los dias que todavia no pasaron (despues de hoy, hora AR) no salen.
 //
 // Solo se tocan los conductores identificados de GEOTAB que tienen viajes. USS
 // (ya viene 1 fila por dia), las filas "Sin conductor" y cualquier conductor cuyo
@@ -61,10 +62,17 @@ const fechaDe = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const horaDe = (ms: number) => new Date(ms).toISOString().slice(11, 19);
 const isoParedDe = (ms: number) => new Date(ms).toISOString().slice(0, 19);
 
+/** Hoy (yyyy-MM-dd) en hora AR. */
+function hoyAR(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+}
+
+/** Dias del rango, sin pasar de hoy: los dias que todavia no ocurrieron no tienen fila. */
 function diasDelRango(desde: string, hasta: string): string[] {
   const dias: string[] = [];
+  const tope = hasta < hoyAR() ? hasta : hoyAR();
   let ms = Date.parse(`${desde}T00:00:00Z`);
-  const fin = Date.parse(`${hasta}T00:00:00Z`);
+  const fin = Date.parse(`${tope}T00:00:00Z`);
   while (ms <= fin && dias.length < MAX_DIAS) {
     dias.push(fechaDe(ms));
     ms += MS_DIA;

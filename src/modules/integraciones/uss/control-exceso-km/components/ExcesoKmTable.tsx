@@ -2,13 +2,14 @@
 // Columnas: GPS · Patente · Conductor · Km recorridos · Límite · Excedidos · Modalidad · Monto · Estado · Acciones
 // Una fila = un conductor que excedió el límite km semanal.
 
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable'
 import { Search, ClipboardList, Download, ChevronDown, X, Plus, CheckCircle, Eye, Sun, Moon, Clock } from 'lucide-react'
 import type { Marcacion } from '../../bitacora/hooks/useUSSHistoricoData'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 import * as XLSX from 'xlsx'
+import { cargarConceptosTarifa } from '../../../../onboarding/tarifaConceptos'
 
 // Defaults (override desde parametros_sistema en el módulo, pasados via props si hace falta)
 const ALQUILER_TURNO_DEFAULT = 245000
@@ -45,6 +46,18 @@ function getConductorSemanaKey(conductorId: string | null | undefined, semana: n
   return `${conductorId}|${semana}|${anio}`
 }
 
+/** Columnas numéricas que filtran con lista o con rango según cuántos valores distintos tienen. */
+type ColumnaNumerica = 'km_recorridos' | 'limite' | 'consumo' | 'cobro_exceso'
+/** Menos de esta cantidad de valores distintos => filtro de lista en vez de desde/hasta. */
+const MAX_VALORES_LISTA = 5
+/** Valor de la columna como se ve en la celda: es lo que lista el filtro. */
+const ETIQUETA_NUMERICA: Record<ColumnaNumerica, (r: ExcesoKmRow) => string> = {
+  km_recorridos: (r) => `${r.kmRecorridos.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km`,
+  limite: (r) => `${r.limite.toLocaleString('es-AR')} km`,
+  consumo: (r) => `${Math.round((r.kmRecorridos / r.limite) * 100)}%`,
+  cobro_exceso: (r) => (r.excedido > 0 ? `$${r.monto.toLocaleString('es-AR')}` : '—'),
+}
+
 export interface ExcesoKmRow {
   /** llave estable = conductorId || conductor (nombre) */
   key: string
@@ -64,6 +77,10 @@ export interface ExcesoKmRow {
   kmRecorridos: number
   limite: number
   excedido: number
+  /** Tarifa de la asignación del conductor esa semana. null = sin asignación válida vigente. */
+  tipoTarifa: 'antigua' | 'nueva' | null
+  /** Km de viajes cuyo conductor se ESTIMÓ por asignación + horario (GPS sin identificar). */
+  kmEstimados: number
   /** Modalidad del conductor esa semana. null = sin asignación válida vigente. */
   modalidad: 'turno' | 'a_cargo' | null
   /** Si la modalidad es 'turno': diurno | nocturno. Si es 'a_cargo': null (no aplica). */
@@ -106,6 +123,21 @@ export function ExcesoKmTable({
   // Filtro GPS
   const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null)
 
+  // Etiquetas de las tarifas (ej. "ENE-26" / "OCT-26"): salen de la descripción de los
+  // conceptos de alquiler, mismo criterio que Facturación > Garantías.
+  const [etiquetasTarifa, setEtiquetasTarifa] = useState<{ antigua: string; nueva: string }>({ antigua: 'ENE-26', nueva: 'OCT-26' })
+  useEffect(() => {
+    let cancelado = false
+    cargarConceptosTarifa().then(conceptos => {
+      if (cancelado) return
+      setEtiquetasTarifa({
+        antigua: conceptos.P001?.periodo || 'ENE-26',
+        nueva: conceptos.P021?.periodo || 'OCT-26',
+      })
+    })
+    return () => { cancelado = true }
+  }, [])
+
   // 1) Agrupar TODAS las marcaciones por conductor (excedan o no).
   //    El usuario ve toda la flota con su estado: la barra de progreso indica si ya está al límite.
   const filas = useMemo<ExcesoKmRow[]>(() => {
@@ -141,12 +173,19 @@ export function ExcesoKmTable({
       }
       // Límite según la modalidad resuelta. Sin asignación (null) => límite de turno
       // (1800, el más estricto) para no subestimar el exceso.
-      const limite = lista[0].limiteSemanal || (modalidad === 'a_cargo' ? 3600 : 1800)
+      // (A cargo con tarifa nueva OCT-26: 2200; ver limiteDe en useExcesoKmData.)
+      const limite = lista[0].limiteSemanal || (modalidad === 'a_cargo'
+        ? (lista.some(m => m.tipoTarifa === 'nueva') ? 2200 : 3600)
+        : 1800)
       // Filas "Sin conductor" (GEOTAB pre-NFC): informativas, no generan exceso cobrable
       // (no hay a quién crear la incidencia). Forzamos excedido = 0 => botón Crear off.
       // El nombre llega como "Sin conductor · PATENTE" (un "—" inicial es opcional).
       const esSinConductor = !lista[lista.length - 1].conductorId &&
         /^(—\s*)?Sin conductor\b/.test(lista[lista.length - 1].conductor || '')
+      // Sin conductor y "0 km" (encendidos sin moverse; el GPS marca unos metros de
+      // deriva estando quieto): no aporta nada, no se muestra. Mismo redondeo que la
+      // columna KM RECORRIDOS, así se oculta exactamente lo que ahí se ve como 0 km.
+      if (esSinConductor && Math.round(km) === 0) continue
       const excedido = esSinConductor ? 0 : Math.max(0, km - limite)
       // patente principal: la que más km tiene en la semana
       const kmPorPatente = new Map<string, number>()
@@ -155,13 +194,21 @@ export function ExcesoKmTable({
       }
       const patentesOrdenadas = [...kmPorPatente.entries()].sort((a, b) => b[1] - a[1])
       const patente = patentesOrdenadas[0]?.[0] || lista[0].patente || ''
-      // GPS predominante: gana el que tenga más km en la semana
-      let kmUSS = 0, kmGeotab = 0
+      // GPS predominante: gana el que tenga más km en la semana. Si empatan (ej. 0 km
+      // en los dos), gana el que tenga más registros: así una fila que solo tiene viajes
+      // de Geotab no queda etiquetada como USS por defecto.
+      let kmUSS = 0, kmGeotab = 0, regUSS = 0, regGeotab = 0
       for (const m of lista) {
-        if (m.gpsOrigen === 'GEOTAB') kmGeotab += m.kmTotal || 0
-        else kmUSS += m.kmTotal || 0
+        if (m.gpsOrigen === 'GEOTAB') { kmGeotab += m.kmTotal || 0; regGeotab++ }
+        else { kmUSS += m.kmTotal || 0; regUSS++ }
       }
-      const gpsOrigen: 'USS' | 'GEOTAB' = kmGeotab > kmUSS ? 'GEOTAB' : 'USS'
+      // Km con conductor estimado (Geotab no identificó al conductor)
+      const kmEstimados = lista.filter(m => m.conductorEstimado).reduce((s, m) => s + (m.kmTotal || 0), 0)
+      // Tarifa: la de la asignación más reciente de la semana que la tenga
+      const tipoTarifa = [...lista].reverse().find(m => m.tipoTarifa)?.tipoTarifa ?? null
+      const gpsOrigen: 'USS' | 'GEOTAB' = kmGeotab !== kmUSS
+        ? (kmGeotab > kmUSS ? 'GEOTAB' : 'USS')
+        : (regGeotab >= regUSS ? 'GEOTAB' : 'USS')
       // porcentaje + monto
       const pct = porcentajePorKm(excedido)
       // último registro: para tomar DNI/iButton del conductor
@@ -188,6 +235,8 @@ export function ExcesoKmTable({
         patente,
         patentes: patentesOrdenadas.map(p => p[0]),
         gpsOrigen,
+        tipoTarifa,
+        kmEstimados: Math.round(kmEstimados * 100) / 100,
         kmRecorridos: Math.round(km * 100) / 100,
         limite,
         excedido: Math.round(excedido * 100) / 100,
@@ -207,6 +256,23 @@ export function ExcesoKmTable({
     })
     return rows
   }, [marcaciones, conductoresConIncidencia, alquilerTurno, alquilerACargo, alquilerPorConductor])
+
+  // Filtro de las columnas numéricas: con menos de MAX_VALORES_LISTA valores distintos
+  // (ej. Límite: 1.800 / 3.600) se filtra con una lista de valores; con más, desde/hasta.
+  // El DataTable elige lista o rango según el tipo del valor que devuelve la columna:
+  // para la lista se le pasa el valor ya formateado (texto) y el orden sigue numérico.
+  const columnasComoLista = useMemo(() => {
+    const ids = new Set<ColumnaNumerica>()
+    for (const id of Object.keys(ETIQUETA_NUMERICA) as ColumnaNumerica[]) {
+      if (new Set(filas.map(ETIQUETA_NUMERICA[id])).size < MAX_VALORES_LISTA) ids.add(id)
+    }
+    return ids
+  }, [filas])
+  const valorFiltro = useCallback(
+    (id: ColumnaNumerica, r: ExcesoKmRow, numero: number): number | string =>
+      columnasComoLista.has(id) ? ETIQUETA_NUMERICA[id](r) : numero,
+    [columnasComoLista],
+  )
 
   // Conteo por GPS
   const gpsCounts = useMemo(() => {
@@ -299,14 +365,32 @@ export function ExcesoKmTable({
               {r.ibutton && (
                 <span style={{ color: 'var(--text-tertiary)', fontSize: 10 }}>#{r.ibutton}</span>
               )}
+              {r.tipoTarifa && (
+                <span
+                  title={`Tarifa de su asignación esa semana: ${r.tipoTarifa === 'nueva' ? 'nueva' : 'antigua'}`}
+                  style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}
+                >
+                  {r.tipoTarifa === 'nueva' ? etiquetasTarifa.nueva : etiquetasTarifa.antigua}
+                </span>
+              )}
             </div>
+            {r.kmEstimados > 0 && (
+              <span
+                title={`${r.kmEstimados.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km sin conductor identificado en Geotab, atribuidos por su asignación y el horario del turno`}
+                style={{ fontSize: 10, color: '#b45309', whiteSpace: 'normal', lineHeight: 1.3, maxWidth: 260 }}
+              >
+                ⚠ No se encontró coincidencia, este conductor es un aproximado/estimado
+                ({r.kmEstimados.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km). Verificá que sea correcto en Geotab.
+              </span>
+            )}
           </div>
         )
       },
     },
     {
       id: 'km_recorridos',
-      accessorFn: (r) => r.kmRecorridos,
+      accessorFn: (r) => valorFiltro('km_recorridos', r, r.kmRecorridos),
+      sortingFn: (a, b) => a.original.kmRecorridos - b.original.kmRecorridos,
       header: 'Km recorridos',
       size: 120,
       cell: ({ row }) => {
@@ -324,7 +408,8 @@ export function ExcesoKmTable({
     },
     {
       id: 'limite',
-      accessorFn: (r) => r.limite,
+      accessorFn: (r) => valorFiltro('limite', r, r.limite),
+      sortingFn: (a, b) => a.original.limite - b.original.limite,
       header: 'Límite',
       size: 90,
       cell: ({ row }) => (
@@ -335,7 +420,8 @@ export function ExcesoKmTable({
     },
     {
       id: 'consumo',
-      accessorFn: (r) => r.kmRecorridos / r.limite,
+      accessorFn: (r) => valorFiltro('consumo', r, r.kmRecorridos / r.limite),
+      sortingFn: (a, b) => a.original.kmRecorridos / a.original.limite - b.original.kmRecorridos / b.original.limite,
       header: 'Consumo',
       size: 180,
       cell: ({ row }) => {
@@ -430,8 +516,10 @@ export function ExcesoKmTable({
       enableSorting: false,
     },
     {
-      id: 'monto',
-      accessorFn: (r) => r.monto,
+      // id sin "monto": el DataTable trata por nombre a "monto" siempre como rango
+      id: 'cobro_exceso',
+      accessorFn: (r) => valorFiltro('cobro_exceso', r, r.monto),
+      sortingFn: (a, b) => a.original.monto - b.original.monto,
       header: 'Monto',
       size: 130,
       cell: ({ row }) => {
@@ -554,7 +642,7 @@ export function ExcesoKmTable({
       },
       enableSorting: false,
     },
-  ], [onCrear, onVerDetalle, alquilerACargo, alquilerTurno, alquilerPorConductor])
+  ], [onCrear, onVerDetalle, alquilerACargo, alquilerTurno, alquilerPorConductor, etiquetasTarifa, valorFiltro])
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false)

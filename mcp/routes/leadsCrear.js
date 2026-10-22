@@ -31,6 +31,7 @@ import express from 'express';
 import { supabaseRequest } from '../lib/supabase.js';
 import { requireApiKey } from '../lib/auth.js';
 import { registrarRequest } from '../lib/audit.js';
+import { normalizarCelularAR } from '../lib/telefono.js';
 
 const router = express.Router();
 
@@ -186,6 +187,16 @@ function validar(body) {
   // ---- Contacto: al menos uno ----
   if (!valores.phone && !valores.whatsapp_number) {
     errores.push('hay que enviar phone o whatsapp_number (al menos uno)');
+  }
+  // Celular argentino: se guarda como +549 + area + numero (ver lib/telefono.js)
+  for (const campo of ['phone', 'whatsapp_number']) {
+    if (!valores[campo]) continue;
+    const normalizado = normalizarCelularAR(valores[campo]);
+    if (normalizado) {
+      valores[campo] = normalizado;
+    } else {
+      errores.push(`${campo} no es un celular valido: debe tener codigo de area y numero (ej: +54 9 11 1234-5678)`);
+    }
   }
 
   // ---- dni (obligatorio) ----
