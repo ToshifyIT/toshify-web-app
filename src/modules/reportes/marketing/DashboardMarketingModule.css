@@ -134,7 +134,23 @@
 .mkt-listas {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 0;
+}
+
+/* Cada lista (Origen / Zona / Turno) separada por una línea fina, y con un
+   ancho máximo para que el número quede cerca de su etiqueta en pantallas anchas. */
+.mkt-listas > div {
+  padding: 0 24px;
+  border-left: 1px solid var(--border-primary);
+}
+
+.mkt-listas > div:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+
+.mkt-listas > div > * {
+  max-width: 320px;
 }
 
 .mkt-control {
@@ -173,6 +189,16 @@
   .mkt-listas,
   .mkt-glosario {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Apiladas: sin línea lateral, separadas hacia abajo. */
+  .mkt-listas {
+    gap: 16px;
+  }
+
+  .mkt-listas > div {
+    padding: 0;
+    border-left: none;
   }
 
   .mkt-control {
