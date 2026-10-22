@@ -1324,6 +1324,7 @@ export function DistribucionMapaV2Module() {
               onSeleccionar={alternarSeleccion}
               baseManual={baseManual}
               baseFueraDelFiltro={baseFueraDelFiltro}
+              segmentar={filtros.segmento === 'ambos'}
             />
           </div>
         </div>
@@ -1580,6 +1581,7 @@ function ListaResultados({
   onSeleccionar,
   baseManual,
   baseFueraDelFiltro,
+  segmentar,
 }: {
   entidades: EntidadMapa[]
   activo: string | null
@@ -1587,6 +1589,12 @@ function ListaResultados({
   baseManual: EntidadMapa | null
   /** true cuando la base está en `entidades` sólo por ser base (el filtro la excluye). */
   baseFueraDelFiltro: boolean
+  /**
+   * Con las dos capas (Conductores y Leads) la lista se parte en dos bloques,
+   * uno por tipo, cada uno con su contador y plegable. Dentro de cada bloque se
+   * conserva el orden por fecha de creación.
+   */
+  segmentar: boolean
 }) {
   // `entidades` ya trae la base aunque el filtro la excluya. Para el contador
   // se muestra aparte, así el número sigue siendo el de la búsqueda.
@@ -1595,9 +1603,56 @@ function ListaResultados({
   // La fila elegida se trae a la vista: con 180 resultados puede estar muy
   // abajo, y si se seleccionó desde el mapa el operador no sabe dónde buscarla.
   const filaActivaRef = useRef<HTMLDivElement | null>(null)
+
+  // La base fijada va aparte (arriba, fuera del scroll).
+  const filas = entidades.filter((e) => !baseManual || e.id !== baseManual.id)
+  const grupos: Array<{ tipo: EntidadMapa['tipo']; titulo: string; filas: EntidadMapa[] }> = segmentar
+    ? [
+        { tipo: 'conductor', titulo: 'Conductores', filas: filas.filter((e) => e.tipo === 'conductor') },
+        { tipo: 'lead', titulo: 'Leads', filas: filas.filter((e) => e.tipo === 'lead') },
+      ]
+    : []
+
+  const [plegados, setPlegados] = useState<Set<string>>(new Set())
+  const alternarGrupo = (tipo: string) =>
+    setPlegados((prev) => {
+      const sig = new Set(prev)
+      if (sig.has(tipo)) sig.delete(tipo)
+      else sig.add(tipo)
+      return sig
+    })
+
+  // Si se selecciona (p. ej. desde el mapa) a alguien de un bloque plegado, el
+  // bloque se despliega para poder mostrar la fila.
+  const tipoActivo = activo ? filas.find((e) => e.id === activo)?.tipo : undefined
+  useEffect(() => {
+    if (!tipoActivo) return
+    setPlegados((prev) => {
+      if (!prev.has(tipoActivo)) return prev
+      const sig = new Set(prev)
+      sig.delete(tipoActivo)
+      return sig
+    })
+  }, [tipoActivo])
+
   useEffect(() => {
     filaActivaRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [activo])
+  }, [activo, plegados])
+
+  const renderFila = (e: EntidadMapa) => {
+    const esActiva = activo === e.id
+    return (
+      <FilaLista
+        key={`li-${e.tipo}-${e.id}`}
+        entidad={e}
+        esActiva={esActiva}
+        esBase={false}
+        baseFueraDelFiltro={false}
+        filaRef={esActiva ? filaActivaRef : undefined}
+        onClick={() => onSeleccionar(e.id)}
+      />
+    )
+  }
 
   return (
     <div
@@ -1649,23 +1704,55 @@ function ListaResultados({
 
       {/* flex:1 + minHeight:0: sin eso la lista no scrollea dentro de la columna */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {entidades
-          .filter((e) => !baseManual || e.id !== baseManual.id)
-          .map((e) => {
-            const esActiva = activo === e.id
-            return (
-              <FilaLista
-                key={`li-${e.tipo}-${e.id}`}
-                entidad={e}
-                esActiva={esActiva}
-                esBase={false}
-                baseFueraDelFiltro={false}
-                filaRef={esActiva ? filaActivaRef : undefined}
-                onClick={() => onSeleccionar(e.id)}
-              />
-            )
-          })}
-        {entidades.length === 0 && (
+        {segmentar
+          ? grupos.map((g) => {
+              const plegado = plegados.has(g.tipo)
+              return (
+                <section key={`grupo-${g.tipo}`}>
+                  {/* Encabezado pegajoso: al scrollear dentro del bloque se sigue
+                      viendo a qué grupo pertenecen las filas. */}
+                  <button
+                    type="button"
+                    onClick={() => alternarGrupo(g.tipo)}
+                    aria-expanded={!plegado}
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 1,
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 10px',
+                      border: 'none',
+                      borderBottom: '1px solid var(--border-primary)',
+                      borderTop: g.tipo === 'lead' ? '1px solid var(--border-primary)' : 'none',
+                      background: 'var(--bg-secondary)',
+                      color: 'var(--text-secondary)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <ChevronRight
+                      size={13}
+                      style={{ transform: plegado ? 'none' : 'rotate(90deg)', transition: 'transform .15s ease' }}
+                    />
+                    <span style={{ flex: 1 }}>{g.titulo}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-tertiary)' }}>{g.filas.length}</span>
+                  </button>
+                  {!plegado && g.filas.map(renderFila)}
+                  {!plegado && g.filas.length === 0 && (
+                    <div style={{ padding: '10px 12px', color: 'var(--text-tertiary)', fontSize: 11 }}>
+                      Sin {g.titulo.toLowerCase()} con estos filtros
+                    </div>
+                  )}
+                </section>
+              )
+            })
+          : filas.map(renderFila)}
+        {!segmentar && entidades.length === 0 && (
           <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>
             Sin resultados
           </div>

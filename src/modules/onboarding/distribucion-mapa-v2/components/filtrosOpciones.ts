@@ -115,6 +115,19 @@ export interface FiltrosV2 {
   zonas: Set<string>
 }
 
+/** 'YYYY-MM-DD' en hora local (no UTC: a la noche en Argentina ya sería mañana). */
+function fechaLocalISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Rango por defecto de "Fecha de creación": del mismo día del mes pasado a hoy. */
+export function rangoCreacionPorDefecto(): { creadoDesde: string; creadoHasta: string } {
+  const hoy = new Date()
+  // new Date(año, mes - 1, día) ajusta solo los meses cortos (31/03 → 03/03).
+  const haceUnMes = new Date(hoy.getFullYear(), hoy.getMonth() - 1, hoy.getDate())
+  return { creadoDesde: fechaLocalISO(haceUnMes), creadoHasta: fechaLocalISO(hoy) }
+}
+
 /** Estado inicial de los filtros: es también a lo que vuelve "Limpiar filtros". */
 export function filtrosIniciales(): FiltrosV2 {
   return {
@@ -130,8 +143,9 @@ export function filtrosIniciales(): FiltrosV2 {
     turnosLead: new Set(),
     tieneLicencia: new Set(),
     guias: new Set(),
-    creadoDesde: '',
-    creadoHasta: '',
+    // Leads creados en el último mes: con más de 10.000 leads, sin rango el
+    // mapa y la lista se llenan. Se puede ampliar o vaciar desde el filtro.
+    ...rangoCreacionPorDefecto(),
     paises: new Set(),
     ciudades: new Set(),
     antecedentes: new Set(),
@@ -168,7 +182,8 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (f.turnosLead.size > 0) n++
   if (f.tieneLicencia.size > 0) n++
   if (f.guias.size > 0) n++
-  if (f.creadoDesde !== '' || f.creadoHasta !== '') n++
+  // El último mes es el valor inicial: sólo cuenta si se lo cambió.
+  if (f.creadoDesde !== base.creadoDesde || f.creadoHasta !== base.creadoHasta) n++
   if (f.paises.size > 0) n++
   if (f.ciudades.size > 0) n++
   if (f.antecedentes.size > 0) n++
