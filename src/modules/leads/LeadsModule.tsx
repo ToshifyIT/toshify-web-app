@@ -3031,22 +3031,24 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
-      // Solo lectura: el texto puede ser largo y multilínea (y contiene la alerta de
-      // recontacto), así que se edita desde el formulario, no inline.
+      // Editable inline: un clic abre un cuadro de texto multilínea (el texto
+      // puede ser largo y contiene la alerta de recontacto, por eso no es un
+      // input de una línea). Usa la misma clave de "abierto" que los Si/No para
+      // que haya un solo editor abierto a la vez.
       id: 'observaciones',
       accessorFn: (row) => row.observaciones || '-',
       header: 'Observaciones',
-      cell: ({ row }) => {
-        const obs = (row.original.observaciones || '').trim()
-        return (
-          <span
-            title={obs || undefined}
-            style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '220px' }}
-          >
-            {obs ? obs.replace(/\s+/g, ' ') : '-'}
-          </span>
-        )
-      },
+      cell: ({ row }) => (
+        <ObservacionesCell
+          leadId={row.original.id}
+          value={row.original.observaciones}
+          isOpen={sinoDropdownKey === `${row.original.id}::observaciones`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onSave={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
       size: 220,
       enableSorting: true,
     },
@@ -3587,6 +3589,169 @@ export function LeadsModule() {
 // =====================================================
 // SI/NO DROPDOWN CELL (portal-based, reutilizable)
 // =====================================================
+
+interface ObservacionesCellProps {
+  leadId: string
+  value: string | null | undefined
+  isOpen: boolean
+  canEdit: boolean
+  onToggle: (key: string) => void
+  onSave: (leadId: string, field: keyof Lead, value: string) => Promise<void>
+  onClose: () => void
+}
+
+/**
+ * Observaciones editables desde la tabla. Muestra el texto en una línea; al
+ * hacer clic abre un cuadro flotante con el texto completo para editarlo.
+ * Guardar: botón o Ctrl/Cmd+Enter. Cancelar: botón, Esc o clic afuera.
+ */
+function ObservacionesCell({ leadId, value, isOpen, canEdit, onToggle, onSave, onClose }: ObservacionesCellProps) {
+  const cellRef = useRef<HTMLSpanElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const [texto, setTexto] = useState(value || '')
+  const [guardando, setGuardando] = useState(false)
+  const key = `${leadId}::observaciones`
+  const obs = (value || '').trim()
+
+  // Al abrir se parte siempre del valor guardado.
+  useEffect(() => {
+    if (isOpen) setTexto(value || '')
+  }, [isOpen, value])
+
+  useLayoutEffect(() => {
+    if (!isOpen || !cellRef.current) return
+    const rect = cellRef.current.getBoundingClientRect()
+    const alto = 170
+    const ancho = 320
+    let top = rect.bottom + 4
+    if (top + alto > window.innerHeight - 8) top = rect.top - alto - 4
+    if (top < 8) top = 8
+    const left = Math.min(rect.left, window.innerWidth - ancho - 8)
+    setPos({ top, left: Math.max(8, left) })
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (panelRef.current && !panelRef.current.contains(t) && cellRef.current && !cellRef.current.contains(t)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isOpen, onClose])
+
+  const guardar = async () => {
+    if (guardando) return
+    if (texto.trim() === obs) {
+      onClose()
+      return
+    }
+    setGuardando(true)
+    try {
+      await onSave(leadId, 'observaciones', texto.trim())
+      onClose()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <span style={{ display: 'block' }}>
+      <span
+        ref={cellRef}
+        title={obs || (canEdit ? 'Agregar observación' : undefined)}
+        onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(key) } : undefined}
+        style={{
+          display: 'block',
+          maxWidth: '220px',
+          fontSize: '11px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          border: canEdit ? '1px dashed transparent' : 'none',
+          cursor: canEdit ? 'text' : 'default',
+          color: obs ? 'var(--text-primary)' : 'var(--text-tertiary)',
+        }}
+        onMouseEnter={canEdit ? (e) => { e.currentTarget.style.borderColor = 'var(--border-primary, #d1d5db)' } : undefined}
+        onMouseLeave={canEdit ? (e) => { e.currentTarget.style.borderColor = 'transparent' } : undefined}
+      >
+        {obs ? obs.replace(/\s+/g, ' ') : '-'}
+      </span>
+      {isOpen && canEdit && createPortal(
+        <div
+          ref={panelRef}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            zIndex: 99999,
+            width: 320,
+            background: 'var(--bg-primary, #fff)',
+            border: '1px solid var(--border-primary, #e5e7eb)',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,.15)',
+            padding: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}
+        >
+          <textarea
+            autoFocus
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.preventDefault(); onClose() }
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void guardar() }
+            }}
+            rows={4}
+            placeholder="Escribí una observación..."
+            disabled={guardando}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+              fontSize: '12px',
+              lineHeight: 1.4,
+              padding: '6px 8px',
+              border: '1px solid var(--border-primary, #d1d5db)',
+              borderRadius: '6px',
+              background: 'var(--bg-secondary, #fff)',
+              color: 'var(--text-primary)',
+              fontFamily: 'inherit',
+            }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginRight: 'auto' }}>Ctrl+Enter guarda · Esc cancela</span>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={guardando}
+              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: '1px solid var(--border-primary, #d1d5db)', borderRadius: '6px', background: 'var(--bg-primary, #fff)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void guardar()}
+              disabled={guardando}
+              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: 'none', borderRadius: '6px', background: 'var(--color-primary, #ff0033)', color: '#fff', cursor: guardando ? 'wait' : 'pointer' }}
+            >
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </span>
+  )
+}
 
 interface SiNoDropdownCellProps {
   leadId: string

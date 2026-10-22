@@ -256,3 +256,9 @@ Crear Usuarios - Intercom.xlsx
 
 docs
 docs/
+
+# Configuración local de herramientas de IA (puede contener API keys)
+opencode.json
+
+# Archivos temporales del sistema de archivos (FUSE)
+.fuse_hidden*

@@ -35,6 +35,7 @@ import { repartirTurnosDelPar } from '../../../../types/programacionPrecarga.typ
 import type { PrecargaParMapa, PersonaPrecargaPar } from '../../../../types/programacionPrecarga.types'
 import { vehiculosActivosDeConductores, type VehiculoActivoDeConductor } from '../vehiculoActivoService'
 import { calcularMinutosEntre, type Coordenada } from '../distanciaParService'
+import { documentoSegunTarifa, permiteAnexo } from '../documentoTarifa'
 
 /**
  * Lead mostrado en la columna informativa del paso 3. Es un subconjunto
@@ -2205,7 +2206,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         saveData.conductor_dni = formData.conductor_dni
         saveData.tipo_candidato = formData.tipo_candidato_cargo || null
         saveData.tipo_asignacion = formData.tipo_asignacion_cargo || 'entrega_auto'
-        saveData.tipo_documento = formData.documento_cargo
+        saveData.tipo_documento = documentoSegunTarifa(formData.documento_cargo, formData.tipo_tarifa)
         saveData.zona = formData.zona_cargo
         saveData.distancia_minutos = formData.distancia_cargo || null
         // Limpiar campos de turno
@@ -2243,7 +2244,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         saveData.tipo_candidato_diurno = formData.tipo_candidato_diurno || null
         saveData.tipo_tarifa_diurno = formData.tipo_tarifa_diurno || 'antigua'
         saveData.tipo_asignacion_diurno = formData.tipo_asignacion_diurno || null
-        saveData.documento_diurno = formData.documento_diurno || null
+        saveData.documento_diurno = documentoSegunTarifa(formData.documento_diurno, formData.tipo_tarifa_diurno) || null
         saveData.zona_diurno = formData.zona_diurno || null
         saveData.distancia_diurno = formData.distancia_diurno || null
 
@@ -2253,7 +2254,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         saveData.tipo_candidato_nocturno = formData.tipo_candidato_nocturno || null
         saveData.tipo_tarifa_nocturno = formData.tipo_tarifa_nocturno || 'antigua'
         saveData.tipo_asignacion_nocturno = formData.tipo_asignacion_nocturno || null
-        saveData.documento_nocturno = formData.documento_nocturno || null
+        saveData.documento_nocturno = documentoSegunTarifa(formData.documento_nocturno, formData.tipo_tarifa_nocturno) || null
         saveData.zona_nocturno = formData.zona_nocturno || null
         saveData.distancia_nocturno = formData.distancia_nocturno || null
 
@@ -2670,7 +2671,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
    */
   const handleTipoAsignacionChange = (field: 'tipo_asignacion_cargo' | 'tipo_asignacion_diurno' | 'tipo_asignacion_nocturno', docField: 'documento_cargo' | 'documento_diurno' | 'documento_nocturno') => (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as TipoAsignacion
-    const doc = DOCUMENTO_POR_OPERACION[val]
+    // Con tarifa nueva no hay anexo: cambio de turno / cambio de auto van como carta oferta.
+    const tarifaSlot = field === 'tipo_asignacion_cargo'
+      ? formData.tipo_tarifa
+      : field === 'tipo_asignacion_diurno' ? formData.tipo_tarifa_diurno : formData.tipo_tarifa_nocturno
+    const doc = documentoSegunTarifa(DOCUMENTO_POR_OPERACION[val], tarifaSlot)
     setFormData({ ...formData, [field]: val, ...(doc ? { [docField]: doc } : {}) })
   }
 
@@ -2702,6 +2707,15 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         : ajustarDefaultsPorAsignacionActiva(personaId, slot, base)
       updates[campoAsig] = sugerido.asignacion
       updates[campoDoc] = sugerido.documento
+    }
+    // Tarifa nueva: un "Anexo" pasa a "Carta oferta" (misma plantilla). Al volver a la
+    // tarifa anterior, cambio de turno / cambio de auto recuperan su "Anexo".
+    const asigFinal = (updates[campoAsig] ?? formData[campoAsig]) as TipoAsignacion | ''
+    const docFinal = (updates[campoDoc] ?? formData[campoDoc]) as TipoDocumento | ''
+    if (tarifa === 'nueva' && docFinal === 'anexo') {
+      updates[campoDoc] = 'carta_oferta'
+    } else if (tarifa !== 'nueva' && docFinal === 'carta_oferta' && (asigFinal === 'cambio_turno' || asigFinal === 'cambio_auto')) {
+      updates[campoDoc] = 'anexo'
     }
     setFormData({ ...formData, ...updates })
   }
@@ -5425,12 +5439,13 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                         <div>
                           <label>Documento *</label>
                           <select
-                            value={formData.documento_cargo}
+                            value={documentoSegunTarifa(formData.documento_cargo, formData.tipo_tarifa)}
                             onChange={(e) => setFormData({ ...formData, documento_cargo: e.target.value as TipoDocumento })}
                             disabled={formData.tipo_asignacion_cargo === 'devolucion_vehiculo'}
                           >
                             <option value="">Seleccionar...</option>
-                            <option value="anexo">Anexo</option>
+                            {/* Tarifa nueva: solo Carta oferta o N/A (una sola plantilla) */}
+                            {permiteAnexo(formData.tipo_tarifa) && <option value="anexo">Anexo</option>}
                             <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
                           </select>
@@ -5539,12 +5554,13 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                         <div>
                           <label>Documento *</label>
                           <select
-                            value={formData.documento_diurno}
+                            value={documentoSegunTarifa(formData.documento_diurno, formData.tipo_tarifa_diurno)}
                             onChange={(e) => setFormData({ ...formData, documento_diurno: e.target.value as TipoDocumento })}
                             disabled={formData.tipo_asignacion_diurno === 'devolucion_vehiculo'}
                           >
                             <option value="">Seleccionar...</option>
-                            <option value="anexo">Anexo</option>
+                            {/* Tarifa nueva: solo Carta oferta o N/A (una sola plantilla) */}
+                            {permiteAnexo(formData.tipo_tarifa_diurno) && <option value="anexo">Anexo</option>}
                             <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
                           </select>
@@ -5658,12 +5674,13 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                         <div>
                           <label>Documento *</label>
                           <select
-                            value={formData.documento_nocturno}
+                            value={documentoSegunTarifa(formData.documento_nocturno, formData.tipo_tarifa_nocturno)}
                             onChange={(e) => setFormData({ ...formData, documento_nocturno: e.target.value as TipoDocumento })}
                             disabled={formData.tipo_asignacion_nocturno === 'devolucion_vehiculo'}
                           >
                             <option value="">Seleccionar...</option>
-                            <option value="anexo">Anexo</option>
+                            {/* Tarifa nueva: solo Carta oferta o N/A (una sola plantilla) */}
+                            {permiteAnexo(formData.tipo_tarifa_nocturno) && <option value="anexo">Anexo</option>}
                             <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
                           </select>

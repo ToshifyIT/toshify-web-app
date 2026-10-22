@@ -337,9 +337,9 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
               <Tooltip content={<ComparisonTooltip />} cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '4 4' }} />
               <Legend
                 verticalAlign="top"
-                height={50}
+                height={36}
                 iconType="plainline"
-                wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: '0.92rem' }}
+                wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: 12 }}
                 formatter={(value: string) => {
                   const match = value.match(/^(Esperado|Percibido)\s*\((.+)\)$/)
                   if (match) {
@@ -359,7 +359,7 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
                 dataKey="teoricoA"
                 name={`Esperado (${periodA})`}
                 stroke={COLOR_A}
-                strokeWidth={3}
+                strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 5 }}
                 isAnimationActive={false}
@@ -381,7 +381,7 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
                 dataKey="teoricoB"
                 name={`Esperado (${periodB})`}
                 stroke={COLOR_B}
-                strokeWidth={3}
+                strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 5 }}
                 isAnimationActive={false}

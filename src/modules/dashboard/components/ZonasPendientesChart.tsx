@@ -131,7 +131,7 @@ export function ZonasPendientesChart() {
                 type="category"
                 dataKey="value"
                 width={40}
-                tick={{ fill: '#374151', fontSize: 12, fontWeight: 'bold' }}
+                tick={{ fill: 'var(--text-secondary, #374151)', fontSize: 12, fontWeight: 600 }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -142,7 +142,7 @@ export function ZonasPendientesChart() {
                   return z ? [`${z.diurnos} falta diurno · ${z.nocturnos} falta nocturno`, 'Turnos libres'] : ['', '']
                 }}
               />
-              <Bar yAxisId="left" dataKey="value" radius={[4, 4, 4, 4]} barSize={32} background={{ fill: '#F9FAFB', radius: 4 }}>
+              <Bar yAxisId="left" dataKey="value" radius={[3, 3, 3, 3]} barSize={18} background={{ fill: 'var(--bg-secondary, #F9FAFB)', radius: 3 }}>
                 {data.map(entry => (
                   <Cell key={entry.name} fill={entry.name === 'Sin zona' ? '#9CA3AF' : '#F59E0B'} />
                 ))}

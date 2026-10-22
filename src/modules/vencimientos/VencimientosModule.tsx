@@ -866,19 +866,17 @@ export function VencimientosModule() {
               <span className="tab-badge">{filteredItems.length}</span>
             </button>
           </div>
+          {/* Aviso compacto en la misma fila de la pestaña (componente global .aviso) */}
+          {totalProximosAVencer > 0 && (
+            <div className="aviso aviso--warning" style={{ marginLeft: 12 }}>
+              <AlertTriangle size={14} />
+              <span>
+                <strong>{totalProximosAVencer}</strong> operación(es) próximas a vencer
+              </span>
+            </div>
+          )}
         </div>
       </div>
-
-      {totalProximosAVencer > 0 && (
-        <div className="vencimientos-alert">
-          <div className="vencimientos-alert-item">
-            <AlertTriangle size={16} />
-            <span>
-              <strong>Atención:</strong> hay {totalProximosAVencer} operación(es) que están próximas a vencer
-            </span>
-          </div>
-        </div>
-      )}
 
       <div className="vencimientos-search-row">
         <div className="vencimientos-search">

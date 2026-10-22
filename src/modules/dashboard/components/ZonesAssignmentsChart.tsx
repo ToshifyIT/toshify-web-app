@@ -247,7 +247,7 @@ export function ZonesAssignmentsChart() {
               type="category" 
               dataKey="value" 
               width={40}
-              tick={{ fill: '#374151', fontSize: 12, fontWeight: 'bold' }}
+              tick={{ fill: 'var(--text-secondary, #374151)', fontSize: 12, fontWeight: 600 }}
               tickFormatter={(value) => value > 0 ? value : ''}
               axisLine={false}
               tickLine={false}
@@ -255,8 +255,8 @@ export function ZonesAssignmentsChart() {
             <Bar 
               yAxisId="left"
               dataKey="value" 
-              radius={[4, 4, 4, 4]} 
-              barSize={32}
+              radius={[3, 3, 3, 3]} 
+              barSize={18}
               background={{ fill: '#F9FAFB', radius: 4 }}
             >
               {data.map((entry, index) => (

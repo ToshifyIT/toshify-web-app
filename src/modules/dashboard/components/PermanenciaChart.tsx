@@ -223,12 +223,14 @@ export function PermanenciaChart() {
               dataKey="name" 
               axisLine={false}
               tickLine={false}
-              dy={10}
+              tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
+              dy={6}
             />
             <YAxis 
               axisLine={false}
               tickLine={false}
               tickFormatter={(value) => `${value}d`}
+              tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
               allowDecimals={false}
             />
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--border-primary, #e2e8f0)', strokeDasharray: '4 4' }} />
@@ -239,8 +241,8 @@ export function PermanenciaChart() {
               strokeWidth={2.5}
               fillOpacity={1} 
               fill="url(#permanenciaGradient)" 
-              dot={{ r: 5, stroke: '#dc2626', strokeWidth: 2.5, fill: 'var(--card-bg, #ffffff)' }}
-              activeDot={{ r: 7, stroke: '#dc2626', strokeWidth: 2.5, fill: 'var(--card-bg, #ffffff)' }}
+              dot={{ r: 3, stroke: '#dc2626', strokeWidth: 2, fill: 'var(--card-bg, #ffffff)' }}
+              activeDot={{ r: 5, stroke: '#dc2626', strokeWidth: 2, fill: 'var(--card-bg, #ffffff)' }}
             />
           </AreaChart>
         </ResponsiveContainer>

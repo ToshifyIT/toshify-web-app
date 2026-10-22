@@ -227,8 +227,8 @@ export function FacturadoVsCobrado() {
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                   <Legend
                     verticalAlign="top"
-                    height={36}
-                    wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: '0.92rem' }}
+                    height={32}
+                    wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: 12 }}
                     content={() => {
                       const items: { label: string; color: string; type: 'line' | 'square' }[] = [
                         { label: 'Facturado', color: '#2563eb', type: 'line' },
@@ -244,11 +244,11 @@ export function FacturadoVsCobrado() {
                               ) : (
                                 <span style={{ width: 12, height: 12, background: item.color, borderRadius: 2, display: 'inline-block' }} />
                               )}
-                              <span style={{ color: '#374151', fontWeight: 600, fontSize: '0.92rem' }}>{item.label}</span>
+                              <span style={{ color: 'var(--text-secondary, #374151)', fontWeight: 600, fontSize: 12 }}>{item.label}</span>
                             </span>
                           ))}
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#6b7280', fontWeight: 600, fontSize: '0.82rem' }}>
-                            <span style={{ background: '#374151', color: '#fff', borderRadius: 3, padding: '1px 5px', fontSize: '0.72rem', fontWeight: 700 }}>00%</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#6b7280', fontWeight: 600, fontSize: 11 }}>
+                            <span style={{ background: '#374151', color: '#fff', borderRadius: 3, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>00%</span>
                             = % Cobrado
                           </span>
                         </div>
@@ -262,8 +262,8 @@ export function FacturadoVsCobrado() {
                     type="monotone"
                     stroke="#2563eb"
                     strokeWidth={3}
-                    dot={{ r: 4, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
-                    activeDot={{ r: 6, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
+                    dot={{ r: 3, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 5, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
                     isAnimationActive={false}
                   />
                   <Bar
@@ -271,7 +271,7 @@ export function FacturadoVsCobrado() {
                     name="Cobrado"
                     stackId="cobranza"
                     fill="#16a34a"
-                    barSize={32}
+                    barSize={22}
                     isAnimationActive={false}
                   >
                     {chartData.map((_, i) => (
@@ -288,7 +288,7 @@ export function FacturadoVsCobrado() {
                     stackId="cobranza"
                     fill="#d1d5db"
                     radius={[4, 4, 0, 0]}
-                    barSize={32}
+                    barSize={22}
                     isAnimationActive={false}
                   >
                     {chartData.map((_, i) => (
