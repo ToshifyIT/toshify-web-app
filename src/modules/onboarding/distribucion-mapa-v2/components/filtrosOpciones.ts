@@ -56,6 +56,15 @@ export const COMPANERO_OPCIONES = [
 export const ZONAS = ['CABA', 'Norte', 'Sur', 'Oeste', 'GBA']
 
 /**
+ * Clave de un guía para filtrar: el mismo nombre cargado con otras mayúsculas
+ * o espacios ("Marina", "marina ") cuenta como el mismo guía, igual que en el
+ * desplegable de Guía del módulo Leads.
+ */
+export function claveGuia(guia: string): string {
+  return guia.trim().toLowerCase()
+}
+
+/**
  * Estado completo de filtros del v2.
  *
  * Los filtros están segmentados a propósito: `turnosConductor` / `asignacion` /
@@ -76,6 +85,8 @@ export interface FiltrosV2 {
   turnosLead: Set<string>
   /** ¿Tiene licencia?: 'si' | 'no'. Vacío = no filtra. */
   tieneLicencia: Set<string>
+  /** Guías tildados, por clave en minúsculas (ver `claveGuia`). Vacío = no filtra. */
+  guias: Set<string>
   /** Rango de fecha de creación del lead ('YYYY-MM-DD' o '' = sin límite). Inclusivo por día. */
   creadoDesde: string
   creadoHasta: string
@@ -108,10 +119,11 @@ export function filtrosIniciales(): FiltrosV2 {
     asignacion: new Set(),
     companero: new Set(),
     requisitosConductor: new Set(),
-    // Los 14 estados están disponibles; arrancan marcados los dos de inducción.
+    // Arrancan marcados los de inducción y Listo Emparejar.
     estadosLead: new Set<string>(ESTADOS_LEAD_DEFAULT as unknown as string[]),
     turnosLead: new Set(),
     tieneLicencia: new Set(),
+    guias: new Set(),
     creadoDesde: '',
     creadoHasta: '',
     paises: new Set(),
@@ -149,6 +161,7 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (!mismoSet(f.estadosLead, base.estadosLead)) n++
   if (f.turnosLead.size > 0) n++
   if (f.tieneLicencia.size > 0) n++
+  if (f.guias.size > 0) n++
   if (f.creadoDesde !== '' || f.creadoHasta !== '') n++
   if (f.paises.size > 0) n++
   if (f.ciudades.size > 0) n++

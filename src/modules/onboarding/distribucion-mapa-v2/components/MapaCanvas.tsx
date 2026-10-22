@@ -656,6 +656,11 @@ function InfoEntidad({
           </Badge>
         )}
         {e.estadoCompanero === 'con_companero' && <Badge tono="info">Con compañero</Badge>}
+        {/* Sin asignación activa con vehículo, el compañero "no aplica": se dice
+            explícitamente para que no parezca un dato faltante. */}
+        {e.tipo === 'conductor' && !e.tieneAsignacionActiva && !e.esBaja && (
+          <Badge tono="neutro">Sin asignación</Badge>
+        )}
       </div>
 
       <p style={{ margin: '6px 0 0', fontSize: 11, color: '#6B7280' }}>
@@ -664,6 +669,13 @@ function InfoEntidad({
         {e.zona && ` · ${e.zona}`}
         {e.patenteAsignacion && ` · ${e.patenteAsignacion}`}
       </p>
+
+      {e.tipo === 'lead' && e.guia && (
+        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>
+          <span style={{ color: '#6B7280' }}>Guía: </span>
+          <b>{e.guia}</b>
+        </p>
+      )}
 
       {e.companeroNombre && (
         <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>

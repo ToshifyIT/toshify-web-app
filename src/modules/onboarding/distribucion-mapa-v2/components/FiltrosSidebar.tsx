@@ -24,6 +24,7 @@ import {
   REQUISITOS_LEAD,
   TURNOS,
   ZONAS,
+  claveGuia,
   resumenRangoCreacion,
   type FiltrosV2,
   type SegmentoV2,
@@ -34,6 +35,8 @@ interface Props {
   onChange: (patch: Partial<FiltrosV2>) => void
   /** Estados de lead disponibles (derivados de los datos cargados). */
   estadosLeadDisponibles: string[]
+  /** Guías que tienen asignados los leads cargados (nombre tal como se muestra). */
+  guiasDisponibles: string[]
   conteoConductores: number
   conteoLeads: number
   conteoSinCompanero: number
@@ -95,6 +98,7 @@ export function FiltrosSidebar({
   filtros,
   onChange,
   estadosLeadDisponibles,
+  guiasDisponibles,
   conteoConductores,
   conteoLeads,
   conteoSinCompanero,
@@ -418,8 +422,8 @@ export function FiltrosSidebar({
                 />
               ))}
               <Hint>
-                Al abrir vienen marcados los dos estados de inducción; sin selección se
-                muestran todos. Los leads descartados y los ubicados en zona restringida
+                Al abrir vienen marcados los estados de inducción y Listo Emparejar; sin
+                selección se muestran todos. Los leads descartados y los ubicados en zona restringida
                 no entran al mapa.
               </Hint>
             </Acordeon>
@@ -434,6 +438,22 @@ export function FiltrosSidebar({
                 />
               ))}
               <Hint>Turno que el lead declaró como preferencia.</Hint>
+            </Acordeon>
+
+            <Acordeon titulo="Guía" resumen={resumen(filtros.guias)}>
+              {guiasDisponibles.map((g) => (
+                <CheckRow
+                  key={claveGuia(g)}
+                  label={g}
+                  checked={filtros.guias.has(claveGuia(g))}
+                  onChange={() => onChange({ guias: alternar(filtros.guias, claveGuia(g)) })}
+                />
+              ))}
+              <Hint>
+                {guiasDisponibles.length > 0
+                  ? 'Guía asignado al lead. Sin selección se muestran todos, con y sin guía.'
+                  : 'Ningún lead cargado tiene guía asignado.'}
+              </Hint>
             </Acordeon>
 
             <Acordeon

@@ -106,6 +106,8 @@ export interface EntidadMapa {
   // --- Lead ---
   estadoLead: string | null
   turnoLead: string | null
+  /** Guía asignado al lead (`leads.entrevistador_asignado`), sin espacios sobrantes. */
+  guia?: string | null
   /** `leads.created_at` (ISO). Es la columna "Creación" del módulo Leads. */
   creadoEn: string | null
 

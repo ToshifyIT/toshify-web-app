@@ -16,8 +16,8 @@
 //      defecto, regulable). Qué se cruza con qué lo decide el segmento activo:
 //      Conductores cruza conductores, Leads cruza leads, Ambos cruza todo.
 //   6. Búsqueda por tokens (arregla "Matias Albarado" -> "ALBARADO, MATIAS").
-//   7. Los 14 estados de lead disponibles en filtros, con los dos de inducción
-//      preseleccionados.
+//   7. Los estados de lead de la tabla de Leads disponibles en filtros, con los
+//      de inducción y "Listo Emparejar" preseleccionados.
 //   8. Más datos de ficha: edad, licencia y vigencia, experiencia, antecedentes
 //      penales y zona peligrosa.
 //
@@ -80,7 +80,7 @@ import type {
 import type { PersonaPrecargaPar, PrecargaParMapa } from '../../../types/programacionPrecarga.types'
 import { guardarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
-import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
+import { claveGuia, contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { SIN_UBICACION } from './ubicacion'
 import { API_GEOCODING, API_MAPA } from './apisGoogle'
 import {
@@ -550,6 +550,7 @@ export function DistribucionMapaV2Module() {
         return false
       }
       if (!matchTieneLicencia(l)) return false
+      if (filtros.guias.size > 0 && !(l.guia && filtros.guias.has(claveGuia(l.guia)))) return false
       if (!matchAntecedentes(l)) return false
       if (!creadoEnRango(l.creadoEn, filtros.creadoDesde, filtros.creadoHasta)) return false
       if (!matchZona(l)) return false
@@ -600,15 +601,26 @@ export function DistribucionMapaV2Module() {
     return { c, l, sinCompanero }
   }, [visibles])
 
-  /** Estados de lead ofrecidos en el filtro: catálogo completo + los que existan. */
+  /** Guías asignados a los leads cargados, sin duplicados por mayúsculas/espacios. */
+  const guiasDisponibles = useMemo(() => {
+    const porClave = new Map<string, string>()
+    for (const l of leads) {
+      if (l.guia && !porClave.has(claveGuia(l.guia))) porClave.set(claveGuia(l.guia), l.guia)
+    }
+    return [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [leads])
+
+  /**
+   * Estados de lead ofrecidos en el filtro: exactamente los de la tabla de Leads
+   * (ya no se suman los estados históricos que aparezcan en los datos).
+   */
   const estadosLeadDisponibles = useMemo(() => {
-    const vistos = new Set<string>(ESTADOS_LEAD_TODOS as unknown as string[])
-    for (const l of leads) vistos.add(l.estadoLead || SIN_ESTADO_LEAD)
+    const vistos = new Set<string>(ESTADOS_LEAD_TODOS)
     // Los estados excluidos del mapa no se ofrecen como filtro: tildarlos no
     // mostraría nada y confundiría.
     for (const e of ESTADOS_LEAD_EXCLUIDOS) vistos.delete(e)
     return [...vistos].sort((a, b) => a.localeCompare(b))
-  }, [leads])
+  }, [])
 
   /**
    * Países y ciudades que REALMENTE aparecen entre lo que se está viendo, con
@@ -1146,7 +1158,7 @@ export function DistribucionMapaV2Module() {
           <MapIcon size={20} style={{ color: 'var(--color-primary, #ff0033)' }} />
           <div>
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Distribución en mapa <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>v2</span>
+              Distribución en mapa
             </h2>
             <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
               {conteos.c} conductores · {conteos.l} leads con ubicación ·{' '}
@@ -1172,7 +1184,7 @@ export function DistribucionMapaV2Module() {
             }
           />
           <MenuFiltro
-            titulo="Ciudad"
+            titulo="Localidad"
             opciones={ubicacionesDisponibles.ciudades}
             seleccion={filtros.ciudades}
             onChange={(ciudades) => setFiltros((f) => ({ ...f, ciudades }))}
@@ -1186,7 +1198,7 @@ export function DistribucionMapaV2Module() {
               type="button"
               onClick={completarUbicaciones}
               disabled={!!resolviendoCeldas}
-              title="Resuelve país y ciudad de las zonas que faltan y las guarda para siempre. Se hace una sola vez por zona."
+              title="Resuelve país y localidad de las zonas que faltan y las guarda para siempre. Se hace una sola vez por zona."
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1268,6 +1280,7 @@ export function DistribucionMapaV2Module() {
               filtros={filtros}
               onChange={aplicarPatch}
               estadosLeadDisponibles={estadosLeadDisponibles}
+              guiasDisponibles={guiasDisponibles}
               conteoConductores={conteos.c}
               conteoLeads={conteos.l}
               conteoSinCompanero={conteos.sinCompanero}
@@ -1805,7 +1818,17 @@ function FilaLista({
         {e.estadoCompanero === 'sin_companero' && (
           <span style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c' }}>Sin compañero</span>
         )}
+        {e.tipo === 'conductor' && !e.tieneAsignacionActiva && !e.esBaja && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>
+            Sin asignación
+          </span>
+        )}
       </div>
+      {e.tipo === 'lead' && e.guia && (
+        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 21 }}>
+          Guía: <b style={{ color: 'var(--text-secondary)' }}>{e.guia}</b>
+        </div>
+      )}
       {e.companeroNombre && (
         <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 21 }}>
           Compañero: <b style={{ color: 'var(--text-secondary)' }}>{e.companeroNombre}</b>

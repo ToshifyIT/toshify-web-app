@@ -30,6 +30,7 @@ import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
+import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
@@ -649,29 +650,9 @@ export function LeadsModule() {
   const [nacionalidades, setNacionalidades] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.nacionalidades || [])
   const [estadosCiviles, setEstadosCiviles] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.estadosCiviles || [])
 
-  // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
-  const ESTADOS_LEAD = [
-    'Inicio conversación', 'Contactado Sellium', 'Edad aprobada', 'Zona aprobada', 'Propuesta enviada', 'Acepta oferta',
-    'Video recibido', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
-    'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
-    'Convocatoria Inducción', 'Apto Inducción', 'Descartado',
-  ] as const
-
-  // Estados que ya no se usan en el proceso actual (Hireflix ya no existe; la carga
-  // de Sellium asigna "Inicio conversación" y no informa "Acepta oferta").
-  // Se ocultan del filtro de la columna Estado y de los desplegables para cambiar
-  // el estado (tabla y formulario): los leads que ya los tienen conservan su
-  // estado como dato histórico y siguen visibles en la tabla.
-  // "Zona aprobada" tampoco se filtra como estado: la zona la determina el sistema
-  // por coordenadas (tag "Zona Aprobada" / "Zona Restringida" y su tarjeta).
-  const ESTADOS_OCULTOS_FILTRO = new Set<string>([
-    'Contactado Sellium', 'Acepta oferta',
-    'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
-    'Zona aprobada',
-    // Se muestra como "Descartado" (ver displayEstadoLead): para elegirlo a mano se usa Descartado.
-    'No cumple edad',
-  ])
-  const ESTADOS_FILTRO = ESTADOS_LEAD.filter(e => !ESTADOS_OCULTOS_FILTRO.has(e))
+  // Estados vigentes para filtros y cambio manual: catálogo único en leadEstados.ts
+  // (lo comparte Distribución en mapa, así ambos muestran los mismos estados).
+  const ESTADOS_FILTRO = ESTADOS_LEAD_FILTRO
 
   /** Pipeline de progresion de estados: indice mayor = mas avanzado.
    *  calcularEstadoLead y la carga masiva Sellium solo pueden AVANZAR, nunca retroceder.
@@ -696,6 +677,7 @@ export function LeadsModule() {
     'No cumple edad': 5,
     'Convocatoria Inducción': 6,
     'Apto Inducción': 7,
+    [ESTADO_LISTO_EMPAREJAR]: 7.5,
     'Conductor': 8,
     'Descartado': 5,
   }
@@ -1503,6 +1485,7 @@ export function LeadsModule() {
       case 'inicio': return l.estado_de_lead === 'Inicio conversación'
       case 'contactadoSellium': return esContactadoSellium(l)
       case 'aptos': return esAptoInduccion(l)
+      case 'listoEmparejar': return l.estado_de_lead === ESTADO_LISTO_EMPAREJAR
       case 'noAptos': return l.estado_de_lead === 'No Apto - Hireflix'
       case 'convocatoria': return l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion'
       case 'zonaSegura': return l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id)
@@ -1587,6 +1570,7 @@ export function LeadsModule() {
     const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
     const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
     const convocatoria = base.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
+    const listoEmparejar = base.filter(l => l.estado_de_lead === ESTADO_LISTO_EMPAREJAR).length
     const intercom = base.filter(esFuenteIntercom).length
     const damaro = base.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
     const autoPueblo = base.filter(l => l.estado_de_lead === 'Auto del pueblo').length
@@ -1594,7 +1578,7 @@ export function LeadsModule() {
     // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
     const todos = sinTarjeta.length
     const recontacto = base.filter(l => tieneAlertaRecontacto(l.observaciones)).length
-    return { total, contactadoSellium, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
+    return { total, contactadoSellium, aptos, noAptos, convocatoria, listoEmparejar, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
   }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona])
 
   // ---------- HANDLERS ----------
@@ -3208,6 +3192,7 @@ export function LeadsModule() {
         inicio: 'Inicio conversación',
         contactadoSellium: 'Contactado Sellium',
         aptos: 'Aptos',
+        listoEmparejar: 'Listo Emparejar',
         noAptos: 'No aptos',
         zonaSegura: 'Zona Aprobada',
         zonaRestringida: 'Zona Restringida',
@@ -3251,6 +3236,17 @@ export function LeadsModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.aptos}</span>
               <span className="stat-label">Aptos</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'listoEmparejar' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('listoEmparejar')}
+            title="Leads en estado Listo Emparejar (listos para asignarles compañero)"
+          >
+            <Link2 size={18} className="stat-icon" style={{ color: '#C026D3' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.listoEmparejar}</span>
+              <span className="stat-label">Listo Emparejar</span>
             </div>
           </div>
           <div

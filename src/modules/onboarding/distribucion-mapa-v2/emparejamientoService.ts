@@ -89,8 +89,14 @@ const MAX_PARES_RESULTADO = 60
  */
 export const MAX_CONEXIONES_RADAR = 12
 
-/** Estados de lead que se consideran listos para inducción. */
-const ESTADOS_LEAD_INDUCCION = new Set(['apto inducción', 'apto induccion', 'convocatoria inducción', 'convocatoria induccion'])
+/** Estados de lead que se consideran listos (inducción o listos para emparejar). */
+const ESTADOS_LEAD_INDUCCION = new Set([
+  'apto inducción',
+  'apto induccion',
+  'convocatoria inducción',
+  'convocatoria induccion',
+  'listo emparejar',
+])
 
 /**
  * Radio de prefiltro en km para un umbral dado. Se toma con holgura (x1.6)

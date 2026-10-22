@@ -16,6 +16,7 @@
 // best-effort de direcciones sin coordenadas, igual que el v1.
 
 import { supabase } from '../../../lib/supabase'
+import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from '../../leads/leadEstados'
 import { derivarUbicacion } from './ubicacion'
 import { API_GEOCODING } from './apisGoogle'
 import {
@@ -47,31 +48,16 @@ import {
 /** Estado de conductor que se muestra atenuado (nunca se oculta del dataset). */
 export const ESTADO_CONDUCTOR_BAJA = 'baja'
 
-/** Los 19 estados del pipeline de leads (espeja ESTADOS_LEAD de LeadsModule). */
-export const ESTADOS_LEAD_TODOS = [
-  'Inicio conversación',
-  'Contactado Sellium',
-  'Edad aprobada',
-  'Zona aprobada',
-  'Propuesta enviada',
-  'Acepta oferta',
-  'Video recibido',
-  'Pendiente - Hireflix',
-  'Apto - Hireflix',
-  'No Apto - Hireflix',
-  'Ayuda - Hireflix',
-  'Documentos enviados',
-  'Documentos pendientes',
-  'Auto del pueblo',
-  'No le interesa',
-  'No cumple edad',
-  'Convocatoria Inducción',
-  'Apto Inducción',
-  'Descartado',
-] as const
+/**
+ * Estados de lead ofrecidos en el filtro: los mismos que la tabla de Leads
+ * (catálogo único en leads/leadEstados.ts). Los estados históricos que ya no se
+ * usan (Hireflix, etc.) no se ofrecen; esos leads siguen en el mapa cuando no
+ * hay ningún estado tildado.
+ */
+export const ESTADOS_LEAD_TODOS = ESTADOS_LEAD_FILTRO
 
-/** Estados preseleccionados al abrir el módulo (los aptos para inducción). */
-export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción'] as const
+/** Estados preseleccionados al abrir el módulo: inducción y listos para emparejar. */
+export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción', ESTADO_LISTO_EMPAREJAR] as const
 
 /**
  * Estados que NO entran al mapa bajo ningún filtro. Un lead descartado ya
@@ -142,6 +128,7 @@ interface LeadRow {
   phone: string | null
   tiempo_de_antiguedad: string | null
   created_at: string | null
+  entrevistador_asignado: string | null
 }
 
 /** Zona peligrosa activa, con su polígono. */
@@ -639,9 +626,11 @@ export async function fetchLeadsMapa(
   let query = supabase
     .from('leads')
     .select(
-      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, direccion_pais, direccion_ciudad, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at'
+      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, direccion_pais, direccion_ciudad, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at, entrevistador_asignado'
     )
-    .order('nombre_completo', { ascending: true }) as any
+    // Más recientes primero, igual que la tabla de Leads (columna "Creación").
+    // Los que no tienen fecha van al final.
+    .order('created_at', { ascending: false, nullsFirst: false }) as any
 
   query = aplicarFiltroSede(query, 'sede_id')
 
@@ -695,6 +684,7 @@ export async function fetchLeadsMapa(
       estadoLead: r.estado_de_lead || null,
       turnoLead: r.turno || null,
       creadoEn: r.created_at || null,
+      guia: (r.entrevistador_asignado || '').trim() || null,
       // Pais y ciudad: primero los que guardo el geocoding (Google ya los trae
       // separados en address_components), y recien si faltan se cae al parseo
       // del texto de la direccion. En leads la direccion se tipea a mano y
