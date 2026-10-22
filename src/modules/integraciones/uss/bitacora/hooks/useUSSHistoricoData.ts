@@ -56,6 +56,10 @@ export interface Marcacion {
   lavadoRealizado: boolean;
   naftaCargada: boolean;
   gpsOrigen: 'USS' | 'GEOTAB';
+  /** Tarifa de la asignación vigente en la semana (solo Control de exceso de km). */
+  tipoTarifa?: 'antigua' | 'nueva' | null;
+  /** Conductor estimado por asignación + horario, no identificado por el GPS (solo Control de exceso de km). */
+  conductorEstimado?: boolean;
   // Acumulado semanal del conductor (para alerta de limite km)
   kmSemanaConductor?: number;
   limiteSemanal?: number;

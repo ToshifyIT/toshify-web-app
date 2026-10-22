@@ -40,6 +40,7 @@ import {
   Target,
   Zap,
   ZapOff,
+  Ticket,
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -367,6 +368,28 @@ async function upsertSaldoConductor(params: {
 }
 
 
+
+/**
+ * Cobertura de Toshipass de un conductor en la semana. Mismo criterio que la garantía:
+ * el cobro app de Cabify cubre primero el alquiler y lo que sobra cubre el Toshipass.
+ * null = el conductor no tiene Toshipass esta semana.
+ */
+function coberturaToshipass(f: { monto_toshipass?: number; subtotal_alquiler?: number; ganancia_cabify?: number }): 'cubrio' | 'no_cubrio' | 'sin_datos' | null {
+  const toshipass = f.monto_toshipass || 0
+  if (toshipass <= 0) return null
+  const cobroApp = f.ganancia_cabify || 0
+  if (cobroApp <= 0) return 'sin_datos'
+  return cobroApp - (f.subtotal_alquiler || 0) >= toshipass - 0.01 ? 'cubrio' : 'no_cubrio'
+}
+
+function contarCoberturaToshipass(src: Array<Parameters<typeof coberturaToshipass>[0]>) {
+  const estados = src.map(coberturaToshipass)
+  return {
+    toshipass_cubrio: estados.filter(e => e === 'cubrio').length,
+    toshipass_no_cubrio: estados.filter(e => e === 'no_cubrio').length,
+    toshipass_sin_datos: estados.filter(e => e === 'sin_datos').length,
+  }
+}
 
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
@@ -10139,7 +10162,8 @@ export function ReporteFacturacionTab() {
         total_descuentos: totalDescuentos,
         total_neto: totalCargos - totalDescuentos,
         conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
-        conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
+        conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
+        ...contarCoberturaToshipass(src),
       }
     }
     // Modo normal con período generado
@@ -10153,7 +10177,8 @@ export function ReporteFacturacionTab() {
       total_descuentos: src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0),
       total_neto: src.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
       conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
-      conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
+      conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
+      ...contarCoberturaToshipass(src),
     }
   }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroGrupoFlota])
 
@@ -10383,7 +10408,7 @@ export function ReporteFacturacionTab() {
               </div>
             </div>
             <div style="display:flex;gap:8px;align-items:flex-start;background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.35);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#3b82f6;line-height:1.5;">
-              ${iconInfo}<span>Total Proyectado = alquiler proyectado + garantía (o Toshipass en conductores nuevos). El % compara lo que Cabify ya descontó (cobro app) vs ese objetivo. Por conductor, el cobro app cuenta como máximo hasta su proyectado (100%); lo cobrado de más no suma.</span>
+              ${iconInfo}<span>Total Proyectado = alquiler proyectado + garantía (o Toshipass en tarifa nueva: conductores nuevos y cambio de tarifa). El % compara lo que Cabify ya descontó (cobro app) vs ese objetivo. Por conductor, el cobro app cuenta como máximo hasta su proyectado (100%); lo cobrado de más no suma.</span>
             </div>
           </div>`
         })()
@@ -10548,6 +10573,45 @@ export function ReporteFacturacionTab() {
                 <div style="font-size:11px;color:#3b82f6;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
                 <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#3b82f6;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
               </div>
+            </div>
+          </div>`
+        })()
+      },
+      toshipass: {
+        title: 'Cobertura de Toshipass',
+        html: (() => {
+          const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+          const etiqueta = { cubrio: ['Cubrió', '#16a34a'], no_cubrio: ['No cubrió', '#dc2626'], sin_datos: ['Sin datos', '#6B7280'] } as const
+          const orden = { no_cubrio: 0, sin_datos: 1, cubrio: 2 } as const
+          const filas = src
+            .map(f => ({ f, estado: coberturaToshipass(f as any) }))
+            .filter((x): x is { f: typeof src[number]; estado: 'cubrio' | 'no_cubrio' | 'sin_datos' } => x.estado !== null)
+            .sort((a, b) => orden[a.estado] - orden[b.estado])
+          const td = 'padding:6px 8px;border-bottom:1px solid var(--border-primary);'
+          const cuerpo = filas.map(({ f, estado }) => {
+            const cobroApp = (f as any).ganancia_cabify || 0
+            const sobrante = Math.max(0, cobroApp - (f.subtotal_alquiler || 0))
+            return `<tr>
+              <td style="${td}">${esc(f.conductor_nombre)}</td>
+              <td style="${td}text-align:right;">${formatCurrency(f.monto_toshipass || 0)}</td>
+              <td style="${td}text-align:right;" title="Cobro app menos alquiler">${cobroApp > 0 ? formatCurrency(sobrante) : '-'}</td>
+              <td style="${td}font-weight:700;color:${etiqueta[estado][1]};">${etiqueta[estado][0]}</td>
+            </tr>`
+          }).join('')
+          return `<div style="text-align:left;font-size:12px;color:var(--text-primary);">
+            <div style="max-height:50vh;overflow:auto;border:1px solid var(--border-primary);border-radius:8px;">
+              <table style="display:table;width:100%;border-collapse:collapse;">
+                <thead><tr style="background:var(--bg-secondary);">
+                  <th style="${td}text-align:left;">Conductor</th>
+                  <th style="${td}text-align:right;">Toshipass</th>
+                  <th style="${td}text-align:right;">Disponible</th>
+                  <th style="${td}text-align:left;">Estado</th>
+                </tr></thead>
+                <tbody>${cuerpo}</tbody>
+              </table>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
+              Disponible = cobro app de Cabify − alquiler. Cubrió si alcanza para el Toshipass.
             </div>
           </div>`
         })()
@@ -11951,6 +12015,26 @@ export function ReporteFacturacionTab() {
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
+                {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
+                  <>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify">
+                      <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
+                        <span className="stat-label">Cubrió Toshipass</span>
+                      </div>
+                    </div>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify)">
+                      <Ticket size={18} className="stat-icon red" />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
+                        <span className="stat-label">No cubrió Toshipass</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -12146,6 +12230,26 @@ export function ReporteFacturacionTab() {
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
+                {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
+                  <>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify">
+                      <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
+                        <span className="stat-label">Cubrió Toshipass</span>
+                      </div>
+                    </div>
+                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
+                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify)">
+                      <Ticket size={18} className="stat-icon red" />
+                      <div className="stat-content">
+                        <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
+                        <span className="stat-label">No cubrió Toshipass</span>
+                      </div>
+                    </div>
+                  </>
+                )}
                 {/* Importe Generado: solo visible en semanas cerradas */}
                 {periodo?.estado === 'cerrado' && (() => {
                   // Calcular importe total que debió cobrarse

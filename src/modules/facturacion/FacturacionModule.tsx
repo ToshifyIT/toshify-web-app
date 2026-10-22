@@ -11,7 +11,8 @@ import {
   // Ban, // Oculto temporalmente
   // UserMinus, // Liquidacion - sin tabla en BD
   // AlertTriangle, // Multas movido a modulo Multas/Telepase
-  CreditCard
+  CreditCard,
+  Ticket
 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { Spinner } from '../../components/ui/LoadingOverlay'
@@ -20,6 +21,7 @@ import { Spinner } from '../../components/ui/LoadingOverlay'
 const ReporteFacturacionTab = lazy(() => import('./tabs/ReporteFacturacionTab').then(m => ({ default: m.ReporteFacturacionTab })))
 // const PeriodosTab = lazy(() => import('./tabs/PeriodosTab').then(m => ({ default: m.PeriodosTab }))) // Funcionalidad movida al tab Reporte
 const GarantiasTab = lazy(() => import('./tabs/GarantiasTab').then(m => ({ default: m.GarantiasTab })))
+const ToshipassTab = lazy(() => import('./tabs/ToshipassTab').then(m => ({ default: m.ToshipassTab })))
 const SaldosAbonosTab = lazy(() => import('./tabs/SaldosAbonosTab').then(m => ({ default: m.SaldosAbonosTab })))
 const TicketsFavorTab = lazy(() => import('./tabs/TicketsFavorTab').then(m => ({ default: m.TicketsFavorTab })))
 // const ConceptosFacturacionTab = lazy(() => import('./tabs/ConceptosFacturacionTab').then(m => ({ default: m.ConceptosFacturacionTab }))) // Movido a menú Parámetros
@@ -31,12 +33,13 @@ const CobrosFraccionadosTab = lazy(() => import('./tabs/CobrosFraccionadosTab').
 
 import './FacturacionModule.css'
 
-type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'conceptos' | 'cobros_fraccionados'
+type TabType = 'reporte' | 'periodos' | 'garantias' | 'toshipass' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'conceptos' | 'cobros_fraccionados'
 
 const TABS = [
   { id: 'reporte' as TabType, label: 'Reporte', icon: FileText },
   // { id: 'periodos' as TabType, label: 'Períodos', icon: Calendar }, // Funcionalidad movida al tab Reporte
   { id: 'garantias' as TabType, label: 'Garantías', icon: Shield },
+  { id: 'toshipass' as TabType, label: 'Toshipass', icon: Ticket },
   { id: 'saldos' as TabType, label: 'Saldos', icon: DollarSign },
   // { id: 'tickets' as TabType, label: 'Tickets', icon: Ticket }, // Oculto - se maneja desde Incidencias
   // { id: 'excesos' as TabType, label: 'Excesos KM', icon: Gauge }, // Oculto temporalmente
@@ -47,7 +50,7 @@ const TABS = [
   // { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings } // Movido a menú Parámetros
 ]
 
-const VALID_TABS: TabType[] = ['reporte', 'periodos', 'garantias', 'saldos', 'tickets', 'excesos', 'bloqueos', 'conceptos', 'cobros_fraccionados']
+const VALID_TABS: TabType[] = ['reporte', 'periodos', 'garantias', 'toshipass', 'saldos', 'tickets', 'excesos', 'bloqueos', 'conceptos', 'cobros_fraccionados']
 
 export function FacturacionModule() {
   // Tab activo sincronizado con la URL (?tab=garantias) — sobrevive al F5.
@@ -94,6 +97,7 @@ export function FacturacionModule() {
            {activeTab === 'reporte' && <ReporteFacturacionTab />}
            {/* {activeTab === 'periodos' && <PeriodosTab />} */}{/* Funcionalidad movida al tab Reporte */}
            {activeTab === 'garantias' && <GarantiasTab />}
+           {activeTab === 'toshipass' && <ToshipassTab />}
            {activeTab === 'saldos' && <SaldosAbonosTab />}
            {activeTab === 'tickets' && <TicketsFavorTab />}
            {activeTab === 'excesos' && <ExcesosKmTab />}
