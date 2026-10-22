@@ -152,6 +152,21 @@ const FALLBACK: Record<TipoTarifa, string> = { antigua: 'Tarifa Antigua', nueva:
 
 const fmt = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
+/**
+ * Período de una tarifa ("ENE-26", "OCT-26"), sin importe. Sale de cualquier
+ * concepto cargado de ese tipo de tarifa (el período es el mismo para todas las
+ * modalidades). Si no hay conceptos, la etiqueta genérica.
+ */
+export function getPeriodoTarifa(conceptos: MapaConceptosTarifa, tarifa: TipoTarifa): string {
+  for (const modalidad of Object.keys(CODIGOS) as ModalidadTarifa[]) {
+    for (const gnc of [true, false]) {
+      const c = conceptos[getCodigoTarifa(modalidad, gnc, tarifa)]
+      if (c?.periodo) return c.periodo
+    }
+  }
+  return FALLBACK[tarifa]
+}
+
 /** Etiqueta de una opción del selector: "ENE-26 ($ 290.000)".
  *  El período legacy (ENE-26) muestra el Total por semana CON IVA, que es el
  *  importe que imprime el documento para ese período. Cualquier otro período

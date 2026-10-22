@@ -31,7 +31,7 @@
 --   4 Envió video introducción  "Video recibido", Hireflix (incl. "Apto - Hireflix") o más
 --   5 Documentación     "Apto - Hireflix", "Documentos pendientes/enviados" o más
 --   6 Entrevista        "Convocatoria Inducción" o más
---   7 Aptos             "Apto Inducción" o más
+--   7 Aptos             "Apto Inducción" o más (incluye "Listo Emparejar")
 --   8 Convertidos       pasaron a conductor
 --   9 Recibieron auto   conductores nuevos (ver abajo)
 --
@@ -146,6 +146,7 @@ leads_n AS (
       WHEN 'documentos pendientes' THEN 5
       WHEN 'convocatoria induccion' THEN 6
       WHEN 'apto induccion' THEN 7
+      WHEN 'listo emparejar' THEN 7.5
       WHEN 'conductor' THEN 8
       ELSE NULL
     END AS nivel_estado,

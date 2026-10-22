@@ -16,6 +16,9 @@
 // best-effort de direcciones sin coordenadas, igual que el v1.
 
 import { supabase } from '../../../lib/supabase'
+import { cargarConceptosTarifa, getPeriodoTarifa } from '../tarifaConceptos'
+import type { TipoTarifa } from '../../../types/onboarding.types'
+import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from '../../leads/leadEstados'
 import { derivarUbicacion } from './ubicacion'
 import { API_GEOCODING } from './apisGoogle'
 import {
@@ -47,31 +50,16 @@ import {
 /** Estado de conductor que se muestra atenuado (nunca se oculta del dataset). */
 export const ESTADO_CONDUCTOR_BAJA = 'baja'
 
-/** Los 19 estados del pipeline de leads (espeja ESTADOS_LEAD de LeadsModule). */
-export const ESTADOS_LEAD_TODOS = [
-  'Inicio conversación',
-  'Contactado Sellium',
-  'Edad aprobada',
-  'Zona aprobada',
-  'Propuesta enviada',
-  'Acepta oferta',
-  'Video recibido',
-  'Pendiente - Hireflix',
-  'Apto - Hireflix',
-  'No Apto - Hireflix',
-  'Ayuda - Hireflix',
-  'Documentos enviados',
-  'Documentos pendientes',
-  'Auto del pueblo',
-  'No le interesa',
-  'No cumple edad',
-  'Convocatoria Inducción',
-  'Apto Inducción',
-  'Descartado',
-] as const
+/**
+ * Estados de lead ofrecidos en el filtro: los mismos que la tabla de Leads
+ * (catálogo único en leads/leadEstados.ts). Los estados históricos que ya no se
+ * usan (Hireflix, etc.) no se ofrecen; esos leads siguen en el mapa cuando no
+ * hay ningún estado tildado.
+ */
+export const ESTADOS_LEAD_TODOS = ESTADOS_LEAD_FILTRO
 
-/** Estados preseleccionados al abrir el módulo (los aptos para inducción). */
-export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción'] as const
+/** Estados preseleccionados al abrir el módulo: inducción y listos para emparejar. */
+export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción', ESTADO_LISTO_EMPAREJAR] as const
 
 /**
  * Estados que NO entran al mapa bajo ningún filtro. Un lead descartado ya
@@ -118,6 +106,7 @@ interface ConductorRow {
   antecedentes_penales: boolean | null
   telefono_contacto: string | null
   fecha_contratacion: string | null
+  created_at?: string | null
   conductores_estados?: { codigo?: string | null; descripcion?: string | null } | null
 }
 
@@ -142,6 +131,7 @@ interface LeadRow {
   phone: string | null
   tiempo_de_antiguedad: string | null
   created_at: string | null
+  entrevistador_asignado: string | null
 }
 
 /** Zona peligrosa activa, con su polígono. */
@@ -163,6 +153,8 @@ interface AsignacionActiva {
   turnoNocturnoOcupado: boolean
   /** Conductores del turno complementario de la misma asignación (sin el propio). */
   companeroIds: string[]
+  /** Tarifa de la asignación: la del conductor manda sobre la de la asignación. */
+  tarifa: TipoTarifa
 }
 
 // Función que aplica el filtro de sede (viene del SedeContext del caller).
@@ -295,6 +287,7 @@ async function fetchAsignacionesActivas(
     horarioAsignacion: string | null
     horarioConductor: string | null
     patente: string | null
+    tarifa: TipoTarifa
   }> = []
 
   const pageSize = 1000
@@ -304,7 +297,7 @@ async function fetchAsignacionesActivas(
     const { data, error } = await supabase
       .from('asignaciones_conductores')
       .select(
-        'conductor_id, estado, horario, asignacion_id, asignaciones(id, estado, sede_id, horario, vehiculos(id, patente))'
+        'conductor_id, estado, horario, tipo_tarifa, asignacion_id, asignaciones(id, estado, sede_id, horario, tipo_tarifa, vehiculos(id, patente))'
       )
       .not('conductor_id', 'is', null)
       .range(desde, desde + pageSize - 1)
@@ -348,6 +341,8 @@ async function fetchAsignacionesActivas(
         horarioAsignacion: (asig.horario || '').toLowerCase() || null,
         horarioConductor,
         patente: (veh.patente as string) || null,
+        // Sin dato es 'antigua', mismo criterio que el asistente de Programación.
+        tarifa: ((row.tipo_tarifa || asig.tipo_tarifa) || 'antigua') as TipoTarifa,
       })
     }
 
@@ -371,6 +366,7 @@ async function fetchAsignacionesActivas(
       turnoDiurnoOcupado: slot.diurno.length > 0,
       turnoNocturnoOcupado: slot.nocturno.length > 0,
       companeroIds: complementario.filter((id) => id !== fila.conductorId),
+      tarifa: fila.tarifa,
     })
   }
 
@@ -421,22 +417,34 @@ export async function fetchConductoresMapa(
   sedeActualId?: string | null,
   zonasPeligrosas: ZonaPeligrosa[] = []
 ): Promise<EntidadMapa[]> {
-  let query = supabase
-    .from('conductores')
-    .select(
-      'id, nombres, apellidos, numero_dni, preferencia_turno, zona, direccion, direccion_lat, direccion_lng, direccion_pais, direccion_ciudad, estado_id, fecha_nacimiento, numero_licencia, licencia_vencimiento, experiencia_previa, antecedentes_penales, telefono_contacto, fecha_contratacion, conductores_estados(codigo, descripcion)'
+  const COLUMNAS =
+    'id, nombres, apellidos, numero_dni, preferencia_turno, zona, direccion, direccion_lat, direccion_lng, direccion_pais, direccion_ciudad, estado_id, fecha_nacimiento, numero_licencia, licencia_vencimiento, experiencia_previa, antecedentes_penales, telefono_contacto, fecha_contratacion, conductores_estados(codigo, descripcion)'
+
+  // Más recientes primero, igual que los leads. Si la tabla no tuviera
+  // created_at, se cae al orden anterior (apellido) en vez de no cargar nada.
+  const consultar = (conFecha: boolean) => {
+    const q = supabase
+      .from('conductores')
+      .select(conFecha ? `${COLUMNAS}, created_at` : COLUMNAS) as any
+    return aplicarFiltroSede(
+      conFecha
+        ? q.order('created_at', { ascending: false, nullsFirst: false })
+        : q.order('apellidos', { ascending: true }),
+      'sede_id'
     )
-    .order('apellidos', { ascending: true }) as any
+  }
 
-  query = aplicarFiltroSede(query, 'sede_id')
-
-  const { data, error } = await query
+  let { data, error } = await consultar(true)
+  if (error) ({ data, error } = await consultar(false))
   if (error) throw error
 
   const rows = (data || []) as ConductorRow[]
 
   const ultimoHorario = await fetchUltimoHorarioPorConductor(rows.map((r) => r.id))
-  const asignacionesActivas = await fetchAsignacionesActivas(sedeActualId)
+  const [asignacionesActivas, conceptosTarifa] = await Promise.all([
+    fetchAsignacionesActivas(sedeActualId),
+    cargarConceptosTarifa(),
+  ])
 
   // Fallback de turno al que tenían como lead, sólo para los que quedarían sin dato.
   const dnisFallback: string[] = []
@@ -520,6 +528,7 @@ export async function fetchConductoresMapa(
       horarioUltimaAsignacion: horario,
       estadoCompanero: companero.estado,
       patenteAsignacion: asig?.patente || null,
+      tarifaAsignacion: asig ? getPeriodoTarifa(conceptosTarifa, asig.tarifa) : null,
       turnoLibreAsignacion: companero.turnoLibre,
       companeroId: companerosConocidos[0] ?? null,
       companeroNombre:
@@ -528,7 +537,7 @@ export async function fetchConductoresMapa(
           : null,
       estadoLead: null,
       turnoLead: null,
-      creadoEn: null,
+      creadoEn: r.created_at || null,
       ...ubicacionDeConductor(r),
       datos,
     }
@@ -639,9 +648,11 @@ export async function fetchLeadsMapa(
   let query = supabase
     .from('leads')
     .select(
-      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, direccion_pais, direccion_ciudad, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at'
+      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, direccion_pais, direccion_ciudad, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at, entrevistador_asignado'
     )
-    .order('nombre_completo', { ascending: true }) as any
+    // Más recientes primero, igual que la tabla de Leads (columna "Creación").
+    // Los que no tienen fecha van al final.
+    .order('created_at', { ascending: false, nullsFirst: false }) as any
 
   query = aplicarFiltroSede(query, 'sede_id')
 
@@ -695,6 +706,7 @@ export async function fetchLeadsMapa(
       estadoLead: r.estado_de_lead || null,
       turnoLead: r.turno || null,
       creadoEn: r.created_at || null,
+      guia: (r.entrevistador_asignado || '').trim() || null,
       // Pais y ciudad: primero los que guardo el geocoding (Google ya los trae
       // separados en address_components), y recien si faltan se cae al parseo
       // del texto de la direccion. En leads la direccion se tipea a mano y

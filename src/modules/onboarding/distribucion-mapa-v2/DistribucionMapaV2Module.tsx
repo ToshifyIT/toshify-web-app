@@ -16,8 +16,8 @@
 //      defecto, regulable). Qué se cruza con qué lo decide el segmento activo:
 //      Conductores cruza conductores, Leads cruza leads, Ambos cruza todo.
 //   6. Búsqueda por tokens (arregla "Matias Albarado" -> "ALBARADO, MATIAS").
-//   7. Los 14 estados de lead disponibles en filtros, con los dos de inducción
-//      preseleccionados.
+//   7. Los estados de lead de la tabla de Leads disponibles en filtros, con los
+//      de inducción y "Listo Emparejar" preseleccionados.
 //   8. Más datos de ficha: edad, licencia y vigencia, experiencia, antecedentes
 //      penales y zona peligrosa.
 //
@@ -71,7 +71,7 @@ import {
   sugerirPares,
   UMBRAL_MINUTOS_DEFAULT,
 } from './emparejamientoService'
-import { coincideBusqueda, coordsValidas, mismaPersona, turnoLeadATurno } from './utils'
+import { coincideBusqueda, coordsValidas, mismaPersona, turnoLeadATurno, turnoConductor } from './utils'
 import type {
   EntidadMapa,
   ParSugerido,
@@ -80,7 +80,7 @@ import type {
 import type { PersonaPrecargaPar, PrecargaParMapa } from '../../../types/programacionPrecarga.types'
 import { guardarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
-import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
+import { claveGuia, contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { SIN_UBICACION } from './ubicacion'
 import { API_GEOCODING, API_MAPA } from './apisGoogle'
 import {
@@ -509,7 +509,7 @@ export function DistribucionMapaV2Module() {
       if (c.esBaja && !filtros.verBaja) return false
       if (
         filtros.turnosConductor.size > 0 &&
-        !filtros.turnosConductor.has(c.turnoEfectivo || 'SIN_PREFERENCIA')
+        !filtros.turnosConductor.has(turnoConductor(c) || '')
       ) {
         return false
       }
@@ -550,6 +550,7 @@ export function DistribucionMapaV2Module() {
         return false
       }
       if (!matchTieneLicencia(l)) return false
+      if (filtros.guias.size > 0 && !(l.guia && filtros.guias.has(claveGuia(l.guia)))) return false
       if (!matchAntecedentes(l)) return false
       if (!creadoEnRango(l.creadoEn, filtros.creadoDesde, filtros.creadoHasta)) return false
       if (!matchZona(l)) return false
@@ -582,7 +583,11 @@ export function DistribucionMapaV2Module() {
     if (filtros.segmento !== 'conductores') {
       for (const l of conUbicacion.lds) if (pasaFiltrosLead(l)) out.push(l)
     }
-    return out
+    // Siempre por fecha de creación, más recientes primero, mezclando
+    // conductores y leads. Sin fecha van al final; el sort es estable, así que
+    // entre ellos se conserva el orden de la consulta.
+    const tiempo = (e: EntidadMapa) => (e.creadoEn ? Date.parse(e.creadoEn) || 0 : 0)
+    return out.sort((a, b) => tiempo(b) - tiempo(a))
   }, [conUbicacion, filtros.segmento, pasaFiltrosConductor, pasaFiltrosLead])
 
   // El emparejamiento trabaja EXACTAMENTE sobre lo que se está viendo en el
@@ -600,15 +605,39 @@ export function DistribucionMapaV2Module() {
     return { c, l, sinCompanero }
   }, [visibles])
 
-  /** Estados de lead ofrecidos en el filtro: catálogo completo + los que existan. */
+  /**
+   * Cantidad por capa, esté prendida o no: lo que se vería al prenderla con los
+   * filtros actuales. (`conteos` cuenta sólo lo visible, y una capa apagada
+   * daría siempre 0.)
+   */
+  const conteosCapa = useMemo(
+    () => ({
+      c: conUbicacion.conds.filter(pasaFiltrosConductor).length,
+      l: conUbicacion.lds.filter(pasaFiltrosLead).length,
+    }),
+    [conUbicacion, pasaFiltrosConductor, pasaFiltrosLead]
+  )
+
+  /** Guías asignados a los leads cargados, sin duplicados por mayúsculas/espacios. */
+  const guiasDisponibles = useMemo(() => {
+    const porClave = new Map<string, string>()
+    for (const l of leads) {
+      if (l.guia && !porClave.has(claveGuia(l.guia))) porClave.set(claveGuia(l.guia), l.guia)
+    }
+    return [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [leads])
+
+  /**
+   * Estados de lead ofrecidos en el filtro: exactamente los de la tabla de Leads
+   * (ya no se suman los estados históricos que aparezcan en los datos).
+   */
   const estadosLeadDisponibles = useMemo(() => {
-    const vistos = new Set<string>(ESTADOS_LEAD_TODOS as unknown as string[])
-    for (const l of leads) vistos.add(l.estadoLead || SIN_ESTADO_LEAD)
+    const vistos = new Set<string>(ESTADOS_LEAD_TODOS)
     // Los estados excluidos del mapa no se ofrecen como filtro: tildarlos no
     // mostraría nada y confundiría.
     for (const e of ESTADOS_LEAD_EXCLUIDOS) vistos.delete(e)
     return [...vistos].sort((a, b) => a.localeCompare(b))
-  }, [leads])
+  }, [])
 
   /**
    * Países y ciudades que REALMENTE aparecen entre lo que se está viendo, con
@@ -1146,14 +1175,14 @@ export function DistribucionMapaV2Module() {
           <MapIcon size={20} style={{ color: 'var(--color-primary, #ff0033)' }} />
           <div>
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Distribución en mapa <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>v2</span>
+              Distribución en mapa
             </h2>
-            <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-              {conteos.c} conductores · {conteos.l} leads con ubicación ·{' '}
-              <b style={{ color: 'var(--color-primary, #ff0033)' }}>
+            {/* Sólo lo accionable: los totales ya están en las tarjetas de capa. */}
+            {filtros.segmento !== 'leads' && (
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--color-primary, #ff0033)' }}>
                 {conteos.sinCompanero} sin compañero
-              </b>
-            </span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -1268,8 +1297,9 @@ export function DistribucionMapaV2Module() {
               filtros={filtros}
               onChange={aplicarPatch}
               estadosLeadDisponibles={estadosLeadDisponibles}
-              conteoConductores={conteos.c}
-              conteoLeads={conteos.l}
+              guiasDisponibles={guiasDisponibles}
+              conteoConductores={conteosCapa.c}
+              conteoLeads={conteosCapa.l}
               conteoSinCompanero={conteos.sinCompanero}
               filtrosActivos={filtrosActivos}
               onLimpiar={limpiarFiltros}
@@ -1795,9 +1825,31 @@ function FilaLista({
         )}
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 21, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-          {e.tipo === 'lead' ? 'Lead' : e.esBaja ? 'Conductor · Baja' : 'Conductor'}
-        </span>
+        {/* El tipo (conductor / lead) ya lo dice el ícono: no se repite en texto. */}
+        {e.tipo === 'conductor' && e.tieneAsignacionActiva && e.patenteAsignacion && (
+          <span
+            title="Vehículo asignado"
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 4,
+              padding: '0 4px',
+              letterSpacing: '.3px',
+            }}
+          >
+            {e.patenteAsignacion}
+          </span>
+        )}
+        {e.tipo === 'conductor' && e.tieneAsignacionActiva && e.tarifaAsignacion && (
+          <span title="Tarifa de la asignación activa" style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {e.tarifaAsignacion}
+          </span>
+        )}
+        {e.tipo === 'conductor' && e.esBaja && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)' }}>Baja</span>
+        )}
         {e.documento && (
           <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.documento}</span>
         )}
@@ -1805,7 +1857,17 @@ function FilaLista({
         {e.estadoCompanero === 'sin_companero' && (
           <span style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c' }}>Sin compañero</span>
         )}
+        {e.tipo === 'conductor' && !e.tieneAsignacionActiva && !e.esBaja && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>
+            Sin asignación
+          </span>
+        )}
       </div>
+      {e.tipo === 'lead' && e.guia && (
+        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 21 }}>
+          Guía: <b style={{ color: 'var(--text-secondary)' }}>{e.guia}</b>
+        </div>
+      )}
       {e.companeroNombre && (
         <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 21 }}>
           Compañero: <b style={{ color: 'var(--text-secondary)' }}>{e.companeroNombre}</b>

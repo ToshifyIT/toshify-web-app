@@ -3,7 +3,7 @@
 // Catálogo de opciones y forma del estado de filtros del v2.
 // Separado del componente para no romper el fast refresh.
 
-import { LABEL_TURNO } from '../utils'
+import { LABEL_TURNO, LABEL_TURNO_CONDUCTOR, type TurnoConductor } from '../utils'
 import { ESTADOS_LEAD_DEFAULT } from '../distribucionMapaV2Service'
 import type { TurnoEfectivo } from '../types'
 
@@ -16,7 +16,6 @@ export type SegmentoV2 = 'conductores' | 'leads' | 'ambos'
  */
 export const REQUISITOS = [
   { value: 'licencia_vigente', label: 'Licencia vigente' },
-  { value: 'fuera_zona_peligrosa', label: 'Fuera de zona restringida' },
 ] as const
 
 /**
@@ -37,6 +36,13 @@ export const REQUISITOS_LEAD = [
 
 export type CampoRequisitoLead = (typeof REQUISITOS_LEAD)[number]['campo']
 
+/** Turno del conductor: sólo Diurno, Nocturno y A cargo (ver turnoConductor en utils). */
+export const TURNOS_CONDUCTOR: Array<{ value: TurnoConductor; label: string }> = [
+  { value: 'DIURNO', label: LABEL_TURNO_CONDUCTOR.DIURNO },
+  { value: 'NOCTURNO', label: LABEL_TURNO_CONDUCTOR.NOCTURNO },
+  { value: 'A_CARGO', label: LABEL_TURNO_CONDUCTOR.A_CARGO },
+]
+
 export const TURNOS: Array<{ value: TurnoEfectivo; label: string }> = [
   { value: 'DIURNO', label: LABEL_TURNO.DIURNO },
   { value: 'NOCTURNO', label: LABEL_TURNO.NOCTURNO },
@@ -54,6 +60,15 @@ export const COMPANERO_OPCIONES = [
 ]
 
 export const ZONAS = ['CABA', 'Norte', 'Sur', 'Oeste', 'GBA']
+
+/**
+ * Clave de un guía para filtrar: el mismo nombre cargado con otras mayúsculas
+ * o espacios ("Marina", "marina ") cuenta como el mismo guía, igual que en el
+ * desplegable de Guía del módulo Leads.
+ */
+export function claveGuia(guia: string): string {
+  return guia.trim().toLowerCase()
+}
 
 /**
  * Estado completo de filtros del v2.
@@ -76,6 +91,8 @@ export interface FiltrosV2 {
   turnosLead: Set<string>
   /** ¿Tiene licencia?: 'si' | 'no'. Vacío = no filtra. */
   tieneLicencia: Set<string>
+  /** Guías tildados, por clave en minúsculas (ver `claveGuia`). Vacío = no filtra. */
+  guias: Set<string>
   /** Rango de fecha de creación del lead ('YYYY-MM-DD' o '' = sin límite). Inclusivo por día. */
   creadoDesde: string
   creadoHasta: string
@@ -108,10 +125,11 @@ export function filtrosIniciales(): FiltrosV2 {
     asignacion: new Set(),
     companero: new Set(),
     requisitosConductor: new Set(),
-    // Los 14 estados están disponibles; arrancan marcados los dos de inducción.
+    // Arrancan marcados los de inducción y Listo Emparejar.
     estadosLead: new Set<string>(ESTADOS_LEAD_DEFAULT as unknown as string[]),
     turnosLead: new Set(),
     tieneLicencia: new Set(),
+    guias: new Set(),
     creadoDesde: '',
     creadoHasta: '',
     paises: new Set(),
@@ -149,6 +167,7 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (!mismoSet(f.estadosLead, base.estadosLead)) n++
   if (f.turnosLead.size > 0) n++
   if (f.tieneLicencia.size > 0) n++
+  if (f.guias.size > 0) n++
   if (f.creadoDesde !== '' || f.creadoHasta !== '') n++
   if (f.paises.size > 0) n++
   if (f.ciudades.size > 0) n++

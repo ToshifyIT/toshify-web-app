@@ -28,6 +28,7 @@ const COLORES_POR_ESTADO_NORMALIZADO: Record<string, string> = {
   'no cumple edad': '#EA580C',
   'convocatoria induccion': '#0891B2',
   'apto induccion': '#059669',
+  'listo emparejar': '#C026D3',
   descartado: '#991B1B',
   conductor: '#7c3aed',
 }

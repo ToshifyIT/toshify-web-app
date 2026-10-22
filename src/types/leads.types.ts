@@ -80,7 +80,10 @@ export interface Lead {
 
   // Datos operativos
   turno?: string | null
+  /** Estado de la cuenta Cabify: 'Crear cuenta' | 'Pendiente' | 'Confirmada' (ver cuentasApps.ts). */
   cuenta_cabify?: string | null
+  /** Estado de la cuenta DiDi, independiente de Cabify. Mismos valores. */
+  cuenta_didi?: string | null
   cochera?: string | null
   rueda?: string | null
   monotributo?: string | null
@@ -218,6 +221,7 @@ export interface LeadFormData {
   certificado_direccion?: string
   turno?: string
   cuenta_cabify?: string
+  cuenta_didi?: string
   cochera?: string
   rueda?: string
   monotributo?: string
