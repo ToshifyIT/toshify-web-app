@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
  
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, User, FileText, ChevronDown, Download, MapPin } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown, Download, MapPin } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
@@ -5404,26 +5404,6 @@ function ModalDetalles({
             type="button"
           >
             ×
-          </button>
-        </div>
-        <div style={{ padding: '8px 24px 0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-          <button
-            className={`btn-sm ${(selectedConductor as any).intercom_id ? 'btn-primary' : 'btn-secondary'}`}
-            disabled={!(selectedConductor as any).intercom_id}
-            onClick={() => { if ((selectedConductor as any).intercom_id) window.open(`https://app.intercom.com/a/apps/ogv74k5c/users/${(selectedConductor as any).intercom_id}`, '_blank') }}
-            title={(selectedConductor as any).intercom_id ? 'Abrir en Intercom' : 'Sin ID de Intercom'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <User size={14} /> Ver Perfil Intercom
-          </button>
-          <button
-            className={`btn-sm ${(selectedConductor as any).id_conversation ? 'btn-primary' : 'btn-secondary'}`}
-            disabled={!(selectedConductor as any).id_conversation}
-            onClick={() => { if ((selectedConductor as any).id_conversation) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${(selectedConductor as any).id_conversation}`, '_blank') }}
-            title={(selectedConductor as any).id_conversation ? 'Abrir conversación en Intercom' : 'Sin conversación'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <MessageSquare size={14} /> Ver conversación
           </button>
         </div>
         <div className="modal-body">

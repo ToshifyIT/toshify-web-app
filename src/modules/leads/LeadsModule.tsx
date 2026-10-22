@@ -12,7 +12,7 @@ import {
 import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
-  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, MessageCircle, Layers, Link2,
+  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Layers, Link2,
   CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin, LocateFixed,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -3061,20 +3061,12 @@ export function LeadsModule() {
       cell: ({ row }) => {
         const lead = row.original
         const tieneFolder = !!lead.url_folder?.trim()
-        const tieneConversacion = !!lead.id_conversation?.trim()
         const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger'; disabled?: boolean }> = []
         if (canEdit) {
           actions.push({ label: 'Editar', icon: <Edit2 size={15} />, onClick: () => handleOpenEdit(lead), variant: 'info' })
         }
         actions.push(
           { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
-          {
-            label: 'Abrir conversación',
-            icon: <MessageCircle size={15} />,
-            onClick: () => { if (tieneConversacion) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${lead.id_conversation}`, '_blank') },
-            variant: tieneConversacion ? 'info' : undefined,
-            disabled: !tieneConversacion,
-          },
         )
         actions.push({
           label: 'Documentos',
