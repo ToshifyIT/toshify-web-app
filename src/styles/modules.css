@@ -772,3 +772,75 @@ input[type="checkbox"] {
     font-size: 9px;
   }
 }
+
+
+/* ============================================
+   AVISOS (franja de aviso dentro de un módulo)
+   Uso: <div className="aviso aviso--warning"><Icono size={14} /><span>…</span></div>
+   Compacta, del ancho de su contenido y con acento a la izquierda, para que
+   se lea como una nota y no como un bloque que corta la pantalla.
+   ============================================ */
+.aviso {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 5px 10px;
+  border: 1px solid;
+  border-left-width: 3px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.aviso svg {
+  flex-shrink: 0;
+}
+
+.aviso strong {
+  font-weight: 700;
+}
+
+.aviso--warning {
+  background: #FFFBEB;
+  border-color: #FDE68A;
+  border-left-color: #F59E0B;
+  color: #92400E;
+}
+
+.aviso--info {
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+  border-left-color: #3B82F6;
+  color: #1E40AF;
+}
+
+.aviso--danger {
+  background: #FEF2F2;
+  border-color: #FECACA;
+  border-left-color: #EF4444;
+  color: #991B1B;
+}
+
+[data-theme="dark"] .aviso--warning {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  border-left-color: #F59E0B;
+  color: #FCD34D;
+}
+
+[data-theme="dark"] .aviso--info {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.3);
+  border-left-color: #3B82F6;
+  color: #93C5FD;
+}
+
+[data-theme="dark"] .aviso--danger {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  border-left-color: #EF4444;
+  color: #FCA5A5;
+}

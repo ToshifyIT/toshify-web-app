@@ -198,3 +198,170 @@
     font-size: 11px;
   }
 }
+
+
+/* =====================================================================
+   GRÁFICOS — mismo estilo que Dashboard Directivo / Marketing
+   Tarjeta plana (fondo, borde 1px, radio 8px, sin sombra), título 14px
+   semibold en mayúsculas sin espaciado extra, controles compactos y
+   altura de gráfico acotada. Todo con prefijo .dkpis-module: los
+   componentes (ZonasPendientesChart) también se usan en Marketing y ahí
+   no cambian. Algunas reglas originales usan !important, por eso se repite.
+   ===================================================================== */
+.dkpis-module .fact-cob-container,
+.dkpis-module .cobro-teorico-container,
+.dkpis-module .permanencia-chart,
+.dkpis-module .zones-assignments-chart,
+.dkpis-module .fleet-donut-card,
+.dkpis-module div.dashboard-comparison {
+  background: var(--bg-primary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  padding: 16px 18px;
+}
+
+.dkpis-module .fact-cob-title,
+.dkpis-module .cobro-teorico-title,
+.dkpis-module .permanencia-chart__title,
+.dkpis-module .zones-assignments-title,
+.dkpis-module .dashboard-section-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  text-transform: uppercase !important;
+  color: var(--text-primary) !important;
+}
+
+/* Encabezados de tarjeta: menos aire entre título, controles y gráfico */
+.dkpis-module .fact-cob-header,
+.dkpis-module .cobro-teorico-header {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dkpis-module .permanencia-chart {
+  min-height: 0;
+}
+
+.dkpis-module .permanencia-chart__header {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dkpis-module .permanencia-chart__picker {
+  min-width: 160px;
+}
+
+.dkpis-module .fact-cob-tabs {
+  margin-bottom: 10px;
+}
+
+.dkpis-module .fact-cob-tab {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+/* Botones Día/Semana/Mes de los gráficos */
+.dkpis-module .fact-cob-container .dashboard-granularity-buttons-container,
+.dkpis-module .cobro-teorico-container .dashboard-granularity-buttons-container {
+  height: 28px;
+}
+
+.dkpis-module .fact-cob-container .dashboard-granularity-button,
+.dkpis-module .cobro-teorico-container .dashboard-granularity-button {
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* Resumen bajo Facturado vs Cobrado */
+.dkpis-module .fact-cob-summary {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.dkpis-module .fact-cob-summary-value {
+  font-size: 13px;
+}
+
+/* Dona de flota */
+.dkpis-module .fleet-donut-legend-text {
+  font-size: 12px;
+}
+
+.dkpis-module .fleet-donut-excluded-value {
+  font-size: 14px;
+}
+
+/* Escritorio: altura de gráficos y selectores de período (en mobile se
+   mantienen los de cada componente; el select queda en 16px para iOS) */
+@media (min-width: 769px) {
+  .dkpis-module .fact-cob-chart-wrapper,
+  .dkpis-module .cobro-teorico-chart-wrapper {
+    height: 260px;
+    min-height: 0;
+  }
+
+  /* 250px = minHeight del ResponsiveContainer del componente */
+  .dkpis-module .permanencia-chart__body {
+    flex: none;
+    height: 250px;
+  }
+
+  /* Alto fijo: con solo min-height el gráfico crecía con el contenedor */
+  .dkpis-module .zones-assignments-body {
+    height: 200px;
+    min-height: 0;
+  }
+
+  .dkpis-module .period-picker__select {
+    height: 32px !important;
+    padding: 4px 10px !important;
+    border-width: 1px !important;
+    border-radius: 8px !important;
+    font-size: 12.5px !important;
+  }
+}
+
+
+/* Pestaña "Gráfico Comparativo" (Cobro teórico y Facturado vs Cobrado) */
+.dkpis-module .cobro-comparativo-content,
+.dkpis-module .fact-comp-content {
+  gap: 10px;
+}
+
+.dkpis-module .cobro-comparativo-content .dashboard-granularity-buttons-container,
+.dkpis-module .fact-comp-content .dashboard-granularity-buttons-container {
+  height: 28px;
+}
+
+.dkpis-module .cobro-comparativo-content .dashboard-granularity-button,
+.dkpis-module .fact-comp-content .dashboard-granularity-button {
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.dkpis-module .cobro-comparativo-vs,
+.dkpis-module .fact-comp-vs {
+  font-size: 11px;
+}
+
+.dkpis-module .cobro-comparativo-card,
+.dkpis-module .fact-comp-card {
+  padding: 10px 14px;
+  gap: 6px;
+  border-radius: 8px;
+}
+
+.dkpis-module .cobro-comparativo-card-value,
+.dkpis-module .fact-comp-card-value {
+  font-size: 14px;
+}
+
+@media (min-width: 769px) {
+  .dkpis-module .cobro-comparativo-chart-wrapper,
+  .dkpis-module .fact-comp-chart-wrapper {
+    height: 240px;
+    min-height: 0;
+  }
+}

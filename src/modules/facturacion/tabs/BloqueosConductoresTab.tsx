@@ -675,17 +675,9 @@ export function BloqueosConductoresTab() {
       </div>
 
       {/* Info */}
-      <div style={{
-        padding: '12px 16px',
-        background: '#FEF3C7',
-        borderRadius: '8px',
-        marginBottom: '16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px'
-      }}>
-        <AlertTriangle size={16} style={{ color: '#92400E' }} />
-        <span style={{ fontSize: '13px', color: '#92400E' }}>
+      <div className="aviso aviso--warning" style={{ marginBottom: '12px' }}>
+        <AlertTriangle size={14} />
+        <span>
           Se muestran conductores con deuda &ge; <strong>{formatCurrency(montoLimite)}</strong> o &ge; <strong>{diasMoraLimite} días</strong> de mora.
           Puede ajustar estos límites en "Configurar Límites".
         </span>

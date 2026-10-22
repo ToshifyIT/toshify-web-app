@@ -561,3 +561,97 @@
   border-radius: 50%;
   background: var(--text-tertiary);
 }
+
+
+/* ============================================
+   VERSIÓN COMPACTA (escritorio)
+   Antes la sección ocupaba casi una pantalla para 10 métricas: pestañas y
+   selectores altos, márgenes de 32–40px y tarjetas de 160px. Se achica todo
+   sin tocar la estructura. Mayor especificidad (prefijo .dashboard-comparison)
+   porque DashboardModule.css se carga después y define los mismos nombres.
+   Mobile conserva sus reglas (≤768px): el select mantiene 16px para que iOS
+   no haga zoom.
+   ============================================ */
+@media (min-width: 769px) {
+  div.dashboard-comparison {
+    padding: 16px 18px;
+  }
+
+  .dashboard-comparison .dashboard-section-title {
+    margin: 0 0 10px 0;
+  }
+
+  .dashboard-comparison .dashboard-granularity-buttons-container {
+    margin-bottom: 12px;
+  }
+
+  .dashboard-comparison .dashboard-granularity-button {
+    padding: 6px 0;
+    font-size: 12px;
+  }
+
+  .dashboard-comparison .dashboard-periods-row {
+    gap: 16px;
+    margin-top: 0;
+    margin-bottom: 14px;
+  }
+
+  .dashboard-comparison .period-picker {
+    gap: 4px;
+  }
+
+  .dashboard-comparison .period-picker__label,
+  .dashboard-comparison .period-picker label {
+    font-size: 10px !important;
+  }
+
+  .dashboard-comparison .period-picker__select {
+    height: 32px !important;
+    padding: 4px 10px !important;
+    border-width: 1px !important;
+    border-radius: 8px !important;
+    font-size: 12.5px !important;
+  }
+
+  .dashboard-comparison .dashboard-period-separator {
+    height: 32px;
+    min-width: 28px;
+    font-size: 11px;
+    margin-bottom: 0;
+  }
+
+  .dashboard-comparison .period-comparison-grid {
+    gap: 10px;
+  }
+
+  .dashboard-comparison .period-comparison-card {
+    padding: 12px 10px;
+    min-height: 0;
+    border-radius: 10px;
+  }
+
+  .dashboard-comparison .period-comparison-name {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  .dashboard-comparison .period-comparison-values {
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  .dashboard-comparison .period-comparison-label {
+    font-size: 9.5px;
+  }
+
+  .dashboard-comparison .period-comparison-value-main,
+  .dashboard-comparison .period-comparison-value-secondary {
+    font-size: 14px;
+  }
+
+  .dashboard-comparison .period-comparison-badge {
+    font-size: 10.5px;
+    padding: 3px 6px;
+  }
+}
