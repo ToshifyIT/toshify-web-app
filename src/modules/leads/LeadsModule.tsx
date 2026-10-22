@@ -545,6 +545,24 @@ function formatDateOnly(dateStr: string | undefined | null): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
+// Valor de filtro para columnas Si/No de texto (licencia, experiencia previa,
+// cochera): "si", "Sí", "SI ", etc. -> "Si" (mismo valor que carga Sellium) y
+// "no"/"NO" -> "No", para que el filtro muestre una sola opción por valor.
+// Cualquier otro texto se deja tal cual (recortado); vacío -> "-".
+function siNoParaFiltro(v: string | null | undefined): string {
+  const t = (v || '').trim()
+  if (!t) return '-'
+  const n = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  if (n === 'si') return 'Si'
+  if (n === 'no') return 'No'
+  return t
+}
+
+// Filtro "tiene / no tiene" para columnas de texto libre (observaciones, experiencia).
+function conSinDato(v: string | null | undefined): string {
+  return (v || '').trim() ? 'Tiene' : 'No tiene'
+}
+
 // Booleano nullable -> etiqueta para Excel ('' cuando no hay dato).
 function siNoLabel(v: boolean | null | undefined): string {
   return v === true ? 'Sí' : v === false ? 'No' : ''
@@ -2850,15 +2868,10 @@ export function LeadsModule() {
     },
     {
       id: 'licencia',
-      // Normaliza para el filtro/orden: "Si"/"Sí"/"SI"/etc -> "Sí", "No"/"NO" -> "No".
+      // Normaliza para el filtro/orden: "Si"/"Sí"/"SI"/etc -> "Si" (como Sellium), "No"/"NO" -> "No".
       // Así el filtro muestra una sola opción por valor y matchea todas las variantes.
       // La celda sigue mostrando el valor crudo (row.original.licencia).
-      accessorFn: (row) => {
-        const v = (row.licencia || '').trim().toLowerCase()
-        if (v === 'si' || v === 'sí') return 'Sí'
-        if (v === 'no') return 'No'
-        return row.licencia?.trim() || '-'
-      },
+      accessorFn: (row) => siNoParaFiltro(row.licencia),
       header: 'Licencia',
       cell: ({ row }) => (
         <SiNoDropdownCell
@@ -2951,7 +2964,7 @@ export function LeadsModule() {
       // Antes se titulaba "Exp. Manejo" pero muestra experiencia_previa (Sí/No),
       // igual que "Experiencia Previa" en el detalle del lead.
       id: 'exp_previa',
-      accessorFn: (row) => row.experiencia_previa || '-',
+      accessorFn: (row) => siNoParaFiltro(row.experiencia_previa),
       header: 'Exp. Previa',
       cell: ({ row }) => (
         <SiNoDropdownCell
@@ -2972,6 +2985,8 @@ export function LeadsModule() {
       // Texto libre ("Experiencia Manejo" en el detalle del lead).
       id: 'exp_manejo',
       accessorFn: (row) => row.experiencia_manejo || '-',
+      // Texto libre: el filtro solo distingue si tiene o no tiene dato.
+      meta: { filterValue: (row: Lead) => conSinDato(row.experiencia_manejo) },
       header: 'Exp. Manejo',
       cell: ({ row }) => {
         const txt = (row.original.experiencia_manejo || '').trim()
@@ -3013,7 +3028,7 @@ export function LeadsModule() {
     },
     {
       id: 'cochera',
-      accessorFn: (row) => row.cochera || '-',
+      accessorFn: (row) => siNoParaFiltro(row.cochera),
       header: 'Cochera',
       cell: ({ row }) => (
         <SiNoDropdownCell
@@ -3037,6 +3052,8 @@ export function LeadsModule() {
       // que haya un solo editor abierto a la vez.
       id: 'observaciones',
       accessorFn: (row) => row.observaciones || '-',
+      // Texto libre: el filtro solo distingue si tiene o no tiene dato.
+      meta: { filterValue: (row: Lead) => conSinDato(row.observaciones) },
       header: 'Observaciones',
       cell: ({ row }) => (
         <ObservacionesCell
@@ -3388,7 +3405,7 @@ export function LeadsModule() {
               <RefreshCw size={14} />
             </button>
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
-              <Download size={14} /> <span className="leads-btn-label">Exportar</span>
+              <Download size={14} /> <span className="leads-btn-label leads-btn-label--sec">Exportar</span>
             </button>
             {esAdmin && (
               <button
@@ -3411,7 +3428,7 @@ export function LeadsModule() {
                 title="Completar pais y ciudad de los leads que todavia no los tienen"
               >
                 <MapPin size={14} />{' '}
-                <span className="leads-btn-label">Ubicación ({leadsSinUbicacion.length})</span>
+                <span className="leads-btn-label leads-btn-label--sec">Ubicación ({leadsSinUbicacion.length})</span>
               </button>
             )}
             {canCreate && (
@@ -3424,7 +3441,7 @@ export function LeadsModule() {
                   onChange={handleCargaMasiva}
                 />
                 <button className="btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} title="Carga Masiva">
-                  <Upload size={14} /> <span className="leads-btn-label">Carga Masiva</span>
+                  <Upload size={14} /> <span className="leads-btn-label leads-btn-label--sec">Carga Masiva</span>
                 </button>
               </>
             )}
@@ -3438,7 +3455,7 @@ export function LeadsModule() {
               onClick={() => setVerLeadsConductores(true)}
               title="Ver los leads que ya son conductores y los que tienen un conductor con el mismo documento pero siguen sin convertir"
             >
-              <Link2 size={14} /> <span className="leads-btn-label">Ver Lead/Conductores</span>
+              <Link2 size={14} /> <span className="leads-btn-label leads-btn-label--sec">Ver Lead/Conductores</span>
             </button>
             <button
               className={`btn-sm ${activeStatCard === 'todos' ? 'btn-primary' : 'btn-secondary'}`}

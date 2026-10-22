@@ -39,6 +39,15 @@ import "../DateRangeSelector/DateRangeSelector.css";
 
 // Tipo para filtros de columna
 type ColumnFilters = Record<string, string[]>;
+/** Hasta cuántos valores distintos una columna numérica se filtra como lista y no como rango. */
+const MAX_OPCIONES_NUMERICAS = 3;
+/** Formato de monto para las opciones de una columna de dinero filtrada como lista. */
+const formatoMontoOpcion = (v: string): string => {
+  const n = Number(v);
+  return Number.isFinite(n)
+    ? `$ ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : v;
+};
 type DateFilters = Record<string, { from?: string; to?: string }>;
 type ColumnAlignment = 'left' | 'center' | 'right';
 type DataTableColumnMeta = {
@@ -46,6 +55,12 @@ type DataTableColumnMeta = {
   cellAlign?: ColumnAlignment;
   /** Texto de ayuda: muestra un ícono (i) en el encabezado con esta explicación. */
   info?: string;
+  /**
+   * Valor que usa SOLO el filtro de la columna (opciones y coincidencia), en lugar
+   * del accessorFn. Sirve para agrupar texto libre, p. ej. "Con dato" / "Sin dato".
+   * El orden y la celda siguen usando el accessorFn.
+   */
+  filterValue?: (row: never) => unknown;
 };
 
 function getJustifyContent(align?: ColumnAlignment): CSSProperties['justifyContent'] | undefined {
@@ -120,6 +135,8 @@ interface FilterHeaderProps {
   isDate: boolean;
   isNumber?: boolean;
   isMoney?: boolean;
+  /** Texto a mostrar por opción (p. ej. montos con formato). El valor filtrado no cambia. */
+  formatOption?: (value: string) => string;
   uniqueValues: string[];
   selectedValues: string[];
   dateFilter: { from?: string; to?: string } | undefined;
@@ -139,6 +156,7 @@ function FilterHeader({
   isDate,
   isNumber = false,
   isMoney = false,
+  formatOption,
   uniqueValues,
   selectedValues,
   dateFilter,
@@ -516,7 +534,7 @@ function FilterHeader({
                         checked={selectedValues.includes(option)}
                         onChange={() => onSelectValue(colId, option)}
                       />
-                      <span>{option}</span>
+                      <span>{formatOption ? formatOption(option) : option}</span>
                     </label>
                   ))
                 )}
@@ -697,6 +715,8 @@ export function DataTable<T>({
   // Se miden en el primer render (sin sticky aplicado) para evitar que el
   // sticky colapse el ancho. Como Excel: la columna fija mantiene su ancho.
   const [stickyDims, setStickyDims] = useState<{ left: number; width: number }[]>([]);
+  // La tabla de escritorio solo se monta sin carga, sin error, con filas y fuera de mobile.
+  const tablaVisible = !loading && !error && data.length > 0 && !isMobile;
 
   // Detectar mobile
   useEffect(() => {
@@ -751,7 +771,10 @@ export function DataTable<T>({
       for (let i = 0; i < stickyLeftCount && i < cells.length; i++) ro?.observe(cells[i]);
     }
     return () => ro?.disconnect();
-  }, [stickyLeftCount, data]);
+    // `tablaVisible`: la tabla (y su wrapper) recién existe cuando termina la carga.
+    // Si `data` llega antes o es la misma referencia memoizada, el efecto no se
+    // volvía a ejecutar al pasar loading → false y las columnas nunca quedaban fijas.
+  }, [stickyLeftCount, data, tablaVisible]);
 
   // Altura máxima de la tabla = alto de la ventana - top del wrapper - reserva
   // para paginación. Simple y predecible: la tabla siempre ocupa lo que falta
@@ -848,10 +871,12 @@ export function DataTable<T>({
   const accessorFnMap = useMemo(() => {
     const map = new Map<string, (row: T) => unknown>();
     columns.forEach(col => {
-      const colDef = col as { accessorKey?: string; id?: string; accessorFn?: (row: T) => unknown };
+      const colDef = col as { accessorKey?: string; id?: string; accessorFn?: (row: T) => unknown; meta?: DataTableColumnMeta };
       const colId = colDef.accessorKey || colDef.id || "";
-      if (colId && colDef.accessorFn) {
-        map.set(colId, colDef.accessorFn);
+      // meta.filterValue (si existe) manda para el filtro; si no, el accessorFn.
+      const filterFn = colDef.meta?.filterValue as ((row: T) => unknown) | undefined;
+      if (colId && (filterFn || colDef.accessorFn)) {
+        map.set(colId, (filterFn || colDef.accessorFn) as (row: T) => unknown);
       }
     });
     return map;
@@ -877,6 +902,20 @@ export function DataTable<T>({
     }
     return value;
   }, [accessorFnMap]);
+
+  // Columnas numéricas con muy pocos valores distintos (p. ej. garantía: siempre
+  // $50.000): un rango Desde/Hasta no aporta, se filtran como lista de opciones.
+  const pocosValoresNumericos = useCallback((colId: string): boolean => {
+    if (!data || data.length === 0) return false;
+    const vistos = new Set<string>();
+    for (const row of data) {
+      const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+      if (value === null || value === undefined || value === '') continue;
+      vistos.add(String(value).trim());
+      if (vistos.size > MAX_OPCIONES_NUMERICAS) return false;
+    }
+    return vistos.size > 0;
+  }, [data, getNestedValueForFilter]);
 
   // Helper: Sample data to detect if column values are numeric (fallback when name-based detection misses).
   const isNumericByData = useCallback((colId: string): boolean => {
@@ -1243,7 +1282,12 @@ export function DataTable<T>({
 
       const isDate = isDateColumn(colId);
       // Numeric: keyword match OR all sampled values are numbers
-      const isNumber = !isDate && (isNumberColumn(colId) || isNumericByData(colId));
+      // Con meta.filterValue la columna define sus propias opciones: va como lista.
+      const tieneFiltroPropio = !!(colDef as { meta?: DataTableColumnMeta }).meta?.filterValue;
+      const esNumerica = !isDate && !tieneFiltroPropio && (isNumberColumn(colId) || isNumericByData(colId));
+      // Con 1 a 3 valores distintos se filtra como lista (casillas), no como rango.
+      const comoLista = esNumerica && pocosValoresNumericos(colId);
+      const isNumber = esNumerica && !comoLista;
       const isMoney = !isDate && isMoneyColumn(colId);
 
       return {
@@ -1270,6 +1314,7 @@ export function DataTable<T>({
               isDate={isDate}
               isNumber={isNumber}
               isMoney={isMoney}
+              formatOption={comoLista && isMoney ? formatoMontoOpcion : undefined}
               uniqueValues={isDate || isNumber ? [] : (isOpen ? getUniqueValuesRef.current(colId) : [])}
               selectedValues={currentColumnFilters[colId] || []}
               dateFilter={currentDateFilters[colId]}
@@ -1284,7 +1329,7 @@ export function DataTable<T>({
         },
       } as ColumnDef<T, unknown>;
     });
-  }, [regularColumns, disableAutoFilters, isDateColumn, isNumberColumn, isMoneyColumn, isNumericByData, openFilterId, handleFilterToggle, handleSelectValue, handleDateChange, handleNumberChange, handleClearFilter]);
+  }, [regularColumns, disableAutoFilters, isDateColumn, isNumberColumn, isMoneyColumn, isNumericByData, pocosValoresNumericos, openFilterId, handleFilterToggle, handleSelectValue, handleDateChange, handleNumberChange, handleClearFilter]);
 
   // Memoize final columns — all regular columns with filters + actions
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {

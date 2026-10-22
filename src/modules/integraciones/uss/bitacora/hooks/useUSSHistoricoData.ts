@@ -56,6 +56,11 @@ export interface Marcacion {
   lavadoRealizado: boolean;
   naftaCargada: boolean;
   gpsOrigen: 'USS' | 'GEOTAB';
+  /** true/false: hay (o no) otro conductor asignado a la misma patente en la fecha.
+   *  null: no se puede determinar (sin conductor o sin asignación en esa patente). */
+  tieneCompanero?: boolean | null;
+  /** Nombre(s) del compañero, cuando lo hay. */
+  companero?: string | null;
   /** Tarifa de la asignación vigente en la semana (solo Control de exceso de km). */
   tipoTarifa?: 'antigua' | 'nueva' | null;
   /** Conductor estimado por asignación + horario, no identificado por el GPS (solo Control de exceso de km). */
@@ -283,7 +288,7 @@ export function useUSSHistoricoData(
       // Cargar asignaciones (conductor -> patentes con su vigencia) una sola vez para cruzar.
       const { data: asigData } = await supabase
         .from('asignaciones_conductores')
-        .select('conductor_id, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(vehiculos!inner(patente))');
+        .select('conductor_id, estado, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(estado, vehiculos!inner(patente))');
       const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim();
       const normPat = (p: string) => (p || '').replace(/[\s\-.%]/g, '').toUpperCase();
       // Índice: "patenteNorm|claveConductor" -> lista de rangos [ini, fin]. La clave de
@@ -307,6 +312,28 @@ export function useUSSHistoricoData(
         const nombre = c ? normNombre(`${c.nombres || ''} ${c.apellidos || ''}`) : '';
         if (nombre) addAsig(pat, nombre, ini, fin);
       }
+      // Ocupantes por patente (para la columna Compañero). Se descartan las
+      // asignaciones canceladas; el resto se cruza por vigencia en la fecha.
+      const esCancelado = (e: unknown) => e === 'cancelado' || e === 'cancelada';
+      const ocupantesPorPatente = new Map<string, { id: string | null; clave: string; nombre: string; ini: number; fin: number }[]>();
+      for (const ac of (asigData || []) as any[]) {
+        if (esCancelado(ac?.estado) || esCancelado(ac?.asignaciones?.estado)) continue;
+        const pat = normPat(ac?.asignaciones?.vehiculos?.patente || '');
+        if (!pat) continue;
+        const c = ac.conductores;
+        const nombre = c ? `${c.nombres || ''} ${c.apellidos || ''}`.replace(/\s+/g, ' ').trim() : '';
+        const id = ac.conductor_id ? String(ac.conductor_id) : null;
+        const arr = ocupantesPorPatente.get(pat) || [];
+        arr.push({
+          id,
+          clave: id || normNombre(nombre),
+          nombre,
+          ini: ac.fecha_inicio ? new Date(ac.fecha_inicio).getTime() : 0,
+          fin: ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY,
+        });
+        ocupantesPorPatente.set(pat, arr);
+      }
+
       // ¿El conductor tenía esa patente asignada en esa fecha?
       const tieneAsignacion = (patNorm: string, conductorId: string | null, conductorNombre: string | null, fecha: string): boolean => {
         const t = new Date(fecha + 'T12:00:00-03:00').getTime();
@@ -370,6 +397,24 @@ export function useUSSHistoricoData(
       marcacionesTransformadas = agruparMarcacionesPorDia(
         marcacionesTransformadas, viajesGeotab, dateRange.startDate, dateRange.endDate,
       );
+
+      // Compañero: otro conductor asignado a la misma patente en la fecha de la marcación.
+      // Solo se informa si el conductor de la fila está asignado a esa patente ese día.
+      for (const m of marcacionesTransformadas) {
+        const sinConductor = !m.conductorId && (!m.conductor || m.conductor === 'Sin conductor');
+        if (sinConductor) { m.tieneCompanero = null; m.companero = null; continue; }
+        const t = new Date(m.fecha + 'T12:00:00-03:00').getTime();
+        const vigentes = (ocupantesPorPatente.get(normPat(m.patenteNormalizada || m.patente)) || [])
+          .filter(o => t >= o.ini && t <= o.fin);
+        const nombreFila = normNombre(m.conductor);
+        const esElMismo = (o: { id: string | null; nombre: string }) =>
+          (!!m.conductorId && o.id === String(m.conductorId)) || (!!o.nombre && normNombre(o.nombre) === nombreFila);
+        if (!vigentes.some(esElMismo)) { m.tieneCompanero = null; m.companero = null; continue; }
+        const otros = new Map<string, string>();
+        for (const o of vigentes) if (!esElMismo(o) && o.clave) otros.set(o.clave, o.nombre);
+        m.tieneCompanero = otros.size > 0;
+        m.companero = otros.size > 0 ? [...otros.values()].filter(Boolean).join(', ') || null : null;
+      }
 
       // Lookup DNIs + horario asignado en batch
       const conductorIds = [...new Set(marcacionesTransformadas.map(m => m.conductorId).filter(Boolean))] as string[];
