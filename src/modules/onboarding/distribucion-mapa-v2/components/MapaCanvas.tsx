@@ -22,7 +22,7 @@ import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
 import type { EntidadMapa, ParSugerido, Radar } from '../types'
 import type { ZonaPeligrosa } from '../distribucionMapaV2Service'
-import { formatKm, formatMin, LABEL_TURNO } from '../utils'
+import { formatKm, formatMin, LABEL_TURNO, LABEL_TURNO_CONDUCTOR, turnoConductor } from '../utils'
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
@@ -646,7 +646,8 @@ function InfoEntidad({
         </span>
         {e.tipo === 'conductor' && e.turnoEfectivo && (
           <Badge tono="info">
-            {LABEL_TURNO[e.turnoEfectivo]} · {ORIGEN_TURNO_LABEL[e.turnoOrigen] || 'sin dato'}
+            {turnoConductor(e) === 'A_CARGO' ? LABEL_TURNO_CONDUCTOR.A_CARGO : LABEL_TURNO[e.turnoEfectivo]} ·{' '}
+            {ORIGEN_TURNO_LABEL[e.turnoOrigen] || 'sin dato'}
           </Badge>
         )}
         {e.tipo === 'lead' && e.turnoLead && <Badge tono="info">{e.turnoLead}</Badge>}

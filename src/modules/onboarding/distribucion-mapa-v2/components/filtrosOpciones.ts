@@ -3,7 +3,7 @@
 // Catálogo de opciones y forma del estado de filtros del v2.
 // Separado del componente para no romper el fast refresh.
 
-import { LABEL_TURNO } from '../utils'
+import { LABEL_TURNO, LABEL_TURNO_CONDUCTOR, type TurnoConductor } from '../utils'
 import { ESTADOS_LEAD_DEFAULT } from '../distribucionMapaV2Service'
 import type { TurnoEfectivo } from '../types'
 
@@ -16,7 +16,6 @@ export type SegmentoV2 = 'conductores' | 'leads' | 'ambos'
  */
 export const REQUISITOS = [
   { value: 'licencia_vigente', label: 'Licencia vigente' },
-  { value: 'fuera_zona_peligrosa', label: 'Fuera de zona restringida' },
 ] as const
 
 /**
@@ -36,6 +35,13 @@ export const REQUISITOS_LEAD = [
 ] as const
 
 export type CampoRequisitoLead = (typeof REQUISITOS_LEAD)[number]['campo']
+
+/** Turno del conductor: sólo Diurno, Nocturno y A cargo (ver turnoConductor en utils). */
+export const TURNOS_CONDUCTOR: Array<{ value: TurnoConductor; label: string }> = [
+  { value: 'DIURNO', label: LABEL_TURNO_CONDUCTOR.DIURNO },
+  { value: 'NOCTURNO', label: LABEL_TURNO_CONDUCTOR.NOCTURNO },
+  { value: 'A_CARGO', label: LABEL_TURNO_CONDUCTOR.A_CARGO },
+]
 
 export const TURNOS: Array<{ value: TurnoEfectivo; label: string }> = [
   { value: 'DIURNO', label: LABEL_TURNO.DIURNO },

@@ -16,6 +16,8 @@
 // best-effort de direcciones sin coordenadas, igual que el v1.
 
 import { supabase } from '../../../lib/supabase'
+import { cargarConceptosTarifa, getPeriodoTarifa } from '../tarifaConceptos'
+import type { TipoTarifa } from '../../../types/onboarding.types'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from '../../leads/leadEstados'
 import { derivarUbicacion } from './ubicacion'
 import { API_GEOCODING } from './apisGoogle'
@@ -104,6 +106,7 @@ interface ConductorRow {
   antecedentes_penales: boolean | null
   telefono_contacto: string | null
   fecha_contratacion: string | null
+  created_at?: string | null
   conductores_estados?: { codigo?: string | null; descripcion?: string | null } | null
 }
 
@@ -150,6 +153,8 @@ interface AsignacionActiva {
   turnoNocturnoOcupado: boolean
   /** Conductores del turno complementario de la misma asignación (sin el propio). */
   companeroIds: string[]
+  /** Tarifa de la asignación: la del conductor manda sobre la de la asignación. */
+  tarifa: TipoTarifa
 }
 
 // Función que aplica el filtro de sede (viene del SedeContext del caller).
@@ -282,6 +287,7 @@ async function fetchAsignacionesActivas(
     horarioAsignacion: string | null
     horarioConductor: string | null
     patente: string | null
+    tarifa: TipoTarifa
   }> = []
 
   const pageSize = 1000
@@ -291,7 +297,7 @@ async function fetchAsignacionesActivas(
     const { data, error } = await supabase
       .from('asignaciones_conductores')
       .select(
-        'conductor_id, estado, horario, asignacion_id, asignaciones(id, estado, sede_id, horario, vehiculos(id, patente))'
+        'conductor_id, estado, horario, tipo_tarifa, asignacion_id, asignaciones(id, estado, sede_id, horario, tipo_tarifa, vehiculos(id, patente))'
       )
       .not('conductor_id', 'is', null)
       .range(desde, desde + pageSize - 1)
@@ -335,6 +341,8 @@ async function fetchAsignacionesActivas(
         horarioAsignacion: (asig.horario || '').toLowerCase() || null,
         horarioConductor,
         patente: (veh.patente as string) || null,
+        // Sin dato es 'antigua', mismo criterio que el asistente de Programación.
+        tarifa: ((row.tipo_tarifa || asig.tipo_tarifa) || 'antigua') as TipoTarifa,
       })
     }
 
@@ -358,6 +366,7 @@ async function fetchAsignacionesActivas(
       turnoDiurnoOcupado: slot.diurno.length > 0,
       turnoNocturnoOcupado: slot.nocturno.length > 0,
       companeroIds: complementario.filter((id) => id !== fila.conductorId),
+      tarifa: fila.tarifa,
     })
   }
 
@@ -408,22 +417,34 @@ export async function fetchConductoresMapa(
   sedeActualId?: string | null,
   zonasPeligrosas: ZonaPeligrosa[] = []
 ): Promise<EntidadMapa[]> {
-  let query = supabase
-    .from('conductores')
-    .select(
-      'id, nombres, apellidos, numero_dni, preferencia_turno, zona, direccion, direccion_lat, direccion_lng, direccion_pais, direccion_ciudad, estado_id, fecha_nacimiento, numero_licencia, licencia_vencimiento, experiencia_previa, antecedentes_penales, telefono_contacto, fecha_contratacion, conductores_estados(codigo, descripcion)'
+  const COLUMNAS =
+    'id, nombres, apellidos, numero_dni, preferencia_turno, zona, direccion, direccion_lat, direccion_lng, direccion_pais, direccion_ciudad, estado_id, fecha_nacimiento, numero_licencia, licencia_vencimiento, experiencia_previa, antecedentes_penales, telefono_contacto, fecha_contratacion, conductores_estados(codigo, descripcion)'
+
+  // Más recientes primero, igual que los leads. Si la tabla no tuviera
+  // created_at, se cae al orden anterior (apellido) en vez de no cargar nada.
+  const consultar = (conFecha: boolean) => {
+    const q = supabase
+      .from('conductores')
+      .select(conFecha ? `${COLUMNAS}, created_at` : COLUMNAS) as any
+    return aplicarFiltroSede(
+      conFecha
+        ? q.order('created_at', { ascending: false, nullsFirst: false })
+        : q.order('apellidos', { ascending: true }),
+      'sede_id'
     )
-    .order('apellidos', { ascending: true }) as any
+  }
 
-  query = aplicarFiltroSede(query, 'sede_id')
-
-  const { data, error } = await query
+  let { data, error } = await consultar(true)
+  if (error) ({ data, error } = await consultar(false))
   if (error) throw error
 
   const rows = (data || []) as ConductorRow[]
 
   const ultimoHorario = await fetchUltimoHorarioPorConductor(rows.map((r) => r.id))
-  const asignacionesActivas = await fetchAsignacionesActivas(sedeActualId)
+  const [asignacionesActivas, conceptosTarifa] = await Promise.all([
+    fetchAsignacionesActivas(sedeActualId),
+    cargarConceptosTarifa(),
+  ])
 
   // Fallback de turno al que tenían como lead, sólo para los que quedarían sin dato.
   const dnisFallback: string[] = []
@@ -507,6 +528,7 @@ export async function fetchConductoresMapa(
       horarioUltimaAsignacion: horario,
       estadoCompanero: companero.estado,
       patenteAsignacion: asig?.patente || null,
+      tarifaAsignacion: asig ? getPeriodoTarifa(conceptosTarifa, asig.tarifa) : null,
       turnoLibreAsignacion: companero.turnoLibre,
       companeroId: companerosConocidos[0] ?? null,
       companeroNombre:
@@ -515,7 +537,7 @@ export async function fetchConductoresMapa(
           : null,
       estadoLead: null,
       turnoLead: null,
-      creadoEn: null,
+      creadoEn: r.created_at || null,
       ...ubicacionDeConductor(r),
       datos,
     }

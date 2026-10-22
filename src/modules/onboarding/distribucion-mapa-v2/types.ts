@@ -91,6 +91,8 @@ export interface EntidadMapa {
   estadoCompanero: EstadoCompanero
   /** Patente del vehículo de la asignación activa, si hay. */
   patenteAsignacion: string | null
+  /** Tarifa de la asignación activa, como período ("ENE-26", "OCT-26"). */
+  tarifaAsignacion?: string | null
   /** Turno que queda libre en la asignación activa ('diurno' | 'nocturno'). */
   turnoLibreAsignacion: 'diurno' | 'nocturno' | null
   /**

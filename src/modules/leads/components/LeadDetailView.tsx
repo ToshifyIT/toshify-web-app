@@ -448,6 +448,10 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             <span className="lead-detail-item-label">Cta. Cabify</span>
             <span className="lead-detail-item-value">{lead.cuenta_cabify || '-'}</span>
           </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Cta. DiDi</span>
+            <span className="lead-detail-item-value">{lead.cuenta_didi || '-'}</span>
+          </div>
         </div>
       </div>
 

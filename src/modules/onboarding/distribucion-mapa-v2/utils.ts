@@ -285,6 +285,27 @@ export function formatMin(minutos: number): string {
   return `${Math.round(minutos)} min`
 }
 
+/**
+ * Turno del conductor tal como se filtra y se pinta: Diurno, Nocturno o A cargo.
+ * Sale de la última asignación y, si no tiene, de su preferencia.
+ * null = sin preferencia de turno o sin dato: no entra en ninguna de las tres
+ * opciones (se ve sólo sin filtro de turno).
+ */
+export type TurnoConductor = 'DIURNO' | 'NOCTURNO' | 'A_CARGO'
+
+export function turnoConductor(e: EntidadMapa): TurnoConductor | null {
+  if (e.turnoEfectivo === 'DIURNO' || e.turnoEfectivo === 'NOCTURNO') return e.turnoEfectivo
+  if (e.turnoOrigen === 'asignacion' && normalizarTexto(e.horarioUltimaAsignacion) === 'todo_dia') return 'A_CARGO'
+  if (e.turnoOrigen === 'preferencia' && (e.preferenciaTurno || '').toUpperCase() === 'A_CARGO') return 'A_CARGO'
+  return null
+}
+
+export const LABEL_TURNO_CONDUCTOR: Record<TurnoConductor, string> = {
+  DIURNO: 'Diurno',
+  NOCTURNO: 'Nocturno',
+  A_CARGO: 'A cargo',
+}
+
 export const LABEL_TURNO: Record<TurnoEfectivo, string> = {
   DIURNO: 'Diurno',
   NOCTURNO: 'Nocturno',

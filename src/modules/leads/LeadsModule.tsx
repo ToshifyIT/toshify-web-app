@@ -32,6 +32,7 @@ import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
+import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
@@ -418,6 +419,7 @@ function leadToFormData(lead: Lead): LeadFormData {
     certificado_direccion: lead.certificado_direccion || '',
     turno: lead.turno || '',
     cuenta_cabify: lead.cuenta_cabify || '',
+    cuenta_didi: lead.cuenta_didi || '',
     cochera: lead.cochera || '',
     rueda: lead.rueda || '',
     monotributo: lead.monotributo || '',
@@ -1898,6 +1900,7 @@ export function LeadsModule() {
           'Monotributo': l.monotributo || '',
           'CBU': l.cbu || '',
           'Cta. Cabify': l.cuenta_cabify || '',
+          'Cta. DiDi': l.cuenta_didi || '',
 
           // --- Contacto de emergencia (detalle) ---
           'Contacto Emergencia': l.datos_de_emergencia || l.contacto_de_emergencia || '',
@@ -1955,6 +1958,7 @@ export function LeadsModule() {
     'FECHA RNR': 'fecha_rnr',
     'CERTIFICADO DIRECCIÓN': 'certificado_direccion',
     'CTA CABIFY': 'cuenta_cabify',
+    'CTA DIDI': 'cuenta_didi',
     'COCHERA': 'cochera',
     'RUEDA': 'rueda',
     'MONOTRIBUTO': 'monotributo',
@@ -3026,16 +3030,39 @@ export function LeadsModule() {
       accessorFn: (row) => row.cuenta_cabify || '-',
       header: 'Cta. Cabify',
       cell: ({ row }) => (
-        <EditableTextCell
+        <GuiaDropdownCell
           leadId={row.original.id}
           field="cuenta_cabify"
           value={row.original.cuenta_cabify}
+          guias={LABELS_CUENTA_APP}
+          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_cabify`}
           canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
           onChange={handleInlineUpdate}
-          maxWidth="80px"
+          onClose={() => setSinoDropdownKey(null)}
         />
       ),
-      size: 85,
+      size: 100,
+      enableSorting: true,
+    },
+    {
+      id: 'cta_didi',
+      accessorFn: (row) => row.cuenta_didi || '-',
+      header: 'Cta. DiDi',
+      cell: ({ row }) => (
+        <GuiaDropdownCell
+          leadId={row.original.id}
+          field="cuenta_didi"
+          value={row.original.cuenta_didi}
+          guias={LABELS_CUENTA_APP}
+          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_didi`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 100,
       enableSorting: true,
     },
     {
@@ -3620,94 +3647,6 @@ export function LeadsModule() {
 }
 
 // =====================================================
-// EDITABLE TEXT CELL (click-to-edit inline)
-// =====================================================
-
-interface EditableTextCellProps {
-  leadId: string
-  field: keyof Lead
-  value: string | null | undefined
-  canEdit: boolean
-  onChange: (leadId: string, field: keyof Lead, value: string) => void
-  maxWidth?: string
-}
-
-function EditableTextCell({ leadId, field, value, canEdit, onChange, maxWidth = '120px' }: EditableTextCellProps) {
-  const [editing, setEditing] = useState(false)
-  const [text, setText] = useState(value || '')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    setText(value || '')
-  }, [value])
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
-    }
-  }, [editing])
-
-  const handleSave = () => {
-    setEditing(false)
-    const trimmed = text.trim()
-    if (trimmed !== (value || '')) {
-      onChange(leadId, field, trimmed)
-    }
-  }
-
-  if (editing && canEdit) {
-    return (
-      <input
-        ref={inputRef}
-        type="text"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={handleSave}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSave()
-          if (e.key === 'Escape') { setText(value || ''); setEditing(false) }
-        }}
-        style={{
-          fontSize: '11px',
-          width: '100%',
-          padding: '2px 6px',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '4px',
-          background: 'var(--bg-primary)',
-          color: 'var(--text-primary)',
-          outline: 'none',
-        }}
-      />
-    )
-  }
-
-  const display = value || '-'
-  return (
-    <span
-      onClick={() => canEdit && setEditing(true)}
-      style={{
-        fontSize: '11px',
-        cursor: canEdit ? 'pointer' : 'default',
-        display: 'block',
-        maxWidth,
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        padding: '2px 4px',
-        borderRadius: '4px',
-        border: canEdit ? '1px solid transparent' : 'none',
-      }}
-      onMouseEnter={(e) => { if (canEdit) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-primary)' }}
-      onMouseLeave={(e) => { if (canEdit) (e.currentTarget as HTMLElement).style.borderColor = 'transparent' }}
-      title={display}
-    >
-      {display}
-    </span>
-  )
-}
-
-// =====================================================
 // SI/NO DROPDOWN CELL (portal-based, reutilizable)
 // =====================================================
 
@@ -3838,10 +3777,13 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
 
 // =====================================================
 // GUIA DROPDOWN CELL (mismo patrón que SiNoDropdownCell)
+// Se reusa para Cta. Cabify / Cta. DiDi pasando `field` y las opciones.
 // =====================================================
 
 interface GuiaDropdownCellProps {
   leadId: string
+  /** Campo del lead que edita. Por defecto, el guía (entrevistador_asignado). */
+  field?: keyof Lead
   value: string | null | undefined
   guias: string[]
   isOpen: boolean
@@ -3851,11 +3793,11 @@ interface GuiaDropdownCellProps {
   onClose: () => void
 }
 
-function GuiaDropdownCell({ leadId, value, guias, isOpen, canEdit, onToggle, onChange, onClose }: GuiaDropdownCellProps) {
+function GuiaDropdownCell({ leadId, field = 'entrevistador_asignado', value, guias, isOpen, canEdit, onToggle, onChange, onClose }: GuiaDropdownCellProps) {
   const cellRef = useRef<HTMLSpanElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0 })
-  const dropdownKey = `${leadId}::entrevistador_asignado`
+  const dropdownKey = `${leadId}::${String(field)}`
   const actual = (value || '').trim()
   const MAX_H = 260
 
@@ -3949,7 +3891,7 @@ function GuiaDropdownCell({ leadId, value, guias, isOpen, canEdit, onToggle, onC
               onMouseLeave={e => (e.currentTarget.style.background = esActual(opt.val) ? '#F3F4F6' : 'transparent')}
               onClick={(e) => {
                 e.stopPropagation()
-                if (!esActual(opt.val)) onChange(leadId, 'entrevistador_asignado', opt.val)
+                if (!esActual(opt.val)) onChange(leadId, field, opt.val)
                 onClose()
               }}
             >

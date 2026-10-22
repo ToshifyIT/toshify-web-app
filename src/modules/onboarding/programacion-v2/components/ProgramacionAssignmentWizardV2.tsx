@@ -29,7 +29,7 @@ import type { Conductor } from '../../../../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../../utils/conductorUtils'
 import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../../lib/googleMaps'
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
-import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
+import { cargarConceptosTarifa, getEtiquetaTarifa, getPeriodoTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
 import { enRangoDiasART, fechaISOART } from '../../../../utils/fechaArgentina'
 import { repartirTurnosDelPar } from '../../../../types/programacionPrecarga.types'
 import type { PrecargaParMapa, PersonaPrecargaPar } from '../../../../types/programacionPrecarga.types'
@@ -696,6 +696,14 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
             .map(a => a.conductor_id)
         )
         const conductoresProgramadosSet = new Set((asignacionesProgramadas || []).map(a => a.conductor_id))
+        // Tarifa de la asignación activa de cada conductor (la del conductor manda
+        // sobre la de la asignación; sin dato es 'antigua', mismo criterio de arriba).
+        const tarifaActivaPorConductor = new Map<string, TipoTarifa>()
+        for (const a of (asignacionesActivasRes.data || []) as any[]) {
+          if (!tarifaActivaPorConductor.has(a.conductor_id)) {
+            tarifaActivaPorConductor.set(a.conductor_id, ((a.tipo_tarifa || a.asignaciones?.tipo_tarifa) || 'antigua') as TipoTarifa)
+          }
+        }
         // ─────────────────────────────────────────────────────────────────────────
 
         const conductoresConEstado = conductoresActivos.map(conductor => {
@@ -711,6 +719,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
             tieneAsignacionActiva,
             tieneAsignacionProgramada,
             tieneTarifaAntiguaActiva: conductoresConTarifaAntiguaSet.has(conductor.id),
+            tarifaActiva: tarifaActivaPorConductor.get(conductor.id) || null,
             tieneAsignacionDiurna: tieneAsignacionDiurna || tieneAsignacionCargo,
             tieneAsignacionNocturna: tieneAsignacionNocturna || tieneAsignacionCargo
           }
@@ -1352,6 +1361,39 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
 
   // GNC del vehiculo que efectivamente se entrega. En un cambio de vehiculo el
   // que manda es el vehiculo destino (mismo criterio que vehiculo_entregar_id).
+  /**
+   * Tarifa por defecto = la que el conductor tiene hoy en su asignación activa.
+   * Se aplica cada vez que un turno pasa a otra persona, venga de donde venga
+   * (arrastre, par del mapa, ocupante del vehículo). No pisa lo guardado al
+   * editar una programación ni lo que se elija a mano después para la misma
+   * persona.
+   */
+  const tarifaAplicadaRef = useRef<Record<SlotConductor, string>>({
+    cargo: editData?.conductor_id || '',
+    diurno: editData?.conductor_diurno_id || '',
+    nocturno: editData?.conductor_nocturno_id || '',
+  })
+  useEffect(() => {
+    type CampoTarifa = 'tipo_tarifa' | 'tipo_tarifa_diurno' | 'tipo_tarifa_nocturno'
+    const slots: Array<[SlotConductor, string, CampoTarifa]> = [
+      ['cargo', formData.conductor_id, 'tipo_tarifa'],
+      ['diurno', formData.conductor_diurno_id, 'tipo_tarifa_diurno'],
+      ['nocturno', formData.conductor_nocturno_id, 'tipo_tarifa_nocturno'],
+    ]
+    const updates: Partial<Record<CampoTarifa, TipoTarifa>> = {}
+    for (const [slot, id, campo] of slots) {
+      if (!id || id === tarifaAplicadaRef.current[slot]) continue
+      const c = conductores.find((x) => x.id === id) as any
+      if (!c) continue // la lista todavía no cargó: se reintenta cuando cargue
+      tarifaAplicadaRef.current[slot] = id
+      if (c.tieneAsignacionActiva && c.tarifaActiva && formData[campo] !== c.tarifaActiva) {
+        updates[campo] = c.tarifaActiva
+      }
+    }
+    if (Object.keys(updates).length > 0) setFormData((prev) => ({ ...prev, ...updates }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.conductor_id, formData.conductor_diurno_id, formData.conductor_nocturno_id, conductores])
+
   const tieneGncVehiculoEntregado = useMemo(() => {
     const id = formData.cambio_vehiculo ? formData.vehiculo_cambio_id : formData.vehiculo_id
     if (!id) return false
@@ -2384,7 +2426,12 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
   const avisoAsignacionActiva = (c: Conductor | undefined, esLead: boolean) => {
     if (!c || esLead) return null
     if (!(c as any).tieneAsignacionActiva) return null
-    return <p className="conductor-asignacion-activa">Asignacion activa</p>
+    const tarifa = (c as any).tarifaActiva as TipoTarifa | null | undefined
+    return (
+      <p className="conductor-asignacion-activa">
+        Asignacion activa{tarifa ? ` · Tarifa ${getPeriodoTarifa(conceptosTarifa, tarifa)}` : ''}
+      </p>
+    )
   }
 
   const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) ||
@@ -5068,6 +5115,22 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                   }}>
                                     {formatPreferencia(conductor.preferencia_turno)}
                                   </span>
+                                  {conductor.tieneAsignacionActiva && (conductor as any).tarifaActiva && (
+                                    <span
+                                      title="Tarifa de su asignación activa"
+                                      style={{
+                                        fontSize: '9px',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontWeight: '600',
+                                        background: 'var(--bg-secondary, #F3F4F6)',
+                                        color: 'var(--text-secondary, #4B5563)',
+                                        border: '1px solid var(--border-primary, #E5E7EB)',
+                                      }}
+                                    >
+                                      {getPeriodoTarifa(conceptosTarifa, (conductor as any).tarifaActiva)}
+                                    </span>
+                                  )}
                                 </p>
                                 {zonaRestringida && (
                                   <span style={{

@@ -44,12 +44,16 @@ export type ZonaOnboarding = 'norte' | 'sur' | 'caba' | 'oeste'
 // Confirmación asistencia
 export type ConfirmacionAsistencia = 'confirmo' | 'no_confirmo' | 'reprogramar' | 'sin_confirmar'
 
-// Estado Cabify
+// Estado de la cuenta Cabify / DiDi de la persona (ver src/modules/leads/cuentasApps.ts).
+// 'listo_cabify', 'asignar_auto' y 'confirmacion_didi' son valores anteriores:
+// los convierte sql/cuentas_cabify_didi.sql y sólo los sigue usando el módulo
+// de Programación v1.
 export type EstadoCabify =
+  | 'crear_cuenta'
   | 'pendiente'
+  | 'confirmada'
   | 'listo_cabify'
   | 'asignar_auto'
-  | 'crear_cuenta'
   | 'confirmacion_didi'
 
 // Tipo documento
@@ -136,6 +140,9 @@ export interface ProgramacionOnboarding {
   estado_cabify?: EstadoCabify
   estado_cabify_diurno?: EstadoCabify
   estado_cabify_nocturno?: EstadoCabify
+  /** Estado de la cuenta DiDi del conductor del turno (A cargo usa _diurno). */
+  estado_didi_diurno?: EstadoCabify | null
+  estado_didi_nocturno?: EstadoCabify | null
   
   // Especialista
   especialista_id?: string
@@ -255,6 +262,9 @@ export interface ProgramacionOnboardingFormData {
   estado_cabify?: EstadoCabify
   estado_cabify_diurno?: EstadoCabify
   estado_cabify_nocturno?: EstadoCabify
+  /** Estado de la cuenta DiDi del conductor del turno (A cargo usa _diurno). */
+  estado_didi_diurno?: EstadoCabify | null
+  estado_didi_nocturno?: EstadoCabify | null
   
   // Especialista
   especialista_id?: string
@@ -324,6 +334,7 @@ export const CONFIRMACION_LABELS: Record<ConfirmacionAsistencia, string> = {
 
 export const ESTADO_CABIFY_LABELS: Record<EstadoCabify, string> = {
   pendiente: 'Pendiente',
+  confirmada: 'Confirmada',
   listo_cabify: 'Listo Cabify',
   asignar_auto: 'Asignar auto',
   crear_cuenta: 'Crear cuenta',

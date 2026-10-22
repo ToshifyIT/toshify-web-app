@@ -5,6 +5,7 @@ import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import { useSede } from '../../../contexts/SedeContext'
 import type { LeadFormData } from '../../../types/leads.types'
 import { normalizarCelularAR, validarCelularAR } from '../../../utils/validacionesCampos'
+import { LABELS_CUENTA_APP } from '../cuentasApps'
 
 interface CatalogoItem {
   id: string
@@ -594,12 +595,21 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Cuenta Cabify</label>
                 <select value={formData.cuenta_cabify || ''} onChange={e => updateField('cuenta_cabify', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="En proceso">En proceso</option>
-                  <option value="Activa">Activa</option>
-                  <option value="No tiene">No tiene</option>
-                  <option value="en revision">en revision</option>
-                  <option value="Verificar Activa">Verificar Activa</option>
-                  <option value="Cuenta de DIDI activa">Cuenta de DIDI activa</option>
+                  {/* Valor anterior al cambio de estados: se conserva como opción para no perderlo */}
+                  {formData.cuenta_cabify && !LABELS_CUENTA_APP.includes(formData.cuenta_cabify) && (
+                    <option value={formData.cuenta_cabify}>{formData.cuenta_cabify}</option>
+                  )}
+                  {LABELS_CUENTA_APP.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </div>
+              <div className="lead-wizard-field">
+                <label>Cuenta DiDi</label>
+                <select value={formData.cuenta_didi || ''} onChange={e => updateField('cuenta_didi', e.target.value)}>
+                  <option value="">Seleccionar</option>
+                  {formData.cuenta_didi && !LABELS_CUENTA_APP.includes(formData.cuenta_didi) && (
+                    <option value={formData.cuenta_didi}>{formData.cuenta_didi}</option>
+                  )}
+                  {LABELS_CUENTA_APP.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
             </div>

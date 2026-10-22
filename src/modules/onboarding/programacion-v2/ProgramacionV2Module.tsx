@@ -51,6 +51,14 @@ import type { GeneratedDocument } from '../../../services/contractService'
 import './ProgramacionV2Module.css'
 import { PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
 import { ConvertirLeadModal } from './components/ConvertirLeadModal'
+import {
+  ESTADOS_CUENTA_APP,
+  LABEL_APP,
+  codigoCuentaApp,
+  labelCuentaApp,
+  type AppCuenta,
+  type EstadoCuentaApp,
+} from '../../leads/cuentasApps'
 import { AvisoLeadsPendientes, type LeadPendiente } from './components/AvisoLeadsPendientes'
 import { calcularMinutosEntre, tieneCoordenadas, type Coordenada } from './distanciaParService'
 
@@ -226,6 +234,9 @@ export function ProgramacionV2Module() {
   const canDelete = canDeleteInMenu('programacion-entregas')
 
   const [programaciones, setProgramaciones] = useState<ProgramacionOnboardingCompleta[]>([])
+  // Cuentas Cabify / DiDi de los leads programados, por id de lead. El dato vive
+  // en el lead: se lee de ahí y al editarlo en Programación se escribe ahí.
+  const [cuentasLead, setCuentasLead] = useState<Record<string, { cuenta_cabify: string | null; cuenta_didi: string | null }>>({})
   const [programacionesHistorico, setProgramacionesHistorico] = useState<ProgramacionOnboardingCompleta[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingHistorico, setLoadingHistorico] = useState(false)
@@ -809,6 +820,69 @@ export function ProgramacionV2Module() {
   }
 
   /**
+   * Estado de las cuentas Cabify / DiDi de cada turno.
+   *  - Turno con lead: se trae `cuenta_cabify` / `cuenta_didi` del lead.
+   *  - Turno con conductor: `estado_didi_<turno>` de la tabla base (la vista no
+   *    lo expone, mismo caso que lead_*_id). `estado_cabify_<turno>` ya viene en
+   *    la vista.
+   * Best-effort: si algo falla (p. ej. todavía no se corrió
+   * sql/cuentas_cabify_didi.sql), esa parte queda sin dato y se muestra "-".
+   */
+  const adjuntarCuentasApps = async (
+    filas: ProgramacionOnboardingCompleta[]
+  ): Promise<ProgramacionOnboardingCompleta[]> => {
+    if (filas.length === 0) return filas
+    let resultado = filas
+
+    try {
+      const { data, error } = await (supabase.from('programaciones_onboarding') as any)
+        .select('id, estado_didi_diurno, estado_didi_nocturno')
+        .in('id', filas.map((f) => f.id))
+      if (!error && data) {
+        const porId = new Map<string, any>(data.map((r: any) => [r.id, r]))
+        resultado = resultado.map((f) => {
+          const extra = porId.get(f.id)
+          return extra
+            ? { ...f, estado_didi_diurno: extra.estado_didi_diurno || null, estado_didi_nocturno: extra.estado_didi_nocturno || null }
+            : f
+        })
+      }
+    } catch {
+      // sin columnas DiDi todavía: queda sin dato
+    }
+
+    const leadIds = [
+      ...new Set(
+        resultado
+          .flatMap((f) => [f.lead_diurno_id, f.lead_nocturno_id, f.lead_cargo_id])
+          .filter((id): id is string => !!id)
+      ),
+    ]
+    if (leadIds.length > 0) {
+      try {
+        const leer = (columnas: string) =>
+          (supabase.from('leads') as any).select(columnas).in('id', leadIds)
+        let { data, error } = await leer('id, cuenta_cabify, cuenta_didi')
+        // Si la columna cuenta_didi todavía no existe, al menos se muestra Cabify.
+        if (error) ({ data, error } = await leer('id, cuenta_cabify'))
+        if (!error && data) {
+          setCuentasLead((prev) => {
+            const next = { ...prev }
+            for (const r of data as any[]) {
+              next[r.id] = { cuenta_cabify: r.cuenta_cabify ?? null, cuenta_didi: r.cuenta_didi ?? null }
+            }
+            return next
+          })
+        }
+      } catch {
+        // sin dato de los leads: se muestra "-"
+      }
+    }
+
+    return resultado
+  }
+
+  /**
    * Tipo de persona de un slot: 'lead' si quedo apuntado un lead (y por lo
    * tanto no hay fila en `conductores`), 'conductor' si hay conductor, o null
    * si el turno esta vacante.
@@ -852,7 +926,7 @@ export function ProgramacionV2Module() {
         .order('created_at', { ascending: false })
 
       if (queryError) throw queryError
-      setProgramaciones(await adjuntarLeadIds((data || []) as ProgramacionOnboardingCompleta[]))
+      setProgramaciones(await adjuntarCuentasApps(await adjuntarLeadIds((data || []) as ProgramacionOnboardingCompleta[])))
     } catch (err: any) {
       setError(err.message || 'Error al cargar programaciones')
     } finally {
@@ -1414,6 +1488,121 @@ export function ProgramacionV2Module() {
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al actualizar', 'error')
     }
+  }
+
+  /** Lead y datos del turno para las columnas Cabify / DiDi. A cargo usa el slot 'diurno'. */
+  const slotCuentas = (prog: ProgramacionOnboardingCompleta, slot: 'diurno' | 'nocturno') => {
+    const esTurno = prog.modalidad === 'turno'
+    if (!esTurno) {
+      return {
+        leadId: prog.lead_cargo_id || null,
+        conductorId: prog.conductor_id,
+        nombre: prog.conductor_nombre || prog.conductor_display,
+      }
+    }
+    return slot === 'diurno'
+      ? { leadId: prog.lead_diurno_id || null, conductorId: prog.conductor_diurno_id, nombre: prog.conductor_diurno_nombre }
+      : { leadId: prog.lead_nocturno_id || null, conductorId: prog.conductor_nocturno_id, nombre: prog.conductor_nocturno_nombre }
+  }
+
+  /**
+   * Cambio de estado de cuenta Cabify / DiDi de un turno. Si lo ocupa un lead,
+   * se guarda en el lead (es su dato y así se ve igual en Leads); si lo ocupa un
+   * conductor, en la programación.
+   */
+  const handleCuentaAppChange = async (
+    prog: ProgramacionOnboardingCompleta,
+    slot: 'diurno' | 'nocturno',
+    app: AppCuenta,
+    codigo: EstadoCuentaApp | ''
+  ) => {
+    const { leadId } = slotCuentas(prog, slot)
+    if (!leadId) {
+      await handleUpdateField(prog.id, `estado_${app}_${slot}`, codigo || null)
+      return
+    }
+    const campo = app === 'cabify' ? 'cuenta_cabify' : 'cuenta_didi'
+    const valor = codigo ? labelCuentaApp(codigo) : null
+    try {
+      const { error } = await (supabase.from('leads') as any)
+        .update({ [campo]: valor, updated_at: new Date().toISOString() })
+        .eq('id', leadId)
+      if (error) throw error
+      setCuentasLead((prev) => ({
+        ...prev,
+        [leadId]: { cuenta_cabify: prev[leadId]?.cuenta_cabify ?? null, cuenta_didi: prev[leadId]?.cuenta_didi ?? null, [campo]: valor },
+      }))
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'Error al actualizar el lead', 'error')
+    }
+  }
+
+  /** Estado actual (código) de la cuenta de un turno, o null si no hay dato. */
+  const estadoCuentaApp = (
+    prog: ProgramacionOnboardingCompleta,
+    slot: 'diurno' | 'nocturno',
+    app: AppCuenta
+  ): EstadoCuentaApp | null => {
+    const { leadId } = slotCuentas(prog, slot)
+    if (leadId) {
+      const cuentas = cuentasLead[leadId]
+      return codigoCuentaApp(app === 'cabify' ? cuentas?.cuenta_cabify : cuentas?.cuenta_didi)
+    }
+    const valor = app === 'cabify'
+      ? (slot === 'diurno' ? prog.estado_cabify_diurno : prog.estado_cabify_nocturno)
+      : (slot === 'diurno' ? prog.estado_didi_diurno : prog.estado_didi_nocturno)
+    return codigoCuentaApp(valor)
+  }
+
+  /** Desplegable de estado de cuenta de un turno ("-" si el turno está vacante). */
+  const renderCuentaApp = (
+    prog: ProgramacionOnboardingCompleta,
+    slot: 'diurno' | 'nocturno',
+    app: AppCuenta,
+    mini: boolean
+  ) => {
+    const { leadId, conductorId, nombre } = slotCuentas(prog, slot)
+    if (!tipoPersonaSlot(leadId, conductorId, nombre)) {
+      return <span className="prog-sin-conductor">-</span>
+    }
+    const codigo = estadoCuentaApp(prog, slot, app)
+    return (
+      <select
+        className={`${mini ? 'prog-inline-select-mini' : 'prog-inline-select'} cabify ${codigo || 'sin_dato'}`}
+        value={codigo || ''}
+        onChange={(e) => handleCuentaAppChange(prog, slot, app, e.target.value as EstadoCuentaApp | '')}
+        title={`Cuenta ${LABEL_APP[app]}${leadId ? ' (se guarda en el lead)' : ''}`}
+      >
+        <option value="">-</option>
+        {ESTADOS_CUENTA_APP.map((e) => (
+          <option key={e.codigo} value={e.codigo}>{e.label}</option>
+        ))}
+      </select>
+    )
+  }
+
+  /** Celda Cabify / DiDi: dos desplegables en TURNO (D y N), uno en A CARGO. */
+  const celdaCuentaApp = (prog: ProgramacionOnboardingCompleta, app: AppCuenta) => {
+    if (prog.modalidad === 'turno') {
+      return (
+        <div className="prog-cabify-turno">
+          <div className="prog-cabify-row">{renderCuentaApp(prog, 'diurno', app, true)}</div>
+          <div className="prog-cabify-row">{renderCuentaApp(prog, 'nocturno', app, true)}</div>
+        </div>
+      )
+    }
+    return renderCuentaApp(prog, 'diurno', app, false)
+  }
+
+  /** Valor para buscar/filtrar/ordenar la columna Cabify / DiDi. */
+  const valorCuentaApp = (prog: ProgramacionOnboardingCompleta, app: AppCuenta): string => {
+    const slots: Array<'diurno' | 'nocturno'> = prog.modalidad === 'turno' ? ['diurno', 'nocturno'] : ['diurno']
+    return slots
+      .map((s) => {
+        const c = estadoCuentaApp(prog, s, app)
+        return c ? labelCuentaApp(c) : '-'
+      })
+      .join(' / ')
   }
 
   // Enviar devolución - Crear registro en tabla devoluciones (sin asignación)
@@ -2329,11 +2518,9 @@ export function ProgramacionV2Module() {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span className="prog-turno-label prog-label-diurno">D</span>
               {diurno ? <ChipTipoPersona tipo={diurno} /> : <span className="prog-sin-conductor">-</span>}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span className="prog-turno-label prog-label-nocturno">N</span>
               {nocturno ? <ChipTipoPersona tipo={nocturno} /> : <span className="prog-sin-conductor">-</span>}
             </span>
           </div>
@@ -2354,7 +2541,6 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-tipo-asig-turno">
               <div className="prog-tipo-asig-row">
-                <span className="prog-tipo-asig-label">D:</span>
                 <select
                   className={`prog-inline-select-mini tipo-asignacion ${tipoD}`}
                   value={tipoD}
@@ -2371,7 +2557,6 @@ export function ProgramacionV2Module() {
                 </select>
               </div>
               <div className="prog-tipo-asig-row">
-                <span className="prog-tipo-asig-label">N:</span>
                 <select
                   className={`prog-inline-select-mini tipo-asignacion ${tipoN}`}
                   value={tipoN}
@@ -2450,7 +2635,6 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-documento-turno">
               <div className="prog-documento-row">
-                <span className="prog-documento-label">D:</span>
                 <select
                   className={`prog-inline-select-mini documento ${docDiurno || 'sin_definir'}`}
                   value={docDiurno}
@@ -2464,7 +2648,6 @@ export function ProgramacionV2Module() {
                 </select>
               </div>
               <div className="prog-documento-row">
-                <span className="prog-documento-label">N:</span>
                 <select
                   className={`prog-inline-select-mini documento ${docNocturno || 'sin_definir'}`}
                   value={docNocturno}
@@ -2513,7 +2696,6 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-confirmacion-turno">
               <div className="prog-confirmacion-row">
-                <span className="prog-confirmacion-label">D:</span>
                 <select
                   className={`prog-inline-select-mini confirmacion ${confD}`}
                   value={confD}
@@ -2527,7 +2709,6 @@ export function ProgramacionV2Module() {
                 </select>
               </div>
               <div className="prog-confirmacion-row">
-                <span className="prog-confirmacion-label">N:</span>
                 <select
                   className={`prog-inline-select-mini confirmacion ${confN}`}
                   value={confN}
@@ -2561,68 +2742,16 @@ export function ProgramacionV2Module() {
       }
     },
     {
-      accessorKey: 'estado_cabify',
+      id: 'estado_cabify',
       header: 'Cabify',
-      cell: ({ row }) => {
-        const prog = row.original
-
-        // Para TURNO: mostrar 2 selects (diurno y nocturno)
-        if (prog.modalidad === 'turno') {
-          const estadoD = prog.estado_cabify_diurno || 'pendiente'
-          const estadoN = prog.estado_cabify_nocturno || 'pendiente'
-
-          return (
-            <div className="prog-cabify-turno">
-              <div className="prog-cabify-row">
-                <span className="prog-cabify-label">D:</span>
-                <select
-                  className={`prog-inline-select-mini cabify ${estadoD}`}
-                  value={estadoD}
-                  onChange={(e) => handleUpdateField(prog.id, 'estado_cabify_diurno', e.target.value)}
-                  title="Estado Cabify conductor diurno"
-                >
-                  <option value="pendiente">Pendiente</option>
-                  <option value="listo_cabify">Listo Cabify</option>
-                  <option value="asignar_auto">Asignar Auto</option>
-                  <option value="crear_cuenta">Crear Cuenta</option>
-                  <option value="confirmacion_didi">Confirmación DIDI</option>
-                </select>
-              </div>
-              <div className="prog-cabify-row">
-                <span className="prog-cabify-label">N:</span>
-                <select
-                  className={`prog-inline-select-mini cabify ${estadoN}`}
-                  value={estadoN}
-                  onChange={(e) => handleUpdateField(prog.id, 'estado_cabify_nocturno', e.target.value)}
-                  title="Estado Cabify conductor nocturno"
-                >
-                  <option value="pendiente">Pendiente</option>
-                  <option value="listo_cabify">Listo Cabify</option>
-                  <option value="asignar_auto">Asignar Auto</option>
-                  <option value="crear_cuenta">Crear Cuenta</option>
-                  <option value="confirmacion_didi">Confirmación DIDI</option>
-                </select>
-              </div>
-            </div>
-          )
-        }
-
-        // Para A CARGO: un solo select
-        return (
-          <select
-            className={`prog-inline-select cabify ${prog.estado_cabify_diurno || 'pendiente'}`}
-            value={prog.estado_cabify_diurno || 'pendiente'}
-            onChange={(e) => handleUpdateField(prog.id, 'estado_cabify_diurno', e.target.value)}
-            title="Estado Cabify"
-          >
-            <option value="pendiente">Pendiente</option>
-            <option value="listo_cabify">Listo Cabify</option>
-            <option value="asignar_auto">Asignar Auto</option>
-            <option value="crear_cuenta">Crear Cuenta</option>
-            <option value="confirmacion_didi">Confirmación DIDI</option>
-          </select>
-        )
-      }
+      accessorFn: (row) => valorCuentaApp(row, 'cabify'),
+      cell: ({ row }) => celdaCuentaApp(row.original, 'cabify'),
+    },
+    {
+      id: 'estado_didi',
+      header: 'DiDi',
+      accessorFn: (row) => valorCuentaApp(row, 'didi'),
+      cell: ({ row }) => celdaCuentaApp(row.original, 'didi'),
     },
     {
       id: 'acciones',
@@ -2669,7 +2798,8 @@ export function ProgramacionV2Module() {
         </div>
       )
     }
-  ], [canCreate, canEdit, canDelete])
+    // cuentasLead: las columnas Cabify / DiDi muestran el dato del lead, que vive en ese estado.
+  ], [canCreate, canEdit, canDelete, cuentasLead])
 
   // Columnas para Enviados (igual que pendientes pero solo botón Ver)
   const enviadosColumns = useMemo<ColumnDef<ProgramacionOnboardingCompleta, any>[]>(() => [
@@ -2781,11 +2911,9 @@ export function ProgramacionV2Module() {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span className="prog-turno-label prog-label-diurno">D</span>
               {diurno ? <ChipTipoPersona tipo={diurno} /> : <span className="prog-sin-conductor">-</span>}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span className="prog-turno-label prog-label-nocturno">N</span>
               {nocturno ? <ChipTipoPersona tipo={nocturno} /> : <span className="prog-sin-conductor">-</span>}
             </span>
           </div>
@@ -2818,13 +2946,11 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-tipo-asig-turno">
               <div className="prog-tipo-asig-row">
-                <span className="prog-tipo-asig-label">D:</span>
                 <span className={`prog-inline-select-mini tipo-asignacion ${tipoD}`} style={{ cursor: 'default', border: 'none' }}>
                   {tipoD ? (tipoLabelsShort[tipoD] || tipoD) : '-'}
                 </span>
               </div>
               <div className="prog-tipo-asig-row">
-                <span className="prog-tipo-asig-label">N:</span>
                 <span className={`prog-inline-select-mini tipo-asignacion ${tipoN}`} style={{ cursor: 'default', border: 'none' }}>
                   {tipoN ? (tipoLabelsShort[tipoN] || tipoN) : '-'}
                 </span>
@@ -2888,13 +3014,11 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-documento-turno">
               <div className="prog-documento-row">
-                <span className="prog-documento-label">D:</span>
                 <span className={`prog-inline-select-mini documento ${docDiurno || 'sin_definir'}`} style={{ cursor: 'default', border: 'none' }}>
                   {docLabels[docDiurno] || docDiurno || '-'}
                 </span>
               </div>
               <div className="prog-documento-row">
-                <span className="prog-documento-label">N:</span>
                 <span className={`prog-inline-select-mini documento ${docNocturno || 'sin_definir'}`} style={{ cursor: 'default', border: 'none' }}>
                   {docLabels[docNocturno] || docNocturno || '-'}
                 </span>
@@ -2935,11 +3059,9 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-confirmacion-turno">
               <div className="prog-confirmacion-row">
-                <span className="prog-confirmacion-label">D:</span>
                 <span style={{ color: confDInfo.color, fontSize: '12px' }}>{confDInfo.label}</span>
               </div>
               <div className="prog-confirmacion-row">
-                <span className="prog-confirmacion-label">N:</span>
                 <span style={{ color: confNInfo.color, fontSize: '12px' }}>{confNInfo.label}</span>
               </div>
             </div>

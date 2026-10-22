@@ -1,10 +1,11 @@
 // src/modules/onboarding/distribucion-mapa-v2/components/iconos.tsx
 //
-// Badge inline del tipo de entidad, para listas, leyendas y tarjetas.
-// Usa exactamente el mismo pictograma y la misma forma (rombo) que los pines
-// del mapa, para que la lectura sea idéntica en el mapa y en la lista.
+// Ícono inline del tipo de entidad, para listas, leyendas y tarjetas: círculo
+// pastel con el pictograma (auto o persona) en el color de acento. Mismo
+// pictograma y mismos tonos que los pines del mapa.
 
-import { glifoConductor, glifoLead } from './glifos'
+import { glifoEntidad } from './glifos'
+import { fondoPastel } from './colores'
 import type { TipoEntidadMapa } from '../types'
 
 export function IconoEntidad({
@@ -16,14 +17,8 @@ export function IconoEntidad({
   color: string
   size?: number
 }) {
-  const glifo =
-    tipo === 'conductor'
-      ? glifoConductor({ color, escala: 0.52, cx: 12, cy: 12.7 })
-      : glifoLead({ escala: 0.74, cx: 12, cy: 12.4 })
-
-  // Rombo para ambos tipos, igual que los pines del mapa: lo que distingue a un
-  // conductor de un lead es el pictograma, no la forma del fondo.
-  const fondo = `<path d="M12 0.6 23.4 12 12 23.4 0.6 12Z" fill="${color}"/>`
+  const fondo = `<circle cx="12" cy="12" r="11.2" fill="${fondoPastel(color)}" stroke="${color}" stroke-width="1.2"/>`
+  const glifo = glifoEntidad(tipo, { tamano: 16, cx: 12, cy: 12, tinta: color })
 
   return (
     <svg

@@ -71,7 +71,7 @@ import {
   sugerirPares,
   UMBRAL_MINUTOS_DEFAULT,
 } from './emparejamientoService'
-import { coincideBusqueda, coordsValidas, mismaPersona, turnoLeadATurno } from './utils'
+import { coincideBusqueda, coordsValidas, mismaPersona, turnoLeadATurno, turnoConductor } from './utils'
 import type {
   EntidadMapa,
   ParSugerido,
@@ -509,7 +509,7 @@ export function DistribucionMapaV2Module() {
       if (c.esBaja && !filtros.verBaja) return false
       if (
         filtros.turnosConductor.size > 0 &&
-        !filtros.turnosConductor.has(c.turnoEfectivo || 'SIN_PREFERENCIA')
+        !filtros.turnosConductor.has(turnoConductor(c) || '')
       ) {
         return false
       }
@@ -583,7 +583,11 @@ export function DistribucionMapaV2Module() {
     if (filtros.segmento !== 'conductores') {
       for (const l of conUbicacion.lds) if (pasaFiltrosLead(l)) out.push(l)
     }
-    return out
+    // Siempre por fecha de creación, más recientes primero, mezclando
+    // conductores y leads. Sin fecha van al final; el sort es estable, así que
+    // entre ellos se conserva el orden de la consulta.
+    const tiempo = (e: EntidadMapa) => (e.creadoEn ? Date.parse(e.creadoEn) || 0 : 0)
+    return out.sort((a, b) => tiempo(b) - tiempo(a))
   }, [conUbicacion, filtros.segmento, pasaFiltrosConductor, pasaFiltrosLead])
 
   // El emparejamiento trabaja EXACTAMENTE sobre lo que se está viendo en el
@@ -600,6 +604,19 @@ export function DistribucionMapaV2Module() {
     ).length
     return { c, l, sinCompanero }
   }, [visibles])
+
+  /**
+   * Cantidad por capa, esté prendida o no: lo que se vería al prenderla con los
+   * filtros actuales. (`conteos` cuenta sólo lo visible, y una capa apagada
+   * daría siempre 0.)
+   */
+  const conteosCapa = useMemo(
+    () => ({
+      c: conUbicacion.conds.filter(pasaFiltrosConductor).length,
+      l: conUbicacion.lds.filter(pasaFiltrosLead).length,
+    }),
+    [conUbicacion, pasaFiltrosConductor, pasaFiltrosLead]
+  )
 
   /** Guías asignados a los leads cargados, sin duplicados por mayúsculas/espacios. */
   const guiasDisponibles = useMemo(() => {
@@ -1160,12 +1177,12 @@ export function DistribucionMapaV2Module() {
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
               Distribución en mapa
             </h2>
-            <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-              {conteos.c} conductores · {conteos.l} leads con ubicación ·{' '}
-              <b style={{ color: 'var(--color-primary, #ff0033)' }}>
+            {/* Sólo lo accionable: los totales ya están en las tarjetas de capa. */}
+            {filtros.segmento !== 'leads' && (
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--color-primary, #ff0033)' }}>
                 {conteos.sinCompanero} sin compañero
-              </b>
-            </span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -1281,8 +1298,8 @@ export function DistribucionMapaV2Module() {
               onChange={aplicarPatch}
               estadosLeadDisponibles={estadosLeadDisponibles}
               guiasDisponibles={guiasDisponibles}
-              conteoConductores={conteos.c}
-              conteoLeads={conteos.l}
+              conteoConductores={conteosCapa.c}
+              conteoLeads={conteosCapa.l}
               conteoSinCompanero={conteos.sinCompanero}
               filtrosActivos={filtrosActivos}
               onLimpiar={limpiarFiltros}
@@ -1808,9 +1825,31 @@ function FilaLista({
         )}
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 21, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-          {e.tipo === 'lead' ? 'Lead' : e.esBaja ? 'Conductor · Baja' : 'Conductor'}
-        </span>
+        {/* El tipo (conductor / lead) ya lo dice el ícono: no se repite en texto. */}
+        {e.tipo === 'conductor' && e.tieneAsignacionActiva && e.patenteAsignacion && (
+          <span
+            title="Vehículo asignado"
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 4,
+              padding: '0 4px',
+              letterSpacing: '.3px',
+            }}
+          >
+            {e.patenteAsignacion}
+          </span>
+        )}
+        {e.tipo === 'conductor' && e.tieneAsignacionActiva && e.tarifaAsignacion && (
+          <span title="Tarifa de la asignación activa" style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {e.tarifaAsignacion}
+          </span>
+        )}
+        {e.tipo === 'conductor' && e.esBaja && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)' }}>Baja</span>
+        )}
         {e.documento && (
           <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.documento}</span>
         )}
