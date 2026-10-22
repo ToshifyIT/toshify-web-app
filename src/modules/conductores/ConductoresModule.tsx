@@ -2930,21 +2930,6 @@ export function ConductoresModule() {
     return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [conductores]);
 
-  // Obtener lista única de categorías de licencia para el filtro
-  const uniqueCategorias = useMemo(() => {
-    const categorias = new Map<string, string>();
-    conductores.forEach(c => {
-      if (Array.isArray(c.licencias_categorias)) {
-        c.licencias_categorias.forEach((cat: any) => {
-          if (cat?.codigo) {
-            categorias.set(cat.codigo, cat.codigo);
-          }
-        });
-      }
-    });
-    return Array.from(categorias.keys()).sort();
-  }, [conductores]);
-
   const uniqueTelefonos = useMemo(() => {
     const tels = new Set<string>()
     conductores.forEach(c => {
@@ -3123,19 +3108,6 @@ export function ConductoresModule() {
     }
   };
 
-  // Handler para mostrar todas las categorías de licencia en popup
-  const handleShowAllCategorias = (categorias: any[]) => {
-    Swal.fire({
-      title: 'Categorías de Licencia',
-      html: `<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px;">
-        ${categorias.map((cat: any) => `<span style="background: rgba(59, 130, 246, 0.1); color: #3B82F6; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;">${cat.codigo}</span>`).join('')}
-      </div>`,
-      showConfirmButton: false,
-      showCloseButton: true,
-      width: 350,
-    });
-  };
-
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<ConductorWithRelations>[]>(
     () => [
@@ -3295,56 +3267,10 @@ export function ConductoresModule() {
         enableSorting: true,
       },
       {
-        accessorKey: "licencias_categorias",
-        header: () => (
-          <ExcelColumnFilter
-            label="Categorias"
-            options={uniqueCategorias}
-            selectedValues={categoriaFilter}
-            onSelectionChange={setCategoriaFilter}
-            filterId="categoria"
-            openFilterId={openColumnFilter}
-            onOpenChange={setOpenColumnFilter}
-          />
-        ),
-        cell: ({ row }) => {
-          const categorias = row.original.licencias_categorias;
-          if (Array.isArray(categorias) && categorias.length > 0) {
-            const maxVisible = 1;
-            const visibles = categorias.slice(0, maxVisible);
-            const restantes = categorias.length - maxVisible;
-            return (
-              <div className="dt-categorias-cell">
-                {visibles.map((cat: any, idx: number) => (
-                  <span key={idx} className="dt-badge dt-badge-blue">
-                    {cat.codigo}
-                  </span>
-                ))}
-                {restantes > 0 && (
-                  <button
-                    type="button"
-                    className="dt-badge dt-badge-gray dt-badge-more"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleShowAllCategorias(categorias);
-                    }}
-                    title={`Ver ${restantes} más: ${categorias.slice(maxVisible).map((c: any) => c.codigo).join(', ')}`}
-                  >
-                    +{restantes}
-                  </button>
-                )}
-              </div>
-            );
-          }
-          return "-";
-        },
-        enableSorting: false,
-      },
-      {
         accessorKey: "licencia_vencimiento",
         header: () => (
           <ExcelColumnFilter
-            label="Vencimiento"
+            label="F. Venc. Licencia"
             options={['Vencido', 'Por vencer', 'Vigente', 'Sin fecha']}
             selectedValues={vencimientoFilter.map(v => v === 'vencido' ? 'Vencido' : v === 'por_vencer' ? 'Por vencer' : v === 'vigente' ? 'Vigente' : 'Sin fecha')}
             onSelectionChange={(vals) => setVencimientoFilter(vals.map(v => v === 'Vencido' ? 'vencido' : v === 'Por vencer' ? 'por_vencer' : v === 'Vigente' ? 'vigente' : 'sin_fecha'))}
@@ -3671,7 +3597,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, companeroFilter, telefonoFilter, uniqueTelefonos, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, uniqueTelefonos, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
   );
 
   return (

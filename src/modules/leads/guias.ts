@@ -21,6 +21,17 @@ const GUIA_HOMOLOGADA: Record<string, string> = {
   "eunice d'urso": "Eunice D'Urso",
 }
 
+/**
+ * Guías que ya no están activos (pedido 2026-10-22). Los leads que los tienen los
+ * siguen mostrando, pero no se ofrecen para asignar ni para filtrar en el mapa.
+ */
+const GUIAS_INACTIVOS: ReadonlySet<string> = new Set(['manuel', 'marina'])
+
+/** false si el guía está dado de baja (ver GUIAS_INACTIVOS). */
+export function esGuiaActivo(nombre: string | null | undefined): boolean {
+  return !GUIAS_INACTIVOS.has(normalizarTexto(nombre))
+}
+
 /** Guía con su nombre homologado; si no está en la lista, el valor tal cual (sin espacios de más). */
 export function homologarGuia(valor: string | null | undefined): string | null {
   const limpio = (valor || '').replace(/\s+/g, ' ').trim()

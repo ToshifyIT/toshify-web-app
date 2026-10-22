@@ -39,6 +39,7 @@ import {
 import { useSede } from '../../../contexts/SedeContext'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../types/leads.types'
+import { esGuiaActivo } from '../../leads/guias'
 import { ConductorDetalleModal } from '../../conductores/panel/ConductorDetalleModal'
 import {
   cargarPanelConductores,
@@ -671,11 +672,15 @@ export function DistribucionMapaV2Module() {
     [conUbicacion, pasaFiltrosConductor, pasaFiltrosLead]
   )
 
-  /** Guías asignados a los leads cargados, sin duplicados por mayúsculas/espacios. */
+  /**
+   * Guías asignados a los leads cargados, sin duplicados por mayúsculas/espacios.
+   * Sin los guías inactivos: no se ofrecen en el filtro, pero el lead que tiene
+   * uno lo sigue mostrando en la lista y en la ficha.
+   */
   const guiasDisponibles = useMemo(() => {
     const porClave = new Map<string, string>()
     for (const l of leads) {
-      if (l.guia && !porClave.has(claveGuia(l.guia))) porClave.set(claveGuia(l.guia), l.guia)
+      if (l.guia && esGuiaActivo(l.guia) && !porClave.has(claveGuia(l.guia))) porClave.set(claveGuia(l.guia), l.guia)
     }
     return [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'))
   }, [leads])
@@ -2001,7 +2006,8 @@ function FilaLista({
           <span style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c' }}>Sin compañero</span>
         )}
         {e.tipo === 'conductor' && !e.tieneAsignacionActiva && !e.esBaja && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>
+          // Gris (mismo tono que DNI y zona): es un dato, no una alerta como "Sin compañero".
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)' }}>
             Sin asignación
           </span>
         )}

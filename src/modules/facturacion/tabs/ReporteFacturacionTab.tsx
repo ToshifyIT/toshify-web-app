@@ -382,6 +382,19 @@ function coberturaToshipass(f: { monto_toshipass?: number; subtotal_alquiler?: n
   return cobroApp - (f.subtotal_alquiler || 0) >= toshipass - 0.01 ? 'cubrio' : 'no_cubrio'
 }
 
+/**
+ * Filtro de las tarjetas "Cubrió Toshipass" / "No cubrió Toshipass" (mismo criterio
+ * que sus contadores: "No cubrió" incluye a los que todavía no tienen cobro app).
+ */
+function pasaFiltroToshipass(f: Parameters<typeof coberturaToshipass>[0], filtro: string | null): boolean {
+  if (filtro === 'toshipass_cubrio') return coberturaToshipass(f) === 'cubrio'
+  if (filtro === 'toshipass_no_cubrio') {
+    const c = coberturaToshipass(f)
+    return c === 'no_cubrio' || c === 'sin_datos'
+  }
+  return true
+}
+
 function contarCoberturaToshipass(src: Array<Parameters<typeof coberturaToshipass>[0]>) {
   const estados = src.map(coberturaToshipass)
   return {
@@ -434,7 +447,7 @@ export function ReporteFacturacionTab() {
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
   // Filtros rápidos de alertas (toggle)
-  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'telepase' | 'pausa' | 'efectivo_on' | 'efectivo_off' | null>(null)
+  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'telepase' | 'pausa' | 'efectivo_on' | 'efectivo_off' | 'toshipass_cubrio' | 'toshipass_no_cubrio' | null>(null)
 
   // Filtro por grupo de flota (null = todos)
   const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>(null)
@@ -10126,10 +10139,13 @@ export function ReporteFacturacionTab() {
 
   // Stats calculados - funciona para facturación generada y vista previa
   const stats = useMemo(() => {
-    const applyChipFilter = (data: typeof facturaciones) => {
+    // incluirToshipass=false: los contadores de las tarjetas de Toshipass no se filtran
+    // por sí mismos (al elegir "Cubrió" la otra tarjeta sigue mostrando su número).
+    const applyChipFilter = (data: typeof facturaciones, incluirToshipass = true) => {
       let result = data
       if (filtroAlerta) {
         result = result.filter(f => {
+          if (incluirToshipass && !pasaFiltroToshipass(f, filtroAlerta)) return false
           if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
           if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
           if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
@@ -10152,6 +10168,7 @@ export function ReporteFacturacionTab() {
     // como la proyección del alquiler a fin de semana.
     if (modoVistaPrevia && vistaPreviaData.length > 0) {
       const src = applyChipFilter(vistaPreviaData as typeof facturaciones)
+      const srcToshipass = applyChipFilter(vistaPreviaData as typeof facturaciones, false)
       const totalCargos = src.reduce((sum, f) => sum + (f.subtotal_cargos || 0), 0)
       const totalDescuentos = src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0)
       return {
@@ -10163,12 +10180,13 @@ export function ReporteFacturacionTab() {
         total_neto: totalCargos - totalDescuentos,
         conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
         conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
-        ...contarCoberturaToshipass(src),
+        ...contarCoberturaToshipass(srcToshipass),
       }
     }
     // Modo normal con período generado
     if (!periodo) return null
     const src = applyChipFilter(facturaciones)
+    const srcToshipass = applyChipFilter(facturaciones, false)
     return {
       total_conductores: src.length,
       // Mismo criterio que el modal (showStatInfo 'proyectado'): alquiler proyectado + garantía de la semana
@@ -10178,7 +10196,7 @@ export function ReporteFacturacionTab() {
       total_neto: src.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
       conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
       conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
-      ...contarCoberturaToshipass(src),
+      ...contarCoberturaToshipass(srcToshipass),
     }
   }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroGrupoFlota])
 
@@ -12017,16 +12035,20 @@ export function ReporteFacturacionTab() {
                 </div>
                 {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
                   <>
-                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
-                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify">
+                    <div className="fact-stat-card"
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'toshipass_cubrio' ? null : 'toshipass_cubrio')}
+                      style={{ cursor: 'pointer', boxShadow: filtroAlerta === 'toshipass_cubrio' ? 'inset 0 0 0 2px #16a34a' : undefined }}
+                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify. Click para filtrar la tabla.">
                       <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
                         <span className="stat-label">Cubrió Toshipass</span>
                       </div>
                     </div>
-                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
-                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify)">
+                    <div className="fact-stat-card"
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'toshipass_no_cubrio' ? null : 'toshipass_no_cubrio')}
+                      style={{ cursor: 'pointer', boxShadow: filtroAlerta === 'toshipass_no_cubrio' ? 'inset 0 0 0 2px #dc2626' : undefined }}
+                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify). Click para filtrar la tabla.">
                       <Ticket size={18} className="stat-icon red" />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
@@ -12150,6 +12172,7 @@ export function ReporteFacturacionTab() {
               if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
               if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
               if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
+              if (!pasaFiltroToshipass(f, filtroAlerta)) return false
               // Filtro por grupo de flota
               if (filtroGrupoFlota && (f.grupo_flota || '') !== filtroGrupoFlota) return false
               return true
@@ -12232,16 +12255,20 @@ export function ReporteFacturacionTab() {
                 </div>
                 {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
                   <>
-                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
-                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify">
+                    <div className="fact-stat-card"
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'toshipass_cubrio' ? null : 'toshipass_cubrio')}
+                      style={{ cursor: 'pointer', boxShadow: filtroAlerta === 'toshipass_cubrio' ? 'inset 0 0 0 2px #16a34a' : undefined }}
+                      title="Conductores que cubrieron el Toshipass con el cobro app de Cabify. Click para filtrar la tabla.">
                       <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
                         <span className="stat-label">Cubrió Toshipass</span>
                       </div>
                     </div>
-                    <div className="fact-stat-card" onClick={() => showStatInfo('toshipass')} style={{ cursor: 'pointer' }}
-                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify)">
+                    <div className="fact-stat-card"
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'toshipass_no_cubrio' ? null : 'toshipass_no_cubrio')}
+                      style={{ cursor: 'pointer', boxShadow: filtroAlerta === 'toshipass_no_cubrio' ? 'inset 0 0 0 2px #dc2626' : undefined }}
+                      title="Conductores que no cubrieron el Toshipass (incluye los que todavía no tienen cobro app de Cabify). Click para filtrar la tabla.">
                       <Ticket size={18} className="stat-icon red" />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
@@ -12511,6 +12538,7 @@ export function ReporteFacturacionTab() {
                     if (filtroAlerta === 'telepase') return f.tiene_telepase === true && !!f.vehiculo_patente
                     if (filtroAlerta === 'efectivo_on') return f.permiso_efectivo === 'Activado'
                     if (filtroAlerta === 'efectivo_off') return f.permiso_efectivo === 'Desactivado'
+                    if (filtroAlerta === 'toshipass_cubrio' || filtroAlerta === 'toshipass_no_cubrio') return pasaFiltroToshipass(f, filtroAlerta)
                     return true
                   })
                 }

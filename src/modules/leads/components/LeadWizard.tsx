@@ -588,7 +588,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="">Seleccionar</option>
                   <option value="Diurno">Diurno</option>
                   <option value="Nocturno">Nocturno</option>
-                  <option value="Indiferente">Indiferente</option>
+                  <option value="A Cargo">A Cargo</option>
+                  <option value="Sin Pref.">Sin Pref.</option>
                 </select>
               </div>
               <div className="lead-wizard-field">
