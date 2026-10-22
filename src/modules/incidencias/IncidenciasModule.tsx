@@ -1,6 +1,6 @@
  
 // src/modules/incidencias/IncidenciasModule.tsx
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1300,7 +1300,7 @@ export function IncidenciasModule() {
       ),
       cell: ({ row }) => {
         const turno = row.original.turno
-        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
+        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : (turno || '').toLowerCase() === 'a cargo' ? 'purple' : 'gray'
         return (
           <div>
             <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
@@ -1482,7 +1482,7 @@ export function IncidenciasModule() {
       ),
       cell: ({ row }) => {
         const turno = row.original.turno
-        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
+        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : (turno || '').toLowerCase() === 'a cargo' ? 'purple' : 'gray'
         return (
           <div>
             <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
@@ -1605,24 +1605,6 @@ export function IncidenciasModule() {
         }
 
         return <span className="dt-badge dt-badge-yellow"><Clock size={12} /> Por Aplicar</span>
-      }
-    },
-    {
-      id: 'fecha_creado',
-      // accessorFn + id propio: el colId es 'fecha_creado' (no 'created_at'), asi NO colisiona
-      // con la columna 'Fecha' (evita los 2 calendarios) y a la vez contiene 'fecha' para que
-      // el DataTable lo siga detectando como columna de FECHA (filtro calendario, no checklist).
-      accessorFn: (row) => row.created_at,
-      header: 'Creado',
-      cell: ({ row }) => {
-        if (!row.original.created_at) return '-'
-        const d = new Date(row.original.created_at)
-        return (
-          <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
-            <div>{d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
-            <div style={{ color: 'var(--text-tertiary)' }}>{d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
-          </div>
-        )
       }
     },
     {
@@ -2011,13 +1993,17 @@ export function IncidenciasModule() {
       }
     })
 
-    // En las pestañas "Aplicadas" y "Rechazados" la columna "Aplicado" es redundante
-    // (todas las filas tienen el mismo valor), por eso se oculta.
-    if (activeTab === 'aplicadas' || activeTab === 'rechazados') {
-      return cols.filter(c => (c as { accessorKey?: string }).accessorKey !== 'aplicado')
-    }
-
-    return cols
+    // Columnas que no aportan (pedido 2026-10-22):
+    // - "Aplicado": en Por Aplicar / Aplicadas / Rechazados todas las filas tienen el mismo valor.
+    // - "Inc." (si viene de una incidencia): no se usa.
+    // - "Sem Apl.": en Por Aplicar todavía no hay semana de aplicación (siempre vacía).
+    const ocultas = new Set<string>(['incidencia'])
+    if (activeTab === 'por_aplicar' || activeTab === 'aplicadas' || activeTab === 'rechazados') ocultas.add('aplicado')
+    if (activeTab === 'por_aplicar') ocultas.add('sem_aplicacion')
+    return cols.filter(c => {
+      const col = c as { id?: string; accessorKey?: string }
+      return !ocultas.has(col.id || col.accessorKey || '')
+    })
   }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, penFraccFilter, penSemanasUnicas, penSemFilter, penSemanasAplUnicas, penSemAplFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, activeTab, penalidadesSeleccionadas, penalidadesPorAplicar])
 
   function handleNuevaIncidencia() {
@@ -5328,184 +5314,104 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
   const esCobro = incidencia.tipo === 'cobro'
   const esAFavor = tipoObj?.es_a_favor || false
 
-  // Estilos inline para el detalle
-  const sectionStyle = { marginBottom: '20px' }
-  const titleStyle = { fontSize: '11px', fontWeight: 700 as const, textTransform: 'uppercase' as const, color: 'var(--text-tertiary)', letterSpacing: '0.5px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }
-  const tableStyle = { border: '1px solid var(--border-primary)', borderRadius: '8px', overflow: 'hidden' as const }
-  const rowStyle = { display: 'flex', borderBottom: '1px solid var(--border-primary)' }
-  const cellStyle = { flex: 1, display: 'flex', justifyContent: 'space-between', padding: '10px 14px' }
-  const cellLeftStyle = { ...cellStyle, borderRight: '1px solid var(--border-primary)' }
-  const labelStyle = { fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 as const }
-  const valueStyle = { fontSize: '13px', color: 'var(--text-primary)', fontWeight: 600 as const, textAlign: 'right' as const }
-  const fullCellStyle = { ...cellStyle, flex: 'unset' as any, width: '100%' }
+  // Estado que se muestra: para incidencias de facturación (con penalidad vinculada) es el
+  // de facturación (Por Aplicar/Aplicado/Rechazado), igual que en la tabla; si no, el genérico.
+  const estadoEfectivo = penalidadVinculada
+    ? (penalidadVinculada.rechazado
+        ? { nombre: 'Rechazado', color: 'red' }
+        : penalidadVinculada.aplicado
+        ? { nombre: 'Aplicado', color: 'green' }
+        : { nombre: 'Por Aplicar', color: 'yellow' })
+    : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
+  const vehiculoTexto = [incidencia.vehiculo_marca, incidencia.vehiculo_modelo].filter(Boolean).join(' ')
+
+  // Estilos (compactos: etiqueta chica arriba, valor abajo, en grilla)
+  const seccion = { border: '1px solid var(--border-primary)', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px' }
+  const tituloSeccion = { fontSize: '10.5px', fontWeight: 700 as const, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: 'var(--text-tertiary)', marginBottom: '8px' }
+  const grilla = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 14px' }
+  const etiqueta = { display: 'block', fontSize: '10px', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.03em', color: 'var(--text-tertiary)', marginBottom: '2px' }
+  const valor = { display: 'block', fontSize: '12.5px', color: 'var(--text-primary)', fontWeight: 500 as const, overflowWrap: 'anywhere' as const }
+  const texto = { fontSize: '12.5px', lineHeight: 1.45, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' as const, margin: 0 }
+
+  const Dato = ({ label, children }: { label: string; children: ReactNode }) => (
+    <div style={{ minWidth: 0 }}>
+      <span style={etiqueta}>{label}</span>
+      <span style={valor}>{children}</span>
+    </div>
+  )
 
   return (
     <div className="incidencia-detail">
-      <div className="detail-header">
-        <div>
-          {/* FIX 2026-05-20: mostrar ID completo en el modal de detalle */}
-          <p className="detail-id" style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px', fontFamily: 'monospace', wordBreak: 'break-all' }}>ID: {incidencia.id}</p>
-          <h3 className="detail-title" style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>{incidencia.patente_display || 'Sin patente'}</h3>
-          {(() => {
-            // Para incidencias de facturación (con penalidad vinculada) el estado que se
-            // muestra es el de facturación (Por Aplicar/Aplicado/Rechazado), igual que en la
-            // tabla. Solo las incidencias sin penalidad usan su estado genérico.
-            const estadoEfectivo = penalidadVinculada
-              ? (penalidadVinculada.rechazado
-                  ? { nombre: 'Rechazado', color: 'red' }
-                  : penalidadVinculada.aplicado
-                  ? { nombre: 'Aplicado', color: 'green' }
-                  : { nombre: 'Por Aplicar', color: 'yellow' })
-              : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
-            return <span className={`estado-badge estado-${estadoEfectivo.color}`}>{estadoEfectivo.nombre}</span>
-          })()}
-        </div>
-        <button className="btn-secondary" onClick={onEdit}>
-          <Edit2 size={14} />
-          Editar
-        </button>
-      </div>
-
-      {/* Card 1: Datos de la Incidencia */}
-      <div style={sectionStyle}>
-        <div style={titleStyle}>Datos de la Incidencia</div>
-        <div style={tableStyle}>
-          <div style={rowStyle}>
-            <div style={cellLeftStyle}>
-              <span style={labelStyle}>Fecha</span>
-              <span style={valueStyle}>{formatDate(incidencia.fecha)}</span>
-            </div>
-            <div style={cellStyle}>
-              <span style={labelStyle}>Semana</span>
-              <span style={valueStyle}>{incidencia.semana || '-'}</span>
-            </div>
-          </div>
-          <div style={rowStyle}>
-            <div style={cellLeftStyle}>
-              <span style={labelStyle}>Modalidad</span>
-              <span style={valueStyle}>{incidencia.turno || '-'}</span>
-            </div>
-            <div style={cellStyle}>
-              <span style={labelStyle}>Estado</span>
-              <span style={valueStyle}>
-                {(() => {
-                  const ef = penalidadVinculada
-                    ? (penalidadVinculada.rechazado
-                        ? { nombre: 'Rechazado', color: 'red' }
-                        : penalidadVinculada.aplicado
-                        ? { nombre: 'Aplicado', color: 'green' }
-                        : { nombre: 'Por Aplicar', color: 'yellow' })
-                    : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
-                  return <span className={`estado-badge estado-${ef.color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{ef.nombre}</span>
-                })()}
-              </span>
-            </div>
-          </div>
-          <div style={{ ...rowStyle, borderBottom: 'none' }}>
-            <div style={cellLeftStyle}>
-              <span style={labelStyle}>Area</span>
-              <span style={valueStyle}>{incidencia.area || '-'}</span>
-            </div>
-            <div style={cellStyle}>
-              <span style={labelStyle}>Registrado por</span>
-              <span style={valueStyle}>{incidencia.registrado_por || '-'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Card 2: Vehiculo y Conductor */}
-      <div style={sectionStyle}>
-        <div style={titleStyle}>Vehículo y Conductor</div>
-        <div style={tableStyle}>
-          <div style={rowStyle}>
-            <div style={cellLeftStyle}>
-              <span style={labelStyle}>Patente</span>
-              <span style={valueStyle}>{incidencia.patente_display || '-'}</span>
-            </div>
-            <div style={cellStyle}>
-              <span style={labelStyle}>Vehículo</span>
-              <span style={valueStyle}>{[incidencia.vehiculo_marca, incidencia.vehiculo_modelo].filter(Boolean).join(' ') || '-'}</span>
-            </div>
-          </div>
-          <div style={{ ...rowStyle, borderBottom: 'none' }}>
-            <div style={cellLeftStyle}>
-              <span style={labelStyle}>Conductor</span>
-              <span style={valueStyle}>{incidencia.conductor_display || '-'}</span>
-            </div>
-            <div style={cellStyle} />
-          </div>
-        </div>
-      </div>
-
-      {/* Card 3: Clasificacion y Cobro */}
-      <div style={sectionStyle}>
-        <div style={titleStyle}>Clasificación y Cobro</div>
-        <div style={tableStyle}>
-          <div style={rowStyle}>
-            <div style={cellLeftStyle}>
-              <span style={labelStyle}>Cod Inc.</span>
-              <span style={valueStyle}>
-                {codInc !== '-' ? (
-                  <span style={{ background: tipoObj?.categoria === 'P004' ? '#dcfce7' : '#fee2e2', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '12px' }}>{codInc}</span>
-                ) : '-'}
-              </span>
-            </div>
-            <div style={cellStyle}>
-              <span style={labelStyle}>Tipo de Incidencia</span>
-              <span style={valueStyle}>{tipoIncidenciaNombre}</span>
-            </div>
-          </div>
-          <div style={{ ...rowStyle, borderBottom: (incidencia.estado_vehiculo ? undefined : 'none') }}>
-            {esCobro ? (
-              <div style={cellLeftStyle}>
-                <span style={labelStyle}>Monto</span>
-                <span style={{ ...valueStyle, fontSize: '14px', color: esAFavor ? '#16a34a' : '#dc2626' }}>{formatMoney(incidencia.monto)}</span>
-              </div>
-            ) : (
-              <div style={cellLeftStyle}>
-                <span style={labelStyle}>Penalidades</span>
-                <span style={valueStyle}>{incidencia.total_penalidades}</span>
-              </div>
-            )}
-            {esCobro ? (
-              <div style={cellStyle}>
-                <span style={labelStyle}>Penalidades</span>
-                <span style={valueStyle}>{incidencia.total_penalidades}</span>
-              </div>
-            ) : (
-              <div style={cellStyle}>
-                <span style={labelStyle}>Estado vehículo</span>
-                <span style={valueStyle}>{incidencia.estado_vehiculo || '-'}</span>
-              </div>
+      {/* Encabezado: patente, estado, código y monto */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>{incidencia.patente_display || 'Sin patente'}</span>
+            <span className={`estado-badge estado-${estadoEfectivo.color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{estadoEfectivo.nombre}</span>
+            {codInc !== '-' && (
+              <span style={{ background: tipoObj?.categoria === 'P004' ? '#dcfce7' : '#fee2e2', color: tipoObj?.categoria === 'P004' ? '#166534' : '#991b1b', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{codInc}</span>
             )}
           </div>
-          {esCobro && incidencia.estado_vehiculo && (
-            <div style={{ ...rowStyle, borderBottom: 'none' }}>
-              <div style={fullCellStyle}>
-                <span style={labelStyle}>Estado vehículo</span>
-                <span style={valueStyle}>{incidencia.estado_vehiculo}</span>
-              </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            {[incidencia.conductor_display, vehiculoTexto].filter(Boolean).join(' · ') || 'Sin conductor ni vehículo'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+          {esCobro && (
+            <div style={{ textAlign: 'right' }}>
+              <span style={etiqueta}>Monto</span>
+              <span style={{ fontSize: '16px', fontWeight: 700, color: esAFavor ? '#16a34a' : '#dc2626' }}>{formatMoney(incidencia.monto)}</span>
             </div>
           )}
+          <button className="btn-secondary" onClick={onEdit} style={{ padding: '6px 12px', fontSize: '12.5px' }}>
+            <Edit2 size={13} />
+            Editar
+          </button>
         </div>
       </div>
 
-      {/* Descripcion */}
-      <div style={sectionStyle}>
-        <div style={titleStyle}>Descripción</div>
-        <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
-          {incidencia.descripcion || 'Sin descripción'}
+      {/* Clasificación */}
+      <div style={seccion}>
+        <div style={tituloSeccion}>Clasificación</div>
+        <div style={grilla}>
+          <Dato label="Tipo de incidencia">{tipoIncidenciaNombre}</Dato>
+          <Dato label="Área">{incidencia.area || '-'}</Dato>
+          <Dato label="Penalidades">{incidencia.total_penalidades ?? '-'}</Dato>
         </div>
       </div>
 
-      {/* Accion Ejecutada */}
-      <div style={sectionStyle}>
-        <div style={titleStyle}>Acción Ejecutada</div>
-        <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
-          {incidencia.accion_ejecutada || 'Sin acción ejecutada'}
+      {/* Fecha y registro */}
+      <div style={seccion}>
+        <div style={tituloSeccion}>Fecha y registro</div>
+        <div style={grilla}>
+          <Dato label="Fecha">{formatDate(incidencia.fecha)}</Dato>
+          <Dato label="Semana">{incidencia.semana || '-'}</Dato>
+          <Dato label="Modalidad">{incidencia.turno || '-'}</Dato>
+          <Dato label="Registrado por">{incidencia.registrado_por || '-'}</Dato>
+          {incidencia.estado_vehiculo && <Dato label="Estado vehículo">{incidencia.estado_vehiculo}</Dato>}
         </div>
       </div>
+
+      {/* Vehículo y conductor */}
+      <div style={seccion}>
+        <div style={tituloSeccion}>Vehículo y conductor</div>
+        <div style={grilla}>
+          <Dato label="Patente">{incidencia.patente_display || '-'}</Dato>
+          <Dato label="Vehículo">{vehiculoTexto || '-'}</Dato>
+          <Dato label="Conductor">{incidencia.conductor_display || '-'}</Dato>
+        </div>
+      </div>
+
+      {/* Descripción y acción */}
+      <div style={seccion}>
+        <div style={{ ...tituloSeccion, marginBottom: '4px' }}>Descripción</div>
+        <p style={texto}>{incidencia.descripcion || <span style={{ color: 'var(--text-tertiary)' }}>Sin descripción</span>}</p>
+        <div style={{ ...tituloSeccion, marginTop: '10px', marginBottom: '4px' }}>Acción ejecutada</div>
+        <p style={texto}>{incidencia.accion_ejecutada || <span style={{ color: 'var(--text-tertiary)' }}>Sin acción ejecutada</span>}</p>
+      </div>
+
+      {/* FIX 2026-05-20: ID completo visible en el detalle */}
+      <p style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', fontFamily: 'monospace', wordBreak: 'break-all', margin: '4px 0 0' }}>ID: {incidencia.id}</p>
     </div>
   )
 }
