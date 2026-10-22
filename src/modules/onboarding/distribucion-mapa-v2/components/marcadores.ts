@@ -56,20 +56,27 @@ export function urlEtiquetaPill(texto: string, fondo = '#ff0033', color = '#ffff
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
-/** Diámetro en px del halo que se dibuja bajo la persona seleccionada. */
-export const TAMANO_HALO = 76
+/** Diámetro en px del aro que se dibuja alrededor de la persona seleccionada. */
+export const TAMANO_HALO = 48
 
 /**
- * Halo de selección: disco rojo translúcido con un anillo más marcado. Va como
- * marcador propio debajo del pin (zIndex menor) para que se vea a cualquier
- * zoom sin depender del tamaño del pin.
+ * Distancia (px) desde la punta del pin destacado (34x44) hasta el centro de su
+ * cabeza, donde va el pictograma. El aro se centra ahí para rodear el ícono en
+ * vez de quedar debajo de la punta.
+ */
+export const HALO_SOBRE_PUNTA = 28
+
+/**
+ * Aro de selección (2026-10-22): antes era un disco rojo de 76px con relleno que
+ * se veía exagerado; ahora es un aro fino con un relleno muy suave alrededor de
+ * la cabeza del pin. Va como marcador propio debajo del pin (zIndex menor) para
+ * que se vea a cualquier zoom y siga sirviendo para ubicar a la persona entre
+ * muchos marcadores.
  */
 export const URL_HALO_ACTIVO: string = (() => {
   const r = TAMANO_HALO / 2
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${TAMANO_HALO}" height="${TAMANO_HALO}" viewBox="0 0 ${TAMANO_HALO} ${TAMANO_HALO}">
-  <circle cx="${r}" cy="${r}" r="${r - 1}" fill="#ff0033" fill-opacity="0.16"/>
-  <circle cx="${r}" cy="${r}" r="${r - 2}" fill="none" stroke="#ff0033" stroke-opacity="0.85" stroke-width="2.5"/>
-  <circle cx="${r}" cy="${r}" r="${r * 0.42}" fill="none" stroke="#ff0033" stroke-opacity="0.55" stroke-width="1.5"/>
+  <circle cx="${r}" cy="${r}" r="${r - 1.5}" fill="#ff0033" fill-opacity="0.08" stroke="#ff0033" stroke-opacity="0.9" stroke-width="2.5"/>
 </svg>`
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 })()

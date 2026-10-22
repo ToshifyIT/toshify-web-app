@@ -13,7 +13,8 @@
 //   - Estado      -> "estado del conductor" vs "estado de lead" (los 14).
 //   - Zona        -> GLOBAL: se aplica a conductores y leads por igual.
 
-import { CheckSquare, Search, Square, Users, UserPlus, X } from 'lucide-react'
+import { useState } from 'react'
+import { CheckSquare, ChevronRight, Search, Square, Users, UserPlus, X } from 'lucide-react'
 import { Acordeon, CheckRow, Chip, GrupoTitulo, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
@@ -131,6 +132,33 @@ export function FiltrosSidebar({
     requisitoLeadActivo(r.campo)
   ).length
 
+  // Cuántos filtros de cada bloque tienen algo elegido: se ve en el encabezado
+  // aunque el bloque esté plegado.
+  const activosConductor = [
+    filtros.verBaja,
+    filtros.turnosConductor.size > 0,
+    filtros.asignacion.size > 0,
+    filtros.companero.size > 0,
+    filtros.requisitosConductor.size > 0,
+  ].filter(Boolean).length
+  const activosLead = [
+    filtros.estadosLead.size > 0,
+    filtros.turnosLead.size > 0,
+    filtros.guias.size > 0,
+    !!(filtros.creadoDesde || filtros.creadoHasta),
+    requisitosLeadActivos > 0,
+  ].filter(Boolean).length
+
+  // Bloques plegables (igual que los grupos de la lista de resultados).
+  const [plegados, setPlegados] = useState<Set<'conductores' | 'leads'>>(new Set())
+  const alternarBloque = (b: 'conductores' | 'leads') =>
+    setPlegados((prev) => {
+      const next = new Set(prev)
+      if (next.has(b)) next.delete(b)
+      else next.add(b)
+      return next
+    })
+
   const verConductores = filtros.segmento !== 'leads'
   const verLeads = filtros.segmento !== 'conductores'
 
@@ -245,12 +273,13 @@ export function FiltrosSidebar({
 
         {/* ---------- Bloque CONDUCTORES ---------- */}
         {verConductores && (
-          <div>
-            <GrupoTitulo>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <Users size={12} /> Filtros de conductores
-              </span>
-            </GrupoTitulo>
+          <BloqueFiltros
+            icono={<Users size={12} />}
+            titulo="Filtros de conductores"
+            activos={activosConductor}
+            plegado={plegados.has('conductores')}
+            onAlternar={() => alternarBloque('conductores')}
+          >
 
             <Acordeon titulo="Estado" resumen={filtros.verBaja ? 'Incluye baja' : 'Sin baja'}>
               <CheckRow
@@ -334,17 +363,18 @@ export function FiltrosSidebar({
                 />
               ))}
             </Acordeon>
-          </div>
+          </BloqueFiltros>
         )}
 
         {/* ---------- Bloque LEADS ---------- */}
         {verLeads && (
-          <div>
-            <GrupoTitulo>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <UserPlus size={12} /> Filtros de leads
-              </span>
-            </GrupoTitulo>
+          <BloqueFiltros
+            icono={<UserPlus size={12} />}
+            titulo="Filtros de leads"
+            activos={activosLead}
+            plegado={plegados.has('leads')}
+            onAlternar={() => alternarBloque('leads')}
+          >
 
             <Acordeon
               titulo="Estado de lead"
@@ -480,7 +510,7 @@ export function FiltrosSidebar({
                 tienen, los que no, y los que todavía no tienen el dato cargado.
               </Hint>
             </Acordeon>
-          </div>
+          </BloqueFiltros>
         )}
 
         {/* ---------- ZONA OPERATIVA (global) ---------- */}
@@ -513,6 +543,65 @@ export function FiltrosSidebar({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * Bloque de filtros plegable (conductores / leads). Mismo encabezado que los
+ * grupos de la lista de resultados: chevron, título y, a la derecha, cuántos
+ * filtros del bloque tienen algo elegido.
+ */
+function BloqueFiltros({
+  icono,
+  titulo,
+  activos,
+  plegado,
+  onAlternar,
+  children,
+}: {
+  icono: React.ReactNode
+  titulo: string
+  activos: number
+  plegado: boolean
+  onAlternar: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={onAlternar}
+        aria-expanded={!plegado}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 8px',
+          border: 'none',
+          borderRadius: 7,
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-secondary)',
+          fontSize: 11,
+          fontWeight: 700,
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
+      >
+        <ChevronRight
+          size={13}
+          style={{ transform: plegado ? 'none' : 'rotate(90deg)', transition: 'transform .15s ease' }}
+        />
+        {icono}
+        <span style={{ flex: 1 }}>{titulo}</span>
+        {activos > 0 && (
+          <span style={{ fontWeight: 600, color: 'var(--color-primary, #ff0033)' }}>
+            {activos} activo{activos === 1 ? '' : 's'}
+          </span>
+        )}
+      </button>
+      {!plegado && <div style={{ padding: '0 2px' }}>{children}</div>}
+    </section>
   )
 }
 

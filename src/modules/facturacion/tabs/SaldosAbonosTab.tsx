@@ -2151,8 +2151,8 @@ export function SaldosAbonosTab() {
       cell: ({ row }) => (
         // FIX 2026-05-20: padding interno para que el conductor no quede pegado al borde
         <div style={{ padding: '4px 8px' }}>
-          <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
-          <div className="text-xs text-gray-500" style={{ marginTop: '2px' }}>{row.original.conductor_cuit || row.original.conductor_dni}</div>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatNombreCompleto(row.original.conductor_nombre)}</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{row.original.conductor_cuit || row.original.conductor_dni}</div>
         </div>
       )
     },
@@ -2242,7 +2242,7 @@ export function SaldosAbonosTab() {
       meta: { info: 'Fecha de la última actualización del saldo.' },
       header: 'Actualizado',
       cell: ({ row }) => (
-        <span className="text-gray-500 text-sm">{row.original.ultima_actualizacion ? formatDate(row.original.ultima_actualizacion) : '-'}</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{row.original.ultima_actualizacion ? formatDate(row.original.ultima_actualizacion) : '-'}</span>
       )
     },
     {

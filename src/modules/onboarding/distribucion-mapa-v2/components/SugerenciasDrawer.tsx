@@ -135,17 +135,9 @@ export function SugerenciasDrawer({
           </div>
         </div>
 
-        <Hint>
-          {base
-            ? `Base: ${base.nombre}${base.zona ? ` · ${base.zona}` : ''}`
-            : modoLeads
-              ? 'Parejas entre leads: misma zona, turnos compatibles, cada lead en un solo par.'
-              : 'Base: todos los conductores sin compañero visibles'}
-        </Hint>
-        <Hint>
-          Sólo se proponen personas que están visibles en el mapa. Elegir otra en
-          el mapa o en la lista recalcula automáticamente.
-        </Hint>
+        {/* Sólo con una base concreta: las tarjetas muestran nada más al
+            candidato, así que hace falta saber contra quién se midió. */}
+        {base && <Hint>{`Base: ${base.nombre}${base.zona ? ` · ${base.zona}` : ''}`}</Hint>}
 
         {/* Umbral de tiempo */}
         <div
@@ -199,7 +191,7 @@ export function SugerenciasDrawer({
               alignItems: 'center',
               justifyContent: 'center',
               gap: 6,
-              padding: '7px 12px',
+              padding: '5px 12px',
               borderRadius: 8,
               border: `1px solid ${mostrarTodos ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
               background: mostrarTodos ? '#fff1f3' : 'var(--bg-primary)',

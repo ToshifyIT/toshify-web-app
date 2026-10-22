@@ -26,13 +26,25 @@ export function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () =>
         inset: 0,
         zIndex: 12000,
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         justifyContent: 'center',
         background: 'rgba(0,0,0,0.5)',
         padding: '3vh 16px',
-        overflowY: 'auto',
       }}
     >
+      {/* El nombre queda fijo arriba y el contenido scrollea adentro del modal
+          (antes scrolleaba toda la página y se perdía el nombre). */}
+      <style>{`
+        .lead-detalle-modal-mapa .lead-detail-header {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          margin: 0 -20px 12px;
+          padding: 16px 112px 12px 20px;
+          background: var(--bg-primary);
+          border-bottom: 1px solid var(--border-primary);
+        }
+      `}</style>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -40,9 +52,12 @@ export function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () =>
           borderRadius: 12,
           width: '100%',
           maxWidth: 1000,
+          maxHeight: '94vh',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           position: 'relative',
-          padding: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
         <button
@@ -50,9 +65,9 @@ export function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () =>
           aria-label="Cerrar"
           style={{
             position: 'absolute',
-            top: 12,
-            right: 12,
-            zIndex: 1,
+            top: 14,
+            right: 16,
+            zIndex: 3,
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-primary)',
             borderRadius: 8,
@@ -67,7 +82,9 @@ export function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () =>
         >
           <X size={14} /> Cerrar
         </button>
-        <LeadDetailView lead={lead} />
+        <div className="lead-detalle-modal-mapa" style={{ overflowY: 'auto', padding: '0 20px 20px', minHeight: 0 }}>
+          <LeadDetailView lead={lead} mostrarVideocuestionario={false} />
+        </div>
       </div>
     </div>
   )

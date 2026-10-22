@@ -495,30 +495,22 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
     tiposSinCategoria: tiposCobroDescuento.filter(t => !t.categoria),
   }), [tiposCobroDescuento])
 
+  const esCobro = formData.tipo_evento === 'cobro_conductor'
+  const llevaMonto = formData.tipo_evento === 'pago' || esCobro
+
   return (
-    <div className="siniestro-seguimiento">
-      {/* Header con boton agregar */}
-      <div className="seguimiento-header" style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px'
-      }}>
-        <div>
-          <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Historial de Gestion
-          </h4>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-            Registro de notas, pagos y cobros relacionados al siniestro
-          </p>
+    <div className="siniestro-seguimiento ss">
+      {/* Encabezado */}
+      <div className="ss-header">
+        <div className="ss-header-texto">
+          <span className="ss-titulo">Historial de gestión</span>
+          <span className="ss-subtitulo">
+            {[siniestro.vehiculo_patente, siniestro.conductor_display].filter(Boolean).join(' · ') || 'Notas, pagos y cobros del siniestro'}
+          </span>
         </div>
-        {!readonly && (
-          <button
-            className="btn-primary"
-            onClick={() => setShowForm(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Plus size={16} />
+        {!readonly && !showForm && (
+          <button className="btn-primary ss-btn" onClick={() => setShowForm(true)}>
+            <Plus size={14} />
             Agregar
           </button>
         )}
@@ -526,265 +518,146 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
 
       {/* Formulario nuevo seguimiento */}
       {showForm && (
-        <div className="seguimiento-form" style={{
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '8px',
-          padding: '16px',
-          marginBottom: '20px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h5 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Nuevo Seguimiento</h5>
-            <button
-              onClick={resetForm}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
-            >
-              <X size={18} color="var(--text-tertiary)" />
+        <div className="ss-form">
+          <div className="ss-form-head">
+            <span className="ss-form-titulo">Nuevo registro</span>
+            <button type="button" className="ss-icon-btn" onClick={resetForm} title="Cerrar">
+              <X size={16} />
             </button>
           </div>
 
-          <div className="form-row" style={{ marginBottom: '12px' }}>
-            <div className="form-group" style={{ flex: 1 }}>
-              <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>
-                Tipo de Evento
-              </label>
+          <div className={`ss-grid${llevaMonto ? '' : ' ss-grid-1'}`}>
+            <label className="ss-field">
+              <span className="ss-label">Tipo de evento</span>
               <select
+                className="ss-input"
                 value={formData.tipo_evento}
                 onChange={(e) => setFormData(prev => ({
                   ...prev,
                   tipo_evento: e.target.value as any,
                   cobrar_conductor: e.target.value === 'cobro_conductor'
                 }))}
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
               >
-                <option value="nota">Nota / Observacion</option>
-                <option value="pago">Pago Recibido</option>
-                <option value="cobro_conductor">Cobro a Conductor (genera incidencia)</option>
+                <option value="nota">Nota / Observación</option>
+                <option value="pago">Pago recibido</option>
+                <option value="cobro_conductor">Cobro a conductor (genera incidencia)</option>
               </select>
-            </div>
+            </label>
+            {llevaMonto && (
+              <label className="ss-field">
+                <span className="ss-label">Monto {esCobro && <span className="ss-req">*</span>}</span>
+                <input
+                  className="ss-input"
+                  type="number"
+                  value={formData.monto || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, monto: Number(e.target.value) || undefined }))}
+                  placeholder="0"
+                />
+              </label>
+            )}
           </div>
 
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>
-              Descripción <span style={{ color: '#dc2626' }}>*</span>
-            </label>
+          <label className="ss-field">
+            <span className="ss-label">Descripción <span className="ss-req">*</span></span>
             <textarea
+              className="ss-input"
               value={formData.descripcion}
               onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-              placeholder={formData.tipo_evento === 'cobro_conductor' ? 'Detalle del siniestro...' : 'Detalle de la gestion realizada...'}
-              rows={3}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
+              placeholder={esCobro ? 'Detalle del siniestro...' : 'Detalle de la gestión realizada...'}
+              rows={2}
             />
-          </div>
+          </label>
 
-          {formData.tipo_evento === 'cobro_conductor' && (
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>
-                Notas <span style={{ color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 400 }}>(opcional, mensaje para administración)</span>
-              </label>
+          {esCobro && (
+            <label className="ss-field">
+              <span className="ss-label">Notas <span className="ss-opcional">(opcional, mensaje para administración)</span></span>
               <textarea
+                className="ss-input"
                 value={formData.notas || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, notas: e.target.value }))}
                 placeholder="Mensaje adicional para administración..."
                 rows={2}
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
               />
+            </label>
+          )}
+
+          {esCobro && (
+            <div className="ss-aviso">
+              <AlertTriangle size={14} />
+              <span>
+                Al continuar se abre el formulario de incidencias para crear el cobro a <strong>{siniestro.conductor_display || 'el conductor del siniestro'}</strong>.
+              </span>
             </div>
           )}
 
-          {(formData.tipo_evento === 'pago' || formData.tipo_evento === 'cobro_conductor') && (
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>
-                Monto {formData.tipo_evento === 'cobro_conductor' && <span style={{ color: '#dc2626' }}>*</span>}
-              </label>
-              <input
-                type="number"
-                value={formData.monto || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, monto: Number(e.target.value) || undefined }))}
-                placeholder="0"
-                style={{ width: '200px', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
-              />
-            </div>
-          )}
-
-          {/* Alerta para cobro a conductor */}
-          {formData.tipo_evento === 'cobro_conductor' && (
-            <div style={{
-              background: 'rgba(220, 38, 38, 0.1)',
-              border: '1px solid rgba(220, 38, 38, 0.3)',
-              borderRadius: '6px',
-              padding: '12px',
-              marginBottom: '16px',
-              display: 'flex',
-              gap: '10px',
-              alignItems: 'flex-start'
-            }}>
-              <AlertTriangle size={18} color="#dc2626" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div style={{ fontSize: '13px', color: '#ef4444' }}>
-                <strong>Importante:</strong> Se abrira el formulario de incidencias para crear el cobro
-                asociado al conductor <strong>{siniestro.conductor_display || 'del siniestro'}</strong>.
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={resetForm}
-              disabled={saving}
-              className="btn-secondary"
-            >
+          <div className="ss-form-acciones">
+            <button type="button" onClick={resetForm} disabled={saving} className="btn-secondary ss-btn">
               Cancelar
             </button>
-            <button
-              type="button"
-              onClick={handleGuardar}
-              disabled={saving}
-              className="btn-primary"
-              style={{
-                background: formData.tipo_evento === 'cobro_conductor' ? '#dc2626' : undefined
-              }}
-            >
-              {saving ? 'Guardando...' : formData.tipo_evento === 'cobro_conductor' ? 'Continuar' : 'Guardar'}
+            <button type="button" onClick={handleGuardar} disabled={saving} className="btn-primary ss-btn">
+              {saving ? 'Guardando...' : esCobro ? 'Continuar' : 'Guardar'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Timeline de seguimientos */}
-      <div className="seguimiento-timeline">
+      {/* Historial */}
+      <div className="seguimiento-timeline ss-lista">
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-            Cargando...
-          </div>
+          <div className="ss-vacio">Cargando...</div>
         ) : seguimientos.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '40px',
-            color: 'var(--text-tertiary)',
-            background: 'var(--bg-secondary)',
-            borderRadius: '8px',
-            border: '1px dashed var(--border-primary)'
-          }}>
-            <Clock size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
-            <p style={{ margin: 0 }}>No hay registros de seguimiento</p>
-            <p style={{ margin: '4px 0 0', fontSize: '13px' }}>Agrega el primer registro de gestion</p>
+          <div className="ss-vacio">
+            <Clock size={22} />
+            <span>Todavía no hay registros de seguimiento</span>
+            {!readonly && !showForm && <span className="ss-vacio-sub">Usá "Agregar" para cargar el primero</span>}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {seguimientos.map((seg) => {
-              const tipoConfig = TIPO_EVENTO_LABELS[seg.tipo_evento] || TIPO_EVENTO_LABELS.nota
-              return (
-                <div
-                  key={seg.id}
-                  className="seguimiento-item"
-                  style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    padding: '14px 16px',
-                    borderLeft: `4px solid ${tipoConfig.color}`
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        background: `${tipoConfig.color}20`,
-                        color: tipoConfig.color
-                      }}>
-                        {tipoConfig.icon}
-                        {tipoConfig.label}
-                      </span>
-                      {seg.monto && (
-                        <span style={{
-                          fontWeight: 600,
-                          color: seg.tipo_evento === 'cobro_conductor' ? '#ef4444' : '#10b981'
-                        }}>
-                          {formatMoney(seg.monto)}
-                        </span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                      {formatDate(seg.created_at)}
+          seguimientos.map((seg) => {
+            const tipoConfig = TIPO_EVENTO_LABELS[seg.tipo_evento] || TIPO_EVENTO_LABELS.nota
+            return (
+              <div key={seg.id} className="seguimiento-item ss-item" style={{ borderLeftColor: tipoConfig.color }}>
+                <div className="ss-item-head">
+                  <span className="ss-tipo" style={{ background: `${tipoConfig.color}1f`, color: tipoConfig.color }}>
+                    {tipoConfig.icon}
+                    {tipoConfig.label}
+                  </span>
+                  {seg.monto ? (
+                    <span className="ss-monto" style={{ color: seg.tipo_evento === 'cobro_conductor' ? '#dc2626' : '#059669' }}>
+                      {formatMoney(seg.monto)}
                     </span>
-                  </div>
-
-                  <p style={{ margin: '0 0 8px', fontSize: '14px', color: 'var(--text-primary)' }}>
-                    {seg.descripcion}
-                  </p>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                      Por: {seg.created_by_name || 'Sistema'}
-                    </span>
-                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                      {seg.incidencia_id && (
-                        <button
-                          onClick={() => verDetalleIncidencia(seg.incidencia_id as string)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '12px',
-                            color: '#0ea5e9',
-                            background: 'none',
-                            border: '1px solid #bae6fd',
-                            cursor: 'pointer',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseOver={e => (e.currentTarget.style.background = 'rgba(14, 165, 233, 0.08)')}
-                          onMouseOut={e => (e.currentTarget.style.background = 'none')}
-                        >
-                          <FileText size={12} />
-                          Ver detalle incidencia
-                        </button>
-                      )}
-                      {(seg.incidencia_id || seg.penalidad_id) && (
-                        <button
-                          onClick={() => {
-                            if (seg.incidencia_id) {
-                              // Navegar dejando la incidencia como filtro en la tabla
-                              // (param `buscar`), en vez de abrir el modal de detalle.
-                              navigate(`/incidencias?buscar=${seg.incidencia_id}`)
-                            } else if (seg.penalidad_id) {
-                              navigate(`/incidencias?penalidad_id=${seg.penalidad_id}`)
-                            }
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '12px',
-                            color: '#6366f1',
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseOver={e => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)')}
-                          onMouseOut={e => (e.currentTarget.style.background = 'none')}
-                        >
-                          <ExternalLink size={12} />
-                          {seg.incidencia_id ? 'Ver Incidencia' : 'Ver Penalidad'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  ) : null}
+                  <span className="ss-meta">{formatDate(seg.created_at)} · {seg.created_by_name || 'Sistema'}</span>
                 </div>
-              )
-            })}
-          </div>
+                <p className="ss-desc">{seg.descripcion}</p>
+                {(seg.incidencia_id || seg.penalidad_id) && (
+                  <div className="ss-item-links">
+                    {seg.incidencia_id && (
+                      <button type="button" className="ss-link" onClick={() => verDetalleIncidencia(seg.incidencia_id as string)}>
+                        <FileText size={12} />
+                        Ver detalle de la incidencia
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="ss-link"
+                      onClick={() => {
+                        if (seg.incidencia_id) {
+                          // Navegar dejando la incidencia como filtro en la tabla
+                          // (param `buscar`), en vez de abrir el modal de detalle.
+                          navigate(`/incidencias?buscar=${seg.incidencia_id}`)
+                        } else if (seg.penalidad_id) {
+                          navigate(`/incidencias?penalidad_id=${seg.penalidad_id}`)
+                        }
+                      }}
+                    >
+                      <ExternalLink size={12} />
+                      {seg.incidencia_id ? 'Ir a Incidencias' : 'Ir a la penalidad'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })
         )}
       </div>
 

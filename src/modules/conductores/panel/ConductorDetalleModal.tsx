@@ -82,14 +82,17 @@ export function ConductorDetalleModal({
   conductor,
   onClose,
   mostrarIntercom = false,
+  tabInicial = 'multas',
 }: {
   conductor: ConductorPanelRow
   onClose: () => void
   // Opt-in: muestra el botón "Abrir conversación" de Intercom. Hoy solo lo activa
   // Distribución en mapa v2; el resto de los usos del modal no cambia.
   mostrarIntercom?: boolean
+  /** Pestaña con la que abre (por defecto Multas, como siempre). */
+  tabInicial?: Tab
 }) {
-  const [tab, setTab] = useState<Tab>('multas')
+  const [tab, setTab] = useState<Tab>(tabInicial)
   const [multas, setMultas] = useState<MultaDetalle[]>([])
   const [facturacion, setFacturacion] = useState<FacturacionSemana[]>([])
   const [km, setKm] = useState<KmSemanaConductor[]>([])
