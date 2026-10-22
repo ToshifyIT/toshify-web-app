@@ -31,6 +31,8 @@ import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
+import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
+import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
@@ -417,6 +419,7 @@ function leadToFormData(lead: Lead): LeadFormData {
     certificado_direccion: lead.certificado_direccion || '',
     turno: lead.turno || '',
     cuenta_cabify: lead.cuenta_cabify || '',
+    cuenta_didi: lead.cuenta_didi || '',
     cochera: lead.cochera || '',
     rueda: lead.rueda || '',
     monotributo: lead.monotributo || '',
@@ -654,29 +657,9 @@ export function LeadsModule() {
   const [nacionalidades, setNacionalidades] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.nacionalidades || [])
   const [estadosCiviles, setEstadosCiviles] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.estadosCiviles || [])
 
-  // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
-  const ESTADOS_LEAD = [
-    'Inicio conversación', 'Contactado Sellium', 'Edad aprobada', 'Zona aprobada', 'Propuesta enviada', 'Acepta oferta',
-    'Video recibido', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
-    'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
-    'Convocatoria Inducción', 'Apto Inducción', 'Descartado',
-  ] as const
-
-  // Estados que ya no se usan en el proceso actual (Hireflix ya no existe; la carga
-  // de Sellium asigna "Inicio conversación" y no informa "Acepta oferta").
-  // Se ocultan del filtro de la columna Estado y de los desplegables para cambiar
-  // el estado (tabla y formulario): los leads que ya los tienen conservan su
-  // estado como dato histórico y siguen visibles en la tabla.
-  // "Zona aprobada" tampoco se filtra como estado: la zona la determina el sistema
-  // por coordenadas (tag "Zona Aprobada" / "Zona Restringida" y su tarjeta).
-  const ESTADOS_OCULTOS_FILTRO = new Set<string>([
-    'Contactado Sellium', 'Acepta oferta',
-    'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
-    'Zona aprobada',
-    // Se muestra como "Descartado" (ver displayEstadoLead): para elegirlo a mano se usa Descartado.
-    'No cumple edad',
-  ])
-  const ESTADOS_FILTRO = ESTADOS_LEAD.filter(e => !ESTADOS_OCULTOS_FILTRO.has(e))
+  // Estados vigentes para filtros y cambio manual: catálogo único en leadEstados.ts
+  // (lo comparte Distribución en mapa, así ambos muestran los mismos estados).
+  const ESTADOS_FILTRO = ESTADOS_LEAD_FILTRO
 
   /** Pipeline de progresion de estados: indice mayor = mas avanzado.
    *  calcularEstadoLead y la carga masiva Sellium solo pueden AVANZAR, nunca retroceder.
@@ -701,6 +684,7 @@ export function LeadsModule() {
     'No cumple edad': 5,
     'Convocatoria Inducción': 6,
     'Apto Inducción': 7,
+    [ESTADO_LISTO_EMPAREJAR]: 7.5,
     'Conductor': 8,
     'Descartado': 5,
   }
@@ -1508,6 +1492,7 @@ export function LeadsModule() {
       case 'inicio': return l.estado_de_lead === 'Inicio conversación'
       case 'contactadoSellium': return esContactadoSellium(l)
       case 'aptos': return esAptoInduccion(l)
+      case 'listoEmparejar': return l.estado_de_lead === ESTADO_LISTO_EMPAREJAR
       case 'noAptos': return l.estado_de_lead === 'No Apto - Hireflix'
       case 'convocatoria': return l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion'
       case 'zonaSegura': return l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id)
@@ -1592,6 +1577,7 @@ export function LeadsModule() {
     const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
     const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
     const convocatoria = base.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
+    const listoEmparejar = base.filter(l => l.estado_de_lead === ESTADO_LISTO_EMPAREJAR).length
     const intercom = base.filter(esFuenteIntercom).length
     const damaro = base.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
     const autoPueblo = base.filter(l => l.estado_de_lead === 'Auto del pueblo').length
@@ -1599,7 +1585,7 @@ export function LeadsModule() {
     // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
     const todos = sinTarjeta.length
     const recontacto = base.filter(l => tieneAlertaRecontacto(l.observaciones)).length
-    return { total, contactadoSellium, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
+    return { total, contactadoSellium, aptos, noAptos, convocatoria, listoEmparejar, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
   }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona])
 
   // ---------- HANDLERS ----------
@@ -1914,6 +1900,7 @@ export function LeadsModule() {
           'Monotributo': l.monotributo || '',
           'CBU': l.cbu || '',
           'Cta. Cabify': l.cuenta_cabify || '',
+          'Cta. DiDi': l.cuenta_didi || '',
 
           // --- Contacto de emergencia (detalle) ---
           'Contacto Emergencia': l.datos_de_emergencia || l.contacto_de_emergencia || '',
@@ -1971,6 +1958,7 @@ export function LeadsModule() {
     'FECHA RNR': 'fecha_rnr',
     'CERTIFICADO DIRECCIÓN': 'certificado_direccion',
     'CTA CABIFY': 'cuenta_cabify',
+    'CTA DIDI': 'cuenta_didi',
     'COCHERA': 'cochera',
     'RUEDA': 'rueda',
     'MONOTRIBUTO': 'monotributo',
@@ -3042,16 +3030,39 @@ export function LeadsModule() {
       accessorFn: (row) => row.cuenta_cabify || '-',
       header: 'Cta. Cabify',
       cell: ({ row }) => (
-        <EditableTextCell
+        <GuiaDropdownCell
           leadId={row.original.id}
           field="cuenta_cabify"
           value={row.original.cuenta_cabify}
+          guias={LABELS_CUENTA_APP}
+          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_cabify`}
           canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
           onChange={handleInlineUpdate}
-          maxWidth="80px"
+          onClose={() => setSinoDropdownKey(null)}
         />
       ),
-      size: 85,
+      size: 100,
+      enableSorting: true,
+    },
+    {
+      id: 'cta_didi',
+      accessorFn: (row) => row.cuenta_didi || '-',
+      header: 'Cta. DiDi',
+      cell: ({ row }) => (
+        <GuiaDropdownCell
+          leadId={row.original.id}
+          field="cuenta_didi"
+          value={row.original.cuenta_didi}
+          guias={LABELS_CUENTA_APP}
+          isOpen={sinoDropdownKey === `${row.original.id}::cuenta_didi`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 100,
       enableSorting: true,
     },
     {
@@ -3250,6 +3261,7 @@ export function LeadsModule() {
         inicio: 'Inicio conversación',
         contactadoSellium: 'Contactado Sellium',
         aptos: 'Aptos',
+        listoEmparejar: 'Listo Emparejar',
         noAptos: 'No aptos',
         zonaSegura: 'Zona Aprobada',
         zonaRestringida: 'Zona Restringida',
@@ -3293,6 +3305,17 @@ export function LeadsModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.aptos}</span>
               <span className="stat-label">Aptos</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'listoEmparejar' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('listoEmparejar')}
+            title="Leads en estado Listo Emparejar (listos para asignarles compañero)"
+          >
+            <Link2 size={18} className="stat-icon" style={{ color: '#C026D3' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.listoEmparejar}</span>
+              <span className="stat-label">Listo Emparejar</span>
             </div>
           </div>
           <div
@@ -3624,94 +3647,6 @@ export function LeadsModule() {
 }
 
 // =====================================================
-// EDITABLE TEXT CELL (click-to-edit inline)
-// =====================================================
-
-interface EditableTextCellProps {
-  leadId: string
-  field: keyof Lead
-  value: string | null | undefined
-  canEdit: boolean
-  onChange: (leadId: string, field: keyof Lead, value: string) => void
-  maxWidth?: string
-}
-
-function EditableTextCell({ leadId, field, value, canEdit, onChange, maxWidth = '120px' }: EditableTextCellProps) {
-  const [editing, setEditing] = useState(false)
-  const [text, setText] = useState(value || '')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    setText(value || '')
-  }, [value])
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
-    }
-  }, [editing])
-
-  const handleSave = () => {
-    setEditing(false)
-    const trimmed = text.trim()
-    if (trimmed !== (value || '')) {
-      onChange(leadId, field, trimmed)
-    }
-  }
-
-  if (editing && canEdit) {
-    return (
-      <input
-        ref={inputRef}
-        type="text"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={handleSave}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSave()
-          if (e.key === 'Escape') { setText(value || ''); setEditing(false) }
-        }}
-        style={{
-          fontSize: '11px',
-          width: '100%',
-          padding: '2px 6px',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '4px',
-          background: 'var(--bg-primary)',
-          color: 'var(--text-primary)',
-          outline: 'none',
-        }}
-      />
-    )
-  }
-
-  const display = value || '-'
-  return (
-    <span
-      onClick={() => canEdit && setEditing(true)}
-      style={{
-        fontSize: '11px',
-        cursor: canEdit ? 'pointer' : 'default',
-        display: 'block',
-        maxWidth,
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        padding: '2px 4px',
-        borderRadius: '4px',
-        border: canEdit ? '1px solid transparent' : 'none',
-      }}
-      onMouseEnter={(e) => { if (canEdit) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-primary)' }}
-      onMouseLeave={(e) => { if (canEdit) (e.currentTarget as HTMLElement).style.borderColor = 'transparent' }}
-      title={display}
-    >
-      {display}
-    </span>
-  )
-}
-
-// =====================================================
 // SI/NO DROPDOWN CELL (portal-based, reutilizable)
 // =====================================================
 
@@ -3842,10 +3777,13 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
 
 // =====================================================
 // GUIA DROPDOWN CELL (mismo patrón que SiNoDropdownCell)
+// Se reusa para Cta. Cabify / Cta. DiDi pasando `field` y las opciones.
 // =====================================================
 
 interface GuiaDropdownCellProps {
   leadId: string
+  /** Campo del lead que edita. Por defecto, el guía (entrevistador_asignado). */
+  field?: keyof Lead
   value: string | null | undefined
   guias: string[]
   isOpen: boolean
@@ -3855,11 +3793,11 @@ interface GuiaDropdownCellProps {
   onClose: () => void
 }
 
-function GuiaDropdownCell({ leadId, value, guias, isOpen, canEdit, onToggle, onChange, onClose }: GuiaDropdownCellProps) {
+function GuiaDropdownCell({ leadId, field = 'entrevistador_asignado', value, guias, isOpen, canEdit, onToggle, onChange, onClose }: GuiaDropdownCellProps) {
   const cellRef = useRef<HTMLSpanElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0 })
-  const dropdownKey = `${leadId}::entrevistador_asignado`
+  const dropdownKey = `${leadId}::${String(field)}`
   const actual = (value || '').trim()
   const MAX_H = 260
 
@@ -3953,7 +3891,7 @@ function GuiaDropdownCell({ leadId, value, guias, isOpen, canEdit, onToggle, onC
               onMouseLeave={e => (e.currentTarget.style.background = esActual(opt.val) ? '#F3F4F6' : 'transparent')}
               onClick={(e) => {
                 e.stopPropagation()
-                if (!esActual(opt.val)) onChange(leadId, 'entrevistador_asignado', opt.val)
+                if (!esActual(opt.val)) onChange(leadId, field, opt.val)
                 onClose()
               }}
             >

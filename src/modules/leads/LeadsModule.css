@@ -73,7 +73,7 @@
 
 .leads-stats-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
 }
 
@@ -458,6 +458,11 @@
   color: #059669;
 }
 
+.lead-estado-listo-emparejar {
+  background: #FAE8FF;
+  color: #A21CAF;
+}
+
 .lead-estado-descartado {
   background: #FEE2E2;
   color: #991B1B;
@@ -545,6 +550,7 @@
 .lead-estado-dot-no-cumple-edad { background: #EA580C; }
 .lead-estado-dot-convocatoria-induccion { background: #0891B2; }
 .lead-estado-dot-apto-induccion { background: #059669; }
+.lead-estado-dot-listo-emparejar { background: #C026D3; }
 .lead-estado-dot-descartado { background: #991B1B; }
 .lead-estado-dot-conductor { background: #7c3aed; }
 

@@ -1,68 +1,35 @@
 // src/modules/onboarding/distribucion-mapa-v2/components/glifos.ts
 //
 // Pictogramas de conductor y lead, como fragmentos de SVG reutilizables.
-// Viven en un archivo propio porque los usan tanto el pin del mapa
-// (marcadores.ts) como el badge de las listas (iconos.tsx), y así el dibujo es
-// literalmente el mismo en los dos lugares.
+// Los usan el pin del mapa (marcadores.ts) y el ícono de las listas
+// (iconos.tsx), así el dibujo es literalmente el mismo en los dos lugares.
 //
-// Ambos se dibujan sobre una caja de 24x24 centrada en (0,0) y se reubican con
-// los parámetros `escala` / `cx` / `cy`.
+// Son los Material Symbols "local_taxi" (conductor) y "person" (lead), estilo
+// Outlined, peso 400 (Google, licencia Apache 2.0). Se dibujan sobre su caja
+// original (viewBox 0 -960 960 960) dentro de un <svg> anidado, así se ubican
+// y escalan sin tocar el path. Ambos van al MISMO tamaño.
+
+import type { TipoEntidadMapa } from '../types'
+
+const PATH_CONDUCTOR =
+  'M200-204v54q0 12.75-8.62 21.37Q182.75-120 170-120h-20q-12.75 0-21.37-8.63Q120-137.25 120-150v-324l85-256q3-14 15.4-22t27.6-8h127v-75h212v75h125q15.2 0 27.6 8 12.4 8 15.4 22l85 256v324q0 12.75-8.62 21.37Q822.75-120 810-120h-21q-12.75 0-21.37-8.63Q759-137.25 759-150v-54H200Zm3-330h554l-55-166H258l-55 166Zm-23 60v210-210Zm105.76 160q23.24 0 38.74-15.75Q340-345.5 340-368q0-23.33-15.75-39.67Q308.5-424 286-424q-23.33 0-39.67 16.26Q230-391.47 230-368.24q0 23.24 16.26 38.74 16.27 15.5 39.5 15.5ZM675-314q23.33 0 39.67-15.75Q731-345.5 731-368q0-23.33-16.26-39.67Q698.47-424 675.24-424q-23.24 0-38.74 16.26-15.5 16.27-15.5 39.5 0 23.24 15.75 38.74Q652.5-314 675-314Zm-495 50h600v-210H180v210Z'
+
+const PATH_LEAD =
+  'M372-523q-42-42-42-108t42-108q42-42 108-42t108 42q42 42 42 108t-42 108q-42 42-108 42t-108-42ZM160-160v-94q0-38 19-65t49-41q67-30 128.5-45T480-420q62 0 123 15.5T731-360q31 14 50 41t19 65v94H160Zm60-60h520v-34q0-16-9.5-30.5T707-306q-64-31-117-42.5T480-360q-57 0-111 11.5T252-306q-14 7-23 21.5t-9 30.5v34Zm324.5-346.5Q570-592 570-631t-25.5-64.5Q519-721 480-721t-64.5 25.5Q390-670 390-631t25.5 64.5Q441-541 480-541t64.5-25.5ZM480-631Zm0 411Z'
 
 interface OpcionesGlifo {
-  /** Factor de escala sobre la caja base de 24x24. */
-  escala?: number
-  /** Centro donde queda el glifo. */
-  cx?: number
-  cy?: number
-  /** Color del pictograma. */
-  tinta?: string
+  /** Lado del cuadrado que ocupa el pictograma, en unidades del SVG contenedor. */
+  tamano: number
+  /** Centro del pictograma. */
+  cx: number
+  cy: number
+  /** Color del trazo. */
+  tinta: string
 }
 
-function envolver(contenido: string, { escala = 1, cx = 12, cy = 12 }: OpcionesGlifo): string {
-  const dx = cx - 12 * escala
-  const dy = cy - 12 * escala
-  return `<g transform="translate(${dx.toFixed(2)} ${dy.toFixed(2)}) scale(${escala})">${contenido}</g>`
-}
-
-/**
- * Chofer: gorra con visera, rostro, hombros y volante por delante.
- *
- * `color` es el color de FONDO sobre el que se dibuja: se usa para recortar el
- * interior del volante contra los hombros, que es lo que hace que el aro se
- * lea como un volante y no como una mancha.
- */
-export function glifoConductor(
-  opciones: OpcionesGlifo & { color: string }
-): string {
-  const tinta = opciones.tinta || '#ffffff'
-  const fondo = opciones.color
-
-  const contenido = `
-    <g fill="${tinta}">
-      <path d="M12 1.6 20.6 6.9 A0.9 0.9 0 0 1 20.3 8.5 L3.7 8.5 A0.9 0.9 0 0 1 3.4 6.9 Z"/>
-      <path d="M3.9 9.4 h16.2 a0.6 0.6 0 0 1 0 1.5 H3.9 a0.6 0.6 0 0 1 0-1.5 z"/>
-      <path d="M4.6 11.7 h14.8 c-0.8 2.6 -3.7 4.4 -7.4 4.4 s-6.6 -1.8 -7.4 -4.4 z"/>
-      <path d="M9.1 16.6 c0.9 0.4 1.9 0.6 2.9 0.6 s2 -0.2 2.9 -0.6 l3.4 1.3 c1.9 0.7 3.1 2.4 3.1 4.4 v1.5 H2.6 v-1.5 c0 -2 1.2 -3.7 3.1 -4.4 z"/>
-    </g>
-    <circle cx="12" cy="19.8" r="5.4" fill="${fondo}"/>
-    <g fill="none" stroke="${tinta}" stroke-width="1.5">
-      <circle cx="12" cy="19.8" r="4.4"/>
-      <path d="M7.7 19.8 h8.6 M12 21.5 v4"/>
-    </g>
-    <circle cx="12" cy="19.8" r="1.35" fill="${tinta}"/>`
-
-  return envolver(contenido, opciones)
-}
-
-/** Lead: silueta de persona de pie (cabeza, torso con brazos, dos piernas). */
-export function glifoLead(opciones: OpcionesGlifo = {}): string {
-  const tinta = opciones.tinta || '#ffffff'
-
-  const contenido = `
-    <g fill="${tinta}">
-      <circle cx="12" cy="4.4" r="3.2"/>
-      <path d="M9 8.6 h6 a2.6 2.6 0 0 1 2.6 2.6 v5.2 a0.95 0.95 0 0 1 -1.9 0 v-4.6 h-0.7 v9.5 a1.1 1.1 0 0 1 -2.2 0 v-5.5 h-1.6 v5.5 a1.1 1.1 0 0 1 -2.2 0 v-9.5 h-0.7 v4.6 a0.95 0.95 0 0 1 -1.9 0 v-5.2 a2.6 2.6 0 0 1 2.6 -2.6 z"/>
-    </g>`
-
-  return envolver(contenido, opciones)
+export function glifoEntidad(tipo: TipoEntidadMapa, { tamano, cx, cy, tinta }: OpcionesGlifo): string {
+  const d = tipo === 'conductor' ? PATH_CONDUCTOR : PATH_LEAD
+  const x = (cx - tamano / 2).toFixed(2)
+  const y = (cy - tamano / 2).toFixed(2)
+  return `<svg x="${x}" y="${y}" width="${tamano}" height="${tamano}" viewBox="0 -960 960 960"><path d="${d}" fill="${tinta}"/></svg>`
 }

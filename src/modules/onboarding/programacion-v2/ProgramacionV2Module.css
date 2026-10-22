@@ -1126,6 +1126,12 @@
   color: var(--badge-orange-text, #C2410C);
 }
 
+/* Cuenta confirmada (Cabify / DiDi). Las columnas DiDi reusan las clases .cabify */
+.prog-inline-select.cabify.confirmada {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
 /* Input inline para dirección */
 .prog-inline-input {
   width: 100%;
@@ -1358,6 +1364,12 @@
 .prog-inline-select-mini.cabify.confirmacion_didi {
   background: var(--badge-orange-bg, #FFEDD5);
   color: var(--badge-orange-text, #C2410C);
+}
+
+/* Cuenta confirmada (Cabify / DiDi). Las columnas DiDi reusan las clases .cabify */
+.prog-inline-select-mini.cabify.confirmada {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
 }
 
 /* Layout para Documento dual (TURNO) */

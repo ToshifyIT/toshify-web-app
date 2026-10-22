@@ -23,7 +23,9 @@ import {
   REQUISITOS,
   REQUISITOS_LEAD,
   TURNOS,
+  TURNOS_CONDUCTOR,
   ZONAS,
+  claveGuia,
   resumenRangoCreacion,
   type FiltrosV2,
   type SegmentoV2,
@@ -34,6 +36,8 @@ interface Props {
   onChange: (patch: Partial<FiltrosV2>) => void
   /** Estados de lead disponibles (derivados de los datos cargados). */
   estadosLeadDisponibles: string[]
+  /** Guías que tienen asignados los leads cargados (nombre tal como se muestra). */
+  guiasDisponibles: string[]
   conteoConductores: number
   conteoLeads: number
   conteoSinCompanero: number
@@ -95,6 +99,7 @@ export function FiltrosSidebar({
   filtros,
   onChange,
   estadosLeadDisponibles,
+  guiasDisponibles,
   conteoConductores,
   conteoLeads,
   conteoSinCompanero,
@@ -129,12 +134,18 @@ export function FiltrosSidebar({
   const verConductores = filtros.segmento !== 'leads'
   const verLeads = filtros.segmento !== 'conductores'
 
-  const segmentos: Array<{ value: SegmentoV2; label: string; n?: number }> = [
-    { value: 'conductores', label: 'Conductores', n: conteoConductores },
-    { value: 'leads', label: 'Leads', n: conteoLeads },
-    // Ambos muestra la suma, así los tres botones se ven iguales (nombre arriba, cantidad abajo)
-    { value: 'ambos', label: 'Ambos', n: conteoConductores + conteoLeads },
-  ]
+  /**
+   * Capas: conductores y leads se prenden y apagan por separado. Por debajo
+   * sigue siendo `segmento` ('conductores' | 'leads' | 'ambos'); siempre queda
+   * al menos una capa prendida.
+   */
+  const alternarCapa = (capa: 'conductores' | 'leads') => {
+    const conductores = capa === 'conductores' ? !verConductores : verConductores
+    const leads = capa === 'leads' ? !verLeads : verLeads
+    if (!conductores && !leads) return
+    const segmento: SegmentoV2 = conductores && leads ? 'ambos' : conductores ? 'conductores' : 'leads'
+    onChange({ segmento })
+  }
 
   return (
     <div
@@ -152,6 +163,26 @@ export function FiltrosSidebar({
       }}
     >
       <div style={{ padding: 13, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Capas: van primero porque definen qué se busca y qué filtros aparecen */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <TarjetaCapa
+            tipo="conductor"
+            color={COLOR_CAPA_CONDUCTOR}
+            label="Conductores"
+            cantidad={conteoConductores}
+            activa={verConductores}
+            onClick={() => alternarCapa('conductores')}
+          />
+          <TarjetaCapa
+            tipo="lead"
+            color={COLOR_CAPA_LEAD}
+            label="Leads"
+            cantidad={conteoLeads}
+            activa={verLeads}
+            onClick={() => alternarCapa('leads')}
+          />
+        </div>
+
         {/* Buscador global */}
         <div style={{ position: 'relative' }}>
           <Search
@@ -183,65 +214,6 @@ export function FiltrosSidebar({
             }}
           />
         </div>
-        <Hint>
-          Busca por palabras sueltas y en cualquier orden: “matias albarado”,
-          “albarado matias” y el DNI devuelven lo mismo.
-        </Hint>
-
-        {/* Selector de segmento */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 2,
-            background: 'var(--bg-secondary)',
-            borderRadius: 9,
-            padding: 3,
-          }}
-        >
-          {segmentos.map((s) => {
-            const activo = filtros.segmento === s.value
-            return (
-              <button
-                key={s.value}
-                type="button"
-                onClick={() => onChange({ segmento: s.value })}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 1,
-                  border: 'none',
-                  borderRadius: 7,
-                  padding: '5px 2px',
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  lineHeight: 1.15,
-                  cursor: 'pointer',
-                  background: activo ? 'var(--bg-primary)' : 'transparent',
-                  color: activo ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  boxShadow: activo ? '0 1px 3px rgba(0,0,0,.14)' : undefined,
-                }}
-              >
-                <span style={{ whiteSpace: 'nowrap' }}>{s.label}</span>
-                {s.n !== undefined && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-tertiary)',
-                    }}
-                  >
-                    {s.n}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
         {/* Limpiar filtros: aparece sólo cuando hay algo apartado del inicial. */}
         {filtrosActivos > 0 && (
           <button
@@ -288,7 +260,7 @@ export function FiltrosSidebar({
             </Acordeon>
 
             <Acordeon titulo="Turno" resumen={resumen(filtros.turnosConductor)}>
-              {TURNOS.map((t) => (
+              {TURNOS_CONDUCTOR.map((t) => (
                 <CheckRow
                   key={t.value}
                   label={t.label}
@@ -418,8 +390,8 @@ export function FiltrosSidebar({
                 />
               ))}
               <Hint>
-                Al abrir vienen marcados los dos estados de inducción; sin selección se
-                muestran todos. Los leads descartados y los ubicados en zona restringida
+                Al abrir vienen marcados los estados de inducción y Listo Emparejar; sin
+                selección se muestran todos. Los leads descartados y los ubicados en zona restringida
                 no entran al mapa.
               </Hint>
             </Acordeon>
@@ -434,6 +406,22 @@ export function FiltrosSidebar({
                 />
               ))}
               <Hint>Turno que el lead declaró como preferencia.</Hint>
+            </Acordeon>
+
+            <Acordeon titulo="Guía" resumen={resumen(filtros.guias)}>
+              {guiasDisponibles.map((g) => (
+                <CheckRow
+                  key={claveGuia(g)}
+                  label={g}
+                  checked={filtros.guias.has(claveGuia(g))}
+                  onChange={() => onChange({ guias: alternar(filtros.guias, claveGuia(g)) })}
+                />
+              ))}
+              <Hint>
+                {guiasDisponibles.length > 0
+                  ? 'Guía asignado al lead. Sin selección se muestran todos, con y sin guía.'
+                  : 'Ningún lead cargado tiene guía asignado.'}
+              </Hint>
             </Acordeon>
 
             <Acordeon
@@ -523,5 +511,67 @@ export function FiltrosSidebar({
         )}
       </div>
     </div>
+  )
+}
+
+/** Colores de las tarjetas de capa (mismo pictograma y tonos que el mapa). */
+const COLOR_CAPA_CONDUCTOR = '#1D4ED8'
+const COLOR_CAPA_LEAD = '#0891B2'
+const COLOR_CAPA_APAGADA = '#9CA3AF'
+
+/** Tarjeta para prender / apagar una capa del mapa (conductores o leads). */
+function TarjetaCapa({
+  tipo,
+  color,
+  label,
+  cantidad,
+  activa,
+  onClick,
+}: {
+  tipo: 'conductor' | 'lead'
+  color: string
+  label: string
+  cantidad: number
+  activa: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activa}
+      title={activa ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
+      style={{
+        flex: '1 1 0',
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 5,
+        padding: '8px 10px',
+        borderRadius: 10,
+        cursor: 'pointer',
+        border: `1.5px solid ${activa ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
+        background: activa ? 'rgba(255, 0, 51, 0.04)' : 'var(--bg-secondary)',
+        textAlign: 'left',
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+        <IconoEntidad tipo={tipo} color={activa ? color : COLOR_CAPA_APAGADA} size={20} />
+        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+          {cantidad}
+        </span>
+      </span>
+      <span
+        style={{
+          fontSize: 12.5,
+          fontWeight: activa ? 700 : 500,
+          color: activa ? 'var(--text-primary)' : 'var(--text-tertiary)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </span>
+    </button>
   )
 }

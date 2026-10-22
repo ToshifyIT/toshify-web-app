@@ -3,15 +3,14 @@
 // Construcción del SVG de los pines del mapa. Separado de iconos.tsx para no
 // mezclar exports de componentes con exports de utilidades (fast refresh).
 //
-// Pictogramas (definidos en glifos.ts):
-//   - conductor: chofer con gorra y volante
-//   - lead:      silueta de persona de pie
-//
-// Ambos usan rombo: la distinción la hace el pictograma (y el color), no la
-// silueta. El conductor usaba gota; se unificó a pedido para que el mapa lea
-// como una sola familia de marcadores.
+// Forma: pin de ubicación (gota) para ambos tipos, con fondo pastel y el
+// pictograma en el color de acento (ver colores.ts). Conductor y lead llevan el
+// pictograma al mismo tamaño; los distingue el dibujo (auto / persona) y el
+// color. La punta del pin queda abajo al centro, que es donde se ancla en el
+// mapa (anchor 17,44 en MapaCanvas).
 
-import { glifoConductor, glifoLead } from './glifos'
+import { glifoEntidad } from './glifos'
+import { fondoPastel } from './colores'
 import type { TipoEntidadMapa } from '../types'
 
 function svgPin(
@@ -20,25 +19,15 @@ function svgPin(
   activo: boolean,
   atenuado: boolean
 ): string {
-  const borde = activo ? '#ff0033' : atenuado ? '#6B7280' : '#ffffff'
-  const grosor = activo ? 3 : 2
+  const borde = activo ? '#ff0033' : atenuado ? '#9CA3AF' : color
+  const grosor = activo ? 2.6 : 1.6
   const opacidad = atenuado ? 0.55 : 1
 
-  const silueta = '<path d="M17 43 31.5 22.5 17 2 2.5 22.5Z"/>'
-
-  // El glifo del conductor necesita el color del pin para "recortar" el hueco
-  // del volante sobre los hombros (no se puede lograr sólo con blanco).
-  //
-  // Va más chico que el del lead y algo por encima del centro: la gorra es la
-  // parte más ancha del dibujo y el rombo se angosta hacia arriba, así que con
-  // una escala mayor la visera se sale por los lados.
-  const glifo =
-    tipo === 'conductor'
-      ? glifoConductor({ color, escala: 0.7, cx: 17, cy: 19 })
-      : glifoLead({ escala: 0.92, cx: 17, cy: 20 })
+  const silueta = '<path d="M17 42.6C13.4 37.6 3 27.4 3 16.2a14 14 0 0 1 28 0c0 11.2-10.4 21.4-14 26.4Z"/>'
+  const glifo = glifoEntidad(tipo, { tamano: 19, cx: 17, cy: 16.2, tinta: atenuado ? '#6B7280' : color })
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44">
-  <g fill="${color}" stroke="${borde}" stroke-width="${grosor}" opacity="${opacidad}">${silueta}</g>
+  <g fill="${fondoPastel(color)}" stroke="${borde}" stroke-width="${grosor}" opacity="${opacidad}">${silueta}</g>
   <g opacity="${opacidad}">${glifo}</g>
 </svg>`
 }

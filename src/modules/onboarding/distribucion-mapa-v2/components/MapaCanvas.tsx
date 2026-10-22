@@ -22,7 +22,7 @@ import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
 import type { EntidadMapa, ParSugerido, Radar } from '../types'
 import type { ZonaPeligrosa } from '../distribucionMapaV2Service'
-import { formatKm, formatMin, LABEL_TURNO } from '../utils'
+import { formatKm, formatMin, LABEL_TURNO, LABEL_TURNO_CONDUCTOR, turnoConductor } from '../utils'
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
@@ -646,7 +646,8 @@ function InfoEntidad({
         </span>
         {e.tipo === 'conductor' && e.turnoEfectivo && (
           <Badge tono="info">
-            {LABEL_TURNO[e.turnoEfectivo]} · {ORIGEN_TURNO_LABEL[e.turnoOrigen] || 'sin dato'}
+            {turnoConductor(e) === 'A_CARGO' ? LABEL_TURNO_CONDUCTOR.A_CARGO : LABEL_TURNO[e.turnoEfectivo]} ·{' '}
+            {ORIGEN_TURNO_LABEL[e.turnoOrigen] || 'sin dato'}
           </Badge>
         )}
         {e.tipo === 'lead' && e.turnoLead && <Badge tono="info">{e.turnoLead}</Badge>}
@@ -656,6 +657,11 @@ function InfoEntidad({
           </Badge>
         )}
         {e.estadoCompanero === 'con_companero' && <Badge tono="info">Con compañero</Badge>}
+        {/* Sin asignación activa con vehículo, el compañero "no aplica": se dice
+            explícitamente para que no parezca un dato faltante. */}
+        {e.tipo === 'conductor' && !e.tieneAsignacionActiva && !e.esBaja && (
+          <Badge tono="neutro">Sin asignación</Badge>
+        )}
       </div>
 
       <p style={{ margin: '6px 0 0', fontSize: 11, color: '#6B7280' }}>
@@ -664,6 +670,13 @@ function InfoEntidad({
         {e.zona && ` · ${e.zona}`}
         {e.patenteAsignacion && ` · ${e.patenteAsignacion}`}
       </p>
+
+      {e.tipo === 'lead' && e.guia && (
+        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>
+          <span style={{ color: '#6B7280' }}>Guía: </span>
+          <b>{e.guia}</b>
+        </p>
+      )}
 
       {e.companeroNombre && (
         <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>
