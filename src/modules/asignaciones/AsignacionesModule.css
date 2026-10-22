@@ -2553,3 +2553,241 @@ input[type="date"].asig-status-select {
   background: var(--badge-purple-bg);
   color: var(--badge-purple-text);
 }
+
+/* Vacante A cargo - Violeta (Estado de Flota, columna Asignados) */
+.asig-turno-vacante.asig-turno-cargo {
+  color: var(--badge-purple-text);
+}
+
+/* ============================================================
+   Estado de Flota - Modal "Detalles de la Asignación" (efd-*)
+   ============================================================ */
+.modal-content.efd-modal {
+  max-width: 760px;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+}
+
+.efd-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.efd-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.efd-titulo {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.efd-header-fila {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.efd-codigo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.efd-close {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.efd-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.efd-body {
+  padding: 14px 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.efd-fechas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.efd-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.efd-seccion-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.efd-card {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--card-bg, var(--modal-bg));
+}
+
+.efd-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border-primary);
+}
+
+.efd-patente {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-right: 8px;
+}
+
+.efd-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.efd-conductor-nombre {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.efd-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.efd-vencimientos {
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-primary);
+}
+
+.efd-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.efd-dato-ancho {
+  grid-column: span 2;
+}
+
+.efd-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
+.efd-valor {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.efd-valor.efd-vencido {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.efd-valor.efd-por-vencer {
+  color: var(--badge-orange-text);
+  font-weight: 600;
+}
+
+.efd-muted,
+.efd-vacio {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.efd-vacio {
+  font-style: italic;
+  margin: 0;
+}
+
+.efd-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.efd-btn-cerrar {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.efd-btn-cerrar:hover {
+  background: var(--bg-hover);
+}
+
+@media (max-width: 640px) {
+  .efd-grid,
+  .efd-fechas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

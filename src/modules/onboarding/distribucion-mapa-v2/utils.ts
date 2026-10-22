@@ -252,7 +252,8 @@ export function turnoLeadATurno(turno: string | null | undefined): TurnoEfectivo
   if (!t) return null
   if (t.includes('diurn')) return 'DIURNO'
   if (t.includes('noctur')) return 'NOCTURNO'
-  if (t.includes('cargo') || t.includes('sin pref') || t.includes('todo')) return 'SIN_PREFERENCIA'
+  // "Indiferente" es el mismo dato que "Sin Pref." (homologado en Leads, 2026-10-22)
+  if (t.includes('cargo') || t.includes('sin pref') || t.includes('indiferente') || t.includes('todo')) return 'SIN_PREFERENCIA'
   return null
 }
 
