@@ -392,3 +392,148 @@
     padding: 8px 10px;
   }
 }
+
+/* ===========================================
+   Tamaños compactos (2026-10-22): mismo tamaño de
+   texto que el resto de Facturación. Va con el
+   prefijo del tab para ganarle a clases globales
+   (.monto / .patente de otros módulos).
+   =========================================== */
+.cobros-fraccionados-tab {
+  padding: 12px 0 0;
+}
+
+.cobros-fraccionados-tab .tab-header {
+  margin-bottom: 12px;
+}
+
+.cobros-fraccionados-tab .tab-header h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cobros-fraccionados-tab .tab-header p {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.cobros-fraccionados-tab .cobros-lista {
+  gap: 8px;
+}
+
+.cobros-fraccionados-tab .cobro-card {
+  border-color: var(--border-primary);
+  background: var(--card-bg, var(--bg-primary));
+  box-shadow: none;
+}
+
+.cobros-fraccionados-tab .cobro-header {
+  padding: 10px 14px;
+  gap: 16px;
+  background: var(--bg-secondary);
+  border-bottom-color: var(--border-primary);
+}
+
+.cobros-fraccionados-tab .cobro-titulo {
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.cobros-fraccionados-tab .cobro-titulo .conductor {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cobros-fraccionados-tab .cobro-titulo .patente {
+  margin-left: 0 !important;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary) !important;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.cobros-fraccionados-tab .cobro-titulo .patente:empty {
+  display: none;
+}
+
+.cobros-fraccionados-tab .cobro-detalles {
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.cobros-fraccionados-tab .cobro-detalles .monto {
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: left;
+}
+
+.cobros-fraccionados-tab .cobro-progreso {
+  gap: 4px;
+  min-width: 130px;
+}
+
+.cobros-fraccionados-tab .barra-progreso {
+  width: 120px;
+  height: 6px;
+  background: var(--bg-tertiary);
+}
+
+.cobros-fraccionados-tab .porcentaje {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.cobros-fraccionados-tab .desde-semana {
+  min-width: 100px !important;
+}
+
+.cobros-fraccionados-tab .desde-semana .label {
+  font-size: 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary) !important;
+}
+
+.cobros-fraccionados-tab .desde-semana .valor {
+  font-size: 11px;
+}
+
+.cobros-fraccionados-tab .proxima-cuota {
+  min-width: 200px;
+  padding: 6px 10px;
+  font-size: 11px;
+  background: var(--card-bg, var(--bg-primary));
+  border-color: var(--border-primary);
+  border-radius: 6px;
+}
+
+.cobros-fraccionados-tab .proxima-cuota .label {
+  margin-bottom: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
+.cobros-fraccionados-tab .proxima-cuota .valor {
+  color: var(--text-primary);
+}
+
+.cobros-fraccionados-tab .btn-expandir svg {
+  width: 17px;
+  height: 17px;
+}
+
+.cobros-fraccionados-tab .cuotas-table {
+  font-size: 11px;
+}

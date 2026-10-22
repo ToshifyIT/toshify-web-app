@@ -20,7 +20,6 @@ import {
   X,
   Shield,
   Clock,
-  ExternalLink,
   FolderOpen,
   Download,
   CheckCircle,
@@ -32,6 +31,7 @@ import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import type {
   SiniestroCompleto,
@@ -451,7 +451,15 @@ export function SiniestrosModule() {
     {
       accessorKey: 'fecha_siniestro',
       header: 'Fecha',
-      cell: ({ row }) => formatDate(row.original.fecha_siniestro)
+      cell: ({ row }) => {
+        const hora = (row.original.hora_siniestro || '').slice(0, 5)
+        return (
+          <div style={{ lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+            <div>{formatDate(row.original.fecha_siniestro)}</div>
+            {hora && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{hora}</div>}
+          </div>
+        )
+      }
     },
     {
       id: 'patente_conductor',
@@ -476,17 +484,14 @@ export function SiniestrosModule() {
             <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {row.original.conductor_display || '-'}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-              <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 500 }}>
-                {row.original.vehiculo_patente || '-'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              <span className="dt-badge dt-badge-gray" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                {row.original.vehiculo_patente || 'Sin patente'}
               </span>
               {resp && (
-                <>
-                  <span style={{ opacity: 0.4 }}>·</span>
-                  <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
-                    {labels[resp] || resp}
-                  </span>
-                </>
+                <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
+                  {labels[resp] || resp}
+                </span>
               )}
             </div>
           </div>
@@ -535,119 +540,41 @@ export function SiniestrosModule() {
       }
     },
     {
-      accessorKey: 'estado_vehiculo',
-      header: 'Est. Veh.',
+      id: 'acciones',
+      size: 110,
+      header: 'Acciones',
       cell: ({ row }) => {
-        const estado = row.original.estado_vehiculo
-        if (!estado) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-
-        // Determinar color según el estado
         const isHabilitado = row.original.habilitado_circular
-        const bgColor = isHabilitado ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'
-        const textColor = isHabilitado ? '#10b981' : '#ef4444'
+        const hasVehiculo = !!row.original.vehiculo_id
+        const hasDrive = !!row.original.carpeta_drive_url
+        const habilitarDisabled = isHabilitado || !hasVehiculo
 
         return (
-          <span style={{
-            padding: '4px 8px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            fontWeight: 500,
-            background: bgColor,
-            color: textColor,
-            whiteSpace: 'nowrap'
-          }}>
-            {estado}
-          </span>
+          <ActionsMenu
+            maxVisible={2}
+            actions={[
+              { icon: <Eye size={15} />, label: 'Ver detalle', onClick: () => handleVerSiniestro(row.original) },
+              { icon: <Edit2 size={15} />, label: 'Editar', onClick: () => handleEditarSiniestro(row.original), variant: 'info' },
+              { icon: <History size={15} />, label: 'Seguimiento', onClick: () => setSeguimientoSiniestro(row.original) },
+              {
+                icon: <FolderOpen size={15} />,
+                label: hasDrive ? 'Carpeta de Drive' : 'Sin carpeta de Drive',
+                onClick: () => { if (hasDrive) window.open(row.original.carpeta_drive_url!, '_blank') },
+                disabled: !hasDrive,
+                variant: hasDrive ? 'success' : undefined,
+              },
+              {
+                icon: <CheckCircle size={15} />,
+                label: !hasVehiculo ? 'Habilitar (sin vehículo)' : isHabilitado ? 'Vehículo ya habilitado' : 'Habilitar vehículo',
+                onClick: () => handleHabilitarVehiculo(row.original),
+                disabled: habilitarDisabled,
+                variant: habilitarDisabled ? undefined : 'warning',
+              },
+            ]}
+          />
         )
       }
     },
-
-    {
-      id: 'acciones',
-      size: 220,
-      header: 'Acciones',
-      cell: ({ row }) => {
-        const isHabilitado = row.original.habilitado_circular;
-        const hasVehiculo = !!row.original.vehiculo_id;
-        const hasDrive = !!row.original.carpeta_drive_url;
-
-        const habilitarDisabled = isHabilitado || !hasVehiculo;
-        const habilitarTooltip = !hasVehiculo
-          ? 'Sin vehículo asignado'
-          : isHabilitado
-            ? 'Vehículo ya habilitado'
-            : 'Habilitar vehículo';
-
-        const btnBase = (color: string, opacity = 1, disabled = false): React.CSSProperties => ({
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1px',
-          background: 'none',
-          border: 'none',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          padding: '2px',
-          color,
-          opacity,
-        });
-        const labelStyle: React.CSSProperties = { fontSize: '9px', fontWeight: 600, lineHeight: 1 };
-
-        return (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              title="Ver detalle"
-              onClick={() => handleVerSiniestro(row.original)}
-              style={btnBase('var(--text-secondary)')}
-            >
-              <Eye size={14} />
-              <span style={labelStyle}>Ver</span>
-            </button>
-            <button
-              title="Editar siniestro"
-              onClick={() => handleEditarSiniestro(row.original)}
-              style={btnBase('#2563eb')}
-            >
-              <Edit2 size={14} />
-              <span style={labelStyle}>Editar</span>
-            </button>
-            <button
-              title="Seguimiento del siniestro"
-              onClick={() => setSeguimientoSiniestro(row.original)}
-              style={btnBase('var(--text-secondary)')}
-            >
-              <History size={14} />
-              <span style={labelStyle}>Hist.</span>
-            </button>
-            <button
-              title={hasDrive ? 'Ver carpeta de Drive' : 'Sin carpeta de Drive'}
-              onClick={() => { if (hasDrive) window.open(row.original.carpeta_drive_url!, '_blank') }}
-              disabled={!hasDrive}
-              style={btnBase(
-                hasDrive ? '#16a34a' : 'var(--text-tertiary)',
-                hasDrive ? 1 : 0.4,
-                !hasDrive,
-              )}
-            >
-              <FolderOpen size={14} />
-              <span style={labelStyle}>Drive</span>
-            </button>
-            <button
-              title={habilitarTooltip}
-              onClick={() => handleHabilitarVehiculo(row.original)}
-              disabled={habilitarDisabled}
-              style={btnBase(
-                habilitarDisabled ? 'var(--text-tertiary)' : '#d97706',
-                habilitarDisabled ? 0.4 : 1,
-                habilitarDisabled,
-              )}
-            >
-              <CheckCircle size={14} />
-              <span style={labelStyle}>Habil.</span>
-            </button>
-          </div>
-        );
-      }
-    }
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, categoriasUnicas, categoriaFilter, responsableFilter, estadosUnicos, estadoFilter, openFilterId, canEdit])
 
   function handleNuevoSiniestro() {
@@ -1042,17 +969,31 @@ export function SiniestrosModule() {
     })
   }
 
-  function formatDias(value: number | null | undefined) {
-    if (value === null || value === undefined) return 'Sin datos'
-    return `${value} días`
+  // Montos del período elegido en el selector (con "Todo el historial" = todos).
+  // Mismas fórmulas que calcularStats, pero sobre los siniestros del período, así las
+  // tarjetas responden al filtro. Los "días desde/entre" siguen siendo sobre todo el historial.
+  const resumenPeriodo = useMemo(() => {
+    const estadoProcesando = estados.find(e => e.codigo === 'PROCESANDO_COBRO')
+    let presupuesto = 0, recuperado = 0, cobrado = 0, procesando = 0
+    for (const s of siniestrosSemana) {
+      presupuesto += s.presupuesto_real || 0
+      recuperado += s.presupuesto_aprobado_seguro || 0
+      cobrado += s.total_pagado || 0
+      if (estadoProcesando && s.estado_id === estadoProcesando.id) procesando += s.presupuesto_real || 0
+    }
+    return { cantidad: siniestrosSemana.length, presupuesto, recuperado, cobrado, procesando }
+  }, [siniestrosSemana, estados])
+
+  /** Monto para las tarjetas: muestra "$ 0" en vez de "-". */
+  function montoTarjeta(value: number) {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value || 0)
   }
 
-  const siniestrosSemanaCount = useMemo(() => siniestrosSemana.length, [siniestrosSemana])
-
-  const presupuestoSemanaTotal = useMemo(
-    () => siniestrosSemana.reduce((sum, s) => sum + (s.presupuesto_real || 0), 0),
-    [siniestrosSemana]
-  )
+  /** "34 días" / "1 día" / "Sin datos" */
+  function diasTexto(value: number | null | undefined) {
+    if (value === null || value === undefined) return 'Sin datos'
+    return `${value} ${value === 1 ? 'día' : 'días'}`
+  }
 
   function handleExportarExcel() {
     if (siniestrosFiltrados.length === 0) {
@@ -1122,103 +1063,76 @@ export function SiniestrosModule() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando siniestros..." size="lg" />
 
+      {/* Indicadores: montos del período elegido + tiempos (sobre todo el historial) */}
       <div className="siniestros-stats">
-        <div className="stats-grid">
-          <div className="stat-card">
-            <DollarSign size={20} className="stat-icon" />
+        <div className="stats-grid siniestros-stats-grid">
+          <div className="stat-card" title="Cantidad de siniestros del período elegido">
+            <FileText size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatMoney(stats?.presupuesto_total || 0)}</span>
-              <span className="stat-label">Total Presupuesto</span>
+              <span className="stat-value">{resumenPeriodo.cantidad}</span>
+              <span className="stat-label">Siniestros</span>
             </div>
           </div>
-          <div className="stat-card">
-            <TrendingUp size={20} className="stat-icon" />
+          <div className="stat-card" title="Suma de los presupuestos reales del período">
+            <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatMoney(stats?.total_recuperados || 0)}</span>
-              <span className="stat-label">Total Recuperados</span>
+              <span className="stat-value">{montoTarjeta(resumenPeriodo.presupuesto)}</span>
+              <span className="stat-label">Presupuesto</span>
             </div>
           </div>
-          <div className="stat-card">
-            <Car size={20} className="stat-icon" />
+          <div className="stat-card" title="Suma de los presupuestos aprobados por el seguro en el período">
+            <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatMoney(stats?.total_cobrado || 0)}</span>
-              <span className="stat-label">Total Cobrado</span>
+              <span className="stat-value">{montoTarjeta(resumenPeriodo.recuperado)}</span>
+              <span className="stat-label">Recuperado</span>
             </div>
           </div>
-          <div className="stat-card highlight">
-            <Clock size={20} className="stat-icon" />
+          <div className="stat-card" title="Total cobrado de los siniestros del período">
+            <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatMoney(stats?.procesando_pago_total || 0)}</span>
-              <span className="stat-label">Procesando Pago</span>
+              <span className="stat-value">{montoTarjeta(resumenPeriodo.cobrado)}</span>
+              <span className="stat-label">Cobrado</span>
             </div>
           </div>
-          <div className="stat-card">
-            <Shield size={20} className="stat-icon" />
+          <div className={`stat-card${resumenPeriodo.procesando > 0 ? ' highlight' : ''}`} title="Presupuesto de los siniestros en estado Procesando Cobro">
+            <Clock size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatDias(stats?.dias_desde_ultimo_robo)}</span>
-              <span className="stat-label">Días desde último Robo</span>
+              <span className="stat-value">{montoTarjeta(resumenPeriodo.procesando)}</span>
+              <span className="stat-label">Procesando pago</span>
             </div>
           </div>
-          <div className="stat-card">
-            <AlertTriangle size={20} className="stat-icon" />
+          <div className="stat-card" title={`Días entre los dos últimos siniestros: ${diasTexto(stats?.dias_entre_ultimos_siniestros)}`}>
+            <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatDias(stats?.dias_entre_ultimos_robos)}</span>
-              <span className="stat-label">Días entre los dos últimos Robos</span>
+              <span className="stat-value">{diasTexto(stats?.dias_desde_ultimo_siniestro)}</span>
+              <span className="stat-label">
+                desde el último siniestro
+                {stats?.dias_entre_ultimos_siniestros != null && <> · {diasTexto(stats.dias_entre_ultimos_siniestros)} entre los dos últimos</>}
+              </span>
             </div>
           </div>
-          <div className="stat-card">
-            <Car size={20} className="stat-icon" />
+          <div className="stat-card" title={`Días entre los dos últimos robos: ${diasTexto(stats?.dias_entre_ultimos_robos)}`}>
+            <Shield size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatDias(stats?.dias_desde_ultimo_siniestro)}</span>
-              <span className="stat-label">Días desde último Siniestro</span>
+              <span className="stat-value">{diasTexto(stats?.dias_desde_ultimo_robo)}</span>
+              <span className="stat-label">
+                desde el último robo
+                {stats?.dias_entre_ultimos_robos != null && <> · {diasTexto(stats.dias_entre_ultimos_robos)} entre los dos últimos</>}
+              </span>
             </div>
-          </div>
-          <div className="stat-card">
-            <Clock size={20} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{formatDias(stats?.dias_entre_ultimos_siniestros)}</span>
-              <span className="stat-label">Días entre los dos últimos Siniestros</span>
-            </div>
-          </div>
-        </div>
-        <div className="siniestros-week-row">
-          <div className="stats-grid">
-            <div className="stat-card">
-              <FileText size={20} className="stat-icon" />
-              <div className="stat-content">
-                <span className="stat-value">{siniestrosSemanaCount}</span>
-                <span className="stat-label">Cantidad de siniestros de la semana</span>
-              </div>
-            </div>
-            <div className="stat-card">
-              <DollarSign size={20} className="stat-icon" />
-              <div className="stat-content">
-                <span className="stat-value">{formatMoney(presupuestoSemanaTotal)}</span>
-                <span className="stat-label">Presupuesto total de la semana</span>
-              </div>
-            </div>
-          </div>
-          <div className="siniestros-week-selector">
-            <DateRangeSelector
-              selectedRange={dateRangeSemana}
-              onRangeChange={setDateRangeSemana}
-              showAllOption
-              placeholder="Semana actual"
-            />
           </div>
         </div>
       </div>
 
-      {/* Tabs + Action Button */}
+      {/* Período + acciones (sin pestañas: el módulo tiene una sola vista) */}
       <div className="siniestros-tabs-row">
-        <div className="siniestros-tabs">
-        <button
-          className="siniestros-tab active"
-        >
-          <FileText size={16} />
-          Listado
-          <span className="tab-badge">{siniestrosFiltrados.length}</span>
-        </button>
+        <div className="siniestros-periodo">
+          <DateRangeSelector
+            selectedRange={dateRangeSemana}
+            onRangeChange={setDateRangeSemana}
+            showAllOption
+            placeholder="Semana actual"
+          />
         </div>
         <div className="tabs-actions">
           <VerLogsButton tablas={['siniestros', 'siniestros_seguimientos']} label="Siniestros" />
@@ -1235,8 +1149,6 @@ export function SiniestrosModule() {
           </button>
         </div>
       </div>
-
-      
 
       {/* Tabla de siniestros */}
       <DataTable
@@ -1256,7 +1168,7 @@ export function SiniestrosModule() {
       {/* Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className={`modal-content${modalMode === 'view' ? ' sd-modal' : ''}`} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>
                 {modalMode === 'create' ? 'Nuevo Siniestro' :
@@ -1330,17 +1242,16 @@ export function SiniestrosModule() {
       {seguimientoSiniestro && (
         <div className="modal-overlay" onClick={() => setSeguimientoSiniestro(null)}>
           <div
-            className="modal-content"
-            style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}
+            className="modal-content ss-modal"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="modal-header">
-              <h2>Seguimiento del Siniestro</h2>
-              <button className="modal-close" onClick={() => setSeguimientoSiniestro(null)}>
+            <div className="ss-modal-header">
+              <h2>Seguimiento del siniestro</h2>
+              <button className="ss-icon-btn" onClick={() => setSeguimientoSiniestro(null)} title="Cerrar">
                 <X size={18} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="ss-modal-body">
               <SiniestroSeguimiento
                 siniestro={seguimientoSiniestro}
                 onReload={cargarDatos}
@@ -1899,197 +1810,121 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
     })
   }
 
+  const respLabels: Record<string, string> = { tercero: 'Tercero', conductor: 'Conductor', compartida: 'Compartida', sin_info: 'Sin info' }
+  const vehiculoTexto = [siniestro.vehiculo_marca, siniestro.vehiculo_modelo].filter(Boolean).join(' ')
+  const Dato = ({ label, children, ancho }: { label: string; children: React.ReactNode; ancho?: boolean }) => (
+    <div className={`sd-dato${ancho ? ' sd-dato-ancho' : ''}`}>
+      <span className="sd-label">{label}</span>
+      <span className="sd-valor">{children}</span>
+    </div>
+  )
+
   return (
-    <div className="siniestro-detail">
-      <div className="detail-header" style={{ flexDirection: 'column', gap: '12px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-          <div>
-            <p className="detail-id">ID: {siniestro.id.slice(0, 8)}...</p>
-            <h3 className="detail-title">
-              {siniestro.vehiculo_patente || 'Sin patente'} - {siniestro.categoria_nombre}
-            </h3>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-              <span className={`estado-badge estado-${siniestro.estado_color}`}>
-                {siniestro.estado_nombre}
-              </span>
-              {siniestro.dias_siniestrado !== undefined && (
-                <span className="dias-badge">
-                  <Clock size={12} /> {siniestro.dias_siniestrado} dias
-                </span>
-              )}
-              {(siniestro as any).habilitado_circular === false && (
-                <span className="no-circular-badge">No habilitado</span>
-              )}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {siniestro.carpeta_drive_url && (
-              <a
-                href={siniestro.carpeta_drive_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-secondary btn-drive"
-                style={{ textDecoration: 'none' }}
-              >
-                <FolderOpen size={14} />
-                Carpeta
-              </a>
+    <div className="siniestro-detail sd">
+      {/* Encabezado */}
+      <div className="sd-header">
+        <div className="sd-header-main">
+          <div className="sd-header-fila">
+            <span className="sd-titulo">{siniestro.vehiculo_patente || 'Sin patente'} · {siniestro.categoria_nombre}</span>
+            <span className={`estado-badge estado-${siniestro.estado_color}`}>{siniestro.estado_nombre}</span>
+            {siniestro.dias_siniestrado !== undefined && siniestro.dias_siniestrado !== null && (
+              <span className="dias-badge"><Clock size={12} /> {siniestro.dias_siniestrado} días</span>
             )}
-            <button className="btn-secondary" onClick={onEdit}>
-              <Edit2 size={14} />
-              Editar
-            </button>
+            {(siniestro as any).habilitado_circular === false && (
+              <span className="no-circular-badge">No habilitado</span>
+            )}
           </div>
+          <span className="sd-sub">
+            {[siniestro.conductor_display, vehiculoTexto].filter(Boolean).join(' · ') || 'Sin conductor ni vehículo'}
+          </span>
+        </div>
+        <div className="sd-header-acciones">
+          {siniestro.carpeta_drive_url && (
+            <a href={siniestro.carpeta_drive_url} target="_blank" rel="noopener noreferrer" className="btn-secondary sd-btn" style={{ textDecoration: 'none' }}>
+              <FolderOpen size={13} />
+              Carpeta
+            </a>
+          )}
+          <button className="btn-secondary sd-btn" onClick={onEdit}>
+            <Edit2 size={13} />
+            Editar
+          </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="detail-tabs">
-        <button
-          className={`detail-tab ${activeTab === 'info' ? 'active' : ''}`}
-          onClick={() => setActiveTab('info')}
-        >
-          Informacion General
+      {/* Pestañas */}
+      <div className="sd-tabs">
+        <button className={`sd-tab${activeTab === 'info' ? ' active' : ''}`} onClick={() => setActiveTab('info')}>
+          Información general
         </button>
-        <button
-          className={`detail-tab ${activeTab === 'reparacion' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reparacion')}
-        >
-          Ticket de Reparacion
+        <button className={`sd-tab${activeTab === 'reparacion' ? ' active' : ''}`} onClick={() => setActiveTab('reparacion')}>
+          Ticket de reparación
           {siniestro.reparacion_id && <span className="tab-dot" />}
         </button>
       </div>
 
       {activeTab === 'info' ? (
-      <div className="detail-cards">
-        <div className="detail-card">
-          <div className="detail-card-title">Información General</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Fecha</span>
-            <span className="detail-item-value">{formatDate(siniestro.fecha_siniestro)}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Hora</span>
-            <span className="detail-item-value">{siniestro.hora_siniestro || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Ubicación</span>
-            <span className="detail-item-value">{siniestro.ubicacion || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Responsable</span>
-            <span className="detail-item-value" style={{ textTransform: 'capitalize' }}>
-              {siniestro.responsable}
-            </span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Lesionados</span>
-            <span className="detail-item-value">{siniestro.hay_lesionados ? 'Sí' : 'No'}</span>
-          </div>
+      <div className="sd-body">
+        {/* Montos */}
+        <div className="sd-montos">
+          <Dato label="Presupuesto real">{formatMoney(siniestro.presupuesto_real)}</Dato>
+          <Dato label="Enviado al seguro">{formatMoney(siniestro.presupuesto_enviado_seguro)}</Dato>
+          <Dato label="Aprobado">{formatMoney(siniestro.presupuesto_aprobado_seguro)}</Dato>
+          <Dato label="Total pagado"><span className={siniestro.total_pagado ? 'sd-positivo' : undefined}>{formatMoney(siniestro.total_pagado)}</span></Dato>
         </div>
 
-        <div className="detail-card">
-          <div className="detail-card-title">Vehículo y Conductor</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Patente</span>
-            <span className="detail-item-value">{siniestro.vehiculo_patente || '-'}</span>
+        <section className="sd-seccion">
+          <div className="sd-seccion-titulo">Siniestro</div>
+          <div className="sd-grid">
+            <Dato label="Fecha">{formatDate(siniestro.fecha_siniestro)}</Dato>
+            <Dato label="Hora">{siniestro.hora_siniestro ? siniestro.hora_siniestro.slice(0, 5) : '-'}</Dato>
+            <Dato label="Responsable">{siniestro.responsable ? (respLabels[siniestro.responsable] || siniestro.responsable) : '-'}</Dato>
+            <Dato label="Lesionados">{siniestro.hay_lesionados ? 'Sí' : 'No'}</Dato>
+            <Dato label="Ubicación" ancho>{siniestro.ubicacion || '-'}</Dato>
           </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Vehículo</span>
-            <span className="detail-item-value">
-              {siniestro.vehiculo_marca} {siniestro.vehiculo_modelo}
-            </span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Conductor</span>
-            <span className="detail-item-value">{siniestro.conductor_display || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Seguro</span>
-            <span className="detail-item-value">{siniestro.seguro_nombre || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Nro. Siniestro</span>
-            <span className="detail-item-value">{siniestro.nro_siniestro_seguro || '-'}</span>
-          </div>
-        </div>
+        </section>
 
-        <div className="detail-card">
-          <div className="detail-card-title">Gestión</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Enviado a Abogada</span>
-            <span className="detail-item-value">{siniestro.enviado_abogada ? 'Sí' : 'No'}</span>
+        <section className="sd-seccion">
+          <div className="sd-seccion-titulo">Vehículo, conductor y seguro</div>
+          <div className="sd-grid">
+            <Dato label="Patente">{siniestro.vehiculo_patente || '-'}</Dato>
+            <Dato label="Vehículo">{vehiculoTexto || '-'}</Dato>
+            <Dato label="Conductor" ancho>{siniestro.conductor_display || '-'}</Dato>
+            <Dato label="Seguro">{siniestro.seguro_nombre || '-'}</Dato>
+            <Dato label="Nro. siniestro">{siniestro.nro_siniestro_seguro || '-'}</Dato>
+            <Dato label="Enviado a abogada">{siniestro.enviado_abogada ? 'Sí' : 'No'}</Dato>
+            <Dato label="Enviado a rentadora">{siniestro.enviado_alliance ? 'Sí' : 'No'}</Dato>
           </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Enviado a Rentadora</span>
-            <span className="detail-item-value">{siniestro.enviado_alliance ? 'Sí' : 'No'}</span>
-          </div>
-          {siniestro.carpeta_drive_url && (
-            <div className="detail-item">
-              <span className="detail-item-label">Carpeta Drive</span>
-              <a
-                href={siniestro.carpeta_drive_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: '#ff0033', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                Abrir <ExternalLink size={12} />
-              </a>
-            </div>
-          )}
-        </div>
+        </section>
 
-        <div className="detail-card">
-          <div className="detail-card-title">Montos</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Presupuesto Real</span>
-            <span className="detail-item-value monto">{formatMoney(siniestro.presupuesto_real)}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Enviado al Seguro</span>
-            <span className="detail-item-value monto">{formatMoney(siniestro.presupuesto_enviado_seguro)}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Aprobado</span>
-            <span className="detail-item-value monto">{formatMoney(siniestro.presupuesto_aprobado_seguro)}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Total Pagado</span>
-            <span className="detail-item-value monto monto-positivo">{formatMoney(siniestro.total_pagado)}</span>
-          </div>
-        </div>
-
-        {/* Descripción y Relato */}
-        {(siniestro.descripcion_danos || siniestro.relato) && (
-          <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
-            <div className="detail-card-title">Descripcion</div>
+        {(siniestro.descripcion_danos || siniestro.relato || siniestro.observaciones) && (
+          <section className="sd-seccion">
+            <div className="sd-seccion-titulo">Descripción</div>
             {siniestro.descripcion_danos && (
-              <div style={{ marginBottom: '12px' }}>
-                <strong style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Danos:</strong>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>{siniestro.descripcion_danos}</p>
+              <div className="sd-texto-bloque">
+                <span className="sd-label">Daños</span>
+                <p className="sd-texto">{siniestro.descripcion_danos}</p>
               </div>
             )}
             {siniestro.relato && (
-              <div>
-                <strong style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Relato:</strong>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>{siniestro.relato}</p>
+              <div className="sd-texto-bloque">
+                <span className="sd-label">Relato</span>
+                <p className="sd-texto">{siniestro.relato}</p>
               </div>
             )}
-          </div>
+            {siniestro.observaciones && (
+              <div className="sd-texto-bloque">
+                <span className="sd-label">Observaciones</span>
+                <p className="sd-texto">{siniestro.observaciones}</p>
+              </div>
+            )}
+          </section>
         )}
 
-        {/* Observaciones */}
-        {siniestro.observaciones && (
-          <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
-            <div className="detail-card-title">Observaciones</div>
-            <p style={{ margin: 0, fontSize: '13px' }}>{siniestro.observaciones}</p>
-          </div>
-        )}
-
-        {/* Historial de Gestión (readonly) */}
-        <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
+        {/* Historial de gestión (solo lectura) */}
+        <section className="sd-seccion">
           <SiniestroSeguimiento siniestro={siniestro} onReload={onReload} readonly />
-        </div>
+        </section>
       </div>
       ) : (
         <ReparacionTicket

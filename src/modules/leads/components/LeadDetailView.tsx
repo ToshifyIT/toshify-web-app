@@ -122,9 +122,11 @@ interface LeadDetailViewProps {
   zonasRestringidas?: ZonaRestringida[]
   enZonaRestringida?: string | null
   onRecalcularUbicacion?: (lead: Lead) => Promise<void>
+  /** Botón "Ver Videocuestionario" (Hireflix). Distribución en mapa lo oculta. */
+  mostrarVideocuestionario?: boolean
 }
 
-export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida, onRecalcularUbicacion }: LeadDetailViewProps) {
+export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida, onRecalcularUbicacion, mostrarVideocuestionario = true }: LeadDetailViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null)
   const [recalculando, setRecalculando] = useState(false)
 
@@ -158,7 +160,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          {(() => {
+          {mostrarVideocuestionario && (() => {
             const guiaMap: Record<string, string> = { marina: '687169f1bda19bb1e7faa1bc', manuel: '6877eeff3042007628cd1ad7' }
             const entrevistador = (lead.entrevistador_asignado || '').trim().toLowerCase()
             const idGuia = guiaMap[entrevistador] || null
