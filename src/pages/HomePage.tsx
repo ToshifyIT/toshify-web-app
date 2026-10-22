@@ -1216,7 +1216,8 @@ export function HomePage() {
           overflow-y: auto;
           overflow-x: hidden;
           background: var(--bg-secondary);
-          padding: 32px;
+          /* Arriba solo 8px: sin franja vacía entre la barra superior y el módulo. */
+          padding: 8px 32px 32px;
         }
 
         .content-card {
@@ -1248,7 +1249,7 @@ export function HomePage() {
             font-size: 20px;
           }
           .content-area {
-            padding: 24px;
+            padding: 8px 24px 24px;
           }
           .sidebar {
             width: 220px;
@@ -1340,7 +1341,7 @@ export function HomePage() {
             min-height: 44px;
           }
           .content-area {
-            padding: 16px;
+            padding: 8px 16px 16px;
           }
           .content-card {
             padding: 20px;
