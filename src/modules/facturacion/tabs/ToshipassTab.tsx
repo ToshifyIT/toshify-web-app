@@ -2,8 +2,9 @@
 // Seguimiento de los cobros de Toshipass (concepto P027), el cargo semanal que reemplaza
 // a la garantía en la tarifa nueva (ver utils/toshipass.ts).
 //
-// Por cada conductor en régimen Toshipass muestra, dentro del rango de semanas elegido:
+// Por cada conductor en régimen Toshipass muestra, sobre todas sus semanas facturadas:
 // lo facturado, lo cobrado, lo pendiente y lo que está en curso (período abierto).
+// (2026-10-22: se quitó el selector de rango de semanas; no aportaba valor.)
 //
 // Cobrado: Toshipass no tiene pagos propios, se cobra junto con la facturación semanal.
 // Se toma la proporción pagada de esa semana (pagos "facturacion_semanal" de la semana
@@ -11,7 +12,7 @@
 // o sin nada que pagar, cuenta como cobrada completa.
 //
 // Las métricas se calculan sobre las filas que quedan después de TODOS los filtros
-// (rango de semanas, tipo, estado del conductor, filtros de columna y búsqueda). Las
+// (tipo, estado del conductor, filtros de columna y búsqueda). Las
 // tarjetas, al hacer click, filtran la tabla por ese criterio.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
@@ -65,6 +66,8 @@ interface FilaToshipass {
   tipo: 'Nuevo' | 'Cambio de tarifa'
   desde: string
   estadoConductor: 'ACTIVO' | 'BAJA'
+  /** Fecha de baja (conductores.fecha_terminacion, 'YYYY-MM-DD'); null si no está cargada o está activo. */
+  fechaBaja: string | null
   semanasFacturadas: number
   facturado: number
   cobrado: number
@@ -73,13 +76,10 @@ interface FilaToshipass {
   ultimaSemana: string
   ultimaSemanaClave: number
   saldoActual: number
+  /** false = el conductor no tiene registro en saldos_conductores (no es lo mismo que saldo 0). */
+  tieneSaldo: boolean
   estadoPago: EstadoPago
   semanas: SemanaToshipass[]
-}
-
-interface OpcionSemana {
-  clave: number
-  label: string
 }
 
 const LABELS_KPI: Record<Exclude<FiltroKpi, null>, string> = {
@@ -91,6 +91,24 @@ const LABELS_KPI: Record<Exclude<FiltroKpi, null>, string> = {
 }
 
 const redondear = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Conductor de baja: saldo actual + Toshipass facturado. Es lo que queda si lo
+ * facturado de Toshipass se toma a favor del conductor (negativo = sigue debiendo).
+ */
+const diferenciaBaja = (f: { saldoActual: number; facturado: number }) => redondear(f.saldoActual + f.facturado)
+
+/** Mismo semáforo que Saldos y Garantías: rojo debe, verde a favor, gris en cero. */
+function MontoConSigno({ valor }: { valor: number }) {
+  const color = valor < 0 ? '#dc2626' : valor > 0 ? '#16a34a' : 'var(--text-secondary)'
+  return <span className="fact-precio" style={{ color, fontWeight: valor === 0 ? 400 : 600 }}>{formatCurrency(valor)}</span>
+}
+
+/** Saldo Actual: conductores de baja y con cambio de tarifa (pedido 2026-10-22), si tienen saldo registrado. */
+const muestraSaldo = (f: { estadoConductor: string; tipo: string; tieneSaldo: boolean }) =>
+  f.tieneSaldo && (f.estadoConductor === 'BAJA' || f.tipo === 'Cambio de tarifa')
+
+const SIN_DATO = <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
 const etiquetaSemana = (semana: number, anio: number) => `S${String(semana).padStart(2, '0')} ${anio}`
 const fechaCorta = (iso: string) => iso.split('-').reverse().join('/')
 
@@ -126,13 +144,10 @@ export function ToshipassTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
 
   const [loading, setLoading] = useState(true)
-  // Datos base: semanas facturadas por conductor (sin filtrar por rango)
+  // Datos base: semanas facturadas por conductor
   const [base, setBase] = useState<Array<Omit<FilaToshipass, 'semanasFacturadas' | 'facturado' | 'cobrado' | 'pendiente' | 'enCurso' | 'ultimaSemana' | 'ultimaSemanaClave' | 'estadoPago'>>>([])
-  const [opcionesSemana, setOpcionesSemana] = useState<OpcionSemana[]>([])
 
   // Filtros propios de la pestaña
-  const [semanaDesde, setSemanaDesde] = useState<number | null>(null)
-  const [semanaHasta, setSemanaHasta] = useState<number | null>(null)
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'nuevo' | 'cambio'>('todos')
   const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
   const [filtroKpi, setFiltroKpi] = useState<FiltroKpi>(null)
@@ -185,9 +200,9 @@ export function ToshipassTab() {
       const idsConductores = [...new Set([...regimen.keys(), ...facturaciones.map(f => f.conductor_id)])]
       const conductores = await leerPorLotes<{
         id: string; nombres: string | null; apellidos: string | null; numero_dni: string | null
-        numero_cuit: string | null; conductores_estados: { codigo: string } | null
+        numero_cuit: string | null; fecha_terminacion: string | null; conductores_estados: { codigo: string } | null
       }>(idsConductores, lote => aplicarFiltroSede((supabase.from('conductores') as any)
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, conductores_estados(codigo)')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, fecha_terminacion, conductores_estados(codigo)')
         .in('id', lote)))
       const conductorPorId = new Map(conductores.map(c => [c.id, c]))
       const conductoresConCargo = new Set(facturaciones.map(f => f.conductor_id))
@@ -216,7 +231,6 @@ export function ToshipassTab() {
 
       // 6) Semanas por conductor
       const semanasPorConductor = new Map<string, SemanaToshipass[]>()
-      const semanasDisponibles = new Map<number, string>()
       for (const f of facturaciones) {
         const periodo = periodoPorId.get(f.periodo_id)
         if (!periodo) continue
@@ -228,7 +242,6 @@ export function ToshipassTab() {
           : Math.min(1, Math.max(0, pagadoSemana / totalAPagar))
         const periodoAbierto = periodo.estado !== 'cerrado'
         const clave = periodo.anio * 100 + periodo.semana
-        semanasDisponibles.set(clave, etiquetaSemana(periodo.semana, periodo.anio))
         const lista = semanasPorConductor.get(f.conductor_id) || []
         lista.push({
           clave,
@@ -260,15 +273,16 @@ export function ToshipassTab() {
           tipo: r?.esCambioTarifa ? 'Cambio de tarifa' : 'Nuevo',
           desde: r?.desde || TOSHIPASS_VIGENCIA_DESDE,
           estadoConductor: (c.conductores_estados?.codigo || '').toUpperCase() === 'BAJA' ? 'BAJA' : 'ACTIVO',
+          // Solo la fecha cargada: no se infiere de otra columna (si falta, se muestra "-").
+          fechaBaja: (c.conductores_estados?.codigo || '').toUpperCase() === 'BAJA' && c.fecha_terminacion
+            ? c.fecha_terminacion.substring(0, 10)
+            : null,
           saldoActual: saldoPorConductor.get(id) || 0,
+          tieneSaldo: saldoPorConductor.has(id),
           semanas: (semanasPorConductor.get(id) || []).sort((a, b) => a.clave - b.clave),
         })
       }
 
-      const opciones = [...semanasDisponibles.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([clave, label]) => ({ clave, label }))
-      setOpcionesSemana(opciones)
       setBase(filas)
     } catch (error) {
       console.error('Error cargando Toshipass:', error)
@@ -282,11 +296,7 @@ export function ToshipassTab() {
     cargarDatos()
   }, [cargarDatos, sedeActualId])
 
-  // Rango de semanas: si el elegido ya no existe (cambio de sede), se usa todo
-  const rangoDesde = semanaDesde !== null && opcionesSemana.some(o => o.clave === semanaDesde) ? semanaDesde : null
-  const rangoHasta = semanaHasta !== null && opcionesSemana.some(o => o.clave === semanaHasta) ? semanaHasta : null
-
-  // Filas con los montos del rango y los filtros propios de la pestaña
+  // Filas con sus montos y los filtros propios de la pestaña
   const filas = useMemo<FilaToshipass[]>(() => {
     return base
       .filter(b => {
@@ -297,8 +307,7 @@ export function ToshipassTab() {
         return true
       })
       .map(b => {
-        const semanas = b.semanas.filter(s =>
-          (rangoDesde === null || s.clave >= rangoDesde) && (rangoHasta === null || s.clave <= rangoHasta))
+        const semanas = b.semanas
         const facturado = redondear(semanas.reduce((sum, s) => sum + s.monto, 0))
         const cobrado = redondear(semanas.reduce((sum, s) => sum + s.cobrado, 0))
         const pendiente = redondear(semanas.filter(s => !s.periodoAbierto).reduce((sum, s) => sum + (s.monto - s.cobrado), 0))
@@ -321,7 +330,7 @@ export function ToshipassTab() {
           estadoPago,
         }
       })
-  }, [base, tipoFilter, estadoCondFilter, rangoDesde, rangoHasta])
+  }, [base, tipoFilter, estadoCondFilter])
 
   // Filtro de las tarjetas (DataTable lo aplica después de sus filtros internos)
   const filtroTarjeta = useCallback((f: FilaToshipass) => {
@@ -355,7 +364,7 @@ export function ToshipassTab() {
   // ========== DETALLE POR CONDUCTOR ==========
   function verDetalle(f: FilaToshipass) {
     const filasHtml = f.semanas.length === 0
-      ? '<tr><td colspan="3" style="padding:10px;text-align:center;color:#9CA3AF;">Sin cargos de Toshipass en el rango elegido</td></tr>'
+      ? '<tr><td colspan="3" style="padding:10px;text-align:center;color:#9CA3AF;">Sin cargos de Toshipass</td></tr>'
       : [...f.semanas].reverse().map(s => `
         <tr>
           <td style="padding:5px 8px;border-bottom:1px solid #E5E7EB;font-family:monospace;">${etiquetaSemana(s.semana, s.anio)}</td>
@@ -368,7 +377,7 @@ export function ToshipassTab() {
       html: `
         <div style="text-align:left;font-size:12px;padding-bottom:4px;">
           <div style="color:#6B7280;margin-bottom:10px;">
-            ${f.documento} · ${f.tipo} desde ${fechaCorta(f.desde)} · ${f.estadoConductor}
+            ${f.documento} · ${f.tipo} desde ${fechaCorta(f.desde)} · ${f.estadoConductor}${f.fechaBaja ? ` desde ${fechaCorta(f.fechaBaja)}` : ''}
           </div>
           <div style="max-height:360px;overflow:auto;border:1px solid #E5E7EB;border-radius:6px;">
             <table style="display:table;width:100%;border-collapse:collapse;">
@@ -402,6 +411,7 @@ export function ToshipassTab() {
       Tipo: f.tipo,
       Desde: fechaCorta(f.desde),
       'Estado Conductor': f.estadoConductor,
+      'Fecha de Baja': f.fechaBaja ? fechaCorta(f.fechaBaja) : '',
       Semanas: f.semanasFacturadas,
       Facturado: f.facturado,
       Cobrado: f.cobrado,
@@ -409,6 +419,7 @@ export function ToshipassTab() {
       'En Curso': f.enCurso,
       'Últ. Semana': f.ultimaSemana,
       'Saldo Actual': f.saldoActual,
+      'Diferencia (saldo + facturado)': f.estadoConductor === 'BAJA' && f.tieneSaldo ? diferenciaBaja(f) : '',
       'Estado Pago': f.estadoPago,
     })))
     const libro = XLSX.utils.book_new()
@@ -420,6 +431,7 @@ export function ToshipassTab() {
   const columnas = useMemo<ColumnDef<FilaToshipass>[]>(() => [
     {
       accessorKey: 'conductor',
+      meta: { info: 'Conductor y su DNI o CUIT.' },
       header: 'Conductor',
       cell: ({ row }) => (
         <div style={{ padding: '4px 8px' }}>
@@ -430,6 +442,7 @@ export function ToshipassTab() {
     },
     {
       accessorKey: 'tipo',
+      meta: { info: 'Nuevo: entró con la tarifa nueva. Cambio de tarifa: venía con la tarifa antigua y pasó a la nueva (deja de pagar garantía y paga Toshipass).' },
       header: 'Tipo',
       cell: ({ row }) => (
         <span className={`fact-badge ${row.original.tipo === 'Nuevo' ? 'fact-badge-purple' : 'fact-badge-blue'}`} style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>
@@ -439,11 +452,13 @@ export function ToshipassTab() {
     },
     {
       accessorKey: 'desde',
+      meta: { info: 'Fecha desde la que el conductor está en régimen Toshipass.' },
       header: 'Desde',
       cell: ({ row }) => <span style={{ fontSize: '11px' }}>{fechaCorta(row.original.desde)}</span>,
     },
     {
       accessorKey: 'estadoConductor',
+      meta: { info: 'Estado actual del conductor: ACTIVO o BAJA.' },
       header: 'Estado Cond.',
       cell: ({ row }) => (
         <span className={`fact-badge ${row.original.estadoConductor === 'ACTIVO' ? 'fact-badge-green' : 'fact-badge-red'}`} style={{ fontSize: '10px' }}>
@@ -452,14 +467,50 @@ export function ToshipassTab() {
       ),
     },
     {
+      id: 'fechaBaja',
+      meta: { info: 'Fecha de baja cargada en el conductor. - si está activo o no tiene la fecha cargada.' },
+      header: 'Fecha de Baja',
+      // 'YYYY-MM-DD' ordena bien como texto; sin fecha queda vacío.
+      accessorFn: (row) => row.fechaBaja || '',
+      cell: ({ row }) => row.original.fechaBaja
+        ? <span style={{ fontSize: '11px' }}>{fechaCorta(row.original.fechaBaja)}</span>
+        : <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>,
+    },
+    {
       accessorKey: 'semanasFacturadas',
+      meta: { info: 'Cantidad de semanas en las que se le facturó Toshipass.' },
       header: 'Semanas',
       cell: ({ row }) => <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }}>{row.original.semanasFacturadas}</span>,
     },
     {
       accessorKey: 'facturado',
+      meta: { info: 'Total de Toshipass facturado en esas semanas.' },
       header: 'Facturado',
       cell: ({ row }) => <span className="fact-precio">{formatCurrency(row.original.facturado)}</span>,
+    },
+    {
+      // Cuenta corriente del conductor (saldos_conductores), igual que en Garantías.
+      // Solo para conductores de baja; los activos muestran "-".
+      id: 'saldoActual',
+      meta: { info: 'Conductores de baja y con cambio de tarifa: cuenta corriente del conductor (la misma de Saldos). Rojo: debe. Verde: a favor.' },
+      header: 'Saldo Actual',
+      accessorFn: (row) => (muestraSaldo(row) ? row.saldoActual : 0),
+      cell: ({ row }) => (muestraSaldo(row.original)
+        ? <MontoConSigno valor={row.original.saldoActual} />
+        : SIN_DATO),
+    },
+    {
+      id: 'diferencia',
+      meta: { info: 'Solo conductores de baja: saldo actual + Toshipass facturado. Es lo que queda si lo facturado de Toshipass se toma a favor del conductor. Negativo: sigue debiendo.' },
+      header: 'Diferencia',
+      accessorFn: (row) => (row.estadoConductor === 'BAJA' && row.tieneSaldo ? diferenciaBaja(row) : 0),
+      cell: ({ row }) => (row.original.estadoConductor === 'BAJA' && row.original.tieneSaldo
+        ? (
+          <span title="Saldo actual + Toshipass facturado">
+            <MontoConSigno valor={diferenciaBaja(row.original)} />
+          </span>
+        )
+        : SIN_DATO),
     },
     {
       id: 'acciones',
@@ -476,11 +527,6 @@ export function ToshipassTab() {
   // ========== FILTROS ACTIVOS ==========
   const externalFilters = useMemo(() => {
     const chips: Array<{ id: string; label: string; onClear: () => void }> = []
-    if (rangoDesde !== null || rangoHasta !== null) {
-      const desde = opcionesSemana.find(o => o.clave === rangoDesde)?.label || 'inicio'
-      const hasta = opcionesSemana.find(o => o.clave === rangoHasta)?.label || 'hoy'
-      chips.push({ id: 'tp-rango', label: `Semanas: ${desde} → ${hasta}`, onClear: () => { setSemanaDesde(null); setSemanaHasta(null) } })
-    }
     if (tipoFilter !== 'todos') {
       chips.push({ id: 'tp-tipo', label: tipoFilter === 'nuevo' ? 'Conductores nuevos' : 'Cambio de tarifa', onClear: () => setTipoFilter('todos') })
     }
@@ -491,11 +537,9 @@ export function ToshipassTab() {
       chips.push({ id: 'tp-kpi', label: LABELS_KPI[filtroKpi], onClear: () => setFiltroKpi(null) })
     }
     return chips
-  }, [rangoDesde, rangoHasta, opcionesSemana, tipoFilter, estadoCondFilter, filtroKpi])
+  }, [tipoFilter, estadoCondFilter, filtroKpi])
 
   const limpiarFiltros = () => {
-    setSemanaDesde(null)
-    setSemanaHasta(null)
     setTipoFilter('todos')
     setEstadoCondFilter('todos')
     setFiltroKpi(null)
@@ -515,11 +559,6 @@ export function ToshipassTab() {
     color: activo ? 'white' : 'var(--text-secondary)',
   })
 
-  const selectSemanaStyle = {
-    padding: '4px 8px', fontSize: '12px', borderRadius: '6px',
-    border: '1px solid var(--border-primary)', background: 'var(--bg-primary)', color: 'var(--text-primary)',
-  }
-
   // ========== RENDER ==========
   return (
     <>
@@ -527,30 +566,6 @@ export function ToshipassTab() {
 
       <div className="fact-header">
         <div className="fact-header-left" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Semanas</span>
-          <select
-            value={rangoDesde ?? ''}
-            onChange={e => setSemanaDesde(e.target.value ? Number(e.target.value) : null)}
-            style={selectSemanaStyle}
-            title="Primera semana del rango"
-          >
-            <option value="">Desde el inicio</option>
-            {opcionesSemana
-              .filter(o => rangoHasta === null || o.clave <= rangoHasta)
-              .map(o => <option key={o.clave} value={o.clave}>{o.label}</option>)}
-          </select>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>→</span>
-          <select
-            value={rangoHasta ?? ''}
-            onChange={e => setSemanaHasta(e.target.value ? Number(e.target.value) : null)}
-            style={selectSemanaStyle}
-            title="Última semana del rango"
-          >
-            <option value="">Hasta hoy</option>
-            {opcionesSemana
-              .filter(o => rangoDesde === null || o.clave >= rangoDesde)
-              .map(o => <option key={o.clave} value={o.clave}>{o.label}</option>)}
-          </select>
           <button className="fact-btn fact-btn-secondary" onClick={exportarVisibles}
             title="Exportar a Excel los conductores visibles, respetando todos los filtros">
             <Download size={14} /> Exportar Registros
@@ -585,7 +600,7 @@ export function ToshipassTab() {
         </div>
       </div>
 
-      {/* Métricas: se recalculan con cada filtro (rango, tipo, estado, columnas y búsqueda) */}
+      {/* Métricas: se recalculan con cada filtro (tipo, estado, columnas y búsqueda) */}
       <div className="fact-stats">
         <div className="fact-stats-grid">
           <div className="fact-stat-card" style={{ cursor: 'pointer' }} onClick={limpiarFiltros} title="Ver todos (limpia los filtros)">
@@ -623,14 +638,14 @@ export function ToshipassTab() {
               <span className="fact-stat-label">Baja</span>
             </div>
           </div>
-          <div {...kpiCard('sin_cargos')} title="Semanas facturadas en el rango. Click: conductores sin semanas facturadas">
+          <div {...kpiCard('sin_cargos')} title="Semanas facturadas. Click: conductores sin semanas facturadas">
             <CalendarDays size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{metricas.semanas}</span>
               <span className="fact-stat-label">Semanas · {metricas.sinCargos} sin cargos</span>
             </div>
           </div>
-          <div className="fact-stat-card" title="Toshipass facturado en las semanas del rango y promedio por conductor con cargos">
+          <div className="fact-stat-card" title="Toshipass facturado y promedio por conductor con cargos">
             <DollarSign size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{formatCurrency(metricas.facturado)}</span>

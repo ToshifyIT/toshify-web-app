@@ -19,7 +19,7 @@ import {
   type Table,
   type FilterFn,
 } from "@tanstack/react-table";
-import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Info } from "lucide-react";
 
 // Icono de filtro estilo Excel - dropdown arrow pequeño y sutil
 const FilterIcon = ({ size = 8 }: { size?: number }) => (
@@ -33,6 +33,7 @@ const FilterIcon = ({ size = 8 }: { size?: number }) => (
   </svg>
 );
 import { Spinner } from "../LoadingOverlay";
+import { AdaptiveTooltip } from "../AdaptiveTooltip";
 import "./DataTable.css";
 import "../DateRangeSelector/DateRangeSelector.css";
 
@@ -43,6 +44,8 @@ type ColumnAlignment = 'left' | 'center' | 'right';
 type DataTableColumnMeta = {
   headerAlign?: ColumnAlignment;
   cellAlign?: ColumnAlignment;
+  /** Texto de ayuda: muestra un ícono (i) en el encabezado con esta explicación. */
+  info?: string;
 };
 
 function getJustifyContent(align?: ColumnAlignment): CSSProperties['justifyContent'] | undefined {
@@ -1889,6 +1892,18 @@ export function DataTable<T>({
                             {flexRender(
                               header.column.columnDef.header,
                               header.getContext()
+                            )}
+                            {columnMeta?.info && (
+                              <AdaptiveTooltip content={columnMeta.info} width={260} variant="dark">
+                                <span
+                                  className="dt-header-info"
+                                  aria-label={columnMeta.info}
+                                  // Que pasar o tocar el ícono no ordene la columna.
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Info size={12} strokeWidth={2} />
+                                </span>
+                              </AdaptiveTooltip>
                             )}
                             {header.column.getCanSort() && (
                               <span className="dt-sort-indicator">

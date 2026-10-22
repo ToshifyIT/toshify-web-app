@@ -23,7 +23,7 @@
 //
 // Sigue siendo de sólo lectura: propone pares, no crea ni modifica asignaciones.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
 import Swal from 'sweetalert2'
@@ -131,6 +131,56 @@ function useAnchoVentana(): number {
 }
 
 /**
+ * Alto que deja el módulo sin que la página haga scroll. El `calc(100vh - 64px)`
+ * de base no conoce los paddings del layout, y si el módulo queda más alto que el
+ * contenedor, al llegar al final de la lista o de los filtros la página entera
+ * se desplaza y se pierde el encabezado. Se mide cuánto sobra en el contenedor
+ * con scroll más cercano y se descuenta (al montar y al cambiar el tamaño).
+ */
+const ALTO_MINIMO = 480
+
+function contenedorConScroll(el: HTMLElement): HTMLElement | null {
+  let p = el.parentElement
+  while (p) {
+    const oy = getComputedStyle(p).overflowY
+    if (oy === 'auto' || oy === 'scroll') return p
+    p = p.parentElement
+  }
+  return null
+}
+
+function useAltoSinScroll(ref: React.RefObject<HTMLDivElement | null>): number | undefined {
+  const [alto, setAlto] = useState<number | undefined>(undefined)
+  useLayoutEffect(() => {
+    let frame = 0
+    const ajustar = () => {
+      const el = ref.current
+      if (!el) return
+      const sc = contenedorConScroll(el)
+      const exceso = sc
+        ? sc.scrollHeight - sc.clientHeight
+        : document.documentElement.scrollHeight - window.innerHeight
+      if (exceso > 0) setAlto(Math.max(ALTO_MINIMO, el.offsetHeight - exceso))
+      if (sc) sc.scrollTop = 0
+      else window.scrollTo(0, 0)
+    }
+    const alCambiar = () => {
+      // Se vuelve al alto base y se mide de nuevo en el próximo cuadro.
+      setAlto(undefined)
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(ajustar)
+    }
+    ajustar()
+    window.addEventListener('resize', alCambiar)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('resize', alCambiar)
+    }
+  }, [ref])
+  return alto
+}
+
+/**
  * Tope de líneas simultáneas sobre el mapa en el modo "Mostrar todos". Más que
  * esto el mapa deja de leerse y las etiquetas se pisan entre sí.
  */
@@ -160,6 +210,9 @@ const TRAMOS_PARA_CONFIRMAR = 50
 export function DistribucionMapaV2Module() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const navigate = useNavigate()
+  // El módulo ocupa exactamente el alto disponible: el encabezado no se pierde al scrollear.
+  const raizRef = useRef<HTMLDivElement | null>(null)
+  const altoRaiz = useAltoSinScroll(raizRef)
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -1157,7 +1210,10 @@ export function DistribucionMapaV2Module() {
   // ---------- Render ----------
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', minHeight: 480 }}>
+    <div
+      ref={raizRef}
+      style={{ display: 'flex', flexDirection: 'column', height: altoRaiz ?? 'calc(100vh - 64px)', minHeight: ALTO_MINIMO }}
+    >
       {/* Header */}
       <div
         style={{
@@ -1703,7 +1759,7 @@ function ListaResultados({
       )}
 
       {/* flex:1 + minHeight:0: sin eso la lista no scrollea dentro de la columna */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {segmentar
           ? grupos.map((g) => {
               const plegado = plegados.has(g.tipo)

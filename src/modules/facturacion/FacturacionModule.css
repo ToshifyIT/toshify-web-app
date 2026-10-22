@@ -1035,7 +1035,10 @@
   background-color: var(--card-bg) !important;
 }
 
-/* Anchos fijos: son los que determinan el desplazamiento de cada columna. */
+/* Anchos fijos: son los que determinan el desplazamiento de cada columna.
+   2026-10-22: Estado Cond. 120 -> 160 y Días Baja 100 -> 150 (left 360 -> 400):
+   con el filtro, el orden y el ícono (i) el título no entraba y se superponía
+   con la columna siguiente. */
 .garantias-tabla-sticky .dt-table th:nth-child(1),
 .garantias-tabla-sticky .dt-table td:nth-child(1) {
   left: 0 !important;
@@ -1048,18 +1051,18 @@
 .garantias-tabla-sticky .dt-table th:nth-child(2),
 .garantias-tabla-sticky .dt-table td:nth-child(2) {
   left: 240px !important;
-  width: 120px !important;
-  min-width: 120px !important;
-  max-width: 120px !important;
+  width: 160px !important;
+  min-width: 160px !important;
+  max-width: 160px !important;
   z-index: 3;
 }
 
 .garantias-tabla-sticky .dt-table th:nth-child(3),
 .garantias-tabla-sticky .dt-table td:nth-child(3) {
-  left: 360px !important;
-  width: 100px !important;
-  min-width: 100px !important;
-  max-width: 100px !important;
+  left: 400px !important;
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
   z-index: 3;
   /* Sombra que marca el corte con la parte que scrollea. */
   box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.12);

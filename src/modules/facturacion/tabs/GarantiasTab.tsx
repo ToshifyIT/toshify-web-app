@@ -163,6 +163,24 @@ function netoCambioTarifa(g: any, saldos: Map<string, number>): number {
   return Math.round((garantiaRetenida(g) + (saldos.get(g?.conductor_id) ?? 0)) * 100) / 100
 }
 
+// Columna "Liquidación": lo que queda al usar la garantía contra la cuenta del
+// conductor, con signo (negativo = el conductor sigue debiendo; positivo = hay
+// que devolverle). Antes se mostraba debajo del badge de Estado.
+//   - Cambio de tarifa: garantía pagada + saldo actual (solo informativo).
+//   - En devolución con saldo: saldo actual + garantía retenida (DEBE / EN DEVOLUCIÓN).
+//   - Resto (en curso, devuelta, N/A, sin saldo, neto saldado): null.
+function liquidacionGarantia(
+  g: any,
+  saldos: Map<string, number>,
+  override?: number,
+  cambioTarifa?: InfoCambioTarifa
+): number | null {
+  if (cambioTarifa) return netoCambioTarifa(g, saldos)
+  const sub = subEstadoDevolucion(g, saldos, override)
+  if (sub !== 'debe' && sub !== 'debemos') return null
+  return Math.round((netoDevolucion(g, saldos, override) ?? 0) * 100) / 100
+}
+
 // Estado tal cual lo muestra la columna "Estado" de la tabla, para los Excel:
 // mismo orden de prioridad que el badge. `monto` es el numero que aparece debajo
 // del badge (solo en DEBE / EN DEVOLUCIÓN); vacio en el resto.
@@ -1613,7 +1631,8 @@ export function GarantiasTab() {
       // Mismo estado y monto que la columna "Estado" de la tabla
       ...(() => {
         const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
-        return { 'Estado': e.estado, 'Monto Estado': e.monto }
+        const liq = liquidacionGarantia(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
+        return { 'Estado': e.estado, 'Liquidación': liq ?? '' }
       })(),
       ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
     }))
@@ -1684,7 +1703,8 @@ export function GarantiasTab() {
       // Mismo estado y monto que la columna "Estado" de la tabla
       ...(() => {
         const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
-        return { 'Estado': e.estado, 'Monto Estado': e.monto }
+        const liq = liquidacionGarantia(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
+        return { 'Estado': e.estado, 'Liquidación': liq ?? '' }
       })(),
       ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
     }))
@@ -2109,6 +2129,7 @@ export function GarantiasTab() {
   const columnsGarantias = useMemo<ColumnDef<GarantiaConductor>[]>(() => [
     {
       accessorKey: 'conductor_nombre',
+      meta: { info: 'Conductor, su DNI o CUIT y la modalidad del alquiler (TURNO o CARGO).' },
       header: () => (
         <div className="dt-column-filter">
           <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
@@ -2161,6 +2182,7 @@ export function GarantiasTab() {
     },
     {
       id: 'estado_conductor',
+      meta: { info: 'Estado actual del conductor: ACTIVO o BAJA.' },
       header: 'Estado Cond.',
       accessorFn: (row) => (row as any).estado_conductor || 'ACTIVO',
       cell: ({ row }) => {
@@ -2173,23 +2195,8 @@ export function GarantiasTab() {
       }
     },
     {
-      id: 'cambio_tarifa',
-      header: 'Cambio Tarifa',
-      accessorFn: (row) => cambiosTarifa.get(row.conductor_id)?.desde || '',
-      cell: ({ row }) => {
-        const ct = cambiosTarifa.get(row.original.conductor_id)
-        if (!ct) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
-            title={`Pasó de tarifa ${etiquetasTarifa.antigua} a ${etiquetasTarifa.nueva}: desde esa semana paga Toshipass en lugar de garantía`}>
-            <span className="fact-badge fact-badge-blue" style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{etiquetasTarifa.antigua} → {etiquetasTarifa.nueva}</span>
-            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>desde {ct.desde.split('-').reverse().join('/')}</span>
-          </div>
-        )
-      }
-    },
-    {
       id: 'dias_desde_baja',
+      meta: { info: 'Días hábiles (lunes a viernes) desde la baja del conductor. En rojo desde 120 días: la garantía ya debería estar devuelta. N/A si está activo o no tiene fecha de baja.' },
       header: 'Días Baja',
       accessorFn: (row) => calcularDiasBaja(row),
       cell: ({ row }) => {
@@ -2206,12 +2213,34 @@ export function GarantiasTab() {
       }
     },
     {
+      // Va después de Días Baja: las tres primeras columnas (Conductor, Estado Cond. y
+      // Días Baja) quedan fijas con anchos fijos (.garantias-tabla-sticky en
+      // FacturacionModule.css); en el 3er lugar, el título se superponía.
+      id: 'cambio_tarifa',
+      meta: { info: 'Si el conductor pasó de la tarifa antigua a la nueva, y desde qué fecha. Desde ahí paga Toshipass en lugar de garantía.' },
+      header: 'Cambio Tarifa',
+      accessorFn: (row) => cambiosTarifa.get(row.conductor_id)?.desde || '',
+      cell: ({ row }) => {
+        const ct = cambiosTarifa.get(row.original.conductor_id)
+        if (!ct) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
+            title={`Pasó de tarifa ${etiquetasTarifa.antigua} a ${etiquetasTarifa.nueva}: desde esa semana paga Toshipass en lugar de garantía`}>
+            <span className="fact-badge fact-badge-blue" style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{etiquetasTarifa.antigua} → {etiquetasTarifa.nueva}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>desde {ct.desde.split('-').reverse().join('/')}</span>
+          </div>
+        )
+      }
+    },
+    {
       accessorKey: 'monto_total',
+      meta: { info: 'Monto total de la garantía a cubrir.' },
       header: 'Total',
       cell: ({ row }) => <span className="fact-precio">{formatCurrency(row.original.monto_total)}</span>
     },
     {
       accessorKey: 'monto_realmente_pagado',
+      meta: { info: 'Lo que el conductor ya pagó de garantía. En 0 si la garantía ya fue devuelta. N/A: conductor de baja que no pagó nada.' },
       header: 'Pagado',
       cell: ({ row }) => {
         const monto = montoPagadoGarantia(row.original, garantiasOverrides.get(row.original.id))
@@ -2227,46 +2256,20 @@ export function GarantiasTab() {
         return <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(monto)}</span>
       }
     },
-    {
-      id: 'cuotas_pagadas',
-      header: 'Cuotas (ref.)',
-      accessorFn: (row) => esGarantiaDevuelta(row, garantiasOverrides.get(row.id)) ? 0 : ((cuotasRealesMap.get(row.id) ?? Number(row.cuotas_pagadas)) || 0),
-      cell: ({ row }) => {
-        const cuotasPagadas = esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))
-          ? 0
-          : (cuotasRealesMap.get(row.original.id) ?? Number(row.original.cuotas_pagadas)) || 0
-        return (
-          <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} cuotas cobradas`}>
-            {cuotasPagadas}
-          </span>
-        )
-      }
-    },
-    {
-      id: 'ultima_semana',
-      header: 'Últ. Semana',
-      accessorFn: (row) => {
-        if (esGarantiaDevuelta(row, garantiasOverrides.get(row.id))) return 0
-        const u = ultimaSemanaMap.get(row.id)
-        return u ? u.anio * 100 + u.semana : 0
-      },
-      cell: ({ row }) => {
-        const u = esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id)) ? null : ultimaSemanaMap.get(row.original.id)
-        if (!u) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
-        return (
-          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-primary)', fontWeight: 600 }}>
-            S{String(u.semana).padStart(2, '0')} {u.anio}
-          </span>
-        )
-      }
-    },
+    // Falta pagar va justo después de Pagado (pedido 2026-10-22).
     {
       id: 'pendiente',
-      header: 'Pendiente',
-      accessorFn: (row) => esGarantiaDevuelta(row, garantiasOverrides.get(row.id))
+      meta: { info: 'Lo que falta pagar para completar la garantía (total menos pagado). En verde con + si pagó de más. Conductores de baja: - (ya no se les cobra).' },
+      header: 'Falta pagar',
+      // Conductor de baja: ya no se le cobra la garantía, el pendiente no aplica (se
+      // muestra "-" y ordena como 0, igual que una garantía devuelta).
+      accessorFn: (row) => (row as any).estado_conductor === 'BAJA' || esGarantiaDevuelta(row, garantiasOverrides.get(row.id))
         ? 0
         : Math.round((row.monto_total || 0) - montoPagadoGarantia(row)),
       cell: ({ row }) => {
+        if ((row.original as any).estado_conductor === 'BAJA') {
+          return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        }
         if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
           return <span className="fact-precio" style={{ color: 'var(--text-secondary)' }}>{formatCurrency(0)}</span>
         }
@@ -2278,31 +2281,11 @@ export function GarantiasTab() {
         return <span className={`fact-precio ${pendiente > 0 ? 'fact-precio-negative' : ''}`}>{formatCurrency(Math.max(0, pendiente))}</span>
       }
     },
-    {
-      // Cuenta corriente del conductor, NO el pendiente de la garantia. El dato
-      // sale de saldos_conductores y es el mismo que muestra la pestaña Saldos.
-      id: 'saldo_actual',
-      header: 'Saldo Actual',
-      // Sin registro en saldos_conductores no es lo mismo que saldo cero, pero
-      // para ordenar necesitamos un numero: se manda 0 y la celda muestra "-".
-      accessorFn: (row) => saldosPorConductor.get(row.conductor_id) ?? 0,
-      cell: ({ row }) => {
-        const saldo = saldosPorConductor.get(row.original.conductor_id)
-        if (saldo === undefined) {
-          return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
-        }
-        // Mismo semaforo que la pestaña Saldos: rojo debe, verde a favor, gris en cero.
-        const color = saldo < 0 ? '#dc2626' : saldo > 0 ? '#16a34a' : 'var(--text-secondary)'
-        return (
-          <span className="fact-precio" style={{ color, fontWeight: saldo === 0 ? 400 : 600 }}>
-            {formatCurrency(saldo)}
-          </span>
-        )
-      }
-    },
+    // % pagado, a continuación.
     {
       id: 'progreso',
-      header: 'Progreso',
+      meta: { info: 'Porcentaje pagado de la garantía (pagado sobre total).' },
+      header: '% pagado',
       accessorFn: (row) => (esGarantiaDevuelta(row, garantiasOverrides.get(row.id)) || row.monto_total <= 0)
         ? 0
         : Math.round((montoPagadoGarantia(row) / row.monto_total) * 100),
@@ -2321,7 +2304,82 @@ export function GarantiasTab() {
       }
     },
     {
+      id: 'cuotas_pagadas',
+      meta: { info: 'Semanas con cuota de garantía cobrada (pagos de garantía y semanas facturadas con garantía). Es un dato de referencia (se cuentan semanas, no montos).' },
+      header: 'Cuotas pagadas',
+      accessorFn: (row) => esGarantiaDevuelta(row, garantiasOverrides.get(row.id)) ? 0 : ((cuotasRealesMap.get(row.id) ?? Number(row.cuotas_pagadas)) || 0),
+      cell: ({ row }) => {
+        const cuotasPagadas = esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))
+          ? 0
+          : (cuotasRealesMap.get(row.original.id) ?? Number(row.original.cuotas_pagadas)) || 0
+        return (
+          <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} cuotas cobradas`}>
+            {cuotasPagadas}
+          </span>
+        )
+      }
+    },
+    {
+      id: 'ultima_semana',
+      meta: { info: 'Última semana en la que se cobró una cuota de garantía.' },
+      header: 'Última cuota',
+      accessorFn: (row) => {
+        if (esGarantiaDevuelta(row, garantiasOverrides.get(row.id))) return 0
+        const u = ultimaSemanaMap.get(row.id)
+        return u ? u.anio * 100 + u.semana : 0
+      },
+      cell: ({ row }) => {
+        const u = esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id)) ? null : ultimaSemanaMap.get(row.original.id)
+        if (!u) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        return (
+          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-primary)', fontWeight: 600 }}>
+            S{String(u.semana).padStart(2, '0')} {u.anio}
+          </span>
+        )
+      }
+    },
+    {
+      // Cuenta corriente del conductor, NO el pendiente de la garantia. El dato
+      // sale de saldos_conductores y es el mismo que muestra la pestaña Saldos.
+      id: 'saldo_actual',
+      meta: { info: 'Cuenta corriente del conductor (la misma de la pestaña Saldos), no la garantía. Rojo: debe. Verde: a favor.' },
+      header: 'Saldo pendiente',
+      // Sin registro en saldos_conductores no es lo mismo que saldo cero, pero
+      // para ordenar necesitamos un numero: se manda 0 y la celda muestra "-".
+      accessorFn: (row) => saldosPorConductor.get(row.conductor_id) ?? 0,
+      cell: ({ row }) => {
+        const saldo = saldosPorConductor.get(row.original.conductor_id)
+        if (saldo === undefined) {
+          return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        }
+        // Mismo semaforo que la pestaña Saldos: rojo debe, verde a favor, gris en cero.
+        const color = saldo < 0 ? '#dc2626' : saldo > 0 ? '#16a34a' : 'var(--text-secondary)'
+        return (
+          <span className="fact-precio" style={{ color, fontWeight: saldo === 0 ? 400 : 600 }}>
+            {formatCurrency(saldo)}
+          </span>
+        )
+      }
+    },
+    {
+      id: 'liquidacion',
+      header: 'Liquidación',
+      meta: { info: 'Lo que queda al usar la garantía contra la cuenta del conductor: saldo pendiente + garantía retenida. Negativo (rojo): el conductor sigue debiendo. Positivo (azul): hay que devolverle ese monto. En cambios de tarifa: garantía pagada + saldo pendiente, solo informativo. - si no corresponde.' },
+      // Sin liquidación se ordena como 0 y se muestra "-".
+      accessorFn: (row) => liquidacionGarantia(row, saldosPorConductor, garantiasOverrides.get(row.id), cambiosTarifa.get(row.conductor_id)) ?? 0,
+      cell: ({ row }) => {
+        const liq = liquidacionGarantia(row.original, saldosPorConductor, garantiasOverrides.get(row.original.id), cambiosTarifa.get(row.original.conductor_id))
+        if (liq === null) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        return (
+          <span className="fact-precio" style={{ color: liq < 0 ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
+            {formatCurrency(liq)}
+          </span>
+        )
+      }
+    },
+    {
       accessorKey: 'estado',
+      meta: { info: 'Estado de la garantía: En curso, Completada, Pendiente, Devuelto o N/A. En bajas se cruza con el saldo: DEBE si, aun descontando la garantía, sigue debiendo; EN DEVOLUCIÓN si la garantía cubre la deuda y hay que devolverle la diferencia. El monto está en Liquidación.' },
       header: () => (
         <div className="dt-column-filter">
           <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
@@ -2368,13 +2426,10 @@ export function GarantiasTab() {
           const neto = netoCambioTarifa(row.original, saldosPorConductor)
           const aFavor = neto >= 0
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
-              title="Cambio de tarifa: garantía pagada + saldo actual. Informativo: no se descuenta de la deuda">
-              <span className="fact-badge fact-badge-blue">DEVOLUCIÓN</span>
-              <span style={{ fontSize: '10px', color: aFavor ? '#2563eb' : '#dc2626', fontWeight: 600 }}>
-                {aFavor ? '+' : '-'}{formatCurrency(Math.abs(neto))}
-              </span>
-            </div>
+            <span className="fact-badge fact-badge-blue"
+              title={`Cambio de tarifa: garantía pagada + saldo actual = ${aFavor ? '+' : '-'}${formatCurrency(Math.abs(neto))} (ver Liquidación). Informativo: no se descuenta de la deuda`}>
+              DEVOLUCIÓN
+            </span>
           )
         }
         // Devuelta: prevalece sobre "no aplica" (su saldo es 0 justamente porque se devolvio).
@@ -2434,15 +2489,11 @@ export function GarantiasTab() {
 
           const debeElConductor = neto < 0
 
+          // El monto va en la columna Liquidación; acá solo el resultado.
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }} title={detalle}>
-              <span className={`fact-badge ${debeElConductor ? 'fact-badge-red' : 'fact-badge-blue'}`}>
-                {debeElConductor ? 'DEBE' : 'EN DEVOLUCIÓN'}
-              </span>
-              <span style={{ fontSize: '10px', color: debeElConductor ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
-                {formatCurrency(Math.abs(neto))}
-              </span>
-            </div>
+            <span className={`fact-badge ${debeElConductor ? 'fact-badge-red' : 'fact-badge-blue'}`} title={detalle}>
+              {debeElConductor ? 'DEBE' : 'EN DEVOLUCIÓN'}
+            </span>
           )
         }
         return <span className={`fact-badge ${badgeClass}`}>{label}</span>
