@@ -62,6 +62,7 @@ import {
 import { AvisoLeadsPendientes, type LeadPendiente } from './components/AvisoLeadsPendientes'
 import { calcularMinutosEntre, tieneCoordenadas, type Coordenada } from './distanciaParService'
 import { documentoSegunTarifa, permiteAnexo } from './documentoTarifa'
+import { esConductorInterno } from '../../../utils/conductorUtils'
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   entrega_auto: 'Entrega de auto',
@@ -1216,7 +1217,8 @@ export function ProgramacionV2Module() {
 
       if (conductoresError) throw conductoresError
 
-      const listaConductores = (conductoresData || []).map((c: any) => ({
+      // Sin los conductores comodín del equipo interno: no se programan.
+      const listaConductores = (conductoresData || []).filter((c: any) => !esConductorInterno(c)).map((c: any) => ({
         id: c.id,
         nombre: `${c.nombres || ''} ${c.apellidos || ''}`.trim(),
         dni: c.numero_dni || ''

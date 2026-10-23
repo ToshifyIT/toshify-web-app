@@ -20,7 +20,7 @@ export const COLOR_TURNO_DIURNO = '#B45309'
 export const COLOR_TURNO_NOCTURNO = '#1D4ED8'
 /** A cargo. */
 export const COLOR_TURNO_SINPREF = '#6D28D9'
-/** Sin preferencia de turno o sin dato. */
+/** Conductor sin asignación activa, o sin turno conocido. */
 export const COLOR_TURNO_SIN_DATO = '#6B7280'
 
 const FONDO_PASTEL: Record<string, string> = {
@@ -46,6 +46,8 @@ export function fondoPastel(color: string): string {
 /** Color de acento: turno para conductores, estado para leads. */
 export function colorEntidad(e: EntidadMapa): string {
   if (e.tipo === 'lead') return getLeadEstadoColor(e.estadoLead)
+  // Sin asignación activa: gris, aunque tenga preferencia de turno cargada.
+  if (!e.tieneAsignacionActiva) return COLOR_TURNO_SIN_DATO
   switch (turnoConductor(e)) {
     case 'DIURNO':
       return COLOR_TURNO_DIURNO
