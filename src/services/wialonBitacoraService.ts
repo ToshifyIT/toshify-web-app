@@ -41,6 +41,7 @@ export interface BitacoraRegistroTransformado {
   tipo_turno?: string | null // turno, a_cargo - viene de asignaciones
   turno_indicador?: string | null // D, N - indicador diurno/nocturno
   gps_origen?: 'USS' | 'GEOTAB' // proveedor GPS de origen
+  conductor_estado?: string | null // codigo del estado del conductor en el sistema (ACTIVO, BAJA...)
 }
 
 // Tipo para fila de wialon_bitacora
@@ -132,6 +133,15 @@ const statsCache = new SimpleCache<BitacoraStats>(2)
 const viajesCache = new SimpleCache<ViajeGeotab[]>(2)
 
 /** Viaje crudo de Geotab (geotab_historico). Los timestamps vienen en hora AR, sin offset. */
+/** Fila de bitacora_checklist (conductor normalizado + jornada). */
+export interface ChecklistJornada {
+  conductor: string
+  fecha: string
+  gnc_cargado: boolean
+  lavado_realizado: boolean
+  nafta_cargada: boolean
+}
+
 export interface ViajeGeotab {
   patente: string | null
   conductor: string | null
@@ -145,6 +155,71 @@ export interface ViajeGeotab {
 // Conserva los segundos si la columna los trae (Postgres `time` -> "09:46:53"):
 // la bitacora muestra la hora exacta del registro, no una version truncada.
 // Las vistas que solo quieren HH:MM ya recortan por su cuenta con substring(0, 5).
+/**
+ * Clave para comparar el nombre que manda Geotab con el del catalogo de conductores:
+ * mayusculas, sin tildes, sin puntos/simbolos, espacios simples y sin palabras
+ * repetidas seguidas. Asi "EZEQUIEL MATIAS VIANA VIANA" = "EZEQUIEL MATIAS VIANA",
+ * "JOSE ANTONIO GUEVARA" = "JOSÉ ANTONIO GUEVARA" y "COLMAN." = "COLMAN".
+ */
+function claveNombreConductor(s: string): string {
+  const palabras = (s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+  return palabras.filter((p, i) => p !== palabras[i - 1]).join(' ')
+}
+
+/**
+ * Indexa el catalogo de conductores y devuelve un resolver: nombre de Geotab ->
+ * clave canonica ("NOMBRES APELLIDOS") del conductor del sistema, o null si no hay.
+ *   1) coincidencia exacta de la clave, en orden "nombres apellidos" o "apellidos nombres";
+ *   2) si no, el conductor del sistema cuyas palabras (2 o mas) estan TODAS en el nombre
+ *      de Geotab (ej. Geotab "EUGENIA QUEVEDO OMASTA" -> sistema "EUGENIA QUEVEDO"). Si
+ *      coinciden varios se toma el de mas palabras (el mas especifico).
+ */
+function crearResolverConductor(
+  conductores: Array<{ nombres?: string | null; apellidos?: string | null }>,
+): (nombreGeotab: string) => string | null {
+  const exactos = new Map<string, string>()
+  const porPalabras: Array<{ canonico: string; palabras: string[] }> = []
+  for (const c of conductores) {
+    const nom = claveNombreConductor(c?.nombres || '')
+    const ape = claveNombreConductor(c?.apellidos || '')
+    if (!nom && !ape) continue
+    const canonico = claveNombreConductor(`${nom} ${ape}`)
+    if (!exactos.has(canonico)) exactos.set(canonico, canonico)
+    if (nom && ape) {
+      const invertido = claveNombreConductor(`${ape} ${nom}`)
+      if (!exactos.has(invertido)) exactos.set(invertido, canonico)
+    }
+    const palabras = canonico.split(' ')
+    if (palabras.length >= 2) porPalabras.push({ canonico, palabras })
+  }
+  const cache = new Map<string, string | null>()
+  return (nombreGeotab: string) => {
+    const clave = claveNombreConductor(nombreGeotab)
+    if (!clave) return null
+    const enCache = cache.get(clave)
+    if (enCache !== undefined) return enCache
+    let resultado = exactos.get(clave) ?? null
+    if (!resultado) {
+      const delGeotab = new Set(clave.split(' '))
+      let mejor = 0
+      for (const c of porPalabras) {
+        if (c.palabras.length > mejor && c.palabras.every(p => delGeotab.has(p))) {
+          resultado = c.canonico
+          mejor = c.palabras.length
+        }
+      }
+    }
+    cache.set(clave, resultado)
+    return resultado
+  }
+}
+
 function formatearHora(hora: string | null): string | null {
   if (!hora) return null
   const match = hora.match(/(\d{2}):(\d{2})(?::(\d{2}))?/)
@@ -262,7 +337,7 @@ export const wialonBitacoraService = {
       // Catalogo de conductores reales del sistema. Solo para filtrar filas GEOTAB:
       // un nombre que viene de Geotab (ej. "Karen Torres") que NO existe como conductor
       // real NO debe aparecer en la bitacora. (USS no se toca.)
-      supabase.from('conductores').select('nombres, apellidos'),
+      supabase.from('conductores').select('nombres, apellidos, conductores_estados(codigo)'),
     ])
 
     if (wialonRes.error) {
@@ -284,7 +359,14 @@ export const wialonBitacoraService = {
     // otro "a_cargo"). Cruzar solo por patente devolvia la modalidad de otro conductor.
     type AsigVig = { modalidad: string; horario: string; ini: number; fin: number }
     const asigsPorPatenteConductor = new Map<string, AsigVig[]>()
-    const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim()
+    // Nombre de Geotab -> conductor del sistema (tolera tildes, puntos, apellido repetido).
+    const resolverConductor = crearResolverConductor((condRes.data || []) as any[])
+    // Estado del conductor (ACTIVO, BAJA...) por clave canonica, para mostrarlo en la grilla.
+    const estadoPorConductor = new Map<string, string>()
+    for (const c of (condRes.data || []) as any[]) {
+      const codigo = c?.conductores_estados?.codigo
+      if (codigo) estadoPorConductor.set(claveNombreConductor(`${c.nombres || ''} ${c.apellidos || ''}`), codigo)
+    }
     for (const ac of (asigRes.data || []) as any[]) {
       const pat = ac?.asignaciones?.vehiculos?.patente
       if (!pat) continue
@@ -292,7 +374,7 @@ export const wialonBitacoraService = {
       const ini = ac.fecha_inicio ? new Date(ac.fecha_inicio).getTime() : 0
       const fin = ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY
       const c = ac.conductores
-      const nombre = c ? normNombre(`${c.nombres || ''} ${c.apellidos || ''}`) : ''
+      const nombre = c ? claveNombreConductor(`${c.nombres || ''} ${c.apellidos || ''}`) : ''
       if (!nombre) continue
       // modalidad del vehiculo: asignaciones.horario 'todo_dia' -> 'a_cargo', sino 'turno'
       const modAsig = (ac.asignaciones?.horario || '').toLowerCase()
@@ -305,23 +387,10 @@ export const wialonBitacoraService = {
       })
       asigsPorPatenteConductor.set(key, arr)
     }
-    // Set de nombres de conductores REALES del sistema (para filtrar filas GEOTAB).
-    // Se guardan en ambos ordenes ("NOMBRES APELLIDOS" y "APELLIDOS NOMBRES") porque
-    // Geotab puede traer el nombre en cualquier orden.
-    const conductoresReales = new Set<string>()
-    for (const c of (condRes.data || []) as any[]) {
-      const nom = normNombre(c?.nombres || '')
-      const ape = normNombre(c?.apellidos || '')
-      if (!nom && !ape) continue
-      if (nom && ape) {
-        conductoresReales.add(`${nom} ${ape}`)
-        conductoresReales.add(`${ape} ${nom}`)
-      } else {
-        conductoresReales.add(nom || ape)
-      }
-    }
-    // Un nombre de Geotab es "conductor real" si coincide exacto con el catalogo.
-    const esConductorReal = (nombre: string): boolean => conductoresReales.has(normNombre(nombre))
+    // Un nombre de Geotab es "conductor real" si se resuelve a un conductor del catalogo.
+    // Antes se exigia coincidencia exacta y se perdian conductores reales cuyo nombre
+    // Geotab trae distinto (apellido repetido, sin tilde, sin el punto final, etc.).
+    const esConductorReal = (nombre: string): boolean => resolverConductor(nombre) !== null
 
     const vigenteEn = <T extends { ini: number; fin: number }>(arr: T[] | undefined, fechaTurno: string): T | undefined => {
       if (!arr || !arr.length) return undefined
@@ -347,7 +416,8 @@ export const wialonBitacoraService = {
       // Las filas SIN conductor (ej. "Sin conductor"/DESC de Geotab) NO llevan modalidad ni turno:
       // no hay a quien atribuirle el turno, asi que se dejan vacios (igual que en Geotab).
       const esGeotab = origen === 'GEOTAB'
-      const nombreCond = normNombre(row.conductor_wialon || '')
+      // Clave canonica del conductor del sistema: es la que indexa asigsPorPatenteConductor.
+      const nombreCond = esGeotab ? resolverConductor(row.conductor_wialon || '') : null
       const modGeo = (esGeotab && nombreCond)
         ? resolverModalidadGeotab(row.patente_normalizada, nombreCond, row.fecha_turno)
         : undefined
@@ -389,6 +459,10 @@ export const wialonBitacoraService = {
         tipo_turno: tipoTurno,
         turno_indicador: turnoIndicador,
         gps_origen: origen,
+        conductor_estado: (() => {
+          const canonico = resolverConductor(row.conductor_wialon || '')
+          return canonico ? estadoPorConductor.get(canonico) ?? null : null
+        })(),
       }
     }
 
@@ -603,29 +677,26 @@ export const wialonBitacoraService = {
   },
 
   /**
-   * Actualiza checklist en wialon_bitacora
+   * Checklist (GNC / Lavado / Nafta) de las jornadas de [desde, hasta], de la tabla
+   * bitacora_checklist: 1 fila por conductor (nombre normalizado) y jornada. Vive
+   * aparte de wialon_bitacora/geotab_bitacora porque los syncs reescriben esas tablas.
    */
-  async updateChecklist(
-    id: string,
-    updates: {
-      gnc_cargado?: boolean
-      lavado_realizado?: boolean
-      nafta_cargada?: boolean
-    }
-  ): Promise<void> {
+  async getChecklist(desde: string, hasta: string): Promise<ChecklistJornada[]> {
+    const { data, error } = await supabase
+      .from('bitacora_checklist')
+      .select('conductor, fecha, gnc_cargado, lavado_realizado, nafta_cargada')
+      .gte('fecha', desde)
+      .lte('fecha', hasta)
+    if (error) throw new Error(`Error obteniendo checklist: ${error.message}`)
+    return (data || []) as ChecklistJornada[]
+  },
+
+  /** Guarda el checklist completo de una jornada (crea la fila si no existe). */
+  async guardarChecklist(fila: ChecklistJornada & { patente?: string | null }): Promise<void> {
     const { error } = await supabase
-      .from('wialon_bitacora')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-
-    if (error) {
-      throw new Error(`Error actualizando checklist: ${error.message}`)
-    }
-
-    this.clearCache()
+      .from('bitacora_checklist')
+      .upsert({ ...fila, updated_at: new Date().toISOString() }, { onConflict: 'conductor,fecha' })
+    if (error) throw new Error(`Error guardando checklist: ${error.message}`)
   },
 
   /**
