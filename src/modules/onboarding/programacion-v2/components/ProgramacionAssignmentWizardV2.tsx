@@ -36,6 +36,7 @@ import type { PrecargaParMapa, PersonaPrecargaPar } from '../../../../types/prog
 import { vehiculosActivosDeConductores, type VehiculoActivoDeConductor } from '../vehiculoActivoService'
 import { calcularMinutosEntre, type Coordenada } from '../distanciaParService'
 import { documentoSegunTarifa, permiteAnexo } from '../documentoTarifa'
+import { esConductorInterno } from '../../../../utils/conductorUtils'
 
 /**
  * Lead mostrado en la columna informativa del paso 3. Es un subconjunto
@@ -659,9 +660,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
 
         if (error) throw error
 
-        // Filtrar conductores activos
+        // Filtrar conductores activos (sin los comodín del equipo interno)
         const conductoresActivos = (data || []).filter((c: any) =>
-          c.conductores_estados?.codigo?.toLowerCase().includes('activo')
+          c.conductores_estados?.codigo?.toLowerCase().includes('activo') && !esConductorInterno(c)
         ) as unknown as Conductor[]
 
         // Verificar asignaciones activas o programadas
