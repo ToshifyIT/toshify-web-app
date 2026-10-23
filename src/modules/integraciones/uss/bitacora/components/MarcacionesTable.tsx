@@ -4,7 +4,7 @@
  * 1 fila por conductor por día con Entrada, Salida, Km, Estado, Checklist
  */
 
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
@@ -12,10 +12,14 @@ import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import { partesART } from '../../../../../utils/fechaArgentina';
-import { esMarcacionPorDia } from '../utils/marcacionesPorDia';
+import { claveChecklist } from '../utils/marcacionesPorDia';
+import { getEstadoConductorBadgeStyle, getEstadoConductorDisplay } from '../../../../../utils/conductorUtils';
+import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
 import { ConductorHistorialModal } from './ConductorHistorialModal';
+import { RangoFilter } from './RangoFilter';
+import { parseDecimal } from '../utils/parseDecimal';
 
 // Conductor malformado de Wialon: iButton sin nombre (ej: "81-", "142-").
 // Lo mostramos como "Sin conductor" para que no aparezca como basura en el filtro.
@@ -165,6 +169,23 @@ function claveSalida(m: Marcacion): string {
   return `${fechaSalidaISO(m) ?? '0000-00-00'}T${h}`;
 }
 
+/** Horas tipeadas en el filtro de Tiempo conducido -> "8h 15min" / "6 min". */
+function describirHoras(horas: number): string {
+  const total = Math.round(horas * 60);
+  if (total < 60) return `${total} min`;
+  const m = total % 60;
+  return m === 0 ? `${total / 60}h` : `${Math.floor(total / 60)}h ${m}min`;
+}
+
+const AYUDA_FILTRO_HORAS = (
+  <>
+    <b>Horas:</b> escribí el número de horas (<b>8</b> = 8h, <b>8,5</b> = 8h 30min).
+    <br />
+    <b>Minutos:</b> como fracción de hora, minutos ÷ 60 (<b>0,17</b> = 10 min, <b>0,25</b> = 15 min,
+    <b> 0,5</b> = 30 min). Menos de 1 hora: Hasta <b>0,99</b>.
+  </>
+);
+
 function formatDuracion(minutos: number | null): string {
   if (minutos === null || minutos === undefined) return '-';
   const h = Math.floor(minutos / 60);
@@ -267,6 +288,27 @@ export function MarcacionesTable({
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [horarioFilter, setHorarioFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
+  const [kmMin, setKmMin] = useState('');
+  const [kmMax, setKmMax] = useState('');
+  // Tiempo conducido en horas ("6", "0,5"); se compara contra duracionMinutos.
+  const [horasMin, setHorasMin] = useState('');
+  const [horasMax, setHorasMax] = useState('');
+  // Cambia al limpiar todos los filtros para vaciar los inputs de Km y horas.
+  const [rangosResetKey, setRangosResetKey] = useState(0);
+  // Valor actual para que el filtro lo recupere cuando la columna se vuelve a crear
+  // (abrir/cerrar filtros recrea las columnas y remonta el header).
+  const kmRangoRef = useRef({ min: '', max: '' });
+  kmRangoRef.current = { min: kmMin, max: kmMax };
+  const setKmRango = useCallback((desde: string, hasta: string) => {
+    setKmMin(desde);
+    setKmMax(hasta);
+  }, []);
+  const horasRangoRef = useRef({ min: '', max: '' });
+  horasRangoRef.current = { min: horasMin, max: horasMax };
+  const setHorasRango = useCallback((desde: string, hasta: string) => {
+    setHorasMin(desde);
+    setHorasMax(hasta);
+  }, []);
   // Quick filter por proveedor GPS
   const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
   // Marcación seleccionada para ver detalle de trips USS por patente
@@ -320,7 +362,7 @@ export function MarcacionesTable({
     [...new Set(marcaciones.map(m => modalidadLabel(m.vehiculoModalidad)))].filter(Boolean).sort()
   , [marcaciones]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || gpsFilter !== null || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || kmMin !== '' || kmMax !== '' || horasMin !== '' || horasMax !== '' || gpsFilter !== null || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
@@ -328,6 +370,11 @@ export function MarcacionesTable({
     setEstadoFilter([]);
     setHorarioFilter([]);
     setTurnoFilter([]);
+    setKmMin('');
+    setKmMax('');
+    setHorasMin('');
+    setHorasMax('');
+    setRangosResetKey(k => k + 1);
     setGpsFilter(null);
     onSearchChange('');
   };
@@ -354,6 +401,26 @@ export function MarcacionesTable({
     if (turnoFilter.length > 0) {
       filtered = filtered.filter(m => turnoFilter.includes(modalidadLabel(m.vehiculoModalidad)));
     }
+    const kmDesde = parseDecimal(kmMin);
+    const kmHasta = parseDecimal(kmMax);
+    if (kmDesde !== undefined || kmHasta !== undefined) {
+      // Se compara contra el km redondeado a 2 decimales, igual que se muestra en la celda.
+      filtered = filtered.filter(m => {
+        const km = Math.round(m.kmTotal * 100) / 100;
+        return (kmDesde === undefined || km >= kmDesde) && (kmHasta === undefined || km <= kmHasta);
+      });
+    }
+    const horasDesde = parseDecimal(horasMin);
+    const horasHasta = parseDecimal(horasMax);
+    if (horasDesde !== undefined || horasHasta !== undefined) {
+      // Sin duración (ej. "Sin actividad") no entra en ningún rango.
+      filtered = filtered.filter(m => {
+        if (m.duracionMinutos === null || m.duracionMinutos === undefined) return false;
+        const min = Math.round(m.duracionMinutos);
+        return (horasDesde === undefined || min >= Math.round(horasDesde * 60))
+          && (horasHasta === undefined || min <= Math.round(horasHasta * 60));
+      });
+    }
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       const termPatente = normalizePatente(searchTerm).toLowerCase();
@@ -363,12 +430,22 @@ export function MarcacionesTable({
       );
     }
     return filtered;
-  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
+  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, kmMin, kmMax, horasMin, horasMax, searchTerm]);
 
   const marcacionesFiltradas = useMemo(() => {
     if (gpsFilter === null) return marcacionesSinGps;
     return marcacionesSinGps.filter(m => (m.gpsOrigen || 'USS') === gpsFilter);
   }, [marcacionesSinGps, gpsFilter]);
+
+  // Los filtros del módulo se aplican como rowFilter y no recortando `data`: si el
+  // DataTable recibe data vacía muestra el estado "Sin marcaciones" sin encabezados, y
+  // el filtro abierto (ej. Km mientras se tipea) desaparece. Con rowFilter queda la
+  // tabla con "No se encontraron resultados".
+  const filtroModulo = useMemo(() => {
+    if (marcacionesFiltradas === marcaciones) return undefined;
+    const visibles = new Set(marcacionesFiltradas);
+    return (m: Marcacion) => visibles.has(m);
+  }, [marcaciones, marcacionesFiltradas]);
 
   // Conteos por proveedor GPS sobre el resultado ya filtrado (menos el propio chip GPS),
   // para que los chips reflejen lo que se está viendo (búsqueda, semana, otros filtros).
@@ -469,6 +546,17 @@ export function MarcacionesTable({
               {m.ibutton && (
                 <span style={{ color: 'var(--text-tertiary)', fontSize: '10px', whiteSpace: 'nowrap' }}>#{m.ibutton}</span>
               )}
+              {m.conductorEstado && (() => {
+                const estilo = getEstadoConductorBadgeStyle({ codigo: m.conductorEstado });
+                return (
+                  <span style={{
+                    background: estilo.bg, color: estilo.color, fontSize: '9px', fontWeight: 600,
+                    padding: '1px 6px', borderRadius: '8px', whiteSpace: 'nowrap', lineHeight: 1.4,
+                  }}>
+                    {getEstadoConductorDisplay({ codigo: m.conductorEstado })}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         );
@@ -477,7 +565,12 @@ export function MarcacionesTable({
     },
 
     {
-      accessorKey: 'entrada',
+      // El id con "fecha" hace que el DataTable use el filtro de calendario; el valor
+      // es la fecha "DD/MM/YY" que se muestra en la celda.
+      id: 'fecha_entrada',
+      accessorFn: (m) => (m.estado === 'Sin Actividad'
+        ? fechaCorta(m.fecha)
+        : textoEntrada(m).split(' ')[0].replace('-', '')) || '',
       header: 'Entrada',
       cell: ({ row }) => {
         const m = row.original;
@@ -508,7 +601,8 @@ export function MarcacionesTable({
       },
     },
     {
-      accessorKey: 'salida',
+      id: 'fecha_salida',
+      accessorFn: (m) => textoSalida(m).split(' ')[0].replace('-', ''),
       header: 'Salida',
       cell: ({ row }) => {
         const m = row.original;
@@ -544,7 +638,13 @@ export function MarcacionesTable({
     },
     {
       accessorKey: 'duracionMinutos',
-      header: 'Tiempo Conducido',
+      // Filtro en horas: la celda muestra "8h 11min" pero el dato está en minutos.
+      header: () => (
+        <RangoFilter label="Tiempo Conducido (h)" placeholder="0" rangoRef={horasRangoRef}
+          ayuda={AYUDA_FILTRO_HORAS} describir={describirHoras}
+          onChange={setHorasRango} resetKey={rangosResetKey}
+          filterId="m-horas" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
+      ),
       cell: ({ row }) => (
         <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
           {formatDuracion(row.original.duracionMinutos)}
@@ -554,7 +654,13 @@ export function MarcacionesTable({
     },
     {
       accessorKey: 'kmTotal',
-      header: 'Km',
+      // Filtro propio: el rango del DataTable no acepta coma decimal. El texto lo guarda
+      // el propio filtro; kmMin/kmMax no van en las deps para no recrear la columna (y
+      // perder el foco del input) en cada tecla.
+      header: () => (
+        <RangoFilter label="Km" rangoRef={kmRangoRef} onChange={setKmRango} resetKey={rangosResetKey}
+          filterId="m-km" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
+      ),
       cell: ({ row }) => (
         <span style={{ fontWeight: 600 }}>
           {row.original.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -677,14 +783,19 @@ export function MarcacionesTable({
       header: 'Checklist',
       cell: ({ row }) => {
         const m = row.original;
-        // Fila armada por dia desde los viajes: no existe en la base, no se puede marcar
-        const soloLectura = esMarcacionPorDia(m);
-        if (soloLectura) return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
+        // Solo jornadas con conductor y actividad: se guarda por conductor + jornada.
+        if (!claveChecklist(m)) return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
+        const marcar = (updates: Parameters<typeof onUpdateChecklist>[1]) => {
+          onUpdateChecklist(m.id, updates).catch((err) => {
+            console.error('Error guardando checklist:', err);
+            Swal.fire('Error', 'No se pudo guardar el checklist', 'error');
+          });
+        };
         return (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
               title="GNC cargado"
-              onClick={() => onUpdateChecklist(m.id, { gnc_cargado: !m.gncCargado })}
+              onClick={() => marcar({ gnc_cargado: !m.gncCargado })}
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -697,7 +808,7 @@ export function MarcacionesTable({
             </button>
             <button
               title="Lavado realizado"
-              onClick={() => onUpdateChecklist(m.id, { lavado_realizado: !m.lavadoRealizado })}
+              onClick={() => marcar({ lavado_realizado: !m.lavadoRealizado })}
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -710,7 +821,7 @@ export function MarcacionesTable({
             </button>
             <button
               title="Nafta cargada"
-              onClick={() => onUpdateChecklist(m.id, { nafta_cargada: !m.naftaCargada })}
+              onClick={() => marcar({ nafta_cargada: !m.naftaCargada })}
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -728,7 +839,7 @@ export function MarcacionesTable({
     },
   ], [conductorPatenteUnicos, conductorFilter,
       estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId,
-      setOpenFilterId, onUpdateChecklist, historialActivo]);
+      setOpenFilterId, onUpdateChecklist, historialActivo, setKmRango, setHorasRango, rangosResetKey]);
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -905,7 +1016,8 @@ export function MarcacionesTable({
 
       {/* DataTable */}
       <DataTable
-        data={marcacionesFiltradas}
+        data={marcaciones}
+        rowFilter={filtroModulo}
         columns={columns}
         loading={isLoading}
         showSearch={false}
