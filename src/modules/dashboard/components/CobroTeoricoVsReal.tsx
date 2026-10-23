@@ -1368,9 +1368,9 @@ export function CobroTeoricoVsReal() {
                   <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--text-tertiary, #9ca3af)', strokeWidth: 1, strokeDasharray: '4 4' }} />
                   <Legend
                     verticalAlign="top"
-                    height={36}
+                    height={32}
                     iconType="plainline"
-                    wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: '0.92rem' }}
+                    wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: 12 }}
                     formatter={(value: string) => {
                       const match = value.match(/^(.+?)\s*\((.+)\)$/)
                       if (match) {
@@ -1390,7 +1390,7 @@ export function CobroTeoricoVsReal() {
                     stroke="#16a34a"
                     strokeWidth={3}
                     dot={false}
-                    activeDot={{ r: 6 }}
+                    activeDot={{ r: 5 }}
                     isAnimationActive={false}
                   />
                   <Line
@@ -1399,8 +1399,8 @@ export function CobroTeoricoVsReal() {
                     name={`Ingreso Percibido (${selectedPeriod.replace(/\s+\d{4}$/, '')})`}
                     stroke="#2563eb"
                     strokeWidth={2.5}
-                    dot={{ r: 4, fill: 'var(--card-bg, #ffffff)', stroke: '#2563eb', strokeWidth: 2 }}
-                    activeDot={{ r: 6, fill: '#2563eb', stroke: 'var(--card-bg, #ffffff)', strokeWidth: 2 }}
+                    dot={{ r: 3, fill: 'var(--card-bg, #ffffff)', stroke: '#2563eb', strokeWidth: 2 }}
+                    activeDot={{ r: 5, fill: '#2563eb', stroke: 'var(--card-bg, #ffffff)', strokeWidth: 2 }}
                     isAnimationActive={false}
                   />
                 </LineChart>

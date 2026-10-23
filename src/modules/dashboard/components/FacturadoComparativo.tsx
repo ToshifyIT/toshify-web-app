@@ -333,24 +333,24 @@ export function FacturadoComparativo({ granularity, onGranularityChange }: Props
               <Tooltip content={<ComparisonTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
               <Legend
                 verticalAlign="top"
-                height={50}
+                height={36}
                 iconType="square"
-                wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: '0.85rem' }}
+                wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: 12 }}
                 formatter={(value: string) => (
                   <span style={{ color: '#374151', fontWeight: 600 }}>{value}</span>
                 )}
               />
               {granularity === 'semana' ? (
                 <>
-                  <Bar dataKey="valorA" name={periodA} fill={COLOR_A} radius={[4, 4, 0, 0]} barSize={28} isAnimationActive={false} />
-                  <Bar dataKey="valorB" name={periodB} fill={COLOR_B} radius={[4, 4, 0, 0]} barSize={28} isAnimationActive={false} />
+                  <Bar dataKey="valorA" name={periodA} fill={COLOR_A} radius={[3, 3, 0, 0]} barSize={20} isAnimationActive={false} />
+                  <Bar dataKey="valorB" name={periodB} fill={COLOR_B} radius={[3, 3, 0, 0]} barSize={20} isAnimationActive={false} />
                 </>
               ) : (
                 <>
-                  <Bar dataKey="facturadoA" name={`Facturado (${periodA})`} fill={COLOR_A} radius={[4, 4, 0, 0]} barSize={20} isAnimationActive={false} />
-                  <Bar dataKey="cobradoA" name={`Cobrado (${periodA})`} fill={`${COLOR_A}99`} radius={[4, 4, 0, 0]} barSize={20} isAnimationActive={false} />
-                  <Bar dataKey="facturadoB" name={`Facturado (${periodB})`} fill={COLOR_B} radius={[4, 4, 0, 0]} barSize={20} isAnimationActive={false} />
-                  <Bar dataKey="cobradoB" name={`Cobrado (${periodB})`} fill={`${COLOR_B}99`} radius={[4, 4, 0, 0]} barSize={20} isAnimationActive={false} />
+                  <Bar dataKey="facturadoA" name={`Facturado (${periodA})`} fill={COLOR_A} radius={[3, 3, 0, 0]} barSize={14} isAnimationActive={false} />
+                  <Bar dataKey="cobradoA" name={`Cobrado (${periodA})`} fill={`${COLOR_A}99`} radius={[3, 3, 0, 0]} barSize={14} isAnimationActive={false} />
+                  <Bar dataKey="facturadoB" name={`Facturado (${periodB})`} fill={COLOR_B} radius={[3, 3, 0, 0]} barSize={14} isAnimationActive={false} />
+                  <Bar dataKey="cobradoB" name={`Cobrado (${periodB})`} fill={`${COLOR_B}99`} radius={[3, 3, 0, 0]} barSize={14} isAnimationActive={false} />
                 </>
               )}
             </BarChart>

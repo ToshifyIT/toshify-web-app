@@ -1035,10 +1035,7 @@
   background-color: var(--card-bg) !important;
 }
 
-/* Anchos fijos: son los que determinan el desplazamiento de cada columna.
-   2026-10-22: Estado Cond. 120 -> 160 y Días Baja 100 -> 150 (left 360 -> 400):
-   con el filtro, el orden y el ícono (i) el título no entraba y se superponía
-   con la columna siguiente. */
+/* Anchos fijos: son los que determinan el desplazamiento de cada columna. */
 .garantias-tabla-sticky .dt-table th:nth-child(1),
 .garantias-tabla-sticky .dt-table td:nth-child(1) {
   left: 0 !important;
@@ -1051,6 +1048,7 @@
 .garantias-tabla-sticky .dt-table th:nth-child(2),
 .garantias-tabla-sticky .dt-table td:nth-child(2) {
   left: 240px !important;
+  /* Ancho suficiente para el título + filtro + (i) + orden sin pisar la columna siguiente. */
   width: 160px !important;
   min-width: 160px !important;
   max-width: 160px !important;
@@ -1060,9 +1058,9 @@
 .garantias-tabla-sticky .dt-table th:nth-child(3),
 .garantias-tabla-sticky .dt-table td:nth-child(3) {
   left: 400px !important;
-  width: 150px !important;
-  min-width: 150px !important;
-  max-width: 150px !important;
+  width: 140px !important;
+  min-width: 140px !important;
+  max-width: 140px !important;
   z-index: 3;
   /* Sombra que marca el corte con la parte que scrollea. */
   box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.12);
@@ -2209,13 +2207,19 @@
 }
 
 .fact-module .fact-semana-actions .fact-btn--recalcular {
-  border-color: var(--border-primary);
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--color-primary);
+  color: #fff;
 }
 
-.fact-module .fact-semana-actions .fact-btn--recalcular:hover:not(:disabled) {
-  background: var(--bg-secondary);
+.fact-module .fact-semana-actions .fact-btn--recalcular:hover:not(:disabled),
+.fact-module .fact-semana-actions .fact-btn--cerrar:hover:not(:disabled) {
+  background: var(--color-primary-hover, var(--color-primary));
+}
+
+/* Cerrar Período bloqueado hasta recalcular: se ve claramente deshabilitado */
+.fact-module .fact-semana-actions .fact-btn--cerrar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .fact-module .fact-semana-actions .fact-btn--cerrar {
@@ -2358,4 +2362,40 @@
 .fact-module .cobros-fraccionados-tab .cf-filter-select {
   padding: 6px 10px;
   font-size: 12px;
+}
+
+/* =====================================================
+   Tipografía unificada de las tablas de Facturación
+   (2026-10-22). Guía: Reporte, la más chica.
+   - Celdas: 11px (regla .fact-module .dt-table td de arriba)
+   - Línea secundaria (CUIT/DNI, etc.): 10px
+   - Montos: 11px, misma letra que el resto (antes monospace 13px)
+   ===================================================== */
+.fact-module .dt-table .fact-precio {
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fact-module .dt-table .text-xs,
+.fact-module .dt-table .text-sm {
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+
+/* Ícono (i) de las tarjetas de indicadores del Reporte */
+.fact-stat-info {
+  display: inline-flex;
+  align-items: center;
+  /* El espacio previo es un no-separable (en el TSX): la (i) nunca queda sola
+     en una línea; si el texto no entra, baja junto con la última palabra. */
+  margin-left: 1px;
+  vertical-align: -1px;
+  color: var(--text-tertiary);
+  cursor: help;
+}
+
+.fact-stat-info:hover {
+  color: var(--color-primary);
 }

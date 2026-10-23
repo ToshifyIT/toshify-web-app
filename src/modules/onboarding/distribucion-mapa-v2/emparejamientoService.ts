@@ -417,9 +417,10 @@ function evaluarPar(
       })
     }
 
+    // "Antecedentes penales = sí" significa que PRESENTÓ el certificado: es un
+    // requisito cumplido, no una alerta. No resta score; se muestra en verde.
     if (persona.datos.antecedentesPenales === true) {
-      score -= 15
-      motivos.push({ tipo: 'bad', texto: `${etiqueta}: con antecedentes penales` })
+      motivos.push({ tipo: 'ok', texto: `${etiqueta}: antecedentes presentados` })
     }
 
     if (persona.datos.zonaPeligrosa) {
@@ -602,13 +603,10 @@ export async function sugerirPares(
 
   pares.sort((x, y) => y.score - x.score || x.tiempoMinutos - y.tiempoMinutos)
 
+  // Sin avisos informativos en el panel: el tope de bases es un control de
+  // gasto interno y el tiempo estimado ya se marca en cada tarjeta
+  // ("Tiempo estimado"). `truncado` se sigue devolviendo en el resultado.
   const avisos: string[] = []
-  if (truncado) {
-    avisos.push(`Se evaluaron las primeras ${MAX_BASES_SUGERENCIA} bases para acotar el consumo de la API.`)
-  }
-  if (!mapsDisponible()) {
-    avisos.push('Google Maps no está disponible: los tiempos son estimados en línea recta.')
-  }
 
   return {
     pares: pares.slice(0, MAX_PARES_RESULTADO),
@@ -825,9 +823,7 @@ export async function emparejarLeads(
   if (sinZona.length > 0) {
     avisos.push(`${sinZona.length} sin zona cargada: no se pueden cruzar por zona.`)
   }
-  if (!mapsDisponible()) {
-    avisos.push('Google Maps no está disponible: los tiempos son estimados en línea recta.')
-  }
+  // El tiempo estimado ya se marca en cada tarjeta ("Tiempo estimado").
 
   return {
     pares,

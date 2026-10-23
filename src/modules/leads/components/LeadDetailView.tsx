@@ -1,6 +1,6 @@
 // src/modules/leads/components/LeadDetailView.tsx
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, MessageSquare, Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
+import { Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import type { Lead } from '../../../types/leads.types'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
@@ -122,9 +122,11 @@ interface LeadDetailViewProps {
   zonasRestringidas?: ZonaRestringida[]
   enZonaRestringida?: string | null
   onRecalcularUbicacion?: (lead: Lead) => Promise<void>
+  /** Botón "Ver Videocuestionario" (Hireflix). Distribución en mapa lo oculta. */
+  mostrarVideocuestionario?: boolean
 }
 
-export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida, onRecalcularUbicacion }: LeadDetailViewProps) {
+export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida, onRecalcularUbicacion, mostrarVideocuestionario = true }: LeadDetailViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null)
   const [recalculando, setRecalculando] = useState(false)
 
@@ -158,30 +160,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          {/* Misma acción que "Abrir conversación" en la grilla de Leads: la
-              conversación de Intercom del lead, si la tiene. */}
-          {(() => {
-            const tieneConversacion = !!lead.id_conversation?.trim()
-            return (
-              <button
-                className={`btn-sm ${tieneConversacion ? 'btn-primary' : 'btn-secondary'}`}
-                disabled={!tieneConversacion}
-                onClick={() => { if (tieneConversacion) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${lead.id_conversation}`, '_blank') }}
-                title={tieneConversacion ? 'Abrir la conversación en Intercom' : 'Sin conversación de Intercom'}
-              >
-                <MessageSquare size={14} /> Abrir conversación
-              </button>
-            )
-          })()}
-          <button
-            className={`btn-sm ${lead.id_lead?.trim() ? 'btn-primary' : 'btn-secondary'}`}
-            disabled={!lead.id_lead?.trim()}
-            onClick={() => { if (lead.id_lead?.trim()) window.open(`https://app.intercom.com/a/apps/ogv74k5c/users/${lead.id_lead}`, '_blank') }}
-            title={lead.id_lead?.trim() ? 'Abrir en Intercom' : 'Sin ID de Intercom'}
-          >
-            <MessageCircle size={14} /> Ver Perfil Intercom
-          </button>
-          {(() => {
+          {mostrarVideocuestionario && (() => {
             const guiaMap: Record<string, string> = { marina: '687169f1bda19bb1e7faa1bc', manuel: '6877eeff3042007628cd1ad7' }
             const entrevistador = (lead.entrevistador_asignado || '').trim().toLowerCase()
             const idGuia = guiaMap[entrevistador] || null

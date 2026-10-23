@@ -691,7 +691,7 @@ export function ConductoresPanelModule() {
       />
 
       {detalle && (
-        <ConductorDetalleModal conductor={detalle} onClose={() => setDetalle(null)} />
+        <ConductorDetalleModal conductor={detalle} onClose={() => setDetalle(null)} tabInicial="facturacion" />
       )}
     </div>
   )

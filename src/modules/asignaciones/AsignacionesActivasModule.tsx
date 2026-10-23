@@ -8,6 +8,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { cargarConceptosTarifa, getPeriodoTarifa } from '../onboarding/tarifaConceptos'
 import './AsignacionesModule.css'
 
 interface AsignacionActiva {
@@ -1061,6 +1062,8 @@ function Vencimiento({ label, aplica, fecha }: { label: string; aplica?: boolean
 function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: AsignacionActiva; onClose: () => void }) {
   const [vehiculo, setVehiculo] = useState<VehiculoDetalle | null>(null)
   const [conductoresDet, setConductoresDet] = useState<Map<string, ConductorDetalle>>(new Map())
+  // Tarifa de cada conductor de la asignación (id de asignaciones_conductores -> etiqueta "ENE-26"/"OCT-26")
+  const [tarifas, setTarifas] = useState<Map<string, { etiqueta: string; nueva: boolean }>>(new Map())
   const [cargando, setCargando] = useState(true)
 
   const esCargo = asignacion.horario === 'todo_dia'
@@ -1090,9 +1093,23 @@ function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: Asignacio
             .select('id, numero_dni, numero_cuit, licencia_vencimiento, zona, fecha_contratacion, conductores_estados (descripcion)')
             .in('id', ids)
         : Promise.resolve({ data: [] }),
+      // Tarifa: la del conductor en la asignación; si no tiene, la de la asignación (mismo criterio que Asignaciones)
+      supabase
+        .from('asignaciones')
+        .select('tipo_tarifa, asignaciones_conductores (id, tipo_tarifa)')
+        .eq('id', asignacion.id)
+        .maybeSingle(),
+      cargarConceptosTarifa(),
     ])
-      .then(([vRes, cRes]) => {
+      .then(([vRes, cRes, tRes, conceptos]) => {
         if (!vigente) return
+        const asigTarifa = (tRes.data as any) || null
+        const mapaTarifas = new Map<string, { etiqueta: string; nueva: boolean }>()
+        for (const ac of (asigTarifa?.asignaciones_conductores || []) as Array<{ id: string; tipo_tarifa: string | null }>) {
+          const tipo = (ac.tipo_tarifa || asigTarifa?.tipo_tarifa || 'antigua') === 'nueva' ? 'nueva' : 'antigua'
+          mapaTarifas.set(ac.id, { etiqueta: getPeriodoTarifa(conceptos, tipo), nueva: tipo === 'nueva' })
+        }
+        setTarifas(mapaTarifas)
         setVehiculo((vRes.data as unknown as VehiculoDetalle) || null)
         const mapa = new Map<string, ConductorDetalle>()
         for (const c of ((cRes.data || []) as unknown as ConductorDetalle[])) mapa.set(c.id, c)
@@ -1201,11 +1218,19 @@ function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: Asignacio
                       <span className={`asig-turno-label ${claseLetra}`} title={turnoLabel}>{letra}</span>
                       <span>{`${ac.conductores?.nombres || ''} ${ac.conductores?.apellidos || ''}`.trim()}</span>
                     </div>
+                    <div className="efd-head-badges">
+                    {tarifas.get(ac.id) && (
+                      <span className={tarifas.get(ac.id)!.nueva ? 'dt-badge dt-badge-blue' : 'dt-badge dt-badge-gray'}
+                        title={tarifas.get(ac.id)!.nueva ? 'Tarifa nueva' : 'Tarifa anterior'}>
+                        Tarifa {tarifas.get(ac.id)!.etiqueta}
+                      </span>
+                    )}
                     {ac.confirmado ? (
                       <span className="dt-badge dt-badge-green" title={ac.fecha_confirmacion ? `Confirmado el ${fechaHoraAR(ac.fecha_confirmacion)}` : undefined}>Confirmado</span>
                     ) : (
                       <span className="dt-badge dt-badge-yellow">Pendiente</span>
                     )}
+                    </div>
                   </div>
                   <div className="efd-grid">
                     <Dato label="DNI">{det?.numero_dni || pendiente}</Dato>

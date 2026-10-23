@@ -97,3 +97,22 @@ export const PROGRAMACION_ESTADO_LABELS: Record<string, string> = {
   en_curso: 'En Curso',
   completado: 'Completado',
 };
+
+/**
+ * Apellido con el que se cargan los conductores comodín del equipo interno
+ * (ej. "INTERNO, EQUIPO TOSHIFY", "INTERNO, PROPIETARIO ANTERIOR").
+ */
+export const APELLIDO_CONDUCTOR_INTERNO = 'INTERNO';
+
+/**
+ * true si es un conductor comodín del equipo interno. No son conductores reales:
+ * se excluyen de listas, mapas, programación y métricas. Se siguen mostrando en
+ * Multas y Telepase, donde las infracciones del vehículo pueden quedar a su nombre.
+ * Regla: apellido exactamente "INTERNO" (sin distinguir mayúsculas, acentos ni espacios).
+ */
+export function esConductorInterno(c: { apellidos?: string | null } | null | undefined): boolean {
+  const ap = (c?.apellidos || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ').trim().toUpperCase();
+  return ap === APELLIDO_CONDUCTOR_INTERNO;
+}

@@ -2093,3 +2093,502 @@
   background: var(--bg-secondary);
   color: var(--text-primary);
 }
+
+/* =====================================================
+   Rediseño 2026-10-22: una sola fila de indicadores y el
+   selector de período junto a las acciones
+   ===================================================== */
+.siniestros-stats .siniestros-stats-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.siniestros-stats .siniestros-stats-grid .stat-label {
+  white-space: normal;
+}
+
+.siniestros-periodo {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* =====================================================
+   Seguimiento del siniestro (ss-*) - compacto
+   ===================================================== */
+.modal-content.ss-modal {
+  max-width: 640px;
+  max-height: 88vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ss-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.ss-modal-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ss-modal-body {
+  padding: 14px 18px 18px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.ss {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ss-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ss-header-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ss-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ss-subtitulo {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.ss .ss-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.ss-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.ss-icon-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.ss-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.ss-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ss-form-titulo {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ss-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.ss-grid.ss-grid-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ss-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+}
+
+.ss .ss-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
+.ss-req {
+  color: #dc2626;
+}
+
+.ss-opcional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ss .ss-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--input-bg, var(--bg-primary));
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.ss textarea.ss-input {
+  resize: vertical;
+  min-height: 52px;
+}
+
+.ss .ss-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.ss-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--badge-red-bg, rgba(220, 38, 38, 0.08));
+  color: var(--badge-red-text, #b91c1c);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ss-aviso svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ss-form-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ss-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ss-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 12px;
+  border: 1px dashed var(--border-primary);
+  border-radius: 8px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.ss-vacio svg {
+  opacity: 0.5;
+}
+
+.ss-vacio-sub {
+  font-size: 11.5px;
+}
+
+.ss-item {
+  padding: 9px 12px;
+  border: 1px solid var(--border-primary);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.ss-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ss-tipo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ss-tipo svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ss-monto {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.ss-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.ss-desc {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.ss-item-links {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.ss-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.ss-link:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+@media (max-width: 560px) {
+  .ss-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* =====================================================
+   Detalle del siniestro (sd-*) - compacto
+   ===================================================== */
+.modal-content.sd-modal {
+  max-width: 780px;
+}
+
+.sd {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sd-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sd-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sd-header-fila {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sd-titulo {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sd-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sd-header-acciones {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sd .sd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  font-size: 12.5px;
+}
+
+.sd-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.sd-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sd-tab:hover {
+  color: var(--text-primary);
+}
+
+.sd-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.sd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sd-montos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.sd-montos .sd-valor {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sd-positivo {
+  color: #059669;
+}
+
+.sd-seccion {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.sd-seccion-titulo {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.sd-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.sd-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sd-dato-ancho {
+  grid-column: span 2;
+}
+
+.sd .sd-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
+.sd-valor {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.sd-texto-bloque + .sd-texto-bloque {
+  margin-top: 8px;
+}
+
+.sd-texto {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  .sd-grid,
+  .sd-montos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1024,6 +1024,13 @@
   color: #9A3412;
 }
 
+/* A Cargo (Conductores, Incidencias, etc.): morado pastel, mismo tono que Asignaciones.
+   Usa las variables del tema, así que se adapta solo al modo oscuro. */
+.dt-badge-purple {
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+}
+
 /* Dark mode badges */
 [data-theme="dark"] .dt-badge-green {
   background: rgba(16, 185, 129, 0.2);
@@ -1766,7 +1773,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.dt-filter-number-label > span:first-child + .dt-filter-number-input-wrap .dt-filter-number-input,
+/* Sin prefijo "$" el texto arranca pegado al borde. (Antes había además un
+   selector que coincidía SIEMPRE, también con "$", y el signo quedaba encima
+   del número.) */
 .dt-filter-number-input-wrap:not(:has(.dt-filter-number-prefix)) .dt-filter-number-input {
   padding-left: 8px;
 }
@@ -1875,9 +1884,9 @@
 .dt-active-filters {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  margin-bottom: 12px;
+  gap: 8px;
+  padding: 5px 10px;
+  margin-bottom: 8px;
   background: var(--bg-secondary, #f9fafb);
   border: 1px solid var(--border-primary, #e5e7eb);
   border-radius: 8px;
@@ -1889,7 +1898,7 @@
   align-items: center;
   gap: 6px;
   color: var(--text-secondary, #6b7280);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -1909,12 +1918,12 @@
 .dt-active-filter-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px 4px 12px;
+  gap: 5px;
+  padding: 2px 4px 2px 9px;
   background: var(--color-primary, #ff0033);
   color: white;
-  border-radius: 16px;
-  font-size: 12px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -1930,15 +1939,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   padding: 0;
   border: none;
   background: rgba(255, 255, 255, 0.2);
   color: white;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: bold;
   line-height: 1;
   transition: background 0.15s;
@@ -1949,12 +1958,12 @@
 }
 
 .dt-clear-all-filters {
-  padding: 6px 14px;
+  padding: 3px 10px;
   border: 1px solid var(--border-primary, #e5e7eb);
-  background: white;
+  background: var(--bg-primary, white);
   color: var(--text-secondary, #6b7280);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;

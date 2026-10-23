@@ -12,7 +12,7 @@ import {
 import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
-  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, MessageCircle, Layers, Link2,
+  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Layers, Link2,
   CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin, LocateFixed,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -543,6 +543,24 @@ function formatDateOnly(dateStr: string | undefined | null): string {
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return ''
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
+// Valor de filtro para columnas Si/No de texto (licencia, experiencia previa,
+// cochera): "si", "Sí", "SI ", etc. -> "Si" (mismo valor que carga Sellium) y
+// "no"/"NO" -> "No", para que el filtro muestre una sola opción por valor.
+// Cualquier otro texto se deja tal cual (recortado); vacío -> "-".
+function siNoParaFiltro(v: string | null | undefined): string {
+  const t = (v || '').trim()
+  if (!t) return '-'
+  const n = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  if (n === 'si') return 'Si'
+  if (n === 'no') return 'No'
+  return t
+}
+
+// Filtro "tiene / no tiene" para columnas de texto libre (observaciones, experiencia).
+function conSinDato(v: string | null | undefined): string {
+  return (v || '').trim() ? 'Tiene' : 'No tiene'
 }
 
 // Booleano nullable -> etiqueta para Excel ('' cuando no hay dato).
@@ -2850,15 +2868,10 @@ export function LeadsModule() {
     },
     {
       id: 'licencia',
-      // Normaliza para el filtro/orden: "Si"/"Sí"/"SI"/etc -> "Sí", "No"/"NO" -> "No".
+      // Normaliza para el filtro/orden: "Si"/"Sí"/"SI"/etc -> "Si" (como Sellium), "No"/"NO" -> "No".
       // Así el filtro muestra una sola opción por valor y matchea todas las variantes.
       // La celda sigue mostrando el valor crudo (row.original.licencia).
-      accessorFn: (row) => {
-        const v = (row.licencia || '').trim().toLowerCase()
-        if (v === 'si' || v === 'sí') return 'Sí'
-        if (v === 'no') return 'No'
-        return row.licencia?.trim() || '-'
-      },
+      accessorFn: (row) => siNoParaFiltro(row.licencia),
       header: 'Licencia',
       cell: ({ row }) => (
         <SiNoDropdownCell
@@ -2951,7 +2964,7 @@ export function LeadsModule() {
       // Antes se titulaba "Exp. Manejo" pero muestra experiencia_previa (Sí/No),
       // igual que "Experiencia Previa" en el detalle del lead.
       id: 'exp_previa',
-      accessorFn: (row) => row.experiencia_previa || '-',
+      accessorFn: (row) => siNoParaFiltro(row.experiencia_previa),
       header: 'Exp. Previa',
       cell: ({ row }) => (
         <SiNoDropdownCell
@@ -2972,6 +2985,8 @@ export function LeadsModule() {
       // Texto libre ("Experiencia Manejo" en el detalle del lead).
       id: 'exp_manejo',
       accessorFn: (row) => row.experiencia_manejo || '-',
+      // Texto libre: el filtro solo distingue si tiene o no tiene dato.
+      meta: { filterValue: (row: Lead) => conSinDato(row.experiencia_manejo) },
       header: 'Exp. Manejo',
       cell: ({ row }) => {
         const txt = (row.original.experiencia_manejo || '').trim()
@@ -3013,7 +3028,7 @@ export function LeadsModule() {
     },
     {
       id: 'cochera',
-      accessorFn: (row) => row.cochera || '-',
+      accessorFn: (row) => siNoParaFiltro(row.cochera),
       header: 'Cochera',
       cell: ({ row }) => (
         <SiNoDropdownCell
@@ -3031,22 +3046,26 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
-      // Solo lectura: el texto puede ser largo y multilínea (y contiene la alerta de
-      // recontacto), así que se edita desde el formulario, no inline.
+      // Editable inline: un clic abre un cuadro de texto multilínea (el texto
+      // puede ser largo y contiene la alerta de recontacto, por eso no es un
+      // input de una línea). Usa la misma clave de "abierto" que los Si/No para
+      // que haya un solo editor abierto a la vez.
       id: 'observaciones',
       accessorFn: (row) => row.observaciones || '-',
+      // Texto libre: el filtro solo distingue si tiene o no tiene dato.
+      meta: { filterValue: (row: Lead) => conSinDato(row.observaciones) },
       header: 'Observaciones',
-      cell: ({ row }) => {
-        const obs = (row.original.observaciones || '').trim()
-        return (
-          <span
-            title={obs || undefined}
-            style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '220px' }}
-          >
-            {obs ? obs.replace(/\s+/g, ' ') : '-'}
-          </span>
-        )
-      },
+      cell: ({ row }) => (
+        <ObservacionesCell
+          leadId={row.original.id}
+          value={row.original.observaciones}
+          isOpen={sinoDropdownKey === `${row.original.id}::observaciones`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onSave={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
       size: 220,
       enableSorting: true,
     },
@@ -3061,20 +3080,12 @@ export function LeadsModule() {
       cell: ({ row }) => {
         const lead = row.original
         const tieneFolder = !!lead.url_folder?.trim()
-        const tieneConversacion = !!lead.id_conversation?.trim()
         const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger'; disabled?: boolean }> = []
         if (canEdit) {
           actions.push({ label: 'Editar', icon: <Edit2 size={15} />, onClick: () => handleOpenEdit(lead), variant: 'info' })
         }
         actions.push(
           { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
-          {
-            label: 'Abrir conversación',
-            icon: <MessageCircle size={15} />,
-            onClick: () => { if (tieneConversacion) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${lead.id_conversation}`, '_blank') },
-            variant: tieneConversacion ? 'info' : undefined,
-            disabled: !tieneConversacion,
-          },
         )
         actions.push({
           label: 'Documentos',
@@ -3394,7 +3405,7 @@ export function LeadsModule() {
               <RefreshCw size={14} />
             </button>
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
-              <Download size={14} /> <span className="leads-btn-label">Exportar</span>
+              <Download size={14} /> <span className="leads-btn-label leads-btn-label--sec">Exportar</span>
             </button>
             {esAdmin && (
               <button
@@ -3417,7 +3428,7 @@ export function LeadsModule() {
                 title="Completar pais y ciudad de los leads que todavia no los tienen"
               >
                 <MapPin size={14} />{' '}
-                <span className="leads-btn-label">Ubicación ({leadsSinUbicacion.length})</span>
+                <span className="leads-btn-label leads-btn-label--sec">Ubicación ({leadsSinUbicacion.length})</span>
               </button>
             )}
             {canCreate && (
@@ -3430,7 +3441,7 @@ export function LeadsModule() {
                   onChange={handleCargaMasiva}
                 />
                 <button className="btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} title="Carga Masiva">
-                  <Upload size={14} /> <span className="leads-btn-label">Carga Masiva</span>
+                  <Upload size={14} /> <span className="leads-btn-label leads-btn-label--sec">Carga Masiva</span>
                 </button>
               </>
             )}
@@ -3444,7 +3455,7 @@ export function LeadsModule() {
               onClick={() => setVerLeadsConductores(true)}
               title="Ver los leads que ya son conductores y los que tienen un conductor con el mismo documento pero siguen sin convertir"
             >
-              <Link2 size={14} /> <span className="leads-btn-label">Ver Lead/Conductores</span>
+              <Link2 size={14} /> <span className="leads-btn-label leads-btn-label--sec">Ver Lead/Conductores</span>
             </button>
             <button
               className={`btn-sm ${activeStatCard === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
@@ -3595,6 +3606,169 @@ export function LeadsModule() {
 // =====================================================
 // SI/NO DROPDOWN CELL (portal-based, reutilizable)
 // =====================================================
+
+interface ObservacionesCellProps {
+  leadId: string
+  value: string | null | undefined
+  isOpen: boolean
+  canEdit: boolean
+  onToggle: (key: string) => void
+  onSave: (leadId: string, field: keyof Lead, value: string) => Promise<void>
+  onClose: () => void
+}
+
+/**
+ * Observaciones editables desde la tabla. Muestra el texto en una línea; al
+ * hacer clic abre un cuadro flotante con el texto completo para editarlo.
+ * Guardar: botón o Ctrl/Cmd+Enter. Cancelar: botón, Esc o clic afuera.
+ */
+function ObservacionesCell({ leadId, value, isOpen, canEdit, onToggle, onSave, onClose }: ObservacionesCellProps) {
+  const cellRef = useRef<HTMLSpanElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const [texto, setTexto] = useState(value || '')
+  const [guardando, setGuardando] = useState(false)
+  const key = `${leadId}::observaciones`
+  const obs = (value || '').trim()
+
+  // Al abrir se parte siempre del valor guardado.
+  useEffect(() => {
+    if (isOpen) setTexto(value || '')
+  }, [isOpen, value])
+
+  useLayoutEffect(() => {
+    if (!isOpen || !cellRef.current) return
+    const rect = cellRef.current.getBoundingClientRect()
+    const alto = 170
+    const ancho = 320
+    let top = rect.bottom + 4
+    if (top + alto > window.innerHeight - 8) top = rect.top - alto - 4
+    if (top < 8) top = 8
+    const left = Math.min(rect.left, window.innerWidth - ancho - 8)
+    setPos({ top, left: Math.max(8, left) })
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (panelRef.current && !panelRef.current.contains(t) && cellRef.current && !cellRef.current.contains(t)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isOpen, onClose])
+
+  const guardar = async () => {
+    if (guardando) return
+    if (texto.trim() === obs) {
+      onClose()
+      return
+    }
+    setGuardando(true)
+    try {
+      await onSave(leadId, 'observaciones', texto.trim())
+      onClose()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <span style={{ display: 'block' }}>
+      <span
+        ref={cellRef}
+        title={obs || (canEdit ? 'Agregar observación' : undefined)}
+        onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(key) } : undefined}
+        style={{
+          display: 'block',
+          maxWidth: '220px',
+          fontSize: '11px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          border: canEdit ? '1px dashed transparent' : 'none',
+          cursor: canEdit ? 'text' : 'default',
+          color: obs ? 'var(--text-primary)' : 'var(--text-tertiary)',
+        }}
+        onMouseEnter={canEdit ? (e) => { e.currentTarget.style.borderColor = 'var(--border-primary, #d1d5db)' } : undefined}
+        onMouseLeave={canEdit ? (e) => { e.currentTarget.style.borderColor = 'transparent' } : undefined}
+      >
+        {obs ? obs.replace(/\s+/g, ' ') : '-'}
+      </span>
+      {isOpen && canEdit && createPortal(
+        <div
+          ref={panelRef}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            zIndex: 99999,
+            width: 320,
+            background: 'var(--bg-primary, #fff)',
+            border: '1px solid var(--border-primary, #e5e7eb)',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,.15)',
+            padding: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}
+        >
+          <textarea
+            autoFocus
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.preventDefault(); onClose() }
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void guardar() }
+            }}
+            rows={4}
+            placeholder="Escribí una observación..."
+            disabled={guardando}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+              fontSize: '12px',
+              lineHeight: 1.4,
+              padding: '6px 8px',
+              border: '1px solid var(--border-primary, #d1d5db)',
+              borderRadius: '6px',
+              background: 'var(--bg-secondary, #fff)',
+              color: 'var(--text-primary)',
+              fontFamily: 'inherit',
+            }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginRight: 'auto' }}>Ctrl+Enter guarda · Esc cancela</span>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={guardando}
+              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: '1px solid var(--border-primary, #d1d5db)', borderRadius: '6px', background: 'var(--bg-primary, #fff)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void guardar()}
+              disabled={guardando}
+              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: 'none', borderRadius: '6px', background: 'var(--color-primary, #ff0033)', color: '#fff', cursor: guardando ? 'wait' : 'pointer' }}
+            >
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </span>
+  )
+}
 
 interface SiNoDropdownCellProps {
   leadId: string

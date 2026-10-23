@@ -150,6 +150,25 @@ function contenedorConScroll(el: HTMLElement): HTMLElement | null {
   return null
 }
 
+/**
+ * Quita el margen superior del contenedor con scroll del layout mientras el
+ * módulo está montado (el mapa arranca pegado a la barra superior) y lo
+ * restaura al salir. Va ANTES de useAltoSinScroll para que el alto se mida ya
+ * sin ese margen.
+ */
+function useSinMargenSuperior(ref: React.RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const el = ref.current
+    const sc = el ? contenedorConScroll(el) : null
+    if (!sc) return
+    const previo = sc.style.paddingTop
+    sc.style.paddingTop = '0px'
+    return () => {
+      sc.style.paddingTop = previo
+    }
+  }, [ref])
+}
+
 function useAltoSinScroll(ref: React.RefObject<HTMLDivElement | null>): number | undefined {
   const [alto, setAlto] = useState<number | undefined>(undefined)
   useLayoutEffect(() => {
@@ -213,6 +232,7 @@ export function DistribucionMapaV2Module() {
   const navigate = useNavigate()
   // El módulo ocupa exactamente el alto disponible: el encabezado no se pierde al scrollear.
   const raizRef = useRef<HTMLDivElement | null>(null)
+  useSinMargenSuperior(raizRef)
   const altoRaiz = useAltoSinScroll(raizRef)
 
   const { isLoaded, loadError } = useJsApiLoader({
@@ -875,9 +895,14 @@ export function DistribucionMapaV2Module() {
     setToast(`Base fijada: ${e.nombre}. Cambiá filtros si hace falta: la base se mantiene.`)
   }, [])
 
+  // Soltar la base vuelve al estado inicial: sin selección (cierra la ficha y
+  // el aro), sin línea medida, sin radar ni "ver todos".
   const soltarBase = useCallback(() => {
     setBaseManual(null)
     setParSeleccionado(null)
+    setRadar(null)
+    setMostrarTodosPares(false)
+    setActivo(null)
   }, [])
 
   /**
@@ -1050,6 +1075,13 @@ export function DistribucionMapaV2Module() {
     baseManualRef.current = baseManual
   }, [baseManual])
 
+  // Espejo del par elegido, por el mismo motivo: el efecto de abajo lo lee
+  // sin re-ejecutarse cada vez que se elige o se quita un par.
+  const parSeleccionadoRef = useRef(parSeleccionado)
+  useEffect(() => {
+    parSeleccionadoRef.current = parSeleccionado
+  }, [parSeleccionado])
+
   // Con el panel abierto, elegir otra persona en el mapa o en la lista cambia
   // la base y recalcula solo.
   //
@@ -1064,9 +1096,15 @@ export function DistribucionMapaV2Module() {
   // persona contra la base", no "cambiá la base de las sugerencias". Si este
   // efecto corriera igual, pisaría la línea recién medida (setParSeleccionado
   // null) y recalcularía sugerencias desde la persona equivocada.
+  //
+  // Y TAMPOCO si la persona tocada es parte del par elegido: ahí el clic es
+  // para ver su ficha, no para cambiar de base. Recalcular borraba el par.
+  // Para sugerir desde esa persona está "Sugerir compañero" en su ficha.
   useEffect(() => {
     if (!drawerAbierto || !activo) return
     if (baseManualRef.current) return
+    const par = parSeleccionadoRef.current
+    if (par && (par.a.id === activo || par.b.id === activo)) return
     const base = visiblesRef.current.find((e) => e.id === activo)
     if (!base) return
     if (baseSugerencias && baseSugerencias.id === base.id) return
@@ -1226,7 +1264,7 @@ export function DistribucionMapaV2Module() {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 14,
-          padding: '11px 18px',
+          padding: '8px 16px',
           borderBottom: '1px solid var(--border-primary)',
           flexShrink: 0,
           flexWrap: 'wrap',
@@ -1281,12 +1319,12 @@ export function DistribucionMapaV2Module() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
-                padding: '7px 11px',
+                padding: '4px 10px',
                 border: '1px dashed var(--border-primary)',
                 borderRadius: 8,
                 background: 'var(--bg-secondary)',
                 color: 'var(--text-secondary)',
-                fontSize: 12,
+                fontSize: 11.5,
                 fontWeight: 700,
                 cursor: resolviendoCeldas ? 'wait' : 'pointer',
                 whiteSpace: 'nowrap',
@@ -1320,18 +1358,18 @@ export function DistribucionMapaV2Module() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              padding: '8px 14px',
+              padding: '5px 12px',
               border: 'none',
               borderRadius: 8,
               background: 'var(--color-primary, #ff0033)',
               color: '#fff',
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: 700,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
           >
-            <Sparkles size={14} /> Sugerir compañero (≤ {umbral} min)
+            <Sparkles size={13} /> Sugerir compañero (≤ {umbral} min)
           </button>
         </div>
       </div>
@@ -1405,7 +1443,9 @@ export function DistribucionMapaV2Module() {
           onClick={alternarLista}
           titulo={mostrarLista ? 'Ocultar lista' : `Mostrar lista (${visibles.length})`}
           top={40}
-          left={Math.max(0, (esAngosto ? bordePanelAngosto : anchoFiltros + anchoLista) - 12)}
+          // Casi toda sobre el mapa: centrada en el borde tapaba los contadores
+          // de los grupos "Conductores / Leads" de la lista.
+          left={Math.max(0, (esAngosto ? bordePanelAngosto : anchoFiltros + anchoLista) - 4)}
           badge={!mostrarLista ? visibles.length : undefined}
         />
 
@@ -1619,7 +1659,9 @@ export function DistribucionMapaV2Module() {
       )}
 
       {fichaConductor && (
-        <ConductorDetalleModal conductor={fichaConductor} onClose={() => setFichaConductor(null)} mostrarIntercom />
+        // Desde el mapa abre directo en "Historial de asignaciones" y sin el botón de
+        // Intercom (ya no se usa; pedido 2026-10-22).
+        <ConductorDetalleModal conductor={fichaConductor} onClose={() => setFichaConductor(null)} tabInicial="asignaciones" />
       )}
       {fichaLead && <LeadDetalleModal lead={fichaLead} onClose={() => setFichaLead(null)} />}
     </div>
@@ -1867,22 +1909,24 @@ function ManijaPanel({
         right,
         transform: top === '50%' ? 'translateY(-50%)' : undefined,
         transition: 'left .25s ease, right .25s ease',
-        width: 24,
-        height: 56,
+        // Más visible que antes: borde y chevron en el color principal y
+        // sombra más marcada, para que se note sobre el mapa y la lista.
+        width: 26,
+        height: 60,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        border: '1px solid var(--border-primary)',
+        border: '1.5px solid var(--color-primary, #ff0033)',
         borderRadius: 8,
         background: 'var(--bg-primary)',
-        color: 'var(--text-secondary)',
-        boxShadow: '0 3px 10px rgba(0,0,0,0.12)',
+        color: 'var(--color-primary, #ff0033)',
+        boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
         cursor: 'pointer',
         zIndex: 6,
         padding: 0,
       }}
     >
-      {apuntaIzquierda ? <ChevronLeft size={15} /> : <ChevronRight size={15} />}
+      {apuntaIzquierda ? <ChevronLeft size={18} strokeWidth={2.5} /> : <ChevronRight size={18} strokeWidth={2.5} />}
       {badge !== undefined && (
         <span
           style={{

@@ -309,6 +309,7 @@ export function MarcacionesTable({
     setHorasMin(desde);
     setHorasMax(hasta);
   }, []);
+  const [companeroFilter, setCompaneroFilter] = useState<string[]>([]);
   // Quick filter por proveedor GPS
   const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
   // Marcación seleccionada para ver detalle de trips USS por patente
@@ -358,11 +359,17 @@ export function MarcacionesTable({
     if (mod === 'turno') return 'Turno';
     return 'Sin asignación';
   };
+  // Compañero: otro conductor asignado a la misma patente en la fecha (lo resuelve el hook).
+  const companeroLabel = (m: Marcacion): string =>
+    m.tieneCompanero === true ? 'Tiene' : m.tieneCompanero === false ? 'No tiene' : 'Sin dato';
+  const companerosUnicos = useMemo(() =>
+    [...new Set(marcaciones.map(m => companeroLabel(m)))].sort()
+  , [marcaciones]);
   const turnosUnicos = useMemo(() =>
     [...new Set(marcaciones.map(m => modalidadLabel(m.vehiculoModalidad)))].filter(Boolean).sort()
   , [marcaciones]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || kmMin !== '' || kmMax !== '' || horasMin !== '' || horasMax !== '' || gpsFilter !== null || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || companeroFilter.length > 0 || kmMin !== '' || kmMax !== '' || horasMin !== '' || horasMax !== '' || gpsFilter !== null || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
@@ -375,6 +382,7 @@ export function MarcacionesTable({
     setHorasMin('');
     setHorasMax('');
     setRangosResetKey(k => k + 1);
+    setCompaneroFilter([]);
     setGpsFilter(null);
     onSearchChange('');
   };
@@ -421,16 +429,25 @@ export function MarcacionesTable({
           && (horasHasta === undefined || min <= Math.round(horasHasta * 60));
       });
     }
+    if (companeroFilter.length > 0) {
+      filtered = filtered.filter(m => companeroFilter.includes(companeroLabel(m)));
+    }
     if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
+      // Texto normalizado: sin acentos, espacios/tabs/saltos colapsados y sin bordes.
+      // Al copiar un nombre desde la grilla suele venir con espacios o saltos de línea
+      // al inicio, y eso hacía que la búsqueda no encontrara nada.
+      const normTexto = (v: string | null | undefined) => (v || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ').trim().toLowerCase();
+      const term = normTexto(searchTerm);
       const termPatente = normalizePatente(searchTerm).toLowerCase();
       filtered = filtered.filter(m =>
-        m.conductor.toLowerCase().includes(term) ||
+        normTexto(m.conductor).includes(term) ||
         normalizePatente(m.patente).toLowerCase().includes(termPatente)
       );
     }
     return filtered;
-  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, kmMin, kmMax, horasMin, horasMax, searchTerm]);
+  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, companeroFilter, kmMin, kmMax, horasMin, horasMax, searchTerm]);
 
   const marcacionesFiltradas = useMemo(() => {
     if (gpsFilter === null) return marcacionesSinGps;
@@ -460,30 +477,6 @@ export function MarcacionesTable({
 
   // Columnas
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
-    {
-      id: 'gps_col',
-      header: 'GPS',
-      cell: ({ row }) => {
-        const origen = row.original.gpsOrigen || 'USS'
-        const isGeotab = origen === 'GEOTAB'
-        return (
-          <span style={{
-            fontSize: '10px',
-            fontWeight: 600,
-            color: '#fff',
-            background: isGeotab ? '#3b82f6' : '#10b981',
-            padding: '2px 8px',
-            borderRadius: '3px',
-            whiteSpace: 'nowrap',
-            letterSpacing: '0.5px'
-          }}>
-            {origen}
-          </span>
-        )
-      },
-      enableSorting: false,
-      size: 70,
-    },
     {
       id: 'patente_col',
       accessorFn: (row) => row.patenteNormalizada || row.patente.replace(/\s/g, ''),
@@ -717,6 +710,31 @@ export function MarcacionesTable({
       enableSorting: false,
     },
     {
+      id: 'companero_col',
+      header: () => (
+        <ExcelColumnFilter label="Compañero" options={companerosUnicos} selectedValues={companeroFilter}
+          onSelectionChange={setCompaneroFilter} filterId="m-companero" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
+      ),
+      cell: ({ row }) => {
+        const m = row.original;
+        if (m.tieneCompanero == null) {
+          return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }} title="Sin conductor o sin asignación en esta patente para la fecha">-</span>;
+        }
+        if (!m.tieneCompanero) {
+          return <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)' }}>No</span>;
+        }
+        return (
+          <span title={m.companero || undefined} style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px', lineHeight: 1.2, maxWidth: '160px' }}>
+            <span style={{ alignSelf: 'flex-start', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px', color: '#fff', background: '#16a34a' }}>Sí</span>
+            {m.companero && (
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.companero}</span>
+            )}
+          </span>
+        );
+      },
+      enableSorting: false,
+    },
+    {
       accessorKey: 'estado',
       header: () => (
         <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
@@ -838,7 +856,7 @@ export function MarcacionesTable({
       enableSorting: false,
     },
   ], [conductorPatenteUnicos, conductorFilter,
-      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId,
+      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, companerosUnicos, companeroFilter, openFilterId,
       setOpenFilterId, onUpdateChecklist, historialActivo, setKmRango, setHorasRango, rangosResetKey]);
 
   // Exportar
@@ -871,6 +889,7 @@ export function MarcacionesTable({
       'Km Total': m.kmTotal,
       'Modalidad': modalidadLabel(m.vehiculoModalidad),
       'Turno': getHorarioLabel(m.horario, m.vehiculoModalidad),
+      'Compañero': m.tieneCompanero === true ? (m.companero || 'Sí') : m.tieneCompanero === false ? 'No' : '',
       'Estado': estadoVisual(m),
       'GNC': m.gncCargado ? 'Sí' : 'No',
       'Lavado': m.lavadoRealizado ? 'Sí' : 'No',
@@ -1019,6 +1038,8 @@ export function MarcacionesTable({
         data={marcaciones}
         rowFilter={filtroModulo}
         columns={columns}
+        // Patente y Conductor quedan fijas al desplazar la tabla a la derecha
+        stickyLeftColumns={2}
         loading={isLoading}
         showSearch={false}
         emptyIcon={<ClipboardList size={48}

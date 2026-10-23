@@ -21,6 +21,7 @@ import { X, Search, Link2, AlertTriangle, Check } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useSede } from '../../../contexts/SedeContext'
 import { showSuccess } from '../../../utils/toast'
 
 interface LeadFila {
@@ -40,6 +41,7 @@ interface ConductorFila {
   apellidos: string | null
   numero_dni: string | null
   numero_cuit: string | null
+  sede_id: string | null
 }
 
 type Situacion = 'convertido' | 'huerfano'
@@ -67,6 +69,7 @@ function fmtFecha(v: string | null): string {
 
 export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () => void; onActualizado?: () => void }) {
   const { profile } = useAuth()
+  const { sedes, sedeActualId } = useSede()
   const [guardandoId, setGuardandoId] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -85,7 +88,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
             .select('id, nombre_completo, dni, cuit, estado_de_lead, proceso, fecha_convertido, created_at')
             .limit(20000),
           (supabase.from('conductores') as any)
-            .select('id, nombres, apellidos, numero_dni, numero_cuit')
+            .select('id, nombres, apellidos, numero_dni, numero_cuit, sede_id')
             .limit(20000),
         ])
         if (leadsRes.error) throw leadsRes.error
@@ -93,7 +96,12 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
         if (cancelado) return
 
         const leads = (leadsRes.data || []) as LeadFila[]
-        const conductores = (condRes.data || []) as ConductorFila[]
+        // Los conductores de la sede de pruebas (solo_admin, p. ej. "Pruebas") no
+        // se cruzan con leads reales: solo cuentan si se está viendo esa sede.
+        // Se arma por lista positiva porque a los no-admin esa sede ni les llega.
+        const sedesValidas = new Set(sedes.filter(s => !s.solo_admin || s.id === sedeActualId).map(s => s.id))
+        const conductores = ((condRes.data || []) as ConductorFila[])
+          .filter(c => !c.sede_id || sedesValidas.has(c.sede_id))
 
         // Indice de conductores por documento normalizado (DNI y CUIT).
         const porDoc = new Map<string, ConductorFila>()
@@ -150,7 +158,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
       }
     })()
     return () => { cancelado = true }
-  }, [])
+  }, [sedes, sedeActualId])
 
   /** Marca el lead como convertido, escribiendo los MISMOS campos que
    *  LeadsModule.handleConvertir. No crea ni modifica el conductor: la relacion
