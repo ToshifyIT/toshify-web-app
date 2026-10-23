@@ -21,6 +21,7 @@ import { cargarConceptosTarifa, getPeriodoTarifa } from '../tarifaConceptos'
 import type { TipoTarifa } from '../../../types/onboarding.types'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from '../../leads/leadEstados'
 import { derivarUbicacion } from './ubicacion'
+import { esConductorInterno } from '../../../utils/conductorUtils'
 import { API_GEOCODING } from './apisGoogle'
 import {
   GOOGLE_MAPS_API_KEY,
@@ -446,7 +447,8 @@ export async function fetchConductoresMapa(
   if (error) ({ data, error } = await consultar(false))
   if (error) throw error
 
-  const rows = (data || []) as ConductorRow[]
+  // Los conductores comodín del equipo interno no van al mapa, la lista ni las métricas.
+  const rows = ((data || []) as ConductorRow[]).filter((r) => !esConductorInterno(r))
 
   const ultimoHorario = await fetchUltimoHorarioPorConductor(rows.map((r) => r.id))
   const [asignacionesActivas, conceptosTarifa] = await Promise.all([
