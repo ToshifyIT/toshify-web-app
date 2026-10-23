@@ -1877,6 +1877,8 @@ export default function MultasModule() {
       <DataTable
         data={multasFiltradas}
         columns={columns}
+        // Fec. Carga, Semana, Fec. Infracción y Patente quedan fijas al desplazar a la derecha
+        stickyLeftColumns={4}
         searchPlaceholder="Buscar por patente, conductor, lugar..."
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}

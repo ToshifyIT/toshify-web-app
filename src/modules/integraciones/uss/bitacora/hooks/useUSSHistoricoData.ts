@@ -15,7 +15,7 @@ import {
   wialonBitacoraService,
   type BitacoraRegistroTransformado,
 } from '../../../../../services/wialonBitacoraService';
-import { agruparMarcacionesPorDia } from '../utils/marcacionesPorDia';
+import { agruparMarcacionesPorDia, claveChecklist } from '../utils/marcacionesPorDia';
 
 // Zona horaria Argentina
 const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires';
@@ -28,12 +28,21 @@ function getToday(): string {
   return toArgentinaDateString(new Date());
 }
 
+/** yyyy-MM-dd del dia siguiente. */
+function diaSiguiente(fecha: string): string {
+  const d = new Date(`${fecha}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // Marcación: 1 fila por conductor por día (de wialon_bitacora)
 export interface Marcacion {
   id: string;
   conductor: string;
   conductorId: string | null;
   conductorDni?: string | null;
+  /** Estado del conductor en el sistema (codigo: ACTIVO, BAJA...). */
+  conductorEstado?: string | null;
   ibutton: string | null;
   fecha: string; // YYYY-MM-DD (fecha_turno)
   patente: string;
@@ -105,6 +114,7 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
     conductor: reg.conductor_wialon || 'Sin conductor',
     conductorId: reg.conductor_id,
     conductorDni: (reg as any).conductor_dni || null,
+    conductorEstado: reg.conductor_estado ?? null,
     ibutton: reg.ibutton,
     fecha: reg.fecha_turno,
     patente: reg.patente,
@@ -163,6 +173,9 @@ export function useUSSHistoricoData(
 
   // Marcaciones de wialon_bitacora
   const [marcaciones, setMarcaciones] = useState<Marcacion[]>([]);
+  // Ultimas marcaciones, para que updateChecklist lea la fila sin recrearse.
+  const marcacionesRef = useRef<Marcacion[]>([]);
+  useEffect(() => { marcacionesRef.current = marcaciones; }, [marcaciones]);
 
   // Paginación (solo para Histórico)
   const [page, setPage] = useState(1);
@@ -228,8 +241,9 @@ export function useUSSHistoricoData(
           .from('parametros_sistema')
           .select('clave, valor')
           .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo']),
-        // Viajes crudos de Geotab: con ellos las cards se rearman en 1 fila por dia
-        wialonBitacoraService.getViajesGeotab(dateRange.startDate, dateRange.endDate, {
+        // Viajes crudos de Geotab: con ellos las cards se rearman en 1 fila por jornada.
+        // Se pide un dia mas: la ultima jornada nocturna cierra al dia siguiente a las 12:00.
+        wialonBitacoraService.getViajesGeotab(dateRange.startDate, diaSiguiente(dateRange.endDate), {
           sedeId,
           tabla: opciones?.tablaGeotabHistorico,
         }),
@@ -392,11 +406,32 @@ export function useUSSHistoricoData(
       }
       // ===== FIN ALERTA LIMITE KM =====
 
-      // GEOTAB: 1 fila por conductor por dia (7 por semana), armada desde los viajes
+      // GEOTAB: 1 fila por conductor por jornada (7 por semana), armada desde los viajes
       // crudos. Va despues del acumulado semanal para que cada fila lo herede.
       marcacionesTransformadas = agruparMarcacionesPorDia(
         marcacionesTransformadas, viajesGeotab, dateRange.startDate, dateRange.endDate,
       );
+
+      // Checklist por conductor + jornada (bitacora_checklist). Si falla, la grilla
+      // se muestra igual con el checklist vacio.
+      try {
+        const checklist = await wialonBitacoraService.getChecklist(
+          dateRange.startDate, dateRange.endDate,
+        );
+        const porClave = new Map(checklist.map(c => [`${c.conductor}|${c.fecha}`, c]));
+        marcacionesTransformadas = marcacionesTransformadas.map(m => {
+          const clave = claveChecklist(m);
+          const c = clave ? porClave.get(`${clave.conductor}|${clave.fecha}`) : undefined;
+          return {
+            ...m,
+            gncCargado: c?.gnc_cargado ?? false,
+            lavadoRealizado: c?.lavado_realizado ?? false,
+            naftaCargada: c?.nafta_cargada ?? false,
+          };
+        });
+      } catch (err) {
+        console.warn('[Bitacora] checklist no disponible:', err);
+      }
 
       // Compañero: otro conductor asignado a la misma patente en la fecha de la marcación.
       // Solo se informa si el conductor de la fila está asignado a esa patente ese día.
@@ -506,21 +541,30 @@ export function useUSSHistoricoData(
     setPage(1);
   }, []);
 
-  // Actualizar checklist de una marcación
+  // Actualizar checklist de una jornada: se guarda por conductor + jornada y se
+  // refleja en todas las filas de esa misma jornada.
   const updateChecklist = useCallback(async (
     id: string,
     updates: { gnc_cargado?: boolean; lavado_realizado?: boolean; nafta_cargada?: boolean }
   ) => {
-    await wialonBitacoraService.updateChecklist(id, updates);
-    // Actualizar localmente
-    setMarcaciones(prev => prev.map(m => {
-      if (m.id !== id) return m;
-      return {
-        ...m,
-        gncCargado: updates.gnc_cargado ?? m.gncCargado,
-        lavadoRealizado: updates.lavado_realizado ?? m.lavadoRealizado,
-        naftaCargada: updates.nafta_cargada ?? m.naftaCargada,
-      };
+    const m = marcacionesRef.current.find(x => x.id === id);
+    const clave = m ? claveChecklist(m) : null;
+    if (!m || !clave) return;
+    const nuevo = {
+      gncCargado: updates.gnc_cargado ?? m.gncCargado,
+      lavadoRealizado: updates.lavado_realizado ?? m.lavadoRealizado,
+      naftaCargada: updates.nafta_cargada ?? m.naftaCargada,
+    };
+    await wialonBitacoraService.guardarChecklist({
+      ...clave,
+      patente: m.patente,
+      gnc_cargado: nuevo.gncCargado,
+      lavado_realizado: nuevo.lavadoRealizado,
+      nafta_cargada: nuevo.naftaCargada,
+    });
+    setMarcaciones(prev => prev.map(x => {
+      const c = claveChecklist(x);
+      return c && c.conductor === clave.conductor && c.fecha === clave.fecha ? { ...x, ...nuevo } : x;
     }));
   }, []);
 
