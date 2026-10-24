@@ -389,6 +389,53 @@ function coberturaToshipass(f: { monto_toshipass?: number; subtotal_alquiler?: n
   return cobroApp - (f.subtotal_alquiler || 0) >= toshipass - TOLERANCIA_PESOS ? 'cubrio' : 'no_cubrio'
 }
 
+interface PagoSemana { monto: number; ref: string; fecha: string | null }
+/** Saldo anterior separado: saldo al cierre de la semana previa + pagos hechos en la semana. */
+interface SaldoSeparado { saldoCierre: number; pagos: PagoSemana[]; totalPagos: number }
+
+/**
+ * saldo_anterior se toma del saldo del conductor al momento de recalcular, sin corte por
+ * fecha: si pagó DURANTE la semana facturada, ese pago ya está adentro. Esto lo separa
+ * (solo para mostrar; no cambia totales):
+ *   saldoCierre (semana anterior) - pagos de la semana = saldo_anterior.
+ * Pagos de la semana = pagos manuales/efectivo del kardex (control_saldos) desde el inicio
+ * de la semana hasta el movimiento cuyo saldo es el que tomó la facturación. pago_cabify no
+ * cuenta: liquida la semana anterior. Si en la semana se eliminó un pago no se separa.
+ * `movsDesc`: movimientos del conductor, más recientes primero. Signos: saldo_anterior
+ * positivo = deuda; saldo_pendiente del kardex positivo = a favor.
+ */
+function separarPagosSemana(
+  saldoAnterior: number,
+  movsDesc: Array<{ tipo_movimiento: string; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null; created_at: string }>,
+  inicioSemanaMs: number,
+): SaldoSeparado | null {
+  if (!saldoAnterior) return null
+  const centavos = (n: number) => Math.round(n * 100)
+  const corte = movsDesc.find(m => centavos(m.saldo_pendiente || 0) === centavos(-saldoAnterior))
+  if (!corte) return null
+  const finMs = new Date(corte.created_at).getTime()
+  const enSemana = movsDesc.filter(m => {
+    const t = new Date(m.created_at).getTime()
+    return t >= inicioSemanaMs && t <= finMs
+  })
+  if (enSemana.some(m => m.tipo_movimiento === 'eliminacion_pago')) return null
+  const pagos = enSemana
+    .filter(m => ['pago_manual', 'pago_efectivo'].includes(m.tipo_movimiento) && (m.monto_movimiento || 0) > 0)
+    .reverse()
+    .map(m => ({ monto: m.monto_movimiento || 0, ref: m.referencia || 'Pago en efectivo', fecha: m.created_at || null }))
+  if (pagos.length === 0) return null
+  const totalPagos = Math.round(pagos.reduce((acc, p) => acc + p.monto, 0) * 100) / 100
+  return { saldoCierre: Math.round((saldoAnterior + totalPagos) * 100) / 100, pagos, totalPagos }
+}
+
+/** Fecha y hora AR de un movimiento, para tooltips ("20/10/2026, 11:00"). */
+function fechaHoraAR(iso: string): string {
+  return new Date(iso).toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}
+
 /** Ícono (i) con la explicación de una tarjeta de indicadores (al pasar el mouse). */
 function StatInfo({ text }: { text: string }) {
   return (
@@ -571,11 +618,15 @@ export function ReporteFacturacionTab() {
 
   // Desglose del saldo anterior: saldo previo + pago manual/efectivo = resultado.
   // Solo display; se lee del kardex (control_saldos). No afecta cálculos.
+  // Desglose visual del saldo anterior del modal de detalle.
+  //   saldoPrevio: saldo antes de los pagos listados (positivo = deuda, negativo = a favor).
+  //   cierreSemana: si viene, saldoPrevio es el saldo al cierre de esa semana y `pagos`
+  //   son los pagos hechos DURANTE la semana facturada (no son saldo anterior).
   const [detalleSaldoBreakdown, setDetalleSaldoBreakdown] = useState<{
     saldoPrevio: number
-    pago: number
-    pagoRef: string
+    pagos: Array<{ monto: number; ref: string; fecha: string | null }>
     resultado: number
+    cierreSemana: number | null
   } | null>(null)
 
 
@@ -716,6 +767,52 @@ export function ReporteFacturacionTab() {
     setBuscarConductor('')
     cargarFacturacion()
   }, [semanaActual, sedeActualId, sedeLoading])
+
+  // Saldo anterior separado por conductor (cierre semana previa + pagos de esta semana),
+  // para la columna "Saldo Ant." y los Excel. Solo visual: no cambia saldo_anterior.
+  const [saldosSeparados, setSaldosSeparados] = useState<Map<string, SaldoSeparado>>(new Map())
+  useEffect(() => {
+    let cancelado = false
+    const conSaldo = facturaciones.filter(f => Math.abs(f.saldo_anterior || 0) >= 0.01)
+    if (conSaldo.length === 0) {
+      setSaldosSeparados(new Map())
+      return
+    }
+    const inicioSemana = new Date(`${format(semanaActual.inicio, 'yyyy-MM-dd')}T00:00:00-03:00`)
+    const ids = [...new Set(conSaldo.map(f => f.conductor_id))]
+    void (async () => {
+      try {
+        // Solo hacen falta los movimientos desde el inicio de la semana: si el saldo que
+        // tomó la facturación es de antes, no hay pagos de la semana que separar.
+        const movs: any[] = []
+        for (let k = 0; k < ids.length; k += 200) {
+          const { data, error } = await (supabase.from('control_saldos') as any)
+            .select('conductor_id, tipo_movimiento, saldo_pendiente, monto_movimiento, referencia, created_at')
+            .in('conductor_id', ids.slice(k, k + 200))
+            .gte('created_at', inicioSemana.toISOString())
+            .order('created_at', { ascending: false })
+          if (error) throw error
+          movs.push(...(data || []))
+        }
+        const porConductor = new Map<string, any[]>()
+        for (const m of movs) {
+          const lista = porConductor.get(m.conductor_id)
+          if (lista) lista.push(m)
+          else porConductor.set(m.conductor_id, [m])
+        }
+        const resultado = new Map<string, SaldoSeparado>()
+        for (const f of conSaldo) {
+          const sep = separarPagosSemana(f.saldo_anterior, porConductor.get(f.conductor_id) || [], inicioSemana.getTime())
+          if (sep) resultado.set(f.conductor_id, sep)
+        }
+        if (!cancelado) setSaldosSeparados(resultado)
+      } catch (error) {
+        console.error('Error separando pagos de la semana:', error)
+        if (!cancelado) setSaldosSeparados(new Map())
+      }
+    })()
+    return () => { cancelado = true }
+  }, [facturaciones, semanaActual])
 
   // Cargar conceptos de nómina y parámetros de descuento al montar
   useEffect(() => {
@@ -6047,10 +6144,12 @@ export function ReporteFacturacionTab() {
         .order('fecha_pago', { ascending: false })
       setDetallePagos(pagos || [])
 
-      // Desglose del saldo anterior desde el kardex (control_saldos).
-      // Busca el movimiento de pago manual/efectivo cuyo saldo resultante coincide
-      // con el saldo_anterior de esta facturación, para mostrar: saldo previo, pago y resultado.
-      // Solo es visual: no modifica totales ni la facturación.
+      // Desglose del saldo anterior desde el kardex (control_saldos). Solo es visual:
+      // no modifica totales ni la facturación.
+      // saldo_anterior se toma del saldo del conductor al momento de recalcular, sin corte
+      // por fecha: si el conductor pagó DURANTE la semana facturada, ese pago ya está
+      // adentro. Para no mostrarlo como "saldo anterior" se separa:
+      //   saldo al cierre de la semana anterior + pagos de esta semana = saldo_anterior.
       try {
         const saldoAnt = facturacion.saldo_anterior || 0
         if (saldoAnt !== 0) {
@@ -6058,31 +6157,46 @@ export function ReporteFacturacionTab() {
             .select('tipo_movimiento, saldo_adeudado, saldo_a_favor, saldo_pendiente, monto_movimiento, referencia, created_at')
             .eq('conductor_id', facturacion.conductor_id)
             .order('created_at', { ascending: false })
-            .limit(15)
+            .limit(30)
           // El saldo_pendiente del kardex tiene signo invertido respecto a saldo_anterior
           // (a favor = positivo en kardex, negativo en facturación).
           const objetivo = -saldoAnt
-          const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
-          const match = (movs || []).find((m: any) =>
-            Math.round((m.saldo_pendiente || 0) * 100) === Math.round(objetivo * 100) &&
-            (m.monto_movimiento || 0) > 0 &&
-            tiposManuales.includes(m.tipo_movimiento)
-          )
-          if (match) {
-            const pago = match.monto_movimiento || 0
-            const resultado = match.saldo_pendiente || 0
-            // saldo previo = lo que debía ANTES del pago = pago - resultado.
-            // Nota: no se usa match.saldo_adeudado porque en el kardex ese campo es
-            // el saldo que quedó DESPUÉS del movimiento (no el previo), lo que hacía
-            // que en pagos parciales el desglose no reflejara la resta. pago - resultado
-            // reconstruye bien la deuda previa en todos los casos (parcial, exacto, a favor).
-            const saldoPrevio = pago - resultado
+          const centavos = (n: number) => Math.round(n * 100)
+          const lista = (movs || []) as any[]
+
+          // a) Pagos hechos durante la semana facturada: se muestran aparte del saldo anterior.
+          const inicioSemana = new Date(`${format(semanaActual.inicio, 'yyyy-MM-dd')}T00:00:00-03:00`).getTime()
+          const separado = separarPagosSemana(saldoAnt, lista, inicioSemana)
+          if (separado) {
             setDetalleSaldoBreakdown({
-              saldoPrevio,
-              pago,
-              pagoRef: match.referencia || 'Pago en efectivo',
-              resultado,
+              saldoPrevio: separado.saldoCierre,
+              pagos: separado.pagos,
+              resultado: objetivo,
+              cierreSemana: getWeek(subWeeks(semanaActual.inicio, 1), { weekStartsOn: 1 }),
             })
+          } else {
+            // b) Sin pagos en la semana: el pago manual que dejó el saldo (de antes de la semana).
+            const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
+            const match = lista.find(m =>
+              centavos(m.saldo_pendiente || 0) === centavos(objetivo) &&
+              (m.monto_movimiento || 0) > 0 &&
+              tiposManuales.includes(m.tipo_movimiento)
+            )
+            if (match) {
+              const pago = match.monto_movimiento || 0
+              const resultado = match.saldo_pendiente || 0
+              // saldo previo = lo que debía ANTES del pago = pago - resultado.
+              // Nota: no se usa match.saldo_adeudado porque en el kardex ese campo es
+              // el saldo que quedó DESPUÉS del movimiento (no el previo), lo que hacía
+              // que en pagos parciales el desglose no reflejara la resta. pago - resultado
+              // reconstruye bien la deuda previa en todos los casos (parcial, exacto, a favor).
+              setDetalleSaldoBreakdown({
+                saldoPrevio: pago - resultado,
+                pagos: [{ monto: pago, ref: match.referencia || 'Pago en efectivo', fecha: match.created_at || null }],
+                resultado,
+                cierreSemana: null,
+              })
+            }
           }
         }
       } catch {
@@ -7697,7 +7811,7 @@ export function ReporteFacturacionTab() {
         [''],
         ['DETALLE POR CONDUCTOR'],
         [''],
-        ['Conductor', 'DNI', 'CUIT', 'Vehículo', 'Tipo', 'Turnos', 'Alquiler', 'Garantía', 'Cargos', 'Descuentos', 'Saldo Ant.', 'Mora', 'Total']
+        ['Conductor', 'DNI', 'CUIT', 'Vehículo', 'Tipo', 'Turnos', 'Alquiler', 'Garantía', 'Cargos', 'Descuentos', 'Saldo Ant.', 'Pagos Sem.', 'Mora', 'Total']
       ]
 
       dataToExport.forEach(f => {
@@ -7712,7 +7826,8 @@ export function ReporteFacturacionTab() {
           f.subtotal_garantia,
           f.subtotal_cargos,
           f.subtotal_descuentos,
-          f.saldo_anterior,
+          saldosSeparados.get(f.conductor_id)?.saldoCierre ?? f.saldo_anterior,
+          -(saldosSeparados.get(f.conductor_id)?.totalPagos ?? 0),
           f.monto_mora,
           f.total_a_pagar
         ])
@@ -7725,7 +7840,8 @@ export function ReporteFacturacionTab() {
         dataToExport.reduce((sum, f) => sum + f.subtotal_garantia, 0),
         dataToExport.reduce((sum, f) => sum + f.subtotal_cargos, 0),
         dataToExport.reduce((sum, f) => sum + f.subtotal_descuentos, 0),
-        dataToExport.reduce((sum, f) => sum + f.saldo_anterior, 0),
+        dataToExport.reduce((sum, f) => sum + (saldosSeparados.get(f.conductor_id)?.saldoCierre ?? f.saldo_anterior), 0),
+        dataToExport.reduce((sum, f) => sum - (saldosSeparados.get(f.conductor_id)?.totalPagos ?? 0), 0),
         dataToExport.reduce((sum, f) => sum + f.monto_mora, 0),
         dataToExport.reduce((sum, f) => sum + f.total_a_pagar, 0)
       ])
@@ -9600,7 +9716,7 @@ export function ReporteFacturacionTab() {
         [`Semana ${semana} del ${anio}`],
         [`Período: ${fechaInicio} al ${fechaFin}`],
         [''],
-        ['Conductor', 'DNI', 'CUIT', 'Patente', 'Tipo', 'Días', 'Alquiler', 'Garantía', 'Descuentos', 'Peajes', 'Excesos KM', 'Penalidades', 'Saldo Ant.', 'Mora', 'TOTAL']
+        ['Conductor', 'DNI', 'CUIT', 'Patente', 'Tipo', 'Días', 'Alquiler', 'Garantía', 'Descuentos', 'Peajes', 'Excesos KM', 'Penalidades', 'Saldo Ant.', 'Pagos Sem.', 'Mora', 'TOTAL']
       ]
 
       dataToExport.forEach(f => {
@@ -9617,7 +9733,8 @@ export function ReporteFacturacionTab() {
           f.monto_peajes || 0,
           f.monto_excesos || 0,
           f.monto_penalidades || 0,
-          f.saldo_anterior,
+          saldosSeparados.get(f.conductor_id)?.saldoCierre ?? f.saldo_anterior,
+          -(saldosSeparados.get(f.conductor_id)?.totalPagos ?? 0),
           f.monto_mora,
           f.total_a_pagar
         ])
@@ -9634,7 +9751,8 @@ export function ReporteFacturacionTab() {
         dataToExport.reduce((sum, f) => sum + (f.monto_peajes || 0), 0),
         dataToExport.reduce((sum, f) => sum + (f.monto_excesos || 0), 0),
         dataToExport.reduce((sum, f) => sum + (f.monto_penalidades || 0), 0),
-        dataToExport.reduce((sum, f) => sum + f.saldo_anterior, 0),
+        dataToExport.reduce((sum, f) => sum + (saldosSeparados.get(f.conductor_id)?.saldoCierre ?? f.saldo_anterior), 0),
+        dataToExport.reduce((sum, f) => sum - (saldosSeparados.get(f.conductor_id)?.totalPagos ?? 0), 0),
         dataToExport.reduce((sum, f) => sum + f.monto_mora, 0),
         dataToExport.reduce((sum, f) => sum + f.total_a_pagar, 0)
       ])
@@ -11341,17 +11459,43 @@ export function ReporteFacturacionTab() {
       enableSorting: true,
     },
     {
-      accessorKey: 'saldo_anterior',
+      // Saldo al cierre de la semana anterior. Si el conductor pagó durante la semana,
+      // esos pagos se informan en el (i) y NO se suman acá (ya están en el TOTAL).
+      id: 'saldo_anterior',
+      accessorFn: (f) => saldosSeparados.get(f.conductor_id)?.saldoCierre ?? f.saldo_anterior,
       header: 'Saldo Ant.',
       cell: ({ row }) => {
-        const saldo = Math.abs(row.original.saldo_anterior) < 0.01 ? 0 : row.original.saldo_anterior
+        const separado = saldosSeparados.get(row.original.conductor_id)
+        const valor = separado ? separado.saldoCierre : row.original.saldo_anterior
+        const saldo = Math.abs(valor) < 0.01 ? 0 : valor
         return (
-        <span style={{
-          fontSize: '11px',
-          fontWeight: saldo !== 0 ? 600 : 400,
-          color: saldo > 0 ? 'var(--badge-red-text)' : saldo < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
-        }}>
-          {saldo !== 0 ? formatCurrency(saldo) : '-'}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{
+            fontSize: '11px',
+            fontWeight: saldo !== 0 ? 600 : 400,
+            color: saldo > 0 ? 'var(--badge-red-text)' : saldo < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
+          }}>
+            {saldo !== 0 ? formatCurrency(saldo) : '-'}
+          </span>
+          {separado && (
+            <AdaptiveTooltip
+              content={
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span>Pagos de esta semana (ya descontados del total):</span>
+                  {separado.pagos.map((p, idx) => (
+                    <span key={idx}>-{formatCurrency(p.monto)} · {p.ref}{p.fecha ? ` · ${fechaHoraAR(p.fecha)} hs` : ''}</span>
+                  ))}
+                  <span>Saldo aplicado en el total: {formatCurrency(row.original.saldo_anterior)}</span>
+                </div>
+              }
+              width={300}
+              variant="dark"
+            >
+              <span style={{ display: 'flex', alignItems: 'center', cursor: 'help', color: 'var(--text-secondary)' }}>
+                <Info size={12} />
+              </span>
+            </AdaptiveTooltip>
+          )}
         </span>
         )
       },
@@ -11447,7 +11591,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, openColumnFilter])
+  ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados])
 
   // Info de la semana
   const infoSemana = useMemo(() => {
@@ -13617,19 +13761,41 @@ export function ReporteFacturacionTab() {
                           border: '1px solid var(--border-primary)', borderBottom: 'none',
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Saldo adeudado anterior</span>
-                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#ff0033' }}>
-                              {formatCurrency(detalleSaldoBreakdown.saldoPrevio)}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            {/* saldoPrevio < 0 = el conductor ya tenia saldo a favor antes de los pagos */}
                             <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                              {detalleSaldoBreakdown.pagoRef || 'Pago'}
+                              {detalleSaldoBreakdown.saldoPrevio < 0 ? 'Saldo a favor' : 'Saldo adeudado'}
+                              {detalleSaldoBreakdown.cierreSemana !== null
+                                ? ` al cierre S${detalleSaldoBreakdown.cierreSemana}`
+                                : ' anterior'}
                             </span>
-                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
-                              -{formatCurrency(detalleSaldoBreakdown.pago)}
+                            <span style={{
+                              fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                              color: detalleSaldoBreakdown.saldoPrevio < 0 ? '#059669' : '#ff0033',
+                            }}>
+                              {detalleSaldoBreakdown.saldoPrevio < 0 ? '-' : ''}{formatCurrency(Math.abs(detalleSaldoBreakdown.saldoPrevio))}
                             </span>
                           </div>
+                          {detalleSaldoBreakdown.pagos.map((p, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {detalleSaldoBreakdown.cierreSemana !== null ? `Pago de esta semana · ${p.ref}` : p.ref}
+                                {p.fecha && (
+                                  <AdaptiveTooltip
+                                    content={`Pago registrado el ${fechaHoraAR(p.fecha)} hs`}
+                                    width={220}
+                                    variant="dark"
+                                  >
+                                    <span style={{ display: 'flex', alignItems: 'center', cursor: 'help', color: 'var(--text-secondary)' }}>
+                                      <Info size={13} />
+                                    </span>
+                                  </AdaptiveTooltip>
+                                )}
+                              </span>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
+                                -{formatCurrency(p.monto)}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       )}
                       <div style={{

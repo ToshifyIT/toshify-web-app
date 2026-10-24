@@ -1724,9 +1724,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         pdf.text('SALDO ANTERIOR', margin, y); y += 6
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
         if (detalleSaldoBreakdown) {
+          // saldoPrevio < 0 = el conductor ya tenia saldo a favor antes del pago
+          const previoAFavor = detalleSaldoBreakdown.saldoPrevio < 0
           pdf.setTextColor(gris)
-          pdf.text('Saldo adeudado anterior', margin, y)
-          pdf.text(formatCurrency(detalleSaldoBreakdown.saldoPrevio), pageWidth - margin, y, { align: 'right' })
+          pdf.text(previoAFavor ? 'Saldo a favor anterior' : 'Saldo adeudado anterior', margin, y)
+          if (previoAFavor) pdf.setTextColor(verde)
+          pdf.text(`${previoAFavor ? '-' : ''}${formatCurrency(Math.abs(detalleSaldoBreakdown.saldoPrevio))}`, pageWidth - margin, y, { align: 'right' })
           y += 5
           const pagoLbl = tipoLabelPdf[detalleSaldoBreakdown.pagoTipo || ''] || 'Pago Manual'
           const pagoRef = detalleSaldoBreakdown.pagoRef ? ` · ${detalleSaldoBreakdown.pagoRef}` : ''
@@ -2480,10 +2483,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           <div className="portal-detail-item">
                             <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>
                               <span className="portal-detail-item-dot" style={{ background: '#d1d5db' }} />
-                              Saldo adeudado anterior
+                              {detalleSaldoBreakdown.saldoPrevio < 0 ? 'Saldo a favor anterior' : 'Saldo adeudado anterior'}
                             </span>
-                            <span className="portal-detail-item-amount" style={{ color: '#9ca3af', fontStyle: 'italic' }}>
-                              {formatCurrency(detalleSaldoBreakdown.saldoPrevio)}
+                            <span className="portal-detail-item-amount" style={{
+                              color: detalleSaldoBreakdown.saldoPrevio < 0 ? '#059669' : '#9ca3af', fontStyle: 'italic',
+                            }}>
+                              {detalleSaldoBreakdown.saldoPrevio < 0 ? '-' : ''}{formatCurrency(Math.abs(detalleSaldoBreakdown.saldoPrevio))}
                             </span>
                           </div>
                           <div className="portal-detail-item">
