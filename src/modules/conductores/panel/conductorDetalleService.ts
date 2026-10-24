@@ -44,6 +44,11 @@ export interface FacturacionSemana {
   pagado: number
   saldo: number
   saldoAnterior: number                   // arrastre de semanas previas (ya incluido en proforma)
+  // Aportes de ESTA semana que ya estaban dentro de saldo_anterior: la facturación toma el
+  // saldo del conductor al recalcular, sin corte por fecha, así que un pago hecho durante
+  // la semana entra en saldo_anterior Y figura como aporte de la semana. Hay que restarlo
+  // una sola vez. Saldo al cierre de la semana anterior = saldoAnterior + pagoEnSaldoAnterior.
+  pagoEnSaldoAnterior: number
   cobertura: number                       // 0..100
   estado: 'cubierto' | 'pendiente' | 'favor'
 }
@@ -440,6 +445,32 @@ export async function cargarResumenExtra(
   return { gananciaCabify }
 }
 
+/**
+ * Suma de los aportes de la semana (semana/anio del kardex) que ya quedaron dentro de
+ * saldo_anterior. saldo_anterior es el saldo del kardex en un movimiento puntual (el que
+ * tomó la facturación al recalcular): el más reciente cuyo saldo_pendiente es
+ * -saldo_anterior. Los aportes de la semana registrados hasta ese movimiento ya están
+ * adentro. `movsDesc`: movimientos del conductor, más recientes primero.
+ */
+function aportesEnSaldoAnterior(
+  movsDesc: Array<{ semana: number | null; anio: number | null; tipo_movimiento: string; monto_movimiento: number | null; saldo_pendiente: number | null; created_at: string }>,
+  saldoAnterior: number,
+  semana: number,
+  anio: number,
+  tiposAporte: string[],
+): number {
+  if (Math.abs(saldoAnterior) < 0.01) return 0
+  const centavos = (n: number) => Math.round(n * 100)
+  const corte = movsDesc.find(m => centavos(Number(m.saldo_pendiente || 0)) === centavos(-saldoAnterior))
+  if (!corte) return 0
+  const finMs = new Date(corte.created_at).getTime()
+  const total = movsDesc
+    .filter(m => m.semana === semana && m.anio === anio && tiposAporte.includes(m.tipo_movimiento))
+    .filter(m => new Date(m.created_at).getTime() <= finMs)
+    .reduce((acc, m) => acc + Number(m.monto_movimiento || 0), 0)
+  return Math.round(total * 100) / 100
+}
+
 // Facturacion por semana del conductor (desde S11/2026, igual que el portal).
 export async function cargarFacturacionConductor(conductorId: string): Promise<FacturacionSemana[]> {
   const [{ data: facts }, { data: pagos }] = await Promise.all([
@@ -448,8 +479,9 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
       .select('id, total_a_pagar, saldo_anterior, vehiculo_patente, tipo_alquiler, turnos_base, turnos_cobrados, periodos_facturacion!inner(semana, anio, fecha_inicio, fecha_fin)')
       .eq('conductor_id', conductorId),
     (supabase.from('control_saldos') as any)
-      .select('semana, anio, tipo_movimiento, monto_movimiento')
-      .eq('conductor_id', conductorId),
+      .select('semana, anio, tipo_movimiento, monto_movimiento, saldo_pendiente, created_at')
+      .eq('conductor_id', conductorId)
+      .order('created_at', { ascending: false }),
   ])
 
   const tiposAporte = ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota']
@@ -471,8 +503,11 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
     const proforma = parseImporte(f.total_a_pagar)
     const saldoAnterior = parseImporte(f.saldo_anterior)
     const pagado = pagadoPorSemana[`${semana}-${anio}`] || 0
-    const saldo = proforma - pagado
-    const cobertura = proforma > 0 ? Math.min(100, (pagado / proforma) * 100) : (pagado > 0 ? 100 : 0)
+    const pagoEnSaldoAnterior = aportesEnSaldoAnterior((pagos || []) as Array<any>, saldoAnterior, semana, anio, tiposAporte)
+    // Lo que faltaba pagar antes de los aportes de la semana (proforma + lo ya aplicado).
+    const totalSemana = proforma + pagoEnSaldoAnterior
+    const saldo = totalSemana - pagado
+    const cobertura = totalSemana > 0 ? Math.min(100, (pagado / totalSemana) * 100) : (pagado > 0 ? 100 : 0)
     const estado: FacturacionSemana['estado'] = saldo > TOLERANCIA ? 'pendiente' : (saldo < -TOLERANCIA ? 'favor' : 'cubierto')
     rows.push({
       id: String(f.id),
@@ -483,7 +518,7 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
       modalidad: f.tipo_alquiler ?? null,
       turnosCobrados: Number(f.turnos_cobrados || 0),
       turnosBase: Number(f.turnos_base || 0),
-      proforma, pagado, saldo, saldoAnterior, cobertura, estado,
+      proforma, pagado, saldo, saldoAnterior, pagoEnSaldoAnterior, cobertura, estado,
     })
   }
   return rows.sort((a, b) => b.anio - a.anio || b.semana - a.semana)
