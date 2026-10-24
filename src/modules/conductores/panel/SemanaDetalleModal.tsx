@@ -66,7 +66,9 @@ export function SemanaDetalleModal({
   const subtotalDescuentos = descuentos.reduce((s, c) => s + c.total, 0)
   const pagos = detalle?.pagos || []
   const totalAportado = pagos.reduce((s, p) => s + p.monto, 0)
-  const saldoAnterior = semana.saldoAnterior
+  // Saldo al cierre de la semana anterior: si un aporte de esta semana ya estaba dentro de
+  // saldo_anterior se lo saca de ahí, porque se muestra (y se resta) en Aportes.
+  const saldoAnterior = semana.saldoAnterior + (semana.pagoEnSaldoAnterior || 0)
 
   // Monto Total Referencial y Pendiente: misma formula que el portal Mi Espacio
   // (PortalPage: `totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior`,
