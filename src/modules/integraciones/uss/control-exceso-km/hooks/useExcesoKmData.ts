@@ -16,6 +16,15 @@ import type { Marcacion } from '../../bitacora/hooks/useUSSHistoricoData'
 
 const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires'
 
+// Estimar el conductor de los viajes GEOTAB sin conductor (paso 3b) por la asignación
+// del vehículo y el horario. DESACTIVADO 2026-10-26: los km tienen que coincidir con el
+// "Reporte avanzado de viajes" de Geotab, donde esos viajes figuran sin conductor. Con
+// la estimación se le sumaban a un conductor viajes que no eran suyos (ej. AI513UD
+// 26/10 16:06-18:37: Llanos ya había sacado la llave y se le contaban 39 km). Ahora
+// esos km van a la fila informativa "Sin conductor · <patente>" y no cuentan para el
+// exceso de nadie.
+const ESTIMAR_CONDUCTOR_SIN_LLAVE = false
+
 // Conductor sentinela para trips GEOTAB sin conductor (histórico pre-NFC).
 // Se muestra tal cual en la columna Conductor y agrupa por patente.
 const SIN_CONDUCTOR_PREFIX = 'Sin conductor'
@@ -353,7 +362,10 @@ export function useExcesoKmData(sedeId?: string | null) {
       //     conductor). No es el vecino más cercano (regla del 2026-09-16): solo se
       //     atribuye si la asignación del vehículo tiene un conductor para ese horario.
       //     El viaje queda marcado `estimado` y la tabla avisa que hay que verificarlo.
-      const huerfanosGeotab = tripsSemana.filter(t => t.gpsOrigen === 'GEOTAB' && !t.condEf)
+      //     Desactivado: ver ESTIMAR_CONDUCTOR_SIN_LLAVE.
+      const huerfanosGeotab = ESTIMAR_CONDUCTOR_SIN_LLAVE
+        ? tripsSemana.filter(t => t.gpsOrigen === 'GEOTAB' && !t.condEf)
+        : []
       if (huerfanosGeotab.length > 0) {
         const { data: paramsTurno } = await supabase
           .from('parametros_sistema')

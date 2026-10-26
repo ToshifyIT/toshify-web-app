@@ -6,12 +6,15 @@
  */
 
 // useMemo removed - stats now computed inside MarcacionesTable
+import { useCallback } from 'react';
 import { UserCheck, List } from 'lucide-react';
 import { useSede } from '../../../../contexts/SedeContext';
 import { useUSSHistoricoData } from './hooks/useUSSHistoricoData';
 import { BitacoraHeader } from './components';
 import { HistoricoTable } from './components/HistoricoTable';
 import { MarcacionesTable } from './components/MarcacionesTable';
+import { ActualizarGeotabButton } from './components/ActualizarGeotabButton';
+import { wialonBitacoraService } from '../../../../services/wialonBitacoraService';
 import './styles/bitacora.css';
 import '../styles/uss.css';
 
@@ -45,18 +48,37 @@ export function BitacoraModule({ tablaGeotab, tablaGeotabHistorico, soloGeotab }
     searchTerm,
     handleSearchChange,
     updateChecklist,
+    refresh,
   } = useUSSHistoricoData(sedeActualId, { tablaGeotab, tablaGeotabHistorico, soloGeotab });
+
+  // Después de "Actualizar desde Geotab": sin cache, para leer lo que se acaba de guardar.
+  const recargarSinCache = useCallback(() => {
+    wialonBitacoraService.clearCache();
+    void refresh();
+  }, [refresh]);
 
   // Stats removed from here - now computed inside MarcacionesTable from filtered data
 
   const headerControls = (
-    <BitacoraHeader
-      dateRange={dateRange}
-      onDateRangePreset={setDateRangePreset}
-      onCustomDateRange={setCustomDateRange}
-      isLoading={loading}
-      weekOnly
-    />
+    <>
+      {/* Solo en la bitácora real: el módulo de prueba lee las tablas _vprueba. */}
+      {!tablaGeotab && !soloGeotab && (
+        <ActualizarGeotabButton
+          sedeId={sedeActualId}
+          startDate={dateRange.startDate}
+          endDate={dateRange.endDate}
+          isLoading={loading}
+          onActualizado={recargarSinCache}
+        />
+      )}
+      <BitacoraHeader
+        dateRange={dateRange}
+        onDateRangePreset={setDateRangePreset}
+        onCustomDateRange={setCustomDateRange}
+        isLoading={loading}
+        weekOnly
+      />
+    </>
   );
 
   return (
