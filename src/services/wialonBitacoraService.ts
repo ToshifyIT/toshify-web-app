@@ -780,5 +780,6 @@ export const wialonBitacoraService = {
   clearCache(): void {
     bitacoraCache.clear()
     statsCache.clear()
+    viajesCache.clear()
   },
 }
