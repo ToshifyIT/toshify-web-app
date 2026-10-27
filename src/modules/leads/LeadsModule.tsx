@@ -1649,6 +1649,24 @@ export function LeadsModule() {
     setShowDeleteModal(true)
   }
 
+  // Abrir la ficha de un lead por enlace: /leads?lead=<id>
+  // (lo usa Integraciones > 2Chat para "Ver lead" en una pestaña nueva)
+  const leadDeEnlaceAbierto = useRef(false)
+  useEffect(() => {
+    if (leadDeEnlaceAbierto.current) return
+    const leadId = new URLSearchParams(window.location.search).get('lead')
+    if (!leadId) return
+    leadDeEnlaceAbierto.current = true
+    void (async () => {
+      const { data, error } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle()
+      if (error || !data) {
+        Swal.fire('Lead no encontrado', 'El enlace no corresponde a un lead existente.', 'warning')
+        return
+      }
+      handleOpenDetails(data as Lead)
+    })()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // Calcula la ubicacion desde la direccion justo despues de guardar (evento),
   // cuando el formulario no trajo un pin. Si Google falla, el lead queda sin

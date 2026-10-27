@@ -1,0 +1,359 @@
+/* Integraciones > 2Chat */
+
+.tc-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Pestañas: reparten el ancho en partes iguales */
+.tc-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.tc-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  min-width: 0;
+  white-space: nowrap;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tc-tab:hover {
+  color: var(--text-primary);
+}
+
+.tc-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Tarjetas: 5 columnas iguales; bajan a 3 y 2 en pantallas chicas */
+.tc-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+}
+
+.tc-stats .stats-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tc-stats .stat-card {
+  min-width: 0;
+}
+
+.tc-stats .stat-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tc-stats .stat-card.active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.tc-pct {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+/* Acciones del header de la tabla */
+.tc-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tc-acciones .btn-primary,
+.tc-acciones .btn-secondary,
+.tc-filtros .btn-primary,
+.tc-filtros .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tc-select {
+  height: 40px;
+  padding: 0 40px 0 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+/* Selectores con formato de botón: flecha propia separada del borde */
+.tc-select,
+.tc-campo select.form-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.tc-select:hover,
+.tc-campo select.form-input:hover {
+  border-color: var(--text-tertiary);
+}
+
+.tc-select:focus,
+.tc-campo select.form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+}
+
+/* Botones del header de la tabla: misma altura que el selector */
+.tc-acciones .btn-primary,
+.tc-acciones .btn-secondary {
+  height: 40px;
+  justify-content: center;
+}
+
+/* Filtros de llamadas: 3 campos de igual ancho + botones, todos de la misma altura */
+.tc-filtros {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto auto;
+  align-items: end;
+  gap: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.tc-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.tc-campo .form-input {
+  height: 40px;
+  padding: 0 12px;
+  line-height: normal;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.tc-campo select.form-input {
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+.tc-filtros .btn-primary,
+.tc-filtros .btn-secondary {
+  height: 40px;
+  justify-content: center;
+}
+
+/* Secciones */
+.tc-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tc-seccion-titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Celdas */
+.tc-nombre {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tc-muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.tc-detalle {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tc-contacto {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.tc-contacto > .tc-badge {
+  align-self: flex-start;
+  margin-bottom: 2px;
+}
+
+.tc-link {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* Tipo de contacto de la llamada */
+.tc-tipo {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.tc-tipo--conductor {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.tc-tipo--lead {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+/* Badges */
+.tc-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.tc-badge--sincronizado,
+.tc-badge--atendida {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.tc-badge--pendiente {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.tc-badge--sin_telefono,
+.tc-badge--cancelada {
+  background: #f3f4f6;
+  color: #4b5563;
+  border-color: #e5e7eb;
+}
+
+.tc-badge--error,
+.tc-badge--telefono_duplicado,
+.tc-badge--fallida {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.tc-badge--no_atendida,
+.tc-badge--ocupado {
+  background: #ffedd5;
+  color: #9a3412;
+  border-color: #fed7aa;
+}
+
+/* Tabla por día */
+.tc-tabla-dia {
+  overflow-x: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.tc-tabla-dia table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tc-tabla-dia th,
+.tc-tabla-dia td {
+  padding: 8px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.tc-tabla-dia th:first-child,
+.tc-tabla-dia td:first-child {
+  text-align: left;
+}
+
+.tc-tabla-dia th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+}
+
+.tc-total {
+  font-weight: 600;
+}
+
+.tc-girando {
+  animation: tc-girar 1s linear infinite;
+}
+
+@keyframes tc-girar {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1100px) {
+  .tc-stats .stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tc-filtros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .tc-stats .stats-grid,
+  .tc-filtros,
+  .tc-filtros--registro {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

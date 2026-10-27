@@ -66,6 +66,9 @@ COPY --from=builder /app/dist ./dist
 # ERR_MODULE_NOT_FOUND al arrancar y el contenedor queda sin escuchar (502).
 COPY server.js ./
 COPY server-insights-directivo.js ./
+COPY server-2chat.js ./
+# server-2chat.js importa el normalizador de celulares de la API (misma regla en todo el sistema)
+COPY mcp/lib/telefono.js ./mcp/lib/telefono.js
 
 # Expose port 80
 EXPOSE 80

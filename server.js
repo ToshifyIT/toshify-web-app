@@ -14,6 +14,8 @@ import { Readable } from 'stream'
 import crypto from 'node:crypto'
 // Análisis con IA del Dashboard Directivo (Gemini, clave solo en el servidor)
 import { insightsDirectivoRouter } from './server-insights-directivo.js'
+// Integración 2Chat: contactos para llamadas + historial de llamadas (clave solo en el servidor)
+import { twoChatRouter } from './server-2chat.js'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
 
 const __filename = fileURLToPath(import.meta.url)
@@ -40,6 +42,9 @@ app.use((_req, res, next) => {
 
 // Rutas /api/insights-directivo (Dashboard Directivo, archivo aparte)
 app.use('/api/insights-directivo', insightsDirectivoRouter)
+
+// Rutas /api/2chat (Integraciones > 2Chat, archivo aparte)
+app.use('/api/2chat', twoChatRouter)
 
 // Google Drive service
 function getDriveService(writeAccess = false) {

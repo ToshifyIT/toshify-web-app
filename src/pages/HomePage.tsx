@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -47,6 +47,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'ctrl-exceso-km': Gauge,
   'bitacora-gps': History,
   'cabify': MapPin,
+  'twochat': Phone,
   'gestion-usuarios': UserCog,
   'roles': Shield,
   'menu-por-rol': List,
@@ -272,9 +273,12 @@ const BitacoraPage = lazy(() => import('./integraciones/uss/BitacoraPage').then(
 const BitacoraVPruebaPage = lazy(() => import('./integraciones/uss/BitacoraVPruebaPage').then(m => ({ default: m.BitacoraVPruebaPage })))
 const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExcesoKmPage').then(m => ({ default: m.ControlExcesoKmPage })))
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
+const TwoChatLlamadasPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatLlamadasPage })))
+const TwoChatContactosPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatContactosPage })))
 const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
 const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then(m => ({ default: m.DashboardKpisPage })))
 const DashboardDirectivoPage = lazy(() => import('./reportes/DashboardDirectivoPage').then(m => ({ default: m.DashboardDirectivoPage })))
+const DashboardKpisV2Page = lazy(() => import('./reportes/DashboardKpisV2Page').then(m => ({ default: m.DashboardKpisV2Page })))
 const DashboardMarketingPage = lazy(() => import('./reportes/DashboardMarketingPage').then(m => ({ default: m.DashboardMarketingPage })))
 const RolesPage = lazy(() => import('./administracion/RolesPage').then(m => ({ default: m.RolesPage })))
 const GestionUsuariosPage = lazy(() => import('./administracion/GestionUsuariosPage').then(m => ({ default: m.GestionUsuariosPage })))
@@ -2143,6 +2147,18 @@ export function HomePage() {
                   <LazyPage><CabifyPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              {/* 2Chat: grupo con Control de llamadas y Contactos */}
+              <Route path="/integraciones/2chat" element={<Navigate to="/integraciones/2chat/llamadas" replace />} />
+              <Route path="/integraciones/2chat/llamadas" element={
+                <ProtectedRoute submenuName="twochat-llamadas" action="view">
+                  <LazyPage><TwoChatLlamadasPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/integraciones/2chat/contactos" element={
+                <ProtectedRoute submenuName="twochat-contactos" action="view">
+                  <LazyPage><TwoChatContactosPage /></LazyPage>
+                </ProtectedRoute>
+              } />
 
               {/* Reportes */}
               <Route path="/reportes" element={
@@ -2158,6 +2174,11 @@ export function HomePage() {
               <Route path="/reportes/dashboard-directivo" element={
                 <ProtectedRoute menuName="reportes" submenuName="dashboard-directivo" action="view">
                   <LazyPage><DashboardDirectivoPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/reportes/dashboard-kpis-v2" element={
+                <ProtectedRoute menuName="reportes" submenuName="dashboard-kpis-v2" action="view">
+                  <LazyPage><DashboardKpisV2Page /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/reportes/dashboard-marketing" element={
