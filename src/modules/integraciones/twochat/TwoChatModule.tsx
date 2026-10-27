@@ -101,7 +101,13 @@ interface ResumenAgente {
   conversaciones: number
   segundos: number
   promedioAtendidas: number
+  /** Números distintos llamados (conductores, leads y sin identificar). */
   conductores: number
+  /** Conductores distintos llamados. */
+  conductoresDistintos: number
+  /** Leads distintos llamados. */
+  leadsDistintos: number
+  /** Llamadas (no números) a conductores y a leads. */
   aConductores: number
   aLeads: number
   costo: number
@@ -129,6 +135,8 @@ function resumirPorAgente(llamadas: LlamadaTwoChat[]): ResumenAgente[] {
         segundos,
         promedioAtendidas: conDuracion.length ? segundos / conDuracion.length : 0,
         conductores: new Set(lista.map((l) => l.numero).filter(Boolean)).size,
+        conductoresDistintos: new Set(lista.filter((l) => l.tipo_contacto === 'conductor').map((l) => l.numero).filter(Boolean)).size,
+        leadsDistintos: new Set(lista.filter((l) => l.tipo_contacto === 'lead').map((l) => l.numero).filter(Boolean)).size,
         aConductores: lista.filter((l) => l.tipo_contacto === 'conductor').length,
         aLeads: lista.filter((l) => l.tipo_contacto === 'lead').length,
         costo: lista.reduce((acc, l) => acc + l.costo_usd, 0),
@@ -484,6 +492,8 @@ function LlamadasTab() {
         'Minutos totales': Number((r.segundos / 60).toFixed(1)),
         'Duración promedio': mmss(r.promedioAtendidas),
         'Números distintos': r.conductores,
+        'Conductores distintos': r.conductoresDistintos,
+        'Leads distintos': r.leadsDistintos,
         'Llamadas a conductores': r.aConductores,
         'Llamadas a leads': r.aLeads,
         'Costo USD': Number(r.costo.toFixed(2)),
@@ -530,9 +540,11 @@ function LlamadasTab() {
     { accessorKey: 'conversaciones', header: `+${SEGUNDOS_CONVERSACION} seg` },
     { accessorKey: 'segundos', header: 'Minutos', cell: ({ getValue }) => ((getValue() as number) / 60).toFixed(1) },
     { accessorKey: 'promedioAtendidas', header: 'Promedio', cell: ({ getValue }) => mmss(getValue() as number) },
+    // Todo en números distintos, para que se pueda comparar: conductores + leads
+    // + sin identificar = números distintos. Las llamadas a cada uno van en el Excel.
     { accessorKey: 'conductores', header: 'Números distintos' },
-    { accessorKey: 'aConductores', header: 'A conductores' },
-    { accessorKey: 'aLeads', header: 'A leads' },
+    { accessorKey: 'conductoresDistintos', header: 'Conductores' },
+    { accessorKey: 'leadsDistintos', header: 'Leads' },
     { accessorKey: 'pctAtendidas', header: '% atendidas', cell: ({ getValue }) => `${((getValue() as number) * 100).toFixed(0)}%` },
     { accessorKey: 'costo', header: 'Costo USD', cell: ({ getValue }) => (getValue() as number).toFixed(2) },
   ], [])

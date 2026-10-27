@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download, Tag, X, Lock } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -2519,7 +2519,7 @@ export function VehicleManagement() {
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDevueltos}</span><span className="stat-label">Dev. Proveedor</span></div>
           </div>
         </div>
-        {/* Fila 2: Categorias, GNC, Telepase */}
+        {/* Fila 2: Categorias */}
         <div className="veh-stats-grid" style={{ marginTop: '8px' }}>
           {Array.from(calculatedStats.categoriaCountMap.entries())
             .sort((a, b) => b[1] - a[1])
@@ -2530,22 +2530,6 @@ export function VehicleManagement() {
               </div>
             ))
           }
-          <div className={`stat-card stat-card-clickable ${activeStatCard === 'sinGnc' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('sinGnc')} title="Click para filtrar: Sin GNC">
-            <Fuel size={18} className="stat-icon" />
-            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosSinGnc}</span><span className="stat-label">Sin GNC</span></div>
-          </div>
-          <div className={`stat-card stat-card-clickable ${activeStatCard === 'conGnc' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('conGnc')} title="Click para filtrar: Con GNC">
-            <Fuel size={18} className="stat-icon" style={{ color: '#16a34a' }} />
-            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosConGnc}</span><span className="stat-label">Con GNC</span></div>
-          </div>
-          <div className={`stat-card stat-card-clickable ${activeStatCard === 'telepaseToshify' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('telepaseToshify')} title="Click para filtrar: Telepase Toshify">
-            <CreditCard size={18} className="stat-icon" />
-            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosTelepaseToshify}</span><span className="stat-label">Telepase Toshify</span></div>
-          </div>
-          <div className={`stat-card stat-card-clickable ${activeStatCard === 'telepase' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('telepase')} title="Click para filtrar: Telepase Propio">
-            <CreditCard size={18} className="stat-icon" />
-            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosConTelepase}</span><span className="stat-label">Telepase Propio</span></div>
-          </div>
         </div>
       </div>
 

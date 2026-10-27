@@ -2798,3 +2798,30 @@ input[type="date"].asig-status-select {
   gap: 6px;
   flex-shrink: 0;
 }
+
+/* Flecha contra la semana anterior en las tarjetas de Estado de Flota */
+.asig-stats .asig-comp {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.asig-module .asig-stats .asig-comp + .asig-turnos-desglose {
+  margin-left: 12px;
+}
+
+.asig-comp-sufijo {
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.asig-comp--bueno { color: #16a34a; }
+.asig-comp--malo { color: #dc2626; }
+.asig-comp--neutro { color: var(--text-tertiary); }
+
+@media (max-width: 767px) {
+  .asig-comp-sufijo { display: none; }
+}
