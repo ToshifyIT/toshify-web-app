@@ -2,6 +2,7 @@
 // Portal público para conductores - Mi Espacio
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
 import { patronIlikeSinAcentos } from '../../utils/nombreMatch'
+import { idsAportesEnFraccionamiento, cargarDesgloseFraccionamiento, type DesgloseFraccionamiento } from '../../utils/aportesFraccionados'
 import { jsPDF } from 'jspdf'
 import { format, parseISO, differenceInCalendarDays, subDays } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
@@ -301,7 +302,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   // % de IVA por concepto (conceptos_nomina). Se usa para mostrar cada cargo en NETO y
   // el IVA en su propio renglon, igual que el modulo de Facturacion. Ver utils/facturacionIva.
   const [ivaPorCodigo, setIvaPorCodigo] = useState<IvaPorCodigo>(() => new Map())
-  const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
+  // aplicadoAFraccionamiento: pago que bajó una deuda que después se fraccionó. Ya está
+  // dentro de las cuotas (P010): se muestra pero no se resta de la semana.
+  const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string; aplicadoAFraccionamiento: boolean }>>([])
   // Desglose del saldo anterior: saldo previo + pago manual/efectivo = resultado.
   // Solo display; se lee del kardex (control_saldos). No afecta cálculos.
   const [detalleSaldoBreakdown, setDetalleSaldoBreakdown] = useState<{
@@ -317,6 +320,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     // Fecha del movimiento (para mostrarla junto al aporte arriba).
     pagoFecha?: string | null
   } | null>(null)
+  // Semana con cuota 1 de un fraccionamiento de saldo: cierre - pagos - fraccionado.
+  // Los pagos de este desglose no se repiten en Aportes.
+  const [desgloseFrac, setDesgloseFrac] = useState<DesgloseFraccionamiento | null>(null)
   const [saldo, setSaldo] = useState<PortalSaldo | null>(null)
   const [fraccionamientos, setFraccionamientos] = useState<PortalFraccionamiento[]>([])
   // El bloque UI que muestra `fraccionamientos` está oculto (comentado), pero
@@ -1336,27 +1342,39 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     setDetalleError('')
     setDetallePagos([])
     setDetalleSaldoBreakdown(null)
+    setDesgloseFrac(null)
 
     // Pagos del conductor en esa semana/año desde control_saldos (kardex)
     const periodo = factura.periodos_facturacion
-    supabase
-      .from('control_saldos')
-      .select('id, tipo_movimiento, monto_movimiento, referencia, created_at')
-      .eq('conductor_id', factura.conductor_id)
-      .eq('semana', periodo.semana)
-      .eq('anio', periodo.anio)
-      .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
-      .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        if (!data) return
-        setDetallePagos((data as Array<{ id: string; tipo_movimiento: string; monto_movimiento: number; referencia: string | null; created_at: string }>).map(p => ({
-          id: p.id,
-          tipo: p.tipo_movimiento,
-          monto: Number(p.monto_movimiento) || 0,
-          referencia: p.referencia,
-          fecha: p.created_at,
-        })))
-      })
+    Promise.all([
+      supabase
+        .from('control_saldos')
+        .select('id, tipo_movimiento, monto_movimiento, referencia, created_at')
+        .eq('conductor_id', factura.conductor_id)
+        .eq('semana', periodo.semana)
+        .eq('anio', periodo.anio)
+        .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
+        .order('created_at', { ascending: true }),
+      // Cierres y fraccionamientos: para marcar los pagos que ya quedaron dentro de una
+      // deuda fraccionada (ver utils/aportesFraccionados).
+      supabase
+        .from('control_saldos')
+        .select('id, tipo_movimiento, referencia, created_at')
+        .eq('conductor_id', factura.conductor_id)
+        .in('tipo_movimiento', ['pago_cabify', 'ajuste_manual']),
+    ]).then(([{ data }, { data: cortes }]) => {
+      if (!data) return
+      const pagosSemana = data as Array<{ id: string; tipo_movimiento: string; monto_movimiento: number; referencia: string | null; created_at: string }>
+      const idsFraccionados = idsAportesEnFraccionamiento([...((cortes || []) as typeof pagosSemana), ...pagosSemana])
+      setDetallePagos(pagosSemana.map(p => ({
+        id: p.id,
+        tipo: p.tipo_movimiento,
+        monto: Number(p.monto_movimiento) || 0,
+        referencia: p.referencia,
+        fecha: p.created_at,
+        aplicadoAFraccionamiento: idsFraccionados.has(p.id),
+      })))
+    })
 
     // Desglose del saldo anterior desde el kardex (control_saldos).
     // Busca el movimiento de pago manual/efectivo cuyo saldo resultante coincide
@@ -1531,6 +1549,11 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         })
       }
 
+      // Se espera el desglose antes de mostrar el detalle: si no, primero aparece sin el
+      // bloque "Saldo anterior" y a los segundos cambia.
+      const desglose = await cargarDesgloseFraccionamiento(factura.conductor_id, factura.saldo_anterior || 0, items)
+        .catch(() => null)
+      setDesgloseFrac(desglose)
       setDetalleItems(items)
     } catch {
       setDetalleItems([])
@@ -1716,8 +1739,36 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         y += 5
       }
 
-      // SALDO ANTERIOR (desglose completo, igual que el modal)
-      if (saldoAntPdf !== 0) {
+      // SALDO ANTERIOR con fraccionamiento: cierre - pagos - fraccionado (igual que el modal)
+      if (desgloseFrac) {
+        checkPage(22 + desgloseFrac.pagos.length * 5)
+        y += 3
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(negro)
+        pdf.text('SALDO ANTERIOR', margin, y); y += 6
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
+        pdf.setTextColor(gris)
+        pdf.text(`Saldo adeudado al cierre S${desgloseFrac.cierreSemana}`, margin, y)
+        pdf.setTextColor(rojo)
+        pdf.text(formatCurrency(desgloseFrac.saldoCierre), pageWidth - margin, y, { align: 'right' })
+        y += 5
+        desgloseFrac.pagos.forEach(p => {
+          pdf.setTextColor(negro)
+          pdf.text(`${tipoLabelPdf[p.tipo] || p.tipo} · ${p.ref} · ${fechaCorta(p.fecha || '')}`, margin, y)
+          pdf.setTextColor(p.monto < 0 ? rojo : verde)
+          pdf.text(`${p.monto < 0 ? '+' : '-'}${formatCurrency(Math.abs(p.monto))}`, pageWidth - margin, y, { align: 'right' })
+          y += 5
+        })
+        pdf.setTextColor(negro)
+        pdf.text(`Fraccionamiento en ${desgloseFrac.fraccionamiento.cuotas} cuotas (P010)`, margin, y)
+        pdf.setTextColor('#6366F1')
+        pdf.text(`-${formatCurrency(desgloseFrac.fraccionamiento.monto)}`, pageWidth - margin, y, { align: 'right' })
+        y += 5
+        pdf.setTextColor(negro)
+        pdf.text(saldoAntPdf > 0 ? 'Resultado: deuda pendiente' : saldoAntPdf < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente', margin, y)
+        pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
+        pdf.text(`${saldoAntPdf > 0 ? '+' : saldoAntPdf < 0 ? '-' : ''}${formatCurrency(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+        y += 6
+      } else if (saldoAntPdf !== 0) {
         checkPage(28)
         y += 3
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(negro)
@@ -1755,10 +1806,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
       // APORTES (excluye el pago ya aplicado en el saldo anterior, igual que el modal)
       const pagoYaAplicadoIdPdf = detalleSaldoBreakdown?.pagoId || null
-      const pagosAportesPdf = pagoYaAplicadoIdPdf
-        ? detallePagos.filter(p => p.id !== pagoYaAplicadoIdPdf)
-        : detallePagos
-      const totalPagadoSemanaPdf = pagosAportesPdf.reduce((s, p) => s + p.monto, 0)
+      const idsEnDesgloseFracPdf = new Set((desgloseFrac?.pagos || []).map(p => p.id))
+      const pagosAportesPdf = detallePagos.filter(p => p.id !== pagoYaAplicadoIdPdf && !idsEnDesgloseFracPdf.has(p.id))
+      const totalPagadoSemanaPdf = pagosAportesPdf.filter(p => !p.aplicadoAFraccionamiento).reduce((s, p) => s + p.monto, 0)
       if (pagosAportesPdf.length > 0) {
         checkPage(16 + pagosAportesPdf.length * 5)
         y += 3
@@ -1771,8 +1821,18 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           const ref = p.referencia ? ` · ${p.referencia}` : ''
           pdf.setTextColor(negro)
           pdf.text(`${lbl}${ref} · ${fechaCorta(p.fecha)}`, margin, y)
-          pdf.setTextColor(verde)
-          pdf.text(`-${formatCurrency(p.monto)}`, pageWidth - margin, y, { align: 'right' })
+          if (p.aplicadoAFraccionamiento) {
+            // Ya descontado dentro de las cuotas (P010): se informa sin restarlo
+            pdf.setTextColor(156, 163, 175)
+            pdf.text(formatCurrency(p.monto), pageWidth - margin, y, { align: 'right' })
+            y += 4
+            pdf.setFontSize(8)
+            pdf.text('Aplicado a la deuda fraccionada (ya descontado en las cuotas)', margin + 3, y)
+            pdf.setFontSize(10)
+          } else {
+            pdf.setTextColor(verde)
+            pdf.text(`-${formatCurrency(p.monto)}`, pageWidth - margin, y, { align: 'right' })
+          }
           y += 5
         })
         pdf.setFont('helvetica', 'bold'); pdf.setTextColor(negro)
@@ -2339,12 +2399,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     // El pago que ya quedó aplicado dentro del "Saldo Anterior" no debe volver a
     // descontarse acá (si no, se resta dos veces). Lo excluimos de los aportes por su ID.
     const pagoYaAplicadoId = detalleSaldoBreakdown?.pagoId || null
-    const pagosAportes = pagoYaAplicadoId
-      ? detallePagos.filter(p => p.id !== pagoYaAplicadoId)
-      : detallePagos
+    const idsEnDesgloseFrac = new Set((desgloseFrac?.pagos || []).map(p => p.id))
+    const pagosAportes = detallePagos.filter(p => p.id !== pagoYaAplicadoId && !idsEnDesgloseFrac.has(p.id))
     // Saldo real = referencial - lo ya pagado (Cabify + ajustes + transferencias).
     // Si > 0 = todavia debe. Si <= 0 = cubierto o a favor.
-    const totalPagadoSemana = pagosAportes.reduce((s, p) => s + p.monto, 0)
+    // Los pagos que ya quedaron dentro de una deuda fraccionada no se restan.
+    const totalPagadoSemana = pagosAportes.filter(p => !p.aplicadoAFraccionamiento).reduce((s, p) => s + p.monto, 0)
     const saldoPendiente = totalAPagar - totalPagadoSemana
 
     return (
@@ -2473,8 +2533,59 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   )}
                 </div>
 
+                {/* SALDO ANTERIOR con fraccionamiento: cierre - pagos - fraccionado = resultado */}
+                {desgloseFrac && (
+                  <div className="portal-detail-section" style={{ marginTop: '8px' }}>
+                    <div className="portal-detail-section-title" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>Saldo Anterior</div>
+                    <div className="portal-detail-items">
+                      <div className="portal-detail-item">
+                        <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>
+                          <span className="portal-detail-item-dot" style={{ background: '#d1d5db' }} />
+                          Saldo adeudado al cierre S{desgloseFrac.cierreSemana}
+                        </span>
+                        <span className="portal-detail-item-amount" style={{ color: '#dc2626' }}>{formatCurrency(desgloseFrac.saldoCierre)}</span>
+                      </div>
+                      {desgloseFrac.pagos.map(p => (
+                        <div key={p.id} className="portal-detail-item">
+                          <span className="portal-detail-item-name">
+                            <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
+                            {({ pago_manual: 'Pago Manual', pago_efectivo: 'Pago en efectivo', pago: 'Pago', pago_cuota: 'Pago Cuota', cargo: 'Cargo' } as Record<string, string>)[p.tipo] || p.tipo}
+                            <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
+                              · {p.ref}{p.fecha ? ` · ${new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
+                            </span>
+                          </span>
+                          <span className="portal-detail-item-amount" style={{ color: p.monto < 0 ? '#dc2626' : '#059669', fontWeight: 600 }}>
+                            {p.monto < 0 ? '+' : '-'}{formatCurrency(Math.abs(p.monto))}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="portal-detail-item">
+                        <span
+                          className="portal-detail-item-name"
+                          title={`Tu deuda se dividió en ${desgloseFrac.fraccionamiento.cuotas} cuotas semanales; la de esta semana está en Conceptos.`}
+                        >
+                          <span className="portal-detail-item-dot" style={{ background: '#6366F1' }} />
+                          Fraccionamiento en {desgloseFrac.fraccionamiento.cuotas} cuotas
+                        </span>
+                        <span className="portal-detail-item-amount" style={{ color: '#6366F1', fontWeight: 600 }}>
+                          -{formatCurrency(desgloseFrac.fraccionamiento.monto)}
+                        </span>
+                      </div>
+                      <div className="portal-detail-item">
+                        <span className="portal-detail-item-name">
+                          <span className="portal-detail-item-dot" style={{ background: saldoAnterior > 0 ? '#dc2626' : '#059669' }} />
+                          {saldoAnterior > 0 ? 'Resultado: deuda pendiente' : saldoAnterior < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente'}
+                        </span>
+                        <span className="portal-detail-item-amount" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
+                          {saldoAnterior > 0 ? '+' : saldoAnterior < 0 ? '-' : ''}{formatCurrency(Math.abs(saldoAnterior))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* SALDO ANTERIOR */}
-                {saldoAnterior !== 0 && (
+                {saldoAnterior !== 0 && !desgloseFrac && (
                   <div className="portal-detail-section" style={{ marginTop: '8px' }}>
                     <div className="portal-detail-section-title" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>Saldo Anterior</div>
                     <div className="portal-detail-items">
@@ -2540,7 +2651,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                     ajuste_manual: 'Ajuste',
                     devolucion_garantia: 'Devolución Garantía',
                   }
-                  const totalPagado = pagosAportes.reduce((s, p) => s + p.monto, 0)
+                  const totalPagado = totalPagadoSemana
                   return (
                     <div className="portal-detail-section" style={{ marginTop: '8px' }}>
                       <div
@@ -2560,11 +2671,22 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                                 {tipoLabel[p.tipo] || p.tipo}
                                 <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
                                   {p.referencia ? `· ${p.referencia}` : ''} · {fecha}
+                                  {p.aplicadoAFraccionamiento ? ' · aplicado a la deuda fraccionada' : ''}
                                 </span>
                               </span>
-                              <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
-                                -{formatCurrency(p.monto)}
-                              </span>
+                              {p.aplicadoAFraccionamiento ? (
+                                <span
+                                  className="portal-detail-item-amount"
+                                  style={{ color: '#9ca3af' }}
+                                  title="Este pago bajó tu deuda antes de fraccionarla: ya está descontado en las cuotas."
+                                >
+                                  {formatCurrency(p.monto)}
+                                </span>
+                              ) : (
+                                <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
+                                  -{formatCurrency(p.monto)}
+                                </span>
+                              )}
                             </div>
                           )
                         })}

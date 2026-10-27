@@ -4,6 +4,7 @@ import { Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw 
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import type { Lead } from '../../../types/leads.types'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
+import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
 import { clasificarMotivoDesinteres } from '../leadMotivos'
 import '../LeadsModule.css'
 
@@ -129,6 +130,7 @@ interface LeadDetailViewProps {
 export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida, onRecalcularUbicacion, mostrarVideocuestionario = true }: LeadDetailViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null)
   const [recalculando, setRecalculando] = useState(false)
+  const { nombrePorId: embajadorPorId } = useConductoresEmbajador()
 
   const handleRecenter = () => {
     if (mapRef.current && lead.latitud != null && lead.longitud != null) {
@@ -368,6 +370,18 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
               {lead.id_fuente
                 ? <a href={lead.id_fuente} target="_blank" rel="noopener noreferrer">{lead.id_fuente}</a>
                 : '-'}
+            </span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Referido</span>
+            <span className="lead-detail-item-value">
+              {lead.referido === true ? 'Si' : lead.referido === false ? 'No' : '-'}
+            </span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Embajador</span>
+            <span className="lead-detail-item-value">
+              {lead.embajador_id ? embajadorPorId.get(lead.embajador_id) || '-' : '-'}
             </span>
           </div>
           <div className="lead-detail-item">

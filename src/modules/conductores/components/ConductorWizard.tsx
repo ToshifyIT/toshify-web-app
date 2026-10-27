@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { User, CreditCard, FileCheck, Phone, Shield, Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
+import { ReferidoEmbajadorFields } from './ReferidoEmbajadorFields'
 
 interface ConductorFormData {
   nombres: string
@@ -34,6 +35,8 @@ interface ConductorFormData {
   experiencia_previa: string
   antecedentes_penales: boolean
   cochera_propia: boolean
+  referido: boolean | null
+  embajador_id: string
   fecha_contratacion: string
   fecha_reincorpoaracion: string
   fecha_terminacion: string
@@ -507,6 +510,13 @@ export function ConductorWizard({
                 </select>
               </div>
             </div>
+
+            <ReferidoEmbajadorFields
+              referido={formData.referido}
+              embajadorId={formData.embajador_id}
+              onChange={(referido, embajador_id) => setFormData({ ...formData, referido, embajador_id })}
+              disabled={saving}
+            />
 
             <div className="form-row-3">
               <div className="form-group">
