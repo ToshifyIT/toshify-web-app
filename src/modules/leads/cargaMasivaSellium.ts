@@ -23,8 +23,10 @@
  * - Casillas (0/1): 1 → Sí; 0 → no se toca (el CRM pone 0 también cuando no hay dato).
  * - Leads EXISTENTES (2026-09-30): solo se completan campos vacíos del lead; lo que ya
  *   tiene valor no se toca (estado, fuente y observaciones incluidos). Excepción:
- *   created_at y fecha_carga, que siempre toman la "Fecha de creación" del Excel.
- * - Leads NUEVOS: fuente SELLIUM, created_at y fecha_carga = "Fecha de creación" del Excel.
+ *   created_at y fecha_carga, que siempre toman la fecha de creación del Excel.
+ * - Leads NUEVOS: fuente SELLIUM, created_at y fecha_carga = fecha de creación del Excel.
+ * - Fecha de creación (2026-10-28): si viene "Llegó por pauta el" (fecha Y hora) se usa
+ *   esa; si no, "Fecha de creación" (solo día → 00:00 hora Argentina).
  * - Guía (2026-10-07): "Propietario del contacto" → entrevistador_asignado, solo si es
  *   Ali, Eunice o Carla (por primer nombre). Otro propietario: no se carga. En leads
  *   existentes sigue la regla general (solo si la Guía está vacía).
@@ -40,6 +42,7 @@
  * - Se ignoran: Interés, Mayor de 21, Equipo asignado, Requires Human Intervention,
  *   Last Lead Interaction, Última modificación por, Última actividad,
  *   Anuncio de origen (pauta), Asignación, Valoración.
+ *   ("Llegó por pauta el" sí se usa: es la fecha y hora de creación, ver arriba.)
  */
 import { inferirSedeDeLead, normalizarTexto, type SedeRef } from '../../utils/sedeMatch'
 import { homologarGuia } from './guias'
@@ -109,6 +112,7 @@ const COL = {
   vehKm: 'km del auto',
   vehPatente: 'patente',
   link: 'link del anuncio (pauta)',
+  llegoPauta: 'llego por pauta el',
   propietario: 'propietario del contacto',
 } as const
 
@@ -198,6 +202,35 @@ export function fechaISO(v: unknown): string | null {
   if (!m) return null
   const anio = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])
   return iso(anio, Number(m[2]), Number(m[1]))
+}
+
+/**
+ * Fecha y hora del CRM → created_at en hora Argentina ("YYYY-MM-DDTHH:mm:00-03:00").
+ * Acepta "27/10/2026, 20:23", "27/10/2026 20:23", serie de Excel con hora u objeto Date.
+ * Sin hora → null (para eso está createdAtDesdeFecha).
+ */
+export function fechaHoraISO(v: unknown): string | null {
+  const armar = (fecha: string | null, h: number, m: number) =>
+    fecha && h >= 0 && h <= 23 && m >= 0 && m <= 59
+      ? `${fecha}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
+      : null
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return null
+    return armar(fechaISO(v), v.getHours(), v.getMinutes())
+  }
+  if (typeof v === 'number') {
+    const minutos = Math.round((v - Math.floor(v)) * 24 * 60)
+    return armar(fechaISO(Math.floor(v)), Math.floor(minutos / 60) % 24, minutos % 60)
+  }
+  const s = texto(v)
+  if (!s) return null
+  const hora = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?\s*$/i)
+  if (!hora) return null
+  let h = Number(hora[1])
+  const ampm = (hora[3] || '').toLowerCase().replace(/[\s.]/g, '')
+  if (ampm === 'pm' && h < 12) h += 12
+  if (ampm === 'am' && h === 12) h = 0
+  return armar(fechaISO(s), h, Number(hora[2]))
 }
 
 /**
@@ -341,6 +374,8 @@ export interface FilaSellium {
   causal: string | null
   estado: ResultadoEstado
   fechaCreacion: string | null
+  /** "Llegó por pauta el" con hora (ISO con -03:00); manda sobre fechaCreacion. */
+  llegadaPauta: string | null
   /** Datos para inferir sede (no se guardan ciudad/provincia por separado). */
   ubicacion: { sede: string | null; zona: string | null; direccion: string | null; city: string | null; region: string | null }
   /** Columnas que se escriben tal cual cuando tienen valor. */
@@ -411,6 +446,7 @@ export function mapearFilasSellium(filas: Fila[], headers: string[]): FilaSelliu
       causal,
       estado: calcularEstado(causal, tieneVehiculo, t(COL.docStatus), t(COL.estado)),
       fechaCreacion: fechaISO(leer(fila, COL.fecha)),
+      llegadaPauta: fechaHoraISO(leer(fila, COL.llegoPauta)),
       ubicacion: { sede: t(COL.sede), zona: t(COL.zona), direccion, city: ciudad, region: provincia },
       campos,
       casillas,
@@ -554,6 +590,16 @@ function lineaRecontacto(fecha: string | null, fuenteAnterior: string, estadoAnt
   return `${MARCA_RECONTACTO_SELLIUM}${cuando}: volvió a contactarse. Fuente anterior: ${fuenteAnterior}.${estado}`
 }
 
+/**
+ * Creación del lead según el Excel: "Llegó por pauta el" (con hora) si viene; si no,
+ * "Fecha de creación" a las 00:00. fecha_carga = el día de esa misma fecha.
+ */
+export function creacionDeFila(f: Pick<FilaSellium, 'fechaCreacion' | 'llegadaPauta'>): { createdAt: string; fecha: string } | null {
+  if (f.llegadaPauta) return { createdAt: f.llegadaPauta, fecha: f.llegadaPauta.slice(0, 10) }
+  if (f.fechaCreacion) return { createdAt: createdAtDesdeFecha(f.fechaCreacion), fecha: f.fechaCreacion }
+  return null
+}
+
 function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unknown> {
   const p: Record<string, unknown> = {
     ...f.campos,
@@ -564,9 +610,10 @@ function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unkno
   if (f.apellido) p.apellido = f.apellido
   if (f.email) p.email = f.email
   if (f.telefono) p.phone = telefonoParaGuardar(f.telefono)
-  if (f.fechaCreacion) {
-    p.fecha_carga = f.fechaCreacion
-    p.created_at = createdAtDesdeFecha(f.fechaCreacion)
+  const creacion = creacionDeFila(f)
+  if (creacion) {
+    p.fecha_carga = creacion.fecha
+    p.created_at = creacion.createdAt
   }
   if (f.estado.estado) p.estado_de_lead = f.estado.estado
   if (f.causal) p.observaciones = lineaCausal(f.causal)
@@ -593,12 +640,10 @@ function payloadActualizacion(
   }
 
   // created_at: siempre (se compara por instante; la base lo devuelve en otro formato).
-  if (f.fechaCreacion) {
-    const nuevaCreacion = createdAtDesdeFecha(f.fechaCreacion)
-    if (!mismoInstante(l.created_at, nuevaCreacion)) p.created_at = nuevaCreacion
-  }
+  const creacion = creacionDeFila(f)
+  if (creacion && !mismoInstante(l.created_at, creacion.createdAt)) p.created_at = creacion.createdAt
   // fecha_carga: misma regla que created_at (guardan la misma fecha del Excel).
-  if (f.fechaCreacion && !mismoInstante(l.fecha_carga, f.fechaCreacion)) p.fecha_carga = f.fechaCreacion
+  if (creacion && !mismoInstante(l.fecha_carga, creacion.fecha)) p.fecha_carga = creacion.fecha
 
   // Columnas directas del Excel (zona, turno, edad, dirección, vehículo, pauta…).
   for (const [campo, valor] of Object.entries(f.campos)) completar(campo, valor)

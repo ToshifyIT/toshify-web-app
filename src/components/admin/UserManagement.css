@@ -375,3 +375,48 @@
     font-size: 14px;
   }
 }
+
+/* Editar usuario: foto */
+.um-edit-foto {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.um-avatar.um-avatar-lg {
+  width: 64px;
+  height: 64px;
+  font-size: 20px;
+}
+
+.um-edit-foto-acciones {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.um-edit-foto-btn {
+  cursor: pointer;
+}
+
+.um-edit-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Tarjetas de arriba: filtran la tabla */
+.admin-module .stat-card-clickable {
+  cursor: pointer;
+}
+
+.admin-module .stat-card-active {
+  outline: 2px solid var(--color-primary, #ff0033);
+  outline-offset: -2px;
+}
