@@ -20,6 +20,7 @@ import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
+import { useConductoresEmbajador } from '../../hooks/useConductoresEmbajador'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import type { Lead, LeadFormData } from '../../types/leads.types'
@@ -448,6 +449,8 @@ function leadToFormData(lead: Lead): LeadFormData {
     observaciones: lead.observaciones || '',
     fuente_de_lead: lead.fuente_de_lead || '',
     codigo_referido: lead.codigo_referido || '',
+    referido: lead.referido ?? null,
+    embajador_id: lead.embajador_id || '',
   }
 }
 
@@ -623,6 +626,8 @@ export function LeadsModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions()
   const { profile } = useAuth()
   const { sedes, sedeActual, sedeActualId, verTodas, aplicarFiltroSede } = useSede()
+  // Nombre del conductor embajador para la columna Embajador
+  const { nombrePorId: embajadorPorId } = useConductoresEmbajador()
   const sedeKey = verTodas ? 'all' : (sedeActualId || 'none')
   const cacheHit = leadsCache?.sedeKey === sedeKey ? leadsCache : null
   const canCreate = canCreateInMenu('leads')
@@ -1707,9 +1712,25 @@ export function LeadsModule() {
     return false
   }
 
+  /**
+   * Referido = Sí exige elegir el conductor embajador. Sin referido no se guarda
+   * embajador. Devuelve false (y marca el error) si falta.
+   */
+  function validarReferido(fields: Record<string, unknown>): boolean {
+    if (fields.referido !== true) {
+      fields.embajador_id = null
+      return true
+    }
+    if (fields.embajador_id) return true
+    setEditErrors(prev => ({ ...prev, embajador_id: 'Seleccione el conductor embajador' }))
+    Swal.fire('Falta el embajador', 'El lead es referido: seleccione el conductor embajador (paso Proceso).', 'warning')
+    return false
+  }
+
   async function handleSaveCreate() {
     const fields = formDataToDbFields(formData)
     if (!prepararTelefonos(fields, null)) return
+    if (!validarReferido(fields)) return
     setSaving(true)
     try {
       // Asignar sede actual (UUID) al crear
@@ -1736,6 +1757,7 @@ export function LeadsModule() {
     if (!selectedLead) return
     const fields = formDataToDbFields(formData)
     if (!prepararTelefonos(fields, selectedLead)) return
+    if (!validarReferido(fields)) return
     setSaving(true)
     try {
       // Resolver sede_id si el campo sede texto cambió
@@ -2918,6 +2940,33 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
+      id: 'referido',
+      accessorFn: (row) => (row.referido === true ? 'Si' : row.referido === false ? 'No' : '-'),
+      header: 'Referido',
+      cell: ({ getValue }) => <span style={{ fontSize: '11px' }}>{getValue() as string}</span>,
+      size: 75,
+      meta: { cellAlign: 'center' },
+      enableSorting: true,
+    },
+    {
+      id: 'embajador',
+      accessorFn: (row) => (row.embajador_id ? embajadorPorId.get(row.embajador_id) || '-' : '-'),
+      header: 'Embajador',
+      cell: ({ getValue }) => {
+        const v = getValue() as string
+        return (
+          <span
+            title={v !== '-' ? v : undefined}
+            style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '160px' }}
+          >
+            {v}
+          </span>
+        )
+      },
+      size: 160,
+      enableSorting: true,
+    },
+    {
       id: 'entrevistador',
       accessorFn: (row) => row.entrevistador_asignado || '-',
       header: 'Guia',
@@ -3184,7 +3233,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords, uniqueGuias])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords, uniqueGuias, embajadorPorId])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||

@@ -132,6 +132,10 @@ export interface Lead {
   documentos_pendientes?: string | null
   link_facturacion?: string | null
   codigo_referido?: string | null
+  /** Llegó referido por un conductor (null = sin dato). */
+  referido?: boolean | null
+  /** Conductor que lo refirió (obligatorio si referido). */
+  embajador_id?: string | null
   ayuda_entrevista?: string | null
   url_folder?: string | null
 
@@ -240,6 +244,8 @@ export interface LeadFormData {
   observaciones?: string
   fuente_de_lead?: string
   codigo_referido?: string
+  referido?: boolean | null
+  embajador_id?: string
   url_folder?: string
 }
 

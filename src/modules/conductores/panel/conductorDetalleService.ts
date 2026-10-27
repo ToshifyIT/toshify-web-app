@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabase'
 import { getConceptoLabel } from '../../../utils/conceptoLabels'
 import { cargarIvaPorCodigo, desglosarIvaCargos, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import { patronIlikeSinAcentos } from '../../../utils/nombreMatch'
+import { idsAportesEnFraccionamiento, cargarDesgloseFraccionamiento, type DesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { parseImporte } from './conductoresPanelService'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
@@ -243,6 +244,9 @@ export interface PagoAporte {
   monto: number
   referencia: string | null
   fecha: string | null
+  // Pago usado para bajar una deuda que después se fraccionó: ya está dentro de las
+  // cuotas (P010), se muestra pero NO se resta de la semana.
+  aplicadoAFraccionamiento: boolean
 }
 export interface SemanaDetalle {
   conceptos: ConceptoDetalle[]
@@ -251,6 +255,8 @@ export interface SemanaDetalle {
   pagos: PagoAporte[]     // aportes de la semana (Cabify, manuales, etc.)
   ivaAlquiler: number     // IVA de los conceptos de alquiler (renglon propio)
   ivaOtros: number        // IVA del resto de los cargos (0 hoy, renglon propio si aparece)
+  // Semana con cuota 1 de un fraccionamiento de saldo: cierre - pagos - fraccionado.
+  desgloseFraccionamiento: DesgloseFraccionamiento | null
 }
 
 // Tipos de movimiento que cuentan como aporte del conductor (mismo criterio que el portal).
@@ -264,11 +270,12 @@ export async function cargarDetalleSemana(
   conductorId: string,
   semana: number,
   anio: number,
+  saldoAnterior = 0,
 ): Promise<SemanaDetalle> {
-  const [{ data: det }, vehRes, pagosRes, ivaPorCodigo] = await Promise.all([
+  const [{ data: det }, vehRes, pagosRes, ivaPorCodigo, cortesRes] = await Promise.all([
     supabase
       .from('facturacion_detalle')
-      .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento')
+      .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento, referencia_id, referencia_tipo')
       .eq('facturacion_id', facturaId)
       // Mismo orden que el portal: primero cargos y despues descuentos, y dentro
       // de cada grupo por codigo de concepto (P003, P007, P013...). Sin el segundo
@@ -287,6 +294,12 @@ export async function cargarDetalleSemana(
       .order('created_at', { ascending: true }),
     // % de IVA por concepto: misma fuente que el modulo de Facturacion.
     cargarIvaPorCodigo(),
+    // Cierres y fraccionamientos del conductor: para marcar los pagos que ya quedaron
+    // dentro de una deuda fraccionada (ver utils/aportesFraccionados).
+    (supabase.from('control_saldos') as any)
+      .select('id, tipo_movimiento, referencia, created_at')
+      .eq('conductor_id', conductorId)
+      .in('tipo_movimiento', ['pago_cabify', 'ajuste_manual']),
   ])
 
   const filas = ((det || []) as Array<any>)
@@ -321,16 +334,24 @@ export async function cargarDetalleSemana(
     ivaPorCodigo,
   )
 
+  const idsFraccionados = idsAportesEnFraccionamiento([
+    ...((cortesRes.data || []) as Array<any>),
+    ...((pagosRes.data || []) as Array<any>),
+  ])
   const pagos: PagoAporte[] = ((pagosRes.data || []) as Array<any>).map(p => ({
     id: String(p.id),
     tipo: p.tipo_movimiento,
     monto: Number(p.monto_movimiento) || 0,
     referencia: p.referencia ?? null,
     fecha: p.created_at ?? null,
+    aplicadoAFraccionamiento: idsFraccionados.has(p.id),
   }))
 
+  const desgloseFraccionamiento = await cargarDesgloseFraccionamiento(conductorId, saldoAnterior, (det || []) as Array<any>)
+    .catch(() => null)
+
   const veh = (vehRes.data && vehRes.data.length > 0) ? (vehRes.data[0] as any) : null
-  return { conceptos, grupoFlota: veh?.grupo_flota ?? null, gnc: veh?.gnc ?? null, pagos, ivaAlquiler, ivaOtros }
+  return { conceptos, grupoFlota: veh?.grupo_flota ?? null, gnc: veh?.gnc ?? null, pagos, ivaAlquiler, ivaOtros, desgloseFraccionamiento }
 }
 
 export interface ExcesoKmSemana {
@@ -453,11 +474,12 @@ export async function cargarResumenExtra(
  * adentro. `movsDesc`: movimientos del conductor, más recientes primero.
  */
 function aportesEnSaldoAnterior(
-  movsDesc: Array<{ semana: number | null; anio: number | null; tipo_movimiento: string; monto_movimiento: number | null; saldo_pendiente: number | null; created_at: string }>,
+  movsDesc: Array<{ id: string; semana: number | null; anio: number | null; tipo_movimiento: string; monto_movimiento: number | null; saldo_pendiente: number | null; created_at: string }>,
   saldoAnterior: number,
   semana: number,
   anio: number,
   tiposAporte: string[],
+  idsFraccionados: Set<string>,
 ): number {
   if (Math.abs(saldoAnterior) < 0.01) return 0
   const centavos = (n: number) => Math.round(n * 100)
@@ -466,6 +488,7 @@ function aportesEnSaldoAnterior(
   const finMs = new Date(corte.created_at).getTime()
   const total = movsDesc
     .filter(m => m.semana === semana && m.anio === anio && tiposAporte.includes(m.tipo_movimiento))
+    .filter(m => !idsFraccionados.has(m.id))
     .filter(m => new Date(m.created_at).getTime() <= finMs)
     .reduce((acc, m) => acc + Number(m.monto_movimiento || 0), 0)
   return Math.round(total * 100) / 100
@@ -479,15 +502,18 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
       .select('id, total_a_pagar, saldo_anterior, vehiculo_patente, tipo_alquiler, turnos_base, turnos_cobrados, periodos_facturacion!inner(semana, anio, fecha_inicio, fecha_fin)')
       .eq('conductor_id', conductorId),
     (supabase.from('control_saldos') as any)
-      .select('semana, anio, tipo_movimiento, monto_movimiento, saldo_pendiente, created_at')
+      .select('id, semana, anio, tipo_movimiento, monto_movimiento, saldo_pendiente, referencia, created_at')
       .eq('conductor_id', conductorId)
       .order('created_at', { ascending: false }),
   ])
 
   const tiposAporte = ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota']
+  // Pagos que ya quedaron dentro de una deuda fraccionada: no pagan la semana.
+  const idsFraccionados = idsAportesEnFraccionamiento((pagos || []) as Array<any>)
   const pagadoPorSemana: Record<string, number> = {}
   for (const p of (pagos || []) as Array<any>) {
     if (!tiposAporte.includes(p.tipo_movimiento)) continue
+    if (idsFraccionados.has(p.id)) continue
     const key = `${p.semana}-${p.anio}`
     pagadoPorSemana[key] = (pagadoPorSemana[key] || 0) + Number(p.monto_movimiento || 0)
   }
@@ -503,7 +529,7 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
     const proforma = parseImporte(f.total_a_pagar)
     const saldoAnterior = parseImporte(f.saldo_anterior)
     const pagado = pagadoPorSemana[`${semana}-${anio}`] || 0
-    const pagoEnSaldoAnterior = aportesEnSaldoAnterior((pagos || []) as Array<any>, saldoAnterior, semana, anio, tiposAporte)
+    const pagoEnSaldoAnterior = aportesEnSaldoAnterior((pagos || []) as Array<any>, saldoAnterior, semana, anio, tiposAporte, idsFraccionados)
     // Lo que faltaba pagar antes de los aportes de la semana (proforma + lo ya aplicado).
     const totalSemana = proforma + pagoEnSaldoAnterior
     const saldo = totalSemana - pagado

@@ -30,6 +30,8 @@ import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
+import { ReferidoEmbajadorFields } from "./components/ReferidoEmbajadorFields";
+import { useConductoresEmbajador } from "../../hooks/useConductoresEmbajador";
 
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
@@ -442,6 +444,8 @@ export function ConductoresModule() {
     experiencia_previa: "",
     antecedentes_penales: false,
     cochera_propia: false,
+    referido: null as boolean | null,
+    embajador_id: "",
     fecha_contratacion: "",
     fecha_reincorpoaracion: "",
     fecha_terminacion: "",
@@ -1167,6 +1171,16 @@ export function ConductoresModule() {
       return;
     }
 
+    if (formData.referido === true && !formData.embajador_id) {
+      Swal.fire({
+        icon: "warning",
+        title: "Falta el embajador",
+        text: "El conductor es referido: seleccione el conductor embajador (paso Seguridad).",
+        confirmButtonColor: "#ff0033",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       // Validar DNI duplicado antes de crear
@@ -1224,6 +1238,8 @@ export function ConductoresModule() {
             experiencia_previa: formData.experiencia_previa || null,
             antecedentes_penales: formData.antecedentes_penales,
             cochera_propia: formData.cochera_propia,
+            referido: formData.referido,
+            embajador_id: formData.referido === true ? formData.embajador_id || null : null,
             fecha_contratacion: formData.fecha_contratacion || null,
             fecha_reincorpoaracion: formData.fecha_reincorpoaracion || null,
             fecha_terminacion: formData.fecha_terminacion || null,
@@ -1342,6 +1358,9 @@ export function ConductoresModule() {
     if (!formData.email?.trim()) newErrors.email = 'Requerido (usado en contratos)';
     if (!formData.direccion?.trim()) newErrors.direccion = 'Requerido (usado en contratos)';
     if (!formData.estado_id) newErrors.estado_id = 'Debe seleccionar un estado';
+    if (formData.referido === true && !formData.embajador_id) {
+      newErrors.embajador_id = 'Seleccione el conductor embajador';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setEditErrors(newErrors);
@@ -1361,6 +1380,7 @@ export function ConductoresModule() {
         email: 'Email',
         direccion: 'Dirección',
         estado_id: 'Estado',
+        embajador_id: 'Embajador (es referido)',
       };
       const faltantes = Object.keys(newErrors).map(k => labels[k] || k);
       Swal.fire({
@@ -1813,6 +1833,8 @@ export function ConductoresModule() {
         experiencia_previa: formData.experiencia_previa || null,
         antecedentes_penales: formData.antecedentes_penales,
         cochera_propia: formData.cochera_propia,
+        referido: formData.referido,
+        embajador_id: formData.referido === true ? formData.embajador_id || null : null,
         fecha_contratacion: formData.fecha_contratacion || null,
         fecha_reincorpoaracion: formData.fecha_reincorpoaracion || null,
         fecha_terminacion: formData.fecha_terminacion || null,
@@ -2471,6 +2493,8 @@ export function ConductoresModule() {
       experiencia_previa: (fc as any).experiencia_previa || "",
       antecedentes_penales: fc.antecedentes_penales,
       cochera_propia: fc.cochera_propia,
+      referido: fc.referido ?? null,
+      embajador_id: fc.embajador_id || "",
       fecha_contratacion: fc.fecha_contratacion || "",
       fecha_reincorpoaracion: fc.fecha_reincorpoaracion || "",
       fecha_terminacion: fc.fecha_terminacion || "",
@@ -2716,6 +2740,8 @@ export function ConductoresModule() {
       experiencia_previa: "",
       antecedentes_penales: false,
       cochera_propia: false,
+      referido: null,
+      embajador_id: "",
       fecha_contratacion: "",
       fecha_reincorpoaracion: "",
       fecha_terminacion: "",
@@ -3992,6 +4018,7 @@ export function ConductoresModule() {
           saving={saving}
           handleUpdate={handleUpdate}
           setShowEditModal={setShowEditModal}
+          conductorId={selectedConductor.id}
           setSelectedConductor={setSelectedConductor}
           resetForm={resetForm}
           estadosCiviles={estadosCiviles}
@@ -4255,6 +4282,7 @@ function ModalEditar({
   saving,
   handleUpdate,
   setShowEditModal,
+  conductorId,
   setSelectedConductor,
   resetForm,
   estadosCiviles,
@@ -4870,6 +4898,22 @@ function ModalEditar({
           </div>
         </div>
 
+        <ReferidoEmbajadorFields
+          referido={formData.referido ?? null}
+          embajadorId={formData.embajador_id || ""}
+          onChange={(referido, embajador_id) => {
+            setFormData({ ...formData, referido, embajador_id });
+            if (editErrors?.embajador_id) {
+              const resto = { ...editErrors };
+              delete resto.embajador_id;
+              setEditErrors(resto);
+            }
+          }}
+          conductorId={conductorId}
+          disabled={saving}
+          error={editErrors?.embajador_id}
+        />
+
         <div className="section-title">Información de Seguridad</div>
 
         <div className="form-row-3">
@@ -5184,6 +5228,7 @@ function ModalDetalles({
   setShowDetailsModal,
   onConductorUpdated,
 }: any) {
+  const { nombrePorId: embajadorPorId } = useConductoresEmbajador();
   const [vehiculosAsignados, setVehiculosAsignados] = useState<any[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [historialBajas, setHistorialBajas] = useState<any[]>([]);
@@ -5707,6 +5752,22 @@ function ModalDetalles({
             <label className="detail-label">COCHERA PROPIA</label>
             <div className="detail-value">
               {(selectedConductor as any).cochera_propia ? "Sí" : "No"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">REFERIDO</label>
+            <div className="detail-value">
+              {(selectedConductor as any).referido === true
+                ? "Sí"
+                : (selectedConductor as any).referido === false ? "No" : "-"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">EMBAJADOR</label>
+            <div className="detail-value">
+              {(selectedConductor as any).embajador_id
+                ? embajadorPorId.get((selectedConductor as any).embajador_id) || "-"
+                : "-"}
             </div>
           </div>
           <div>
