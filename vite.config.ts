@@ -36,9 +36,39 @@ function insightsDirectivoDevApi(): Plugin {
   }
 }
 
+/**
+ * Monta la API de la integración 2Chat (/api/2chat) dentro del dev server de
+ * Vite, igual que insightsDirectivoDevApi. En producción la sirve server.js.
+ */
+function twoChatDevApi(): Plugin {
+  return {
+    name: 'toshify-2chat-dev-api',
+    apply: 'serve',
+    async configureServer(server) {
+      try {
+        const rutaModulo = path.resolve(server.config.root, 'server-2chat.js')
+        const { mtimeMs } = await stat(rutaModulo)
+        const modulo = `${pathToFileURL(rutaModulo).href}?v=${mtimeMs}`
+        const { twoChatRouter } = await import(/* @vite-ignore */ modulo)
+        server.middlewares.use('/api/2chat', twoChatRouter)
+        server.watcher.add(rutaModulo)
+        server.watcher.on('change', (archivo) => {
+          if (path.resolve(archivo) !== rutaModulo) return
+          void server.restart()
+        })
+      } catch (err) {
+        server.config.logger.warn(
+          '  [2chat] No se pudo montar /api/2chat: ' +
+            (err instanceof Error ? err.message : String(err)),
+        )
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), insightsDirectivoDevApi()],
+  plugins: [react(), insightsDirectivoDevApi(), twoChatDevApi()],
   esbuild: {
     drop: ['console', 'debugger'],
   },
