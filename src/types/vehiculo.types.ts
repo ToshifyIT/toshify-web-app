@@ -73,3 +73,11 @@ export const VEHICULO_ESTADO_LABELS: Record<string, string> = {
   'PROGRAMADO': 'Programado',
   'DEVUELTO_PROVEEDOR': 'Dev. Proveedor',
 };
+
+/** Categorías de vehículo (columna vehiculos.categoria, texto libre en la base). */
+export const VEHICULO_CATEGORIAS = [
+  'Autos del pueblo',
+  'Rentadora',
+  'Flota propia',
+  'Mobility Management',
+] as const

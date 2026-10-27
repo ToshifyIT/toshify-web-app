@@ -26,7 +26,7 @@ import { VehiculoWizard } from './components/VehiculoWizard'
 import { SearchableSelect } from '../../components/ui/SearchableSelect/SearchableSelect'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import { formatFechaART, formatHoraART, timestampART, toDateART } from '../../utils/fechaArgentina'
-import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
+import { VEHICULO_CATEGORIAS, VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import { useGruposFlota } from '../../hooks/useGruposFlota'
 import './VehicleManagement.css'
 
@@ -174,6 +174,7 @@ export function VehicleManagement() {
   const [colorFilter, setColorFilter] = useState<string[]>([])
   const [kmFilter, setKmFilter] = useState<string[]>([])
   const [titularFilter, setTitularFilter] = useState<string[]>([])
+  const [categoriaColFilter, setCategoriaColFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]) // Filtro de columna Estado
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
@@ -1683,6 +1684,13 @@ export function VehicleManagement() {
         onClear: () => setTitularFilter([])
       })
     }
+    if (categoriaColFilter.length > 0) {
+      filters.push({
+        id: 'categoria',
+        label: `Categoría: ${categoriaColFilter.length === 1 ? categoriaColFilter[0] : `${categoriaColFilter.length} seleccionados`}`,
+        onClear: () => setCategoriaColFilter([])
+      })
+    }
     if (estadoFilter.length > 0) {
       filters.push({
         id: 'estado',
@@ -1693,7 +1701,7 @@ export function VehicleManagement() {
 
     return filters
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, gncFilter])
+  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, categoriaColFilter, kmFilter, estadoFilter, gncFilter])
 
   // Limpiar todos los filtros
   const handleClearAllFilters = () => {
@@ -1707,6 +1715,7 @@ export function VehicleManagement() {
     setAnioFilter([])
     setColorFilter([])
     setTitularFilter([])
+    setCategoriaColFilter([])
     setKmFilter([])
     setEstadoFilter([])
   }
@@ -1740,6 +1749,16 @@ export function VehicleManagement() {
   const patentesUnicas = useMemo(() => {
     const patentes = vehiculos.map(v => v.patente).filter(Boolean) as string[]
     return [...new Set(patentes)].sort()
+  }, [vehiculos])
+
+  // Las categorías de la lista más cualquier otra que ya tenga algún vehículo
+  const categoriasUnicas = useMemo(() => {
+    const set = new Set<string>(VEHICULO_CATEGORIAS)
+    vehiculos.forEach(v => {
+      const c = (v as any).categoria
+      if (c) set.add(c)
+    })
+    return [...Array.from(set).sort(), 'Sin categoría']
   }, [vehiculos])
 
   const titularesUnicos = useMemo(() => {
@@ -1814,6 +1833,12 @@ export function VehicleManagement() {
     if (titularFilter.length > 0) {
       result = result.filter(v =>
         titularFilter.includes((v as any).titular || '')
+      )
+    }
+
+    if (categoriaColFilter.length > 0) {
+      result = result.filter(v =>
+        categoriaColFilter.includes((v as any).categoria || 'Sin categoría')
       )
     }
 
@@ -1897,7 +1922,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter, telepaseFilter, categoriaFilter])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter, telepaseFilter, categoriaFilter, categoriaColFilter])
 
 
   // Definir columnas para TanStack Table
@@ -1933,7 +1958,17 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'categoria',
-        header: 'Categoría',
+        header: () => (
+          <ExcelColumnFilter
+            label="Categoría"
+            options={categoriasUnicas}
+            selectedValues={categoriaColFilter}
+            onSelectionChange={setCategoriaColFilter}
+            filterId="categoria"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
         cell: ({ row }) => {
           const cat = (row.original as any).categoria
           if (!cat) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
@@ -2313,7 +2348,7 @@ export function VehicleManagement() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, titularFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, titularesUnicos, aniosUnicos, coloresUnicos, estadosUnicos, ussPatentes]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, titularFilter, categoriaColFilter, categoriasUnicas, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, titularesUnicos, aniosUnicos, coloresUnicos, estadosUnicos, ussPatentes]
   )
 
   // Exporta a Excel los vehículos actualmente visibles en la tabla, respetando:
@@ -3084,9 +3119,9 @@ export function VehicleManagement() {
                   disabled={saving}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="Autos del pueblo">Autos del pueblo</option>
-                  <option value="Rentadora">Rentadora</option>
-                  <option value="Flota propia">Flota propia</option>
+                  {VEHICULO_CATEGORIAS.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
             </div>
