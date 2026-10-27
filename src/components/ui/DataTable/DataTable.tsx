@@ -312,17 +312,27 @@ function FilterHeader({
     setPosition({ top, left });
   }, [isOpen]);
 
-  // Re-adjust after render if dropdown overflows viewport
+  // Re-adjust after render with the real size: horizontal overflow, and when it
+  // opens upwards, pegarlo al botón según su alto real (antes se usaba un alto fijo
+  // de 300px y los filtros cortos quedaban flotando lejos del encabezado).
   useLayoutEffect(() => {
-    if (!isOpen || !dropdownRef.current) return;
+    if (!isOpen || !dropdownRef.current || !buttonRef.current) return;
     const dropdownRect = dropdownRef.current.getBoundingClientRect();
+    const buttonRect = buttonRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
-    if (dropdownRect.right > viewportWidth - 8) {
-      setPosition(prev => ({
-        ...prev,
-        left: Math.max(8, viewportWidth - dropdownRect.width - 8)
-      }));
-    }
+    setPosition(prev => {
+      let { top, left } = prev;
+      if (dropdownRect.right > viewportWidth - 8) {
+        left = Math.max(8, viewportWidth - dropdownRect.width - 8);
+      }
+      const abreArriba = top < buttonRect.top;
+      if (abreArriba) {
+        top = Math.max(8, buttonRect.top - dropdownRect.height - 4);
+      } else if (top + dropdownRect.height > window.innerHeight - 8 && buttonRect.top - dropdownRect.height - 4 >= 8) {
+        top = buttonRect.top - dropdownRect.height - 4;
+      }
+      return top === prev.top && left === prev.left ? prev : { top, left };
+    });
   }, [isOpen]);
 
   // Clear search when closing
@@ -353,8 +363,9 @@ function FilterHeader({
         left = Math.max(8, viewportWidth - dropdownWidth - 8);
       }
       if (left < 8) left = 8;
-      if (top + 300 > window.innerHeight) {
-        top = rect.top - 304;
+      const dropdownHeight = dropdownRef.current?.getBoundingClientRect().height || 300;
+      if (top + dropdownHeight > window.innerHeight - 8) {
+        top = Math.max(8, rect.top - dropdownHeight - 4);
       }
       setPosition({ top, left });
     };

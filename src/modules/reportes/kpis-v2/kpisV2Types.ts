@@ -86,10 +86,6 @@ export function sumarDias(iso: string, dias: number): string {
   return fromUtc(toUtc(iso) + dias * DIA_MS)
 }
 
-export function diasEntre(desde: string, hasta: string): number {
-  return Math.round((toUtc(hasta) - toUtc(desde)) / DIA_MS)
-}
-
 /** Lunes de la semana de la fecha. */
 export function lunesDe(iso: string): string {
   const dow = new Date(toUtc(iso)).getUTCDay() // 0 = domingo
@@ -209,14 +205,6 @@ export interface Conductores {
 }
 
 export type Motivo = { motivo: string; cantidad: number }
-
-/** "  consiguió otro TRABAJO " → "Consiguió otro trabajo" (para agrupar texto libre). */
-export function normalizarMotivo(m: string | null): string {
-  const t = (m ?? '').replace(/\s+/g, ' ').trim()
-  if (!t) return 'Sin motivo cargado'
-  const l = t.toLocaleLowerCase('es-AR')
-  return l.charAt(0).toLocaleUpperCase('es-AR') + l.slice(1)
-}
 
 /**
  * Temas de baja. El motivo se carga como texto libre; se clasifica por
@@ -545,21 +533,9 @@ export function periodoPorDefecto(periodos: Periodo[]): Periodo | null {
 /** Desde cuándo hay datos para mostrar (el histórico se reconstruye desde acá). */
 export const INICIO_DATOS = '2026-03-01'
 
-/** 0 = todo desde INICIO_DATOS. */
-export const RANGOS_SEMANA = [0, 8, 12, 26] as const
-export const RANGOS_MES = [0, 3, 6] as const
-
-export function rangoConsulta(granularidad: Granularidad, cantidad: number, hoy: string) {
-  if (cantidad === 0) {
-    // Mismo rango para semanal y mensual: cambiar de vista no vuelve a pedir datos
-    return { desde: lunesDe(INICIO_DATOS), hasta: hoy }
-  }
-  if (granularidad === 'semana') {
-    return { desde: sumarDias(lunesDe(hoy), -7 * (cantidad - 1)), hasta: hoy }
-  }
-  const [y, m] = hoy.slice(0, 7).split('-').map(Number)
-  const inicio = new Date(Date.UTC(y, m - 1 - (cantidad - 1), 1))
-  return { desde: fromUtc(inicio.getTime()), hasta: hoy }
+/** Siempre todo desde INICIO_DATOS; igual para semanal y mensual, así cambiar de vista no vuelve a pedir datos. */
+export function rangoConsulta(hoy: string) {
+  return { desde: lunesDe(INICIO_DATOS), hasta: hoy }
 }
 
 /** Hoy en Argentina (la base corta los días en hora Argentina). */

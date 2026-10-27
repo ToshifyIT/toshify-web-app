@@ -6,7 +6,6 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
-import * as XLSX from 'xlsx'
 import {
   Shield,
   Users,
@@ -25,7 +24,6 @@ import {
   RotateCcw,
   Scale,
   Download,
-  Upload,
   HelpCircle,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -36,6 +34,7 @@ import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { recalcGarantiasForSede } from '../../../services/garantiasService'
+import { descargarExcel } from '../../../utils/excelCorporativo'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
 import { X as XIcon } from 'lucide-react'
@@ -261,7 +260,6 @@ export function GarantiasTab() {
   // Sub-tab activo (Movimientos removido - no se usa)
   const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
   
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [garantias, setGarantias] = useState<GarantiaConductor[]>([])
   // Saldo de cuenta corriente por conductor_id, tal como lo muestra la pestaña
   // Saldos (saldos_conductores.saldo_actual). Negativo = deuda.
@@ -1592,72 +1590,115 @@ export function GarantiasTab() {
     'Correo Electrónico': '', 'CBU': '', 'CUIT': '', 'Estado Civil': '',
   }
 
-  const COLS_CONTACTO = [
-    { wch: 16 }, // Celular
-    { wch: 40 }, // Dirección
-    { wch: 28 }, // Contacto Emergencia
-    { wch: 18 }, // Teléfono Emergencia
-    { wch: 30 }, // Correo Electrónico
-    { wch: 24 }, // CBU
-    { wch: 15 }, // CUIT
-    { wch: 14 }, // Estado Civil
-  ]
+  // ====== EXPORTAR DEUDORES (para cobranza) ======
+  // Conductores DE BAJA que, aun descontando la garantía que les retenemos, nos
+  // siguen debiendo (estado "Debe"). Sin filtros de la tabla: siempre todos.
+  // Solo datos útiles para cobrar (contacto, deuda y con qué empresa firmó).
+  //
+  // Empresa del contrato = grupo de flota (razón social) de los autos que tuvo.
+  // Misma regla que Facturación: si alguna vez tuvo un auto de 44 DREAMS es
+  // 44 Dreams; si no, o si no hay dato, Grupo CG.
+  //
+  // También: cuándo empezó su primera asignación y la modalidad de la última
+  // (Diurno, Nocturno o A cargo).
+  interface DatosAsignacion { empresa: string; inicio: string; modalidad: string }
 
-  // ====== EXPORTAR GARANTÍAS A EXCEL ======
-  async function exportarGarantias() {
-    if (garantias.length === 0) {
-      Swal.fire('Sin datos', 'No hay garantías para exportar', 'info')
+  async function cargarDatosAsignacion(conductorIds: string[]): Promise<Map<string, DatosAsignacion>> {
+    const MODALIDAD: Record<string, string> = { diurno: 'Diurno', nocturno: 'Nocturno', a_cargo: 'A cargo', todo_dia: 'A cargo' }
+    const porConductor = new Map<string, { con44: boolean; inicio: string | null; ultimaFecha: string; ultimaModalidad: string }>()
+    const LOTE = 100
+    for (let i = 0; i < conductorIds.length; i += LOTE) {
+      const { data, error } = await (supabase.from('asignaciones_conductores') as any)
+        .select('conductor_id, fecha_inicio, horario, asignaciones(modalidad, fecha_inicio, vehiculos(grupo_flota))')
+        .in('conductor_id', conductorIds.slice(i, i + LOTE))
+      if (error) throw error
+      for (const ac of (data || []) as any[]) {
+        const fecha: string | null = ac.fecha_inicio || ac.asignaciones?.fecha_inicio || null
+        const actual = porConductor.get(ac.conductor_id) ?? { con44: false, inicio: null, ultimaFecha: '', ultimaModalidad: '' }
+        const grupo = String(ac.asignaciones?.vehiculos?.grupo_flota || '').toUpperCase()
+        if (grupo.includes('44 DREAM')) actual.con44 = true
+        if (fecha && (!actual.inicio || fecha < actual.inicio)) actual.inicio = fecha
+        if ((fecha ?? '') >= actual.ultimaFecha) {
+          actual.ultimaFecha = fecha ?? ''
+          const clave = ac.asignaciones?.modalidad === 'a_cargo' ? 'a_cargo' : (ac.horario || '')
+          actual.ultimaModalidad = MODALIDAD[clave] || clave
+        }
+        porConductor.set(ac.conductor_id, actual)
+      }
+    }
+    return new Map(conductorIds.map(id => {
+      const d = porConductor.get(id)
+      return [id, {
+        empresa: d?.con44 ? '44 Dreams' : 'Grupo CG',
+        inicio: d?.inicio ? formatDate(d.inicio) : '',
+        modalidad: d?.ultimaModalidad || '',
+      }]
+    }))
+  }
+
+  async function exportarDeudores() {
+    const deudores = garantias.filter(g =>
+      (g as any).estado_conductor === 'BAJA' && garantiaPorCobrar(g, saldosPorConductor)
+    )
+    if (deudores.length === 0) {
+      Swal.fire('Sin datos', 'No hay conductores de baja que nos deban', 'info')
       return
     }
 
     let contactos: Map<string, Record<string, string>>
+    let asignaciones: Map<string, DatosAsignacion>
     try {
-      contactos = await cargarContactosPorDni()
+      ;[contactos, asignaciones] = await Promise.all([
+        cargarContactosPorDni(),
+        cargarDatosAsignacion([...new Set(deudores.map(g => g.conductor_id))]),
+      ])
     } catch (error) {
-      console.error('Error cargando datos de contacto:', error)
-      Swal.fire('Error', 'No se pudieron cargar los datos de contacto para el reporte', 'error')
+      console.error('Error cargando datos de deudores:', error)
+      Swal.fire('Error', 'No se pudieron cargar los datos para el reporte de deudores', 'error')
       return
     }
 
-    const data = garantias.map((g) => ({
-      'DNI': g.conductor_dni || '',
-      'Conductor': g.conductor_nombre || '',
-      'Monto Total': g.monto_total,
-      'Monto Pagado': g.monto_realmente_pagado || g.monto_pagado,
-      'Cuotas Totales': g.cuotas_totales,
-      'Cuotas Pagadas': g.cuotas_pagadas,
-      // Vacio (no 0) cuando el conductor no tiene registro en saldos_conductores.
-      'Saldo Actual': saldosPorConductor.get(g.conductor_id) ?? '',
-      // Mismo estado y monto que la columna "Estado" de la tabla
-      ...(() => {
-        const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
-        const liq = liquidacionGarantia(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
-        return { 'Estado': e.estado, 'Liquidación': liq ?? '' }
-      })(),
-      ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
-    }))
+    const redondear = (n: number) => Math.round(n * 100) / 100
+    const data = deudores
+      .map((g) => {
+        const c = contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO
+        const fechaBaja = (g as any).fecha_baja as string | null
+        return {
+          'DNI': g.conductor_dni || '',
+          'CUIT': c['CUIT'],
+          'Conductor': g.conductor_nombre || '',
+          'Empresa contrato': asignaciones.get(g.conductor_id)?.empresa || 'Grupo CG',
+          'Modalidad': asignaciones.get(g.conductor_id)?.modalidad || '',
+          'Inicio con Toshify': asignaciones.get(g.conductor_id)?.inicio || '',
+          'Fecha de baja': fechaBaja ? formatDate(fechaBaja) : '',
+          // Saldo pendiente − garantía retenida = a cobrar
+          'Saldo pendiente': redondear(Math.abs(Math.min(saldosPorConductor.get(g.conductor_id) ?? 0, 0))),
+          'Garantía retenida': redondear(garantiaRetenida(g)),
+          'A cobrar': redondear(Math.abs(netoDevolucion(g, saldosPorConductor) ?? 0)),
+          'Celular': c['Celular'],
+          'Correo electrónico': c['Correo Electrónico'],
+          'Dirección': c['Dirección'],
+          'Contacto de emergencia': c['Contacto Emergencia'],
+          'Teléfono de emergencia': c['Teléfono Emergencia'],
+        }
+      })
+      .sort((a, b) => b['A cobrar'] - a['A cobrar'])
 
-    const ws = XLSX.utils.json_to_sheet(data)
-
-    ws['!cols'] = [
-      { wch: 14 }, // DNI
-      { wch: 35 }, // Conductor
-      { wch: 14 }, // Monto Total
-      { wch: 14 }, // Monto Pagado
-      { wch: 14 }, // Cuotas Totales
-      { wch: 14 }, // Cuotas Pagadas
-      { wch: 16 }, // Saldo Actual
-      { wch: 26 }, // Estado
-      { wch: 16 }, // Monto Estado
-      ...COLS_CONTACTO,
-    ]
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Garantias')
-
-    const fecha = new Date().toISOString().slice(0, 10)
-    XLSX.writeFile(wb, `Garantias_Conductores_${fecha}.xlsx`)
-    showSuccess('Exportado correctamente')
+    await descargarExcel({
+      archivo: `Deudores_${new Date().toISOString().slice(0, 10)}`,
+      titulo: 'Deudores',
+      subtitulo: 'Conductores de baja que siguen debiendo. A cobrar = saldo pendiente − garantía retenida',
+      hojas: [{
+        nombre: 'Deudores',
+        filas: data,
+        columnas: {
+          'DNI': { formato: 'texto' },
+          'CUIT': { formato: 'texto' },
+          'Dirección': { ancho: 40 },
+        },
+      }],
+    })
+    showSuccess(`Exportados ${data.length} deudores`)
   }
 
   // ====== EXPORTAR REGISTROS VISIBLES EN LA TABLA ======
@@ -1709,29 +1750,24 @@ export function GarantiasTab() {
       ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
     }))
 
-    const ws = XLSX.utils.json_to_sheet(data)
-    ws['!cols'] = [
-      { wch: 14 }, // DNI
-      { wch: 35 }, // Conductor
-      { wch: 16 }, // Estado Conductor
-      { wch: 16 }, // Estado Garantía
-      { wch: 10 }, // Días Baja
-      { wch: 14 }, // Monto Total
-      { wch: 14 }, // Monto Pagado
-      { wch: 16 }, // Monto Pendiente
-      { wch: 14 }, // Cuotas Totales
-      { wch: 14 }, // Cuotas Pagadas
-      { wch: 16 }, // Saldo Actual
-      { wch: 26 }, // Estado
-      { wch: 16 }, // Monto Estado
-      ...COLS_CONTACTO,
-    ]
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Garantias')
-
-    const fecha = new Date().toISOString().slice(0, 10)
-    XLSX.writeFile(wb, `Garantias_Registros_${fecha}.xlsx`)
+    await descargarExcel({
+      archivo: `Garantias_${new Date().toISOString().slice(0, 10)}`,
+      titulo: 'Garantías',
+      subtitulo: 'Registros visibles con los filtros aplicados',
+      hojas: [{
+        nombre: 'Garantías',
+        filas: data,
+        columnas: {
+          'DNI': { formato: 'texto' },
+          'CUIT': { formato: 'texto' },
+          'CBU': { formato: 'texto' },
+          'Días Baja': { formato: 'entero' },
+          'Cuotas Totales': { formato: 'entero' },
+          'Cuotas Pagadas': { formato: 'entero' },
+          'Dirección': { ancho: 40 },
+        },
+      }],
+    })
     showSuccess(`Exportados ${registros.length} registros`)
   }
 
@@ -1807,312 +1843,6 @@ export function GarantiasTab() {
       Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
     } finally {
       setLoading(false)
-    }
-  }
-
-  // ====== IMPORTAR GARANTÍAS DESDE EXCEL ======
-  async function importarGarantias(file: File) {
-    try {
-      const buffer = await file.arrayBuffer()
-      const wb = XLSX.read(buffer, { type: 'array' })
-
-      // Buscar la hoja correcta: primero "Garantias", sino la primera que tenga columna DNI
-      let sheetName = ''
-      if (wb.SheetNames.includes('Garantias')) {
-        sheetName = 'Garantias'
-      } else {
-        for (const name of wb.SheetNames) {
-          const testWs = wb.Sheets[name]
-          const testRows: any[] = XLSX.utils.sheet_to_json(testWs, { raw: false })
-          if (testRows.length > 0 && (testRows[0]['DNI'] !== undefined || testRows[0]['dni'] !== undefined || testRows[0]['Dni'] !== undefined)) {
-            sheetName = name
-            break
-          }
-        }
-        if (!sheetName) sheetName = wb.SheetNames[0]
-      }
-
-      const ws = wb.Sheets[sheetName]
-      const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
-
-      if (rows.length === 0) {
-        Swal.fire('Error', 'El archivo no contiene datos en la hoja "' + sheetName + '"', 'error')
-        return
-      }
-
-      // Buscar columna DNI (case-insensitive)
-      const firstRow = rows[0]
-      const findCol = (names: string[]) => {
-        for (const key of Object.keys(firstRow)) {
-          if (names.includes(key.trim().toLowerCase())) return key
-        }
-        return null
-      }
-      const colDni = findCol(['dni'])
-      const colMontoTotal = findCol(['monto total', 'montototal', 'total'])
-      const colMontoPagado = findCol(['monto pagado', 'montopagado', 'pagado'])
-      const colCuotasTotales = findCol(['cuotas totales', 'cuotastotales'])
-      const colCuotasPagadas = findCol(['cuotas pagadas', 'cuotaspagadas'])
-      const colCuotaSemanal = findCol(['cuota semanal', 'cuotasemanal'])
-      const colEstado = findCol(['estado'])
-
-      if (!colDni) {
-        Swal.fire('Error', 'El archivo debe tener la columna "DNI".<br><br>Columnas encontradas: ' + Object.keys(firstRow).join(', '), 'error')
-        return
-      }
-
-      // Crear mapa DNI -> garantia
-      const dniMap = new Map<string, GarantiaConductor & { estado_conductor?: string }>()
-      for (const g of garantias) {
-        if (g.conductor_dni) {
-          const dniNorm = String(g.conductor_dni).replace(/[.\s]/g, '').replace(/^0+/, '')
-          dniMap.set(dniNorm, g)
-        }
-      }
-
-      const estadosValidos = ['pendiente', 'en_curso', 'completada', 'cancelada', 'suspendida', 'en_devolucion']
-
-      interface ImportRow {
-        garantia_id: string
-        dni: string
-        nombre: string
-        monto_total: number
-        monto_pagado: number
-        cuotas_totales: number
-        cuotas_pagadas: number
-        monto_cuota_semanal: number
-        estado: string
-      }
-
-      const parsed: ImportRow[] = []
-      const errores: string[] = []
-
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i]
-        const dniRaw = String(r[colDni] || '').trim()
-        const dniNorm = dniRaw.replace(/[.\s]/g, '').replace(/^0+/, '')
-
-        if (!dniNorm || dniNorm.length < 5) {
-          errores.push(`Fila ${i + 2}: DNI invalido "${dniRaw}"`)
-          continue
-        }
-
-        const match = dniMap.get(dniNorm)
-        if (!match) {
-          errores.push(`Fila ${i + 2}: DNI ${dniRaw} no encontrado en garantias`)
-          continue
-        }
-
-        // Leer columnas del Excel, si falta usar valor de DB
-        const montoTotal = colMontoTotal
-          ? parseFloat(String(r[colMontoTotal] || '0').replace(/,/g, ''))
-          : match.monto_total
-        const montoPagado = colMontoPagado
-          ? parseFloat(String(r[colMontoPagado] || '0').replace(/,/g, ''))
-          : match.monto_pagado
-        const cuotasTotales = colCuotasTotales
-          ? (parseInt(String(r[colCuotasTotales] || '0')) || 0)
-          : match.cuotas_totales
-        const cuotasPagadas = colCuotasPagadas
-          ? (parseInt(String(r[colCuotasPagadas] || '0')) || 0)
-          : match.cuotas_pagadas
-
-        // Cuota semanal: si viene en el Excel usarla, sino siempre 50000
-        const cuotaSemanal = colCuotaSemanal
-          ? parseFloat(String(r[colCuotaSemanal] || '0').replace(/,/g, ''))
-          : 50000
-
-        // Auto-calcular estado si no viene en el Excel
-        let estado: string
-        if (colEstado) {
-          estado = String(r[colEstado]).trim().toLowerCase()
-        } else {
-          // Mantener en_devolucion si el conductor está de baja
-          const esBaja = (match as any).estado_conductor === 'BAJA'
-          if (esBaja && montoPagado > 0) {
-            estado = 'en_devolucion'
-          } else if (montoPagado >= montoTotal && montoTotal > 0) {
-            estado = 'completada'
-          } else if (montoPagado > 0) {
-            estado = 'en_curso'
-          } else {
-            estado = 'pendiente'
-          }
-        }
-
-        if (isNaN(montoTotal) || isNaN(montoPagado) || isNaN(cuotaSemanal)) {
-          errores.push(`Fila ${i + 2}: Valores numericos invalidos`)
-          continue
-        }
-
-        if (!estadosValidos.includes(estado)) {
-          errores.push(`Fila ${i + 2}: Estado "${estado}" no valido`)
-          continue
-        }
-
-        parsed.push({
-          garantia_id: match.id,
-          dni: dniRaw,
-          nombre: String(r['Conductor'] || r['conductor'] || match.conductor_nombre || ''),
-          monto_total: Math.round(montoTotal * 100) / 100,
-          monto_pagado: Math.round(montoPagado * 100) / 100,
-          cuotas_totales: cuotasTotales,
-          cuotas_pagadas: cuotasPagadas,
-          monto_cuota_semanal: Math.round(cuotaSemanal * 100) / 100,
-          estado: estado,
-        })
-      }
-
-      if (parsed.length === 0) {
-        Swal.fire('Error', `No se pudo procesar ninguna fila.${errores.length > 0 ? '<br><br>' + errores.slice(0, 10).join('<br>') : ''}`, 'error')
-        return
-      }
-
-      // Detectar cambios
-      const cambios = parsed.filter((p) => {
-        const actual = garantias.find((g) => g.id === p.garantia_id)
-        return !actual ||
-          Math.abs(actual.monto_total - p.monto_total) > 0.01 ||
-          Math.abs(actual.monto_pagado - p.monto_pagado) > 0.01 ||
-          actual.cuotas_totales !== p.cuotas_totales ||
-          actual.cuotas_pagadas !== p.cuotas_pagadas ||
-          Math.abs(actual.monto_cuota_semanal - p.monto_cuota_semanal) > 0.01 ||
-          actual.estado !== p.estado
-      })
-
-      if (cambios.length === 0) {
-        Swal.fire('Sin cambios', 'Los valores del archivo son iguales a los actuales', 'info')
-        return
-      }
-
-      // Preview HTML - mostrar todos los campos: anterior → nuevo
-      const cellStyle = 'padding:3px 6px;border-bottom:1px solid #E5E7EB;font-size:10px;'
-      const diffCell = (ant: string | number, nuevo: string | number, isNum = true) => {
-        const changed = String(ant) !== String(nuevo)
-        if (!changed) return `<td style="${cellStyle}text-align:right;color:#9CA3AF;">${isNum ? formatCurrency(Number(nuevo)) : nuevo}</td>`
-        return `<td style="${cellStyle}text-align:right;">
-          <span style="color:#9CA3AF;text-decoration:line-through;font-size:9px;">${isNum ? formatCurrency(Number(ant)) : ant}</span>
-          <span style="color:#111;font-weight:600;margin-left:2px;">${isNum ? formatCurrency(Number(nuevo)) : nuevo}</span>
-        </td>`
-      }
-
-      const previewRows = cambios.slice(0, 50).map((c) => {
-        const a = garantias.find((g) => g.id === c.garantia_id)
-        return `<tr>
-          <td style="${cellStyle}white-space:nowrap;font-weight:500;">${c.nombre}</td>
-          <td style="${cellStyle}text-align:center;color:#6B7280;">${c.dni}</td>
-          ${diffCell(a?.monto_total ?? 0, c.monto_total)}
-          ${diffCell(a?.monto_pagado ?? 0, c.monto_pagado)}
-          ${diffCell(a?.cuotas_totales ?? 0, c.cuotas_totales)}
-          ${diffCell(a?.cuotas_pagadas ?? 0, c.cuotas_pagadas)}
-          ${diffCell(a?.monto_cuota_semanal ?? 0, c.monto_cuota_semanal)}
-          ${diffCell(a?.estado ?? '', c.estado, false)}
-        </tr>`
-      }).join('')
-
-      const { isConfirmed } = await Swal.fire({
-        title: '<span style="font-size:16px;font-weight:600;">Preview de Importacion</span>',
-        html: `
-          <div style="text-align:left;font-size:13px;">
-            <div style="display:flex;gap:12px;margin-bottom:10px;">
-              <div style="flex:1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:8px 10px;text-align:center;">
-                <div style="font-size:18px;font-weight:700;color:#16a34a;">${parsed.length}</div>
-                <div style="font-size:10px;color:#6B7280;">Filas leidas</div>
-              </div>
-              <div style="flex:1;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:8px 10px;text-align:center;">
-                <div style="font-size:18px;font-weight:700;color:#D97706;">${cambios.length}</div>
-                <div style="font-size:10px;color:#6B7280;">Con cambios</div>
-              </div>
-              ${errores.length > 0 ? `<div style="flex:1;background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:8px 10px;text-align:center;">
-                <div style="font-size:18px;font-weight:700;color:#dc2626;">${errores.length}</div>
-                <div style="font-size:10px;color:#6B7280;">Errores</div>
-              </div>` : `<div style="flex:1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:8px 10px;text-align:center;">
-                <div style="font-size:18px;font-weight:700;color:#16a34a;">0</div>
-                <div style="font-size:10px;color:#6B7280;">Errores</div>
-              </div>`}
-            </div>
-            ${errores.length > 0 ? `<details style="margin-bottom:8px;font-size:11px;">
-              <summary style="cursor:pointer;color:#dc2626;font-weight:500;">Ver ${errores.length} errores</summary>
-              <div style="max-height:80px;overflow-y:auto;background:#FEF2F2;padding:6px 8px;border-radius:4px;margin-top:4px;color:#991B1B;">
-                ${errores.slice(0, 20).map(e => `<div>${e}</div>`).join('')}
-                ${errores.length > 20 ? `<div>... y ${errores.length - 20} mas</div>` : ''}
-              </div>
-            </details>` : ''}
-            <div style="max-height:350px;overflow:auto;border:1px solid #E5E7EB;border-radius:6px;">
-              <table style="width:100%;border-collapse:collapse;font-size:11px;">
-                <thead>
-                  <tr style="background:#F9FAFB;position:sticky;top:0;z-index:1;">
-                    <th style="padding:5px 6px;text-align:left;font-weight:600;">Conductor</th>
-                    <th style="padding:5px 6px;text-align:center;font-weight:600;">DNI</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Monto Total</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Monto Pagado</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuotas Tot.</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuotas Pag.</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuota Sem.</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>${previewRows}
-                ${cambios.length > 50 ? `<tr><td colspan="8" style="padding:6px;text-align:center;color:#9CA3AF;font-size:11px;">... y ${cambios.length - 50} cambios mas</td></tr>` : ''}
-                </tbody>
-              </table>
-            </div>
-            <div style="margin-top:8px;font-size:10px;color:#6B7280;">Los valores <span style="text-decoration:line-through;">tachados</span> son los actuales. Los valores en <strong>negrita</strong> son los nuevos.</div>
-          </div>
-        `,
-        showCancelButton: true,
-        confirmButtonText: `Confirmar ${cambios.length} cambios`,
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#ff0033',
-        width: 850,
-        customClass: {
-          popup: 'swal-compact',
-          title: 'swal-title-compact',
-          htmlContainer: 'swal-html-compact'
-        }
-      })
-
-      if (!isConfirmed) return
-
-      // Ejecutar updates
-      setLoading(true)
-      const now = new Date().toISOString()
-      let updated = 0
-      let errors = 0
-
-      for (const c of cambios) {
-         
-        const { error } = await (supabase.from('garantias_conductores') as any)
-          .update({
-            monto_total: c.monto_total,
-            monto_realmente_pagado: c.monto_pagado,
-            cuotas_totales: c.cuotas_totales,
-            cuotas_pagadas: c.cuotas_pagadas,
-            monto_cuota_semanal: c.monto_cuota_semanal,
-            estado: c.estado,
-            updated_at: now,
-          })
-          .eq('id', c.garantia_id)
-
-        if (error) {
-          errors++
-        } else {
-          updated++
-        }
-      }
-
-      if (errors > 0) {
-        Swal.fire('Importacion parcial', `${updated} actualizados, ${errors} errores`, 'warning')
-      } else {
-        Swal.fire('Importacion exitosa', `${updated} garantias actualizadas`, 'success')
-      }
-
-      await cargarGarantias()
-    } catch {
-      setLoading(false)
-      Swal.fire('Error', 'No se pudo procesar el archivo', 'error')
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -2254,53 +1984,6 @@ export function GarantiasTab() {
           return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
         }
         return <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(monto)}</span>
-      }
-    },
-    // Falta pagar va justo después de Pagado (pedido 2026-10-22).
-    {
-      id: 'pendiente',
-      meta: { info: 'Lo que falta pagar para completar la garantía (total menos pagado). En verde con + si pagó de más. Conductores de baja: - (ya no se les cobra).' },
-      header: 'Falta pagar',
-      // Conductor de baja: ya no se le cobra la garantía, el pendiente no aplica (se
-      // muestra "-" y ordena como 0, igual que una garantía devuelta).
-      accessorFn: (row) => (row as any).estado_conductor === 'BAJA' || esGarantiaDevuelta(row, garantiasOverrides.get(row.id))
-        ? 0
-        : Math.round((row.monto_total || 0) - montoPagadoGarantia(row)),
-      cell: ({ row }) => {
-        if ((row.original as any).estado_conductor === 'BAJA') {
-          return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
-        }
-        if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
-          return <span className="fact-precio" style={{ color: 'var(--text-secondary)' }}>{formatCurrency(0)}</span>
-        }
-        const pendiente = row.original.monto_total - montoPagadoGarantia(row.original)
-        if (pendiente < -1) {
-          // Excedente: pagó más del objetivo
-          return <span className="fact-precio" style={{ color: '#16a34a', fontWeight: 600 }}>+{formatCurrency(Math.abs(pendiente))}</span>
-        }
-        return <span className={`fact-precio ${pendiente > 0 ? 'fact-precio-negative' : ''}`}>{formatCurrency(Math.max(0, pendiente))}</span>
-      }
-    },
-    // % pagado, a continuación.
-    {
-      id: 'progreso',
-      meta: { info: 'Porcentaje pagado de la garantía (pagado sobre total).' },
-      header: '% pagado',
-      accessorFn: (row) => (esGarantiaDevuelta(row, garantiasOverrides.get(row.id)) || row.monto_total <= 0)
-        ? 0
-        : Math.round((montoPagadoGarantia(row) / row.monto_total) * 100),
-      cell: ({ row }) => {
-        const porcentaje = (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id)) || row.original.monto_total <= 0)
-          ? 0
-          : (montoPagadoGarantia(row.original) / row.original.monto_total) * 100
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div className="fact-progress-bar">
-              <div className="fact-progress-fill" style={{ width: `${Math.min(porcentaje, 100)}%` }} />
-            </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{porcentaje.toFixed(0)}%</span>
-          </div>
-        )
       }
     },
     {
@@ -2814,36 +2497,14 @@ export function GarantiasTab() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando garantias..." size="lg" />
 
-      {/* Hidden file input for import */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        accept=".xlsx,.xls"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) importarGarantias(file)
-        }}
-      />
-
       {/* Contenido Garantías (sub-tab Movimientos removido - no se usa) */}
       {activeSubTab === 'garantias' && (
         <>
           {/* Header (filtro removido - se usan los filtros de columna) */}
           <div className="fact-header">
             <div className="fact-header-left">
-              {/* "Exportar Registros" disponible para cualquier usuario con acceso.
-                  "Exportar" (todo), "Importar" y "Sincronizar" son acciones administrativas → solo admin. */}
+              {/* Descargas disponibles para cualquier usuario con acceso. */}
               <div style={{ display: 'flex', gap: '6px' }}>
-                {isAdmin() && (
-                  <button
-                    className="fact-btn fact-btn-secondary"
-                    onClick={exportarGarantias}
-                    title="Exportar TODAS las garantías a Excel (sin aplicar filtros)"
-                  >
-                    <Download size={14} /> Exportar
-                  </button>
-                )}
                 <button
                   className="fact-btn fact-btn-secondary"
                   onClick={exportarRegistrosVisibles}
@@ -2851,15 +2512,13 @@ export function GarantiasTab() {
                 >
                   <Download size={14} /> Exportar Registros
                 </button>
-                {isAdmin() && (
-                  <button
-                    className="fact-btn fact-btn-primary"
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Importar garantias desde Excel"
-                  >
-                    <Upload size={14} /> Importar
-                  </button>
-                )}
+                <button
+                  className="fact-btn fact-btn-secondary"
+                  onClick={exportarDeudores}
+                  title="Exportar a Excel los conductores de baja que nos deben, con sus datos de contacto y la empresa con la que firmaron contrato"
+                >
+                  <Download size={14} /> Exportar Deudores
+                </button>
                 {/* Sincronizar oculto: la garantía se recalcula automáticamente al cerrar período */}
               </div>
             </div>

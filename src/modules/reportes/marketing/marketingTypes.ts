@@ -17,6 +17,9 @@ export const PERFILES: Perfil[] = ['Cumple', 'Medio', 'No cumple', 'Sin datos']
 
 export interface EtapasEmbudo {
   leads: number
+  /** Pasaron el filtro de edad (21 años o más) */
+  edad: number
+  /** Pasaron los dos filtros: edad y cobertura (fuera de zonas restringidas) */
   filtros: number
   acepta: number
   video: number
@@ -101,6 +104,9 @@ export interface NuevosConductores {
   total_anterior: number
   dias_mediana: number | null
   dias_mediana_segmento: { segmento: Segmento; mediana: number | null }[]
+  /** Time to driver del período anterior (puede faltar si la función SQL es vieja) */
+  dias_mediana_anterior?: number | null
+  dias_mediana_segmento_anterior?: { segmento: Segmento; mediana: number | null }[]
   por_zona: { segmento: Segmento; zona: string; cantidad: number }[]
   por_segmento: { segmento: Segmento; cantidad: number }[]
   turnos: { segmento: Segmento; diurno: number; nocturno: number; cargo: number }[]
@@ -128,7 +134,7 @@ export function enSegmento(segmento: Segmento, filtro: FiltroSegmento): boolean 
 }
 
 const ETAPAS_VACIAS: EtapasEmbudo = {
-  leads: 0, filtros: 0, acepta: 0, video: 0, documentacion: 0, entrevista: 0, aptos: 0,
+  leads: 0, edad: 0, filtros: 0, acepta: 0, video: 0, documentacion: 0, entrevista: 0, aptos: 0,
   convertidos: 0, con_auto: 0, descartados: 0, calificables: 0, nuevos: 0,
 }
 
@@ -234,7 +240,9 @@ export function anuncioCorto(link: string): string {
 
 export const GLOSARIO: { termino: string; definicion: string }[] = [
   { termino: 'Leads', definicion: 'Personas que entraron a Toshibase en el período (fecha de creación del lead). Las conversaciones que informa Meta son otra cosa: no todas se convierten en lead.' },
-  { termino: 'Pasaron filtros', definicion: 'Dirección con cobertura y edad aprobada (21 años o más).' },
+  { termino: 'Pasaron edad', definicion: 'Tienen 21 años o más ("Edad aprobada" o más adelante).' },
+  { termino: 'Pasaron cobertura', definicion: 'Además de la edad, su dirección tiene cobertura: no está en una zona restringida ("Zona aprobada" o más adelante).' },
+  { termino: 'Time to driver', definicion: 'Días desde que la persona entra como lead hasta que recibe su primer auto (mediana de los conductores nuevos del período).' },
   { termino: 'Acepta oferta', definicion: 'Aceptó la propuesta que le envió el chatbot (o el lead avanzó más). Quien solo recibió la propuesta no cuenta acá.' },
   { termino: 'Envió video introducción', definicion: 'Envió el video de introducción ("Video recibido" o etapa Hireflix, incluido Apto Hireflix) o avanzó más.' },
   { termino: 'Documentación', definicion: 'Llegó a la etapa de documentos: pendientes o enviados (precandidato).' },

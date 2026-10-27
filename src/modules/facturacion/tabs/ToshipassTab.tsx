@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Swal from 'sweetalert2'
-import * as XLSX from 'xlsx'
+import { descargarExcel } from '../../../utils/excelCorporativo'
 import {
   Ticket,
   Users,
@@ -405,7 +405,7 @@ export function ToshipassTab() {
       Swal.fire('Sin datos', 'No hay registros visibles para exportar', 'info')
       return
     }
-    const hoja = XLSX.utils.json_to_sheet(filasExport.map(f => ({
+    const filas = filasExport.map(f => ({
       Conductor: f.conductor,
       Documento: f.documento,
       Tipo: f.tipo,
@@ -421,10 +421,21 @@ export function ToshipassTab() {
       'Saldo Actual': f.saldoActual,
       'Diferencia (saldo + facturado)': f.estadoConductor === 'BAJA' && f.tieneSaldo ? diferenciaBaja(f) : '',
       'Estado Pago': f.estadoPago,
-    })))
-    const libro = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(libro, hoja, 'Toshipass')
-    XLSX.writeFile(libro, `toshipass_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    }))
+    void descargarExcel({
+      archivo: `Toshipass_${new Date().toISOString().slice(0, 10)}`,
+      titulo: 'Toshipass',
+      subtitulo: 'Registros visibles con los filtros aplicados',
+      hojas: [{
+        nombre: 'Toshipass',
+        filas,
+        columnas: {
+          Documento: { formato: 'texto' },
+          Semanas: { formato: 'entero' },
+          'Saldo Actual': { formato: 'moneda' },
+        },
+      }],
+    })
   }
 
   // ========== COLUMNAS ==========

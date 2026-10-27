@@ -9,6 +9,7 @@ import Swal from 'sweetalert2'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { cargarConceptosTarifa, getPeriodoTarifa } from '../onboarding/tarifaConceptos'
+import { useFlotaSemanaAnterior } from './useFlotaSemanaAnterior'
 import './AsignacionesModule.css'
 
 interface AsignacionActiva {
@@ -76,8 +77,41 @@ function bucketEstadoFlota(descripcion: string): number {
   return ESTADOS_TOTAL_FLOTA.findIndex(e => e.match(d))
 }
 
+// Flecha contra el mismo día de la semana anterior (foto diaria de kpi_flota_diaria).
+// `invertido`: subir es malo (ej. turnos disponibles = turnos sin conductor).
+function Comparacion({ actual, anterior, puntos = false, invertido = false }: {
+  actual: number
+  anterior: number | null
+  puntos?: boolean
+  invertido?: boolean
+}) {
+  if (anterior === null || !Number.isFinite(anterior)) return null
+  const dif = actual - anterior
+  const umbral = puntos ? 0.05 : 0.5
+  const plano = Math.abs(dif) < umbral
+  const bueno = invertido ? dif < 0 : dif > 0
+  const tono = plano ? 'neutro' : bueno ? 'bueno' : 'malo'
+  const texto = puntos
+    ? `${Math.abs(dif).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} pts`
+    : Math.abs(Math.round(dif)).toLocaleString('es-AR')
+  const anteriorTexto = puntos
+    ? `${anterior.toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`
+    : Math.round(anterior).toLocaleString('es-AR')
+  return (
+    <span
+      className={`asig-comp asig-comp--${tono}`}
+      title={`Hace una semana: ${anteriorTexto}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {plano ? '=' : dif > 0 ? '▲' : '▼'} {plano ? 'igual' : texto}
+      <span className="asig-comp-sufijo"> vs sem. ant.</span>
+    </span>
+  )
+}
+
 export function AsignacionesActivasModule() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const semanaAnterior = useFlotaSemanaAnterior()
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   // Desglose del Total Flota por estado (para el popup descriptivo)
@@ -797,6 +831,7 @@ export function AsignacionesActivasModule() {
               <span className="stat-value">{stats.totalFlota}</span>
               <span className="stat-label">Total Flota</span>
             </div>
+            <Comparacion actual={stats.totalFlota} anterior={semanaAnterior?.totalFlota ?? null} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'vehiculosActivos' ? 'stat-card-active' : ''}`}
@@ -808,6 +843,7 @@ export function AsignacionesActivasModule() {
               <span className="stat-value">{stats.vehiculos}</span>
               <span className="stat-label">Vehículos Activos</span>
             </div>
+            <Comparacion actual={stats.vehiculos} anterior={semanaAnterior?.vehiculosAsignados ?? null} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'disponibles' ? 'stat-card-active' : ''}`}
@@ -830,6 +866,11 @@ export function AsignacionesActivasModule() {
               <span className="stat-value">{stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</span>
               <span className="stat-label">Turnos Disponibles</span>
             </div>
+            <Comparacion
+              actual={stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}
+              anterior={semanaAnterior ? semanaAnterior.turnosTotales - semanaAnterior.turnosOcupados : null}
+              invertido
+            />
             <div className="asig-turnos-desglose">
               <span className="asig-turnos-desglose-item">
                 <span className="asig-turno-label asig-label-diurno">D</span>
@@ -875,6 +916,11 @@ export function AsignacionesActivasModule() {
               <span className="stat-value">{stats.porcentajeOcupacionGeneral}%</span>
               <span className="stat-label">% Ocupación</span>
             </div>
+            <Comparacion
+              puntos
+              actual={Number(stats.porcentajeOcupacionGeneral)}
+              anterior={semanaAnterior && semanaAnterior.turnosTotales > 0 ? (semanaAnterior.turnosOcupados / semanaAnterior.turnosTotales) * 100 : null}
+            />
           </div>
           <div 
             className="stat-card stat-card-clickable" 
@@ -904,6 +950,11 @@ export function AsignacionesActivasModule() {
               <span className="stat-value">{stats.porcentajeOperatividad}%</span>
               <span className="stat-label">% Operatividad</span>
             </div>
+            <Comparacion
+              puntos
+              actual={Number(stats.porcentajeOperatividad)}
+              anterior={semanaAnterior && semanaAnterior.totalFlota > 0 ? (semanaAnterior.enUso / semanaAnterior.totalFlota) * 100 : null}
+            />
           </div>
         </div>
       </div>
