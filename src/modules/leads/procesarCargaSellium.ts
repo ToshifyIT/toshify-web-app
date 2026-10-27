@@ -266,7 +266,7 @@ function armarSecciones(plan: PlanCarga): Secciones {
       columnas: ['Fila', 'Fecha de creación', 'Nombre', 'Teléfono', 'Correo', 'Estado', 'Zona', 'Dirección', 'Fuente pauta', 'Observaciones'],
       origen: plan.crear.map(a => a.fila),
       filas: plan.crear.map(a => [
-        String(a.fila.numero), a.fila.fechaCreacion ? fechaLegible(a.payload.created_at) : '(hoy)',
+        String(a.fila.numero), a.payload.created_at ? fechaLegible(a.payload.created_at) : '(hoy)',
         String(a.payload.nombre_completo ?? ''), String(a.payload.phone ?? ''),
         String(a.payload.email ?? ''), String(a.payload.estado_de_lead ?? '(vacío)'), String(a.payload.zona ?? ''),
         String(a.payload.direccion ?? ''), String(a.payload.fuente_pauta ?? ''), String(a.payload.observaciones ?? ''),
