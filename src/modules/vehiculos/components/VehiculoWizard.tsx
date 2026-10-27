@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Car, Settings, Wrench, Calendar, Shield, Check, ChevronLeft, ChevronRight, Save, Info } from 'lucide-react'
 import type { VehiculoEstado } from '../../../types/database.types'
 import { SearchableSelect } from '../../../components/ui/SearchableSelect/SearchableSelect'
+import { VEHICULO_CATEGORIAS } from '../../../types/vehiculo.types'
 
 interface VehiculoFormData {
   patente: string
@@ -758,9 +759,9 @@ export function VehiculoWizard({
                   disabled={saving}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="Autos del pueblo">Autos del pueblo</option>
-                  <option value="Rentadora">Rentadora</option>
-                  <option value="Flota propia">Flota propia</option>
+                  {VEHICULO_CATEGORIAS.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
             </div>
