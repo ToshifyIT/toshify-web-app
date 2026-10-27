@@ -9,7 +9,7 @@
 
 @media (min-width: 1280px) {
   .mkt-kpis {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
@@ -220,7 +220,13 @@
 
 @media (min-width: 1024px) {
   .mkt-module .dkpis-stats-grid.mkt-kpis {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .mkt-module .dkpis-stats-grid.mkt-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 

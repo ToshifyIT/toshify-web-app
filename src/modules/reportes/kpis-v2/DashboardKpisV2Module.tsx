@@ -430,7 +430,7 @@ export function DashboardKpisV2Module() {
 
   const hoy = useMemo(() => hoyArgentina(), [])
   // Siempre desde que hay datos (marzo 2026)
-  const { desde, hasta } = useMemo(() => rangoConsulta(granularidad, 0, hoy), [granularidad, hoy])
+  const { desde, hasta } = useMemo(() => rangoConsulta(hoy), [hoy])
   const { data, isLoading, error, recargar } = useKpisV2Data(desde, hasta)
 
   // Los períodos del principio sin ningún dato (anteriores al histórico) no se muestran
@@ -711,7 +711,7 @@ export function DashboardKpisV2Module() {
             seleccionado={actual?.key ?? null}
             onSeleccionar={setSeleccionado}
           />
-          {actual ? <IndicadoresModulos periodo={actual} hoy={hoy} motivosGeneral={motivosGeneral} /> : null}
+          {actual ? <IndicadoresModulos periodo={actual} anterior={anterior} hoy={hoy} motivosGeneral={motivosGeneral} /> : null}
         </>
       ) : null}
 

@@ -26,8 +26,12 @@
 -- EMBUDO (leads creados en el período, según su estado actual; sigue el flujo
 -- del chatbot). Un lead descartado no suma en las etapas posteriores.
 --   1 Leads
---   2 Pasaron filtros   cobertura y edad ("Edad aprobada" / "Zona aprobada" o más)
---   3 Acepta oferta     "Acepta oferta" o más
+--   2 Pasaron edad      21 años o más: por la edad del lead (o la calculada de la
+--                       fecha de nacimiento); sin edad, "Edad aprobada" o más.
+--   3 Pasaron cobertura además de la edad, dirección fuera de las zonas restringidas
+--                       ("Zona aprobada" o más, o la ubicación del lead fuera de
+--                       zonas_peligrosas). 'filtros' = pasaron los dos.
+--   4 Acepta oferta     "Acepta oferta" o más
 --   4 Envió video introducción  "Video recibido", Hireflix (incl. "Apto - Hireflix") o más
 --   5 Documentación     "Apto - Hireflix", "Documentos pendientes/enviados" o más
 --   6 Entrevista        "Convocatoria Inducción" o más
@@ -67,6 +71,46 @@
 -- Uso: supabase.rpc('get_dashboard_marketing', { p_sede_id, p_desde, p_hasta })
 -- Para quitarla: DROP FUNCTION IF EXISTS get_dashboard_marketing(uuid, date, date, date);
 -- =====================================================
+
+-- ¿El punto cae dentro de alguna zona restringida activa? (zonas_peligrosas.poligono:
+-- lista de {lat, lng}). Mismo cálculo que el "✓ Zona Aprobada" del módulo Leads.
+CREATE OR REPLACE FUNCTION punto_en_zona_restringida(p_lat double precision, p_lng double precision)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+  z record;
+  pts jsonb;
+  n integer;
+  j integer;
+  xi double precision; yi double precision; xj double precision; yj double precision;
+  dentro boolean;
+BEGIN
+  IF p_lat IS NULL OR p_lng IS NULL THEN
+    RETURN NULL;
+  END IF;
+  FOR z IN SELECT poligono::jsonb AS p FROM zonas_peligrosas WHERE activo LOOP
+    pts := z.p;
+    IF pts IS NULL OR jsonb_typeof(pts) <> 'array' THEN CONTINUE; END IF;
+    n := jsonb_array_length(pts);
+    IF n < 3 THEN CONTINUE; END IF;
+    dentro := false;
+    j := n - 1;
+    FOR i IN 0..n - 1 LOOP
+      xi := (pts -> i ->> 'lng')::double precision; yi := (pts -> i ->> 'lat')::double precision;
+      xj := (pts -> j ->> 'lng')::double precision; yj := (pts -> j ->> 'lat')::double precision;
+      IF ((yi > p_lat) <> (yj > p_lat))
+         AND p_lng < (xj - xi) * (p_lat - yi) / NULLIF(yj - yi, 0) + xi THEN
+        dentro := NOT dentro;
+      END IF;
+      j := i;
+    END LOOP;
+    IF dentro THEN RETURN true; END IF;
+  END LOOP;
+  RETURN false;
+END;
+$fn$;
 
 CREATE OR REPLACE FUNCTION get_dashboard_marketing(
   p_sede_id uuid DEFAULT NULL,
@@ -129,6 +173,8 @@ leads_base AS (
       substring(COALESCE(l.observaciones, '') FROM 'Causal de cierre:\s*([^\n]+)'),
       NULLIF(btrim(l.motivo_desinteres), ''),
       ''), '\s+', ' ', 'g')), '') AS causal,
+    COALESCE(l.latitud, l.direccion_latitud)::double precision AS lat,
+    COALESCE(l.longitud, l.direccion_longitud)::double precision AS lng,
     dashboard_directivo_zona(
       l.zona,
       COALESCE(l.latitud, l.direccion_latitud)::double precision,
@@ -234,7 +280,21 @@ leads_v AS (
     ln.id, ln.dni, ln.ingreso, ln.segmento, ln.canal, ln.id_fuente, ln.descartado, ln.causal, ln.estado, ln.edad,
     COALESCE(ln.zona, 'Sin dato') AS zona,
     (ln.zona IS NULL) AS sin_zona,
-    (NOT ln.descartado AND COALESCE(ln.nivel_estado, 0) >= 1.1) OR ln.convertido AS filtros,
+    -- Edad: con la edad cargada (o calculada de la fecha de nacimiento) manda la edad;
+    -- sin edad, el estado del chatbot ("Edad aprobada" o más). Así cuentan también
+    -- los leads de la web, que no pasan por el chatbot.
+    ln.convertido OR (NOT ln.descartado AND CASE
+      WHEN ln.edad IS NOT NULL THEN ln.edad >= 21
+      ELSE COALESCE(ln.nivel_estado, 0) >= 1.1
+    END) AS edad_ok,
+    -- Pasaron los dos filtros: edad y cobertura. Cobertura: estado "Zona aprobada" o
+    -- más, o dirección ubicada fuera de las zonas restringidas (como el ✓ Zona Aprobada
+    -- de Leads).
+    ln.convertido OR (NOT ln.descartado
+      AND CASE WHEN ln.edad IS NOT NULL THEN ln.edad >= 21 ELSE COALESCE(ln.nivel_estado, 0) >= 1.1 END
+      AND (COALESCE(ln.nivel_estado, 0) >= 1.2
+           OR (ln.lat IS NOT NULL AND ln.lng IS NOT NULL AND NOT COALESCE(punto_en_zona_restringida(ln.lat, ln.lng), false)))
+    ) AS filtros,
     (NOT ln.descartado AND COALESCE(ln.nivel_estado, 0) >= 1.5) OR ln.convertido AS acepta,
     (NOT ln.descartado AND COALESCE(ln.nivel_estado, 0) >= 2) OR ln.convertido AS video,
     (NOT ln.descartado AND COALESCE(ln.nivel_estado, 0) >= 4) OR ln.convertido AS documentacion,
@@ -336,7 +396,7 @@ SELECT jsonb_build_object(
 
   'embudo', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
-      'rango', x.rango, 'segmento', x.segmento, 'leads', x.leads, 'filtros', x.filtros,
+      'rango', x.rango, 'segmento', x.segmento, 'leads', x.leads, 'edad', x.edad, 'filtros', x.filtros,
       'acepta', x.acepta, 'video', x.video, 'documentacion', x.documentacion,
       'entrevista', x.entrevista, 'aptos', x.aptos, 'convertidos', x.convertidos,
       'con_auto', x.con_auto, 'nuevos', x.con_auto, 'descartados', x.descartados,
@@ -344,6 +404,7 @@ SELECT jsonb_build_object(
       ORDER BY x.rango, x.segmento), '[]'::jsonb)
     FROM (
       SELECT rango, segmento, COUNT(*) AS leads,
+             COUNT(*) FILTER (WHERE edad_ok) AS edad,
              COUNT(*) FILTER (WHERE filtros) AS filtros,
              COUNT(*) FILTER (WHERE acepta) AS acepta,
              COUNT(*) FILTER (WHERE video) AS video,
@@ -441,6 +502,15 @@ SELECT jsonb_build_object(
     'total', (SELECT COUNT(*) FROM leads_act WHERE con_auto),
     'total_anterior', (SELECT COUNT(*) FROM leads_v WHERE rango = 'anterior' AND con_auto),
     'dias_mediana', (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) FROM leads_act WHERE con_auto),
+    -- Time to driver del período anterior, para comparar
+    'dias_mediana_anterior', (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) FROM leads_v WHERE rango = 'anterior' AND con_auto),
+    'dias_mediana_segmento_anterior', (
+      SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'mediana', mediana)), '[]'::jsonb)
+      FROM (
+        SELECT segmento, percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) AS mediana
+        FROM leads_v WHERE rango = 'anterior' AND con_auto GROUP BY segmento
+      ) x
+    ),
     'dias_mediana_segmento', (
       SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'mediana', mediana)), '[]'::jsonb)
       FROM (

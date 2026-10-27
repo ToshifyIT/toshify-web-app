@@ -191,11 +191,21 @@ function Filtros({ rango, d, filtro, cargando, onRango, onFiltro }: {
 
 // ───────────── Secciones ─────────────
 
+/** Time to driver (mediana de días de lead a primer auto) del período y del anterior. */
+function timeToDriver(n: MarketingRaw['nuevos_conductores'], filtro: FiltroSegmento) {
+  if (filtro === 'Todos') return { actual: n.dias_mediana, anterior: n.dias_mediana_anterior ?? null }
+  return {
+    actual: (n.dias_mediana_segmento ?? []).find(m => m.segmento === filtro)?.mediana ?? null,
+    anterior: (n.dias_mediana_segmento_anterior ?? []).find(m => m.segmento === filtro)?.mediana ?? null,
+  }
+}
+
 function Kpis({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
   const a = embudoDe(d, 'actual', filtro)
   const b = embudoDe(d, 'anterior', filtro)
   const cal = calidadDe(d, filtro)
   const totalCal = PERFILES.reduce((s, p) => s + cal[p], 0)
+  const ttd = timeToDriver(d.nuevos_conductores, filtro)
   return (
     <div className="dkpis-stats">
     <div className="dkpis-stats-grid mkt-kpis">
@@ -226,6 +236,13 @@ function Kpis({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
         info="Leads del período que pasaron la entrevista (Apto Inducción) o ya son conductores."
       />
       <Kpi
+        label="TIME TO DRIVER"
+        value={ttd.actual === null ? '—' : `${fmtInt(Math.round(ttd.actual))} días`}
+        subtitle="De lead a primer auto (mediana)"
+        variacion={variacion(ttd.actual, ttd.anterior, 'dias', false)}
+        info="Días desde que la persona entra como lead hasta que recibe su primer auto. Es la mediana de los conductores nuevos del período: la mitad tardó menos y la mitad más. Menos días es mejor."
+      />
+      <Kpi
         label="CONDUCTORES NUEVOS"
         value={fmtInt(a.nuevos)}
         subtitle={`Conversión ${fmtPct(ratio(a.nuevos, a.leads))} · ${fmtInt(a.nuevos)} de ${fmtInt(a.leads)} leads del período`}
@@ -241,7 +258,8 @@ function Embudo({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
   const a = embudoDe(d, 'actual', filtro)
   const etapas = [
     { etapa: 'Leads', valor: a.leads },
-    { etapa: 'Pasaron filtros (cobertura y edad)', valor: a.filtros },
+    { etapa: 'Pasaron edad (21 o más)', valor: a.edad },
+    { etapa: 'Pasaron cobertura (zona)', valor: a.filtros },
     { etapa: 'Acepta oferta', valor: a.acepta },
     { etapa: 'Envió video introducción', valor: a.video },
     { etapa: 'Documentación', valor: a.documentacion },
