@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
+import { ConductorAutocomplete } from '../../../components/ui/ConductorAutocomplete'
+import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
 import { useSede } from '../../../contexts/SedeContext'
 import type { LeadFormData } from '../../../types/leads.types'
 import { normalizarCelularAR, validarCelularAR } from '../../../utils/validacionesCampos'
@@ -59,6 +61,7 @@ function calcularEdad(fechaNac: string): number | undefined {
 export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosCiviles = [], nacionalidades = [], guias = [], estados = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
+  const embajadores = useConductoresEmbajador()
 
   // Mapping zona → nombre de sede esperada.
   // Cuando el operador (o AddressAutocomplete) cambia la zona, auto-asignamos
@@ -695,13 +698,44 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Codigo Referido</label>
-                <input
-                  type="text"
-                  value={formData.codigo_referido || ''}
-                  onChange={e => updateField('codigo_referido', e.target.value)}
-                />
+                <label>Referido</label>
+                <select
+                  value={formData.referido === true ? 'Si' : formData.referido === false ? 'No' : ''}
+                  onChange={e => {
+                    const v = e.target.value
+                    const referido = v === 'Si' ? true : v === 'No' ? false : null
+                    // Sin referido no hay embajador
+                    setFormData(prev => ({
+                      ...prev,
+                      referido,
+                      embajador_id: referido ? prev.embajador_id : '',
+                    }))
+                  }}
+                >
+                  <option value="">Seleccionar</option>
+                  <option value="Si">Si</option>
+                  <option value="No">No</option>
+                </select>
               </div>
+              <div className="lead-wizard-field">
+                <label>
+                  Embajador {formData.referido === true && <span className="required">*</span>}
+                </label>
+                <ConductorAutocomplete
+                  value={formData.embajador_id || ''}
+                  onChange={v => updateField('embajador_id', v)}
+                  options={embajadores.opciones}
+                  placeholder={
+                    formData.referido !== true
+                      ? 'Solo si es referido'
+                      : embajadores.loading ? 'Cargando conductores...' : 'Escribí nombre o DNI...'
+                  }
+                  disabled={formData.referido !== true}
+                  hasError={!!errors.embajador_id}
+                />
+                {errors.embajador_id && <span className="error-text">{errors.embajador_id}</span>}
+              </div>
+              {/* Codigo Referido (texto libre) reemplazado por Referido / Embajador */}
               {/* Fecha de Inicio oculto */}
             </div>
             <div className="lead-wizard-form-group full-width">

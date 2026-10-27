@@ -7,6 +7,8 @@ import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { showSuccess } from '../../../utils/toast'
 import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
 import { evaluarCierre, timestampCierre, descuentoCierre, CIERRE_DEFAULTS, type ParamsCierre } from '../utils/cierreAsignacion'
+import { construirSaldosAnteriores } from '../utils/saldoAnterior'
+import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
 import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import jsPDF from 'jspdf'
@@ -627,6 +629,8 @@ export function ReporteFacturacionTab() {
     pagos: Array<{ monto: number; ref: string; fecha: string | null }>
     resultado: number
     cierreSemana: number | null
+    // Deuda que pasó a cuotas (P010) en esta semana: se resta del saldo anterior.
+    fraccionamiento?: { monto: number; cuotas: number; fecha: string } | null
   } | null>(null)
 
 
@@ -2904,6 +2908,7 @@ export function ReporteFacturacionTab() {
         { data: excesosData },
         { data: dniMapeoData },
         { data: garantiaHistorialVP },
+        { data: cobrosFraccionadosVP },
       ] = await Promise.all([
         // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
         // Si hay pagos manuales/efectivo dentro de la semana, se reflejan en el saldo
@@ -2942,6 +2947,13 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, subtotal_garantia')
           .in('conductor_id', conductorIds)
           .gt('subtotal_garantia', 0),
+        // Fraccionamientos hasta esta semana: para no arrastrar como saldo la deuda ya fraccionada
+        (supabase.from('cobros_fraccionados') as any)
+          .select('conductor_id, descripcion, created_at')
+          .in('conductor_id', conductorIds)
+          .lte('semana', semanaDelPeriodo)
+          .eq('anio', anioDelPeriodo)
+          .neq('estado', 'cancelada_por_baja'),
       ])
 
       // Mapa acumulado de garantía facturada por conductor (suma histórica de subtotal_garantia)
@@ -2962,13 +2974,9 @@ export function ReporteFacturacionTab() {
       )
 
       // Construir mapas
-      // Tomar el saldo más reciente (pre-pagos) por conductor
-      const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>()
-      for (const s of (saldos || []) as any[]) {
-        if (!saldosMap.has(s.conductor_id)) {
-          saldosMap.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_pendiente || 0 })
-        }
-      }
+      // Tomar el saldo más reciente (pre-pagos) por conductor.
+      // Ignora la deuda que ya pasó a un fraccionamiento de saldo (ver utils/saldoAnterior).
+      const saldosMap = construirSaldosAnteriores((saldos || []) as any[], (cobrosFraccionadosVP || []) as any[])
 
       const garantiasMap = new Map<string, {
         conductor_id: string | null;
@@ -4677,14 +4685,9 @@ export function ReporteFacturacionTab() {
         arr.push(pc)
         cuotasGrouped.set(cid, arr)
       })
-      // Saldo acumulado por conductor (fuente: último registro de control_saldos de semanas anteriores)
-      const saldosMapById = new Map<string, any>()
-      for (const s of (saldos as any[])) {
-        // Solo tomar el primer registro por conductor (ya viene ordenado desc)
-        if (!saldosMapById.has(s.conductor_id)) {
-          saldosMapById.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_pendiente || 0 })
-        }
-      }
+      // Saldo acumulado por conductor (fuente: último registro de control_saldos de semanas anteriores).
+      // Ignora la deuda que ya pasó a un fraccionamiento de saldo (ver utils/saldoAnterior).
+      const saldosMapById = construirSaldosAnteriores(saldos as any[], (cobrosRes.data || []) as any[])
       // ─────────────────────────────────────────────────────────────────────────────
 
       // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
@@ -6152,7 +6155,18 @@ export function ReporteFacturacionTab() {
       //   saldo al cierre de la semana anterior + pagos de esta semana = saldo_anterior.
       try {
         const saldoAnt = facturacion.saldo_anterior || 0
-        if (saldoAnt !== 0) {
+        // Si en esta semana se cobra la cuota 1 de un fraccionamiento de saldo, se muestra
+        // de dónde salió: cierre anterior - pagos - deuda fraccionada = saldo anterior.
+        const desgloseFrac = await cargarDesgloseFraccionamiento(facturacion.conductor_id, saldoAnt, detallesTyped)
+        if (desgloseFrac) {
+          setDetalleSaldoBreakdown({
+            saldoPrevio: desgloseFrac.saldoCierre,
+            pagos: desgloseFrac.pagos,
+            resultado: -saldoAnt,
+            cierreSemana: desgloseFrac.cierreSemana,
+            fraccionamiento: desgloseFrac.fraccionamiento,
+          })
+        } else if (saldoAnt !== 0) {
           const { data: movs } = await (supabase.from('control_saldos') as any)
             .select('tipo_movimiento, saldo_adeudado, saldo_a_favor, saldo_pendiente, monto_movimiento, referencia, created_at')
             .eq('conductor_id', facturacion.conductor_id)
@@ -13744,8 +13758,9 @@ export function ReporteFacturacionTab() {
                     </div>
                   )}
 
-                  {/* Saldo Anterior (si existe y no está ya incluido en los items) */}
-                  {conceptosFaltantes.saldo !== 0 && (
+                  {/* Saldo Anterior (si existe y no está ya incluido en los items).
+                      Con fraccionamiento se muestra aunque quede en $0, para explicar la cuota P010. */}
+                  {(conceptosFaltantes.saldo !== 0 || !!detalleSaldoBreakdown?.fraccionamiento) && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{
                         fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
@@ -13791,11 +13806,30 @@ export function ReporteFacturacionTab() {
                                   </AdaptiveTooltip>
                                 )}
                               </span>
-                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
-                                -{formatCurrency(p.monto)}
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: p.monto < 0 ? '#ff0033' : '#059669' }}>
+                                {p.monto < 0 ? '+' : '-'}{formatCurrency(Math.abs(p.monto))}
                               </span>
                             </div>
                           ))}
+                          {detalleSaldoBreakdown.fraccionamiento && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                Fraccionamiento en {detalleSaldoBreakdown.fraccionamiento.cuotas} cuotas (P010)
+                                <AdaptiveTooltip
+                                  content={`Fraccionado el ${fechaHoraAR(detalleSaldoBreakdown.fraccionamiento.fecha)} hs. Esta deuda se cobra en ${detalleSaldoBreakdown.fraccionamiento.cuotas} cuotas semanales; la de esta semana está en Cargos (P010).`}
+                                  width={260}
+                                  variant="dark"
+                                >
+                                  <span style={{ display: 'flex', alignItems: 'center', cursor: 'help', color: 'var(--text-secondary)' }}>
+                                    <Info size={13} />
+                                  </span>
+                                </AdaptiveTooltip>
+                              </span>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#6366F1' }}>
+                                -{formatCurrency(detalleSaldoBreakdown.fraccionamiento.monto)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
                       <div style={{
@@ -13813,7 +13847,8 @@ export function ReporteFacturacionTab() {
                           }} />
                           <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
                             {detalleSaldoBreakdown
-                              ? (conceptosFaltantes.saldo > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor')
+                              ? (conceptosFaltantes.saldo > 0 ? 'Resultado: deuda pendiente'
+                                : conceptosFaltantes.saldo < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente')
                               : (conceptosFaltantes.saldo > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior')}
                           </span>
                         </div>
@@ -13821,7 +13856,7 @@ export function ReporteFacturacionTab() {
                           fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
                           color: conceptosFaltantes.saldo > 0 ? '#ff0033' : '#059669',
                         }}>
-                          {conceptosFaltantes.saldo > 0 ? '+' : '-'}{formatCurrency(Math.abs(conceptosFaltantes.saldo))}
+                          {conceptosFaltantes.saldo > 0 ? '+' : conceptosFaltantes.saldo < 0 ? '-' : ''}{formatCurrency(Math.abs(conceptosFaltantes.saldo))}
                         </span>
                       </div>
                     </div>

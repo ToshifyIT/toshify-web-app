@@ -46,11 +46,11 @@ export function SemanaDetalleModal({
   useEffect(() => {
     let vivo = true
     setLoading(true)
-    cargarDetalleSemana(semana.id, semana.patente, conductorId, semana.semana, semana.anio)
+    cargarDetalleSemana(semana.id, semana.patente, conductorId, semana.semana, semana.anio, semana.saldoAnterior)
       .then(d => { if (vivo) setDetalle(d) })
       .finally(() => { if (vivo) setLoading(false) })
     return () => { vivo = false }
-  }, [semana.id, semana.patente, conductorId, semana.semana, semana.anio])
+  }, [semana.id, semana.patente, conductorId, semana.semana, semana.anio, semana.saldoAnterior])
 
   const cargos = (detalle?.conceptos || []).filter(c => !c.esDescuento)
   const descuentos = (detalle?.conceptos || []).filter(c => c.esDescuento)
@@ -64,8 +64,13 @@ export function SemanaDetalleModal({
     <div className="csem-row"><span className="csem-dot" />{etiqueta}<span className="csem-amt">{formatCurrency(valor)}</span></div>
   )
   const subtotalDescuentos = descuentos.reduce((s, c) => s + c.total, 0)
-  const pagos = detalle?.pagos || []
-  const totalAportado = pagos.reduce((s, p) => s + p.monto, 0)
+  // Con fraccionamiento, los pagos previos a fraccionar se muestran en "Saldo anterior"
+  // (cierre - pagos - fraccionado), no en Aportes.
+  const desgloseFrac = detalle?.desgloseFraccionamiento || null
+  const idsEnDesglose = new Set((desgloseFrac?.pagos || []).map(p => p.id))
+  const pagos = (detalle?.pagos || []).filter(p => !idsEnDesglose.has(p.id))
+  // Los pagos que ya quedaron dentro de una deuda fraccionada se muestran pero no se restan.
+  const totalAportado = pagos.filter(p => !p.aplicadoAFraccionamiento).reduce((s, p) => s + p.monto, 0)
   // Saldo al cierre de la semana anterior: si un aporte de esta semana ya estaba dentro de
   // saldo_anterior se lo saca de ahí, porque se muestra (y se resta) en Aportes.
   const saldoAnterior = semana.saldoAnterior + (semana.pagoEnSaldoAnterior || 0)
@@ -133,13 +138,44 @@ export function SemanaDetalleModal({
                 </>
               )}
 
-              {saldoAnterior !== 0 && (
+              {saldoAnterior !== 0 && !desgloseFrac && (
                 <div className="csem-subtotal">
                   <span>{saldoAnterior > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)'}</span>
                   <span className={saldoAnterior > 0 ? 'debit' : 'credit'}>
                     {saldoAnterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoAnterior))}
                   </span>
                 </div>
+              )}
+
+              {desgloseFrac && (
+                <>
+                  <div className="csem-sect-title">Saldo anterior</div>
+                  <div className="csem-items">
+                    <div className="csem-row">
+                      <span className="csem-dot" />Saldo adeudado al cierre S{desgloseFrac.cierreSemana}
+                      <span className="csem-amt" style={{ color: '#dc2626' }}>{formatCurrency(desgloseFrac.saldoCierre)}</span>
+                    </div>
+                    {desgloseFrac.pagos.map(p => (
+                      <div key={p.id} className="csem-row aporte">
+                        <span className="csem-dot aporte" />{TIPO_APORTE_LABEL[p.tipo] || p.tipo}
+                        <span className="csem-ref">· {p.ref}{fmtPagoFecha(p.fecha) ? ` · ${fmtPagoFecha(p.fecha)}` : ''}</span>
+                        <span className="csem-amt" style={{ color: p.monto < 0 ? '#dc2626' : '#059669' }}>
+                          {p.monto < 0 ? '+' : '-'}{formatCurrency(Math.abs(p.monto))}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="csem-row" title={`Fraccionado el ${fmtPagoFecha(desgloseFrac.fraccionamiento.fecha)}. Se cobra en ${desgloseFrac.fraccionamiento.cuotas} cuotas semanales (P010).`}>
+                      <span className="csem-dot" style={{ background: '#6366F1' }} />Fraccionamiento en {desgloseFrac.fraccionamiento.cuotas} cuotas (P010)
+                      <span className="csem-amt" style={{ color: '#6366F1' }}>-{formatCurrency(desgloseFrac.fraccionamiento.monto)}</span>
+                    </div>
+                  </div>
+                  <div className="csem-subtotal">
+                    <span>{saldoAnterior > 0 ? 'Resultado: deuda pendiente' : saldoAnterior < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente'}</span>
+                    <span className={saldoAnterior > 0 ? 'debit' : 'credit'}>
+                      {saldoAnterior > 0 ? '+' : saldoAnterior < 0 ? '-' : ''}{formatCurrency(Math.abs(saldoAnterior))}
+                    </span>
+                  </div>
+                </>
               )}
 
               {pagos.length > 0 && (
@@ -152,8 +188,11 @@ export function SemanaDetalleModal({
                       {TIPO_APORTE_LABEL[p.tipo] || p.tipo}
                       <span className="csem-ref">
                         {p.referencia ? `· ${p.referencia}` : ''}{fmtPagoFecha(p.fecha) ? ` · ${fmtPagoFecha(p.fecha)}` : ''}
+                        {p.aplicadoAFraccionamiento ? ' · aplicado a la deuda fraccionada' : ''}
                       </span>
-                      <span className="csem-amt credit">-{formatCurrency(p.monto)}</span>
+                      {p.aplicadoAFraccionamiento
+                        ? <span className="csem-amt" style={{ color: '#9ca3af' }} title="Este pago bajó la deuda antes de fraccionarla: ya está descontado en las cuotas (P010).">{formatCurrency(p.monto)}</span>
+                        : <span className="csem-amt credit">-{formatCurrency(p.monto)}</span>}
                     </div>
                   ))}
                   </div>

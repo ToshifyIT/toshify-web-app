@@ -974,6 +974,49 @@ export function SaldosAbonosTab() {
 
       void pendientes // Permitir multiples fraccionamientos
 
+      // Re-verificar el saldo: si cambió desde que se abrió la pantalla (ej. otro usuario
+      // registró un pago), se fraccionaría un monto desactualizado.
+      const { data: saldoFresco, error: errorSaldoFresco } = await (supabase.from('saldos_conductores') as any)
+        .select('saldo_actual')
+        .eq('id', saldo.id)
+        .single()
+      if (errorSaldoFresco) throw errorSaldoFresco
+      if (Math.abs(Math.abs(Number(saldoFresco.saldo_actual) || 0) - montoDeuda) >= 0.01) {
+        await Swal.fire(
+          'Saldo actualizado',
+          `El saldo del conductor cambió a ${formatCurrency(Number(saldoFresco.saldo_actual) || 0)}. Revise y vuelva a fraccionar.`,
+          'warning',
+        )
+        cargarSaldos()
+        return
+      }
+
+      // El ajuste_manual que deja el saldo en $0 tiene que ser el ÚLTIMO movimiento que ve
+      // el recálculo de la semana de la primera cuota (ordena por semana DESC y después por
+      // created_at DESC). Por defecto va en la semana anterior a la primera cuota, pero si
+      // ya hay movimientos en una semana posterior (ej. un pago en efectivo cargado en la
+      // semana de la primera cuota) se registra en la semana del último movimiento; si no,
+      // ese movimiento queda por encima y arrastra la deuda completa como saldo anterior.
+      let semAjuste = formValues.semana - 1
+      let anioAjuste = formValues.anio
+      if (semAjuste < 1) { semAjuste = 52; anioAjuste-- }
+
+      const { data: ultimoMovimiento, error: errorUltimoMov } = await (supabase.from('control_saldos') as any)
+        .select('semana, anio')
+        .eq('conductor_id', saldo.conductor_id)
+        .order('anio', { ascending: false })
+        .order('semana', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (errorUltimoMov) throw errorUltimoMov
+      if (ultimoMovimiento && (
+        ultimoMovimiento.anio > anioAjuste ||
+        (ultimoMovimiento.anio === anioAjuste && ultimoMovimiento.semana > semAjuste)
+      )) {
+        semAjuste = ultimoMovimiento.semana
+        anioAjuste = ultimoMovimiento.anio
+      }
+
       const montoCuota = Math.ceil(montoDeuda / formValues.cuotas)
 
       // Obtener sede del conductor para que las cuotas queden correctamente asignadas
@@ -1018,14 +1061,6 @@ export function SaldosAbonosTab() {
         })
         .eq('id', saldo.id)
       if (errorUpdate) throw errorUpdate
-
-      // El ajuste_manual debe quedar en la semana ANTERIOR a la primera cuota.
-      // Si se registra en la misma semana o posterior, el recalcular de esa semana
-      // no lo ve (filtra semana <= semanaDelPeriodo con orden DESC) y muestra
-      // el saldo viejo como "deuda pendiente semana anterior", causando doble cobro.
-      let semAjuste = formValues.semana - 1
-      let anioAjuste = formValues.anio
-      if (semAjuste < 1) { semAjuste = 52; anioAjuste-- }
 
       await insertControlSaldo({
         conductorId: saldo.conductor_id,

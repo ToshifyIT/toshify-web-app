@@ -325,6 +325,9 @@ export async function convertirLeadAConductor(
       observaciones: lead.observaciones || null,
       cochera_propia: lead.cochera?.toLowerCase() === 'si' || lead.cochera?.toLowerCase() === 'sí' || false,
       antecedentes_penales: lead.antecedentes_penales ?? false,
+      // Referido / Embajador pasan tal cual al conductor
+      referido: lead.referido ?? null,
+      embajador_id: lead.referido === true ? lead.embajador_id || null : null,
     }
 
     let conductorId: string
