@@ -424,3 +424,163 @@
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* Conductores nuevos: detalle por persona y anuncio */
+.mkt-nuevos-titulo {
+  display: block;
+  margin: 16px 0 8px;
+}
+
+.mkt-anuncios-grupos {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mkt-anuncio-grupo + .mkt-anuncio-grupo {
+  border-top: 1px solid var(--border-primary);
+}
+
+.mkt-anuncio-grupo summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+
+.mkt-anuncio-grupo summary::-webkit-details-marker {
+  display: none;
+}
+
+.mkt-anuncio-grupo summary::before {
+  content: '▸';
+  color: var(--text-tertiary);
+  margin-right: 4px;
+  transition: transform 0.15s;
+}
+
+.mkt-anuncio-grupo[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.mkt-anuncio-grupo summary:hover {
+  background: var(--bg-secondary);
+}
+
+.mkt-anuncio-cab {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mkt-anuncio-n {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mkt-anuncio-lista {
+  margin: 0;
+  padding: 4px 14px 10px 30px;
+  list-style: none;
+  font-size: 13px;
+}
+
+.mkt-anuncio-lista li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-top: 1px dashed var(--border-primary);
+}
+
+/* Ojito de los motivos de descarte */
+.mkt-descarte-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mkt-ojito {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.mkt-ojito:hover {
+  color: var(--color-primary, #ff0033);
+  border-color: var(--color-primary, #ff0033);
+}
+
+/* Ventana de detalle */
+.mkt-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.mkt-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(820px, 100%);
+  max-height: calc(100vh - 32px);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.mkt-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.mkt-modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mkt-modal-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mkt-modal-cerrar {
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.mkt-modal-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+}

@@ -20,7 +20,8 @@ export interface PropuestaAlegra {
   destino: DestinoAlegra | null
   /** Diferencia de centavos con la factura (se carga como pago aparte) */
   ajuste: number
-  opciones_factura: Array<{ id: string; nombre: string; saldo: number }>
+  /** Facturas abiertas del proveedor; coincide = el saldo es el importe del pago */
+  opciones_factura: Array<{ id: string; nombre: string; saldo: number; coincide?: boolean }>
 }
 
 export interface MovimientoCresium {
@@ -47,9 +48,13 @@ export interface MovimientoCresium {
   alegra_cargado_en: string | null
   /** Conciliación de Alegra (borrador) en la que quedó */
   alegra_conciliacion_id: string | null
+  /** Guardado en la base la primera vez que se vio conciliado en Alegra */
+  alegra_conciliado: boolean
   propuesta: PropuestaAlegra | null
   /** Ya hay un pago en la cuenta Cresium de Alegra con misma fecha e importe */
   posible_duplicado: { id: string; fecha: string; monto: number } | null
+  /** Conciliado en Alegra (null = no se sabe / no cargado) */
+  conciliado?: boolean | null
 }
 
 export interface CategoriaAlegra {
@@ -120,6 +125,14 @@ export function obtenerMovimientosCresium(
 export interface PropuestasAlegraResponse {
   /** cresium_id -> propuesta para los pendientes del mes */
   propuestas: Record<string, { propuesta: PropuestaAlegra; posible_duplicado: MovimientoCresium['posible_duplicado'] }>
+  /** cresium_id -> si lo cargado está conciliado en Alegra */
+  conciliacion: Record<string, { conciliado: boolean }>
+  /** Movimientos que ya estaban cargados a mano en Alegra y se vincularon solos */
+  vinculados_auto: number
+  /** Cargados cuyo pago se eliminó/anuló en Alegra: volvieron a pendiente */
+  revertidos?: number
+  /** true: el mes está todo cargado y conciliado según la base; no se consultó Alegra */
+  sin_consulta?: boolean
   categorias: CategoriaAlegra[]
   /** Si Alegra no respondió: la tabla se ve igual, sin propuesta */
   error_alegra: string | null
@@ -185,6 +198,8 @@ export interface ConciliacionResponse {
   egresos: number
   impuestos: number
   conciliacion_id?: string
+  /** Fecha del documento en Alegra (hoy si ya había una conciliación posterior al corte) */
+  fecha_conciliacion?: string
 }
 
 /**
@@ -200,6 +215,16 @@ export function conciliarEnAlegra(
     method: 'POST',
     body: JSON.stringify({ hasta, confirmar }),
   })
+}
+
+export type CondicionIva = 'IVA_RESPONSABLE' | 'UNIQUE_TRIBUTE_RESPONSABLE'
+
+/** Crea en Alegra el proveedor/cliente del CUIT del movimiento (si ya existe, devuelve ese) */
+export function crearContactoAlegra(
+  empresa: EmpresaCresium,
+  datos: { cresium_id: number; nombre: string; iva_condicion: CondicionIva; tipo: 'provider' | 'client' },
+): Promise<{ contacto: { id: string; nombre: string }; existente: boolean }> {
+  return pedir(`/${empresa}/contacto`, { method: 'POST', body: JSON.stringify(datos) })
 }
 
 /** Link al pago en Alegra */

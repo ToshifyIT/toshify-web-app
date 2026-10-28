@@ -6,7 +6,7 @@
   gap: 16px;
 }
 
-/* Tarjetas: 7 columnas; bajan a 4 y 2 en pantallas chicas */
+/* Tarjetas: 8 columnas; bajan a 4 y 2 en pantallas chicas */
 .cr-stats {
   background: var(--bg-primary);
   border-radius: 8px;
@@ -15,7 +15,7 @@
 }
 
 .cr-stats .stats-grid {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -77,6 +77,20 @@
   justify-content: center;
   gap: 6px;
   height: 40px;
+  white-space: nowrap;
+}
+
+.cr-mes-conciliado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -248,6 +262,12 @@
   border-color: #bbf7d0;
 }
 
+.cr-badge--conciliado {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+
 .cr-badge--pendiente {
   background: #fef3c7;
   color: #92400e;
@@ -264,6 +284,37 @@
   background: #fee2e2;
   color: #991b1b;
   border-color: #fecaca;
+}
+
+.cr-link-btn {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.cr-link-btn:hover {
+  text-decoration: underline;
+}
+
+/* Formulario de alta de contacto */
+.cr-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.cr-form .swal2-input,
+.cr-form .swal2-select {
+  width: 100%;
+  margin: 0;
+  height: 40px;
+  font-size: 14px;
 }
 
 /* Resumen del popup de confirmación */
@@ -283,4 +334,12 @@
   .cr-stats .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.cr-girando {
+  animation: cr-girar 1s linear infinite;
+}
+
+@keyframes cr-girar {
+  to { transform: rotate(360deg); }
 }

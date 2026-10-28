@@ -47,7 +47,7 @@ BEGIN
     INSERT INTO submenus (name, label, route, menu_id, parent_id, level, order_index, is_active)
     VALUES (
       'dashboard-kpis-v2',
-      'Dashboard KPI v2',
+      'Dashboard KPI''s',
       '/reportes/dashboard-kpis-v2',
       v_menu_id,
       v_parent_id,
@@ -59,7 +59,7 @@ BEGIN
   ELSE
     UPDATE submenus
     SET
-      label = 'Dashboard KPI v2',
+      label = 'Dashboard KPI''s',
       route = '/reportes/dashboard-kpis-v2',
       menu_id = v_menu_id,
       parent_id = v_parent_id,

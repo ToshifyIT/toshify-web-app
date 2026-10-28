@@ -328,6 +328,10 @@ export async function convertirLeadAConductor(
       // Referido / Embajador pasan tal cual al conductor
       referido: lead.referido ?? null,
       embajador_id: lead.referido === true ? lead.embajador_id || null : null,
+      // De qué pauta / anuncio vino (sql/conductores_origen_pauta.sql)
+      fuente_pauta: lead.fuente_pauta || null,
+      id_fuente: lead.id_fuente || null,
+      lead_origen_id: lead.id || null,
     }
 
     let conductorId: string

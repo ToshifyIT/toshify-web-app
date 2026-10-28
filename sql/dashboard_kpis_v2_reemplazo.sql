@@ -50,8 +50,9 @@ BEGIN
   WHERE name ILIKE '%direc%' OR name ILIKE '%director%'
   ON CONFLICT (role_id, submenu_id) DO UPDATE SET can_view = true, can_edit = true;
 
-  -- 3. Ocultar Dashboard KPI's (respaldo)
-  UPDATE submenus SET is_active = false WHERE id = v_viejo;
+  -- 3. Ocultar el anterior (respaldo) y que el v2 tome su nombre
+  UPDATE submenus SET is_active = false, label = 'Dashboard KPI''s (respaldo)' WHERE id = v_viejo;
+  UPDATE submenus SET label = 'Dashboard KPI''s' WHERE id = v_nuevo;
 END $$;
 
 COMMIT;
@@ -66,4 +67,5 @@ WHERE s.name = 'dashboard-kpis-v2'
 ORDER BY r.name;
 
 -- Volver atrás (mostrar de nuevo Dashboard KPI's):
--- UPDATE submenus SET is_active = true WHERE name = 'dashboard-kpis';
+-- UPDATE submenus SET is_active = true, label = 'Dashboard KPI''s' WHERE name = 'dashboard-kpis';
+-- UPDATE submenus SET label = 'Dashboard KPI v2' WHERE name = 'dashboard-kpis-v2';
