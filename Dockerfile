@@ -67,6 +67,7 @@ COPY --from=builder /app/dist ./dist
 COPY server.js ./
 COPY server-insights-directivo.js ./
 COPY server-2chat.js ./
+COPY server-cresium.js ./
 # server-2chat.js importa el normalizador de celulares de la API (misma regla en todo el sistema)
 COPY mcp/lib/telefono.js ./mcp/lib/telefono.js
 

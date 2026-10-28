@@ -22,6 +22,52 @@ interface EstadoAuth {
 
 const USUARIO_VACIO = { email: '', fullName: '', roleId: '', sedeId: '' }
 
+type Vista = 'activos' | 'inactivos' | 'todos'
+
+interface FormEdicion {
+  fullName: string
+  email: string
+  roleId: string
+  isActive: boolean
+  /** Vista previa de la foto (URL actual o la nueva elegida) */
+  avatarPreview: string | null
+  /** Foto nueva, JPEG 256x256 en base64 */
+  avatarBase64: string | null
+  quitarAvatar: boolean
+}
+
+/** Recorta al centro y achica la foto a 256x256 JPEG (unos 30 KB). */
+function prepararFoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const lado = Math.min(img.width, img.height)
+      const canvas = document.createElement('canvas')
+      canvas.width = 256
+      canvas.height = 256
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        URL.revokeObjectURL(url)
+        reject(new Error('No se pudo procesar la imagen'))
+        return
+      }
+      ctx.drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 256, 256)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/jpeg', 0.85))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('El archivo no es una imagen válida'))
+    }
+    img.src = url
+  })
+}
+
+function iniciales(nombre: string): string {
+  return nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+}
+
 function escaparHtml(texto: string): string {
   return texto.replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
@@ -63,6 +109,11 @@ export function UserManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newUser, setNewUser] = useState(USUARIO_VACIO)
+  // Por defecto solo los activos; las tarjetas de arriba cambian la vista
+  const [vista, setVista] = useState<Vista>('activos')
+  const [editando, setEditando] = useState<UserWithRole | null>(null)
+  const [form, setForm] = useState<FormEdicion | null>(null)
+  const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -310,42 +361,90 @@ export function UserManagement() {
     showSuccess('Configuración de sede guardada')
   }
 
-  const editUserName = async (userId: string, currentName: string) => {
-    const { value: newName } = await Swal.fire({
-      title: 'Editar Nombre',
-      input: 'text',
-      inputValue: currentName || '',
-      inputPlaceholder: 'Nombre completo',
-      showCancelButton: true,
-      confirmButtonText: 'Guardar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#FF0033',
-      reverseButtons: true,
-      inputValidator: (value) => {
-        if (!value?.trim()) return 'El nombre no puede estar vacío'
-        return null
-      }
+  const abrirEdicion = (user: UserWithRole) => {
+    setEditando(user)
+    setForm({
+      fullName: (user.full_name || '') as string,
+      email: (user.email || '') as string,
+      roleId: (user.role_id || '') as string,
+      isActive: user.is_active !== false,
+      avatarPreview: (user.avatar_url as string | null) || null,
+      avatarBase64: null,
+      quitarAvatar: false,
     })
+  }
 
-    if (!newName) return
+  const cerrarEdicion = () => {
+    if (guardando) return
+    setEditando(null)
+    setForm(null)
+  }
 
+  const elegirFoto = async (file: File | undefined) => {
+    if (!file || !form) return
     try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ full_name: newName.trim() })
-        .eq('id', userId)
-
-      if (error) throw error
-
-      await loadData()
-      showSuccess('Nombre Actualizado', `Nombre cambiado a "${newName.trim()}"`)
+      const base64 = await prepararFoto(file)
+      setForm({ ...form, avatarPreview: base64, avatarBase64: base64, quitarAvatar: false })
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al actualizar nombre: ' + message
+      Swal.fire({ icon: 'error', title: 'Foto', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  const guardarEdicion = async () => {
+    if (!editando || !form) return
+    const fullName = form.fullName.trim()
+    const email = form.email.trim()
+    if (!fullName) {
+      Swal.fire({ icon: 'error', title: 'Falta el nombre', text: 'El nombre no puede estar vacío' })
+      return
+    }
+    const errorEmail = validarEmail(email)
+    if (errorEmail) {
+      Swal.fire({ icon: 'error', title: 'Email inválido', text: errorEmail })
+      return
+    }
+    const esUsuarioActual = editando.id === currentUser?.id
+    const cambiaEstado = form.isActive !== (editando.is_active !== false)
+    if (cambiaEstado && esUsuarioActual && !form.isActive) {
+      Swal.fire({ icon: 'warning', title: 'Estado', text: 'No podés desactivar tu propio usuario' })
+      return
+    }
+    const cambiaEmail = email.toLowerCase() !== String(editando.email || '').toLowerCase()
+    if (cambiaEmail) {
+      const ok = await Swal.fire({
+        icon: 'question',
+        title: 'Cambiar correo',
+        html: `Desde ahora va a iniciar sesión con <strong>${escaparHtml(email)}</strong>. Su contraseña no cambia.`,
+        showCancelButton: true,
+        confirmButtonText: 'Cambiar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#FF0033',
+        reverseButtons: true,
       })
+      if (!ok.isConfirmed) return
+    }
+
+    setGuardando(true)
+    try {
+      await llamarApiUsuarios('update', {
+        userId: editando.id,
+        fullName,
+        email,
+        roleId: form.roleId || null,
+        avatarBase64: form.avatarBase64,
+        quitarAvatar: form.quitarAvatar,
+      })
+      if (cambiaEstado) {
+        await llamarApiUsuarios('set-active', { userId: editando.id, isActive: form.isActive })
+      }
+      setEditando(null)
+      setForm(null)
+      await loadData()
+      showSuccess('Usuario actualizado', `Se guardaron los cambios de ${fullName}`)
+    } catch (err: unknown) {
+      Swal.fire({ icon: 'error', title: 'Error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setGuardando(false)
     }
   }
 
@@ -460,6 +559,8 @@ export function UserManagement() {
       {
         accessorKey: 'role_id',
         header: 'Rol',
+        // El filtro muestra el nombre del rol, no su id
+        meta: { filterValue: (u: UserWithRole) => (u.roles as Role | null)?.name || 'Sin rol' },
         cell: ({ row }) => (
           <select
             className="um-select-role"
@@ -482,6 +583,11 @@ export function UserManagement() {
       {
         accessorKey: 'is_active',
         header: 'Estado',
+        // El filtro muestra lo mismo que el badge (no true/false)
+        meta: {
+          filterValue: (u: UserWithRole) =>
+            u.is_active === false ? 'Inactivo' : estaPendiente(u) ? 'Pendiente' : 'Activo',
+        },
         cell: ({ row, getValue }) => {
           const isActive = getValue() as boolean
           if (isActive !== false && estaPendiente(row.original)) {
@@ -520,8 +626,8 @@ export function UserManagement() {
             <div className="dt-actions">
               <button
                 className="dt-btn-action dt-btn-edit"
-                onClick={() => editUserName(row.original.id, (row.original.full_name || '') as string)}
-                data-tooltip="Editar nombre"
+                onClick={() => abrirEdicion(row.original)}
+                data-tooltip="Editar usuario"
               >
                 <Pencil size={15} />
               </button>
@@ -576,27 +682,40 @@ export function UserManagement() {
     return { total, activos, inactivos, rolesCount }
   }, [users])
 
+  const usuariosVisibles = useMemo(() => {
+    if (vista === 'activos') return users.filter(u => u.is_active !== false)
+    if (vista === 'inactivos') return users.filter(u => u.is_active === false)
+    return users
+  }, [users, vista])
+
+  const tarjeta = (v: Vista) => ({
+    className: `stat-card stat-card-clickable${vista === v ? ' stat-card-active' : ''}`,
+    onClick: () => setVista(v),
+    role: 'button' as const,
+    title: v === 'todos' ? 'Ver todos los usuarios' : v === 'activos' ? 'Ver solo los activos' : 'Ver solo los inactivos',
+  })
+
   return (
     <div className="admin-module">
       <LoadingOverlay show={loading} message="Cargando usuarios..." size="lg" />
       {/* Stats Cards - Estilo Bitacora */}
       <div className="admin-stats">
         <div className="admin-stats-grid">
-          <div className="stat-card">
+          <div {...tarjeta('todos')}>
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.total}</span>
               <span className="stat-label">Total</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div {...tarjeta('activos')}>
             <UserCheck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.activos}</span>
               <span className="stat-label">Activos</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div {...tarjeta('inactivos')}>
             <UserX size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.inactivos}</span>
@@ -615,7 +734,7 @@ export function UserManagement() {
 
       {/* DataTable with integrated action button */}
       <DataTable
-        data={users}
+        data={usuariosVisibles}
         columns={columns}
         loading={loading}
         error={error}
@@ -725,6 +844,110 @@ pageSize={100}
                 disabled={creating}
               >
                 {creating ? 'Enviando invitación...' : 'Crear y enviar invitación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para editar usuario: foto, nombre, correo, rol y estado */}
+      {editando && form && (
+        <div className="um-modal-overlay" onClick={cerrarEdicion}>
+          <div className="um-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 className="um-modal-title">Editar usuario</h2>
+            <p className="um-modal-subtitle">La sede se configura aparte, con el botón del edificio.</p>
+
+            <div className="um-edit-foto">
+              <div className="um-avatar um-avatar-lg">
+                {form.avatarPreview ? (
+                  <img src={form.avatarPreview} alt={form.fullName} className="um-avatar-img" />
+                ) : (
+                  <span className="um-avatar-initials">{iniciales(form.fullName || 'U')}</span>
+                )}
+              </div>
+              <div className="um-edit-foto-acciones">
+                <label className="btn-secondary um-edit-foto-btn">
+                  {form.avatarPreview ? 'Cambiar foto' : 'Subir foto'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    disabled={guardando}
+                    onChange={(e) => {
+                      void elegirFoto(e.target.files?.[0])
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                {form.avatarPreview ? (
+                  <button
+                    type="button"
+                    className="um-edit-link"
+                    disabled={guardando}
+                    onClick={() => setForm({ ...form, avatarPreview: null, avatarBase64: null, quitarAvatar: true })}
+                  >
+                    Quitar foto
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="um-form-group">
+              <label className="um-form-label">Nombre completo *</label>
+              <input
+                type="text"
+                className="um-form-input"
+                value={form.fullName}
+                onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                disabled={guardando}
+              />
+            </div>
+
+            <div className="um-form-group">
+              <label className="um-form-label">Email *</label>
+              <input
+                type="email"
+                className="um-form-input"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                disabled={guardando}
+              />
+            </div>
+
+            <div className="um-form-group">
+              <label className="um-form-label">Rol</label>
+              <select
+                className="um-form-input"
+                value={form.roleId}
+                onChange={(e) => setForm({ ...form, roleId: e.target.value })}
+                disabled={guardando}
+              >
+                <option value="">Sin rol</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="um-form-group">
+              <label className="um-form-label">Estado</label>
+              <select
+                className="um-form-input"
+                value={form.isActive ? 'activo' : 'inactivo'}
+                onChange={(e) => setForm({ ...form, isActive: e.target.value === 'activo' })}
+                disabled={guardando || editando.id === currentUser?.id}
+              >
+                <option value="activo">Activo (puede iniciar sesión)</option>
+                <option value="inactivo">Inactivo (no puede iniciar sesión)</option>
+              </select>
+            </div>
+
+            <div className="um-modal-actions">
+              <button className="btn-secondary" onClick={cerrarEdicion} disabled={guardando}>
+                Cancelar
+              </button>
+              <button className="btn-primary" onClick={guardarEdicion} disabled={guardando}>
+                {guardando ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>

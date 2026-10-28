@@ -16,6 +16,8 @@ import crypto from 'node:crypto'
 import { insightsDirectivoRouter } from './server-insights-directivo.js'
 // Integración 2Chat: contactos para llamadas + historial de llamadas (clave solo en el servidor)
 import { twoChatRouter } from './server-2chat.js'
+// Integración Cresium -> Alegra: movimientos bancarios y carga en Alegra (claves solo en el servidor)
+import { cresiumRouter } from './server-cresium.js'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
 
 const __filename = fileURLToPath(import.meta.url)
@@ -45,6 +47,9 @@ app.use('/api/insights-directivo', insightsDirectivoRouter)
 
 // Rutas /api/2chat (Integraciones > 2Chat, archivo aparte)
 app.use('/api/2chat', twoChatRouter)
+
+// Rutas /api/cresium (Integraciones > Cresium, archivo aparte)
+app.use('/api/cresium', cresiumRouter)
 
 // Google Drive service
 function getDriveService(writeAccess = false) {
@@ -1007,6 +1012,105 @@ app.post('/api/admin/users/send-access', async (req, res) => {
   } catch (error) {
     console.error('[usuarios] send-access:', error)
     res.status(500).json({ error: 'Error interno al enviar el correo' })
+  }
+})
+
+// Editar usuario: nombre, correo, rol y foto (el estado va por set-active).
+// El correo se cambia en Auth (sin pedir confirmacion al usuario) y en el perfil.
+// La foto llega en base64 (JPEG de 256x256 armado en el navegador, unos 30 KB, entra
+// en el límite de express.json) y se sube
+// al bucket "avatars" con la service role.
+app.post('/api/admin/users/update', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg } = ctx
+    const userId = String(req.body?.userId || '')
+    const fullName = String(req.body?.fullName || '').trim()
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const roleId = req.body?.roleId || null
+    const avatarBase64 = typeof req.body?.avatarBase64 === 'string' ? req.body.avatarBase64 : null
+    const quitarAvatar = req.body?.quitarAvatar === true
+
+    if (!UUID_RE.test(userId)) return res.status(400).json({ error: 'Usuario invalido' })
+    if (!fullName) return res.status(400).json({ error: 'El nombre es obligatorio' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return res.status(400).json({ error: 'El email no tiene un formato valido' })
+    }
+    if (roleId && !UUID_RE.test(roleId)) return res.status(400).json({ error: 'Rol invalido' })
+
+    const actualRes = await fetch(`${cfg.url}/rest/v1/user_profiles?id=eq.${userId}&select=email,avatar_url`, { headers: cfg.headers })
+    const [actual] = actualRes.ok ? await actualRes.json() : []
+    if (!actual) return res.status(404).json({ error: 'El usuario no existe' })
+
+    // Correo: no puede repetirse y se cambia primero en Auth (es con el que inicia sesion)
+    const cambiaEmail = email !== String(actual.email || '').toLowerCase()
+    if (cambiaEmail) {
+      const dupRes = await fetch(
+        `${cfg.url}/rest/v1/user_profiles?email=ilike.${encodeURIComponent(email)}&id=neq.${userId}&select=id`,
+        { headers: cfg.headers }
+      )
+      const dup = dupRes.ok ? await dupRes.json() : []
+      if (dup.length > 0) return res.status(409).json({ error: 'Ya existe otro usuario con ese email' })
+      const authRes = await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: cfg.headers,
+        body: JSON.stringify({ email, email_confirm: true }),
+      })
+      if (!authRes.ok) {
+        return res.status(502).json({ error: `No se pudo cambiar el correo: ${await leerErrorGotrue(authRes)}` })
+      }
+    }
+
+    // Foto
+    let avatarUrl
+    if (avatarBase64) {
+      const datos = avatarBase64.replace(/^data:image\/\w+;base64,/, '')
+      const buffer = Buffer.from(datos, 'base64')
+      if (buffer.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'La foto es muy pesada' })
+      const ruta = `avatars/${userId}-${Date.now()}.jpg`
+      const subida = await fetch(`${cfg.url}/storage/v1/object/avatars/${ruta}`, {
+        method: 'POST',
+        headers: { apikey: cfg.headers.apikey, Authorization: cfg.headers.Authorization, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+        body: buffer,
+      })
+      if (!subida.ok) {
+        const detalle = await subida.text()
+        console.error('[usuarios] update: foto no subida:', detalle)
+        return res.status(502).json({ error: 'No se pudo subir la foto' })
+      }
+      avatarUrl = `${cfg.url}/storage/v1/object/public/avatars/${ruta}`
+    } else if (quitarAvatar) {
+      avatarUrl = null
+    }
+    // La foto anterior se borra (si era del bucket) para no acumular archivos
+    if (avatarUrl !== undefined && actual.avatar_url) {
+      const anterior = String(actual.avatar_url).split('/storage/v1/object/public/avatars/')[1]
+      if (anterior) {
+        await fetch(`${cfg.url}/storage/v1/object/avatars`, {
+          method: 'DELETE',
+          headers: cfg.headers,
+          body: JSON.stringify({ prefixes: [anterior] }),
+        }).catch(() => {})
+      }
+    }
+
+    const cambios = { full_name: fullName, email, role_id: roleId, updated_at: new Date().toISOString() }
+    if (avatarUrl !== undefined) cambios.avatar_url = avatarUrl
+    const profileRes = await fetch(`${cfg.url}/rest/v1/user_profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { ...cfg.headers, Prefer: 'return=minimal' },
+      body: JSON.stringify(cambios),
+    })
+    if (!profileRes.ok) {
+      console.error('[usuarios] update: perfil no actualizado:', await profileRes.text())
+      return res.status(500).json({ error: 'No se pudo guardar el usuario' })
+    }
+
+    res.json({ success: true, avatarUrl: avatarUrl ?? actual.avatar_url ?? null })
+  } catch (error) {
+    console.error('[usuarios] update:', error)
+    res.status(500).json({ error: 'Error interno al guardar el usuario' })
   }
 })
 
