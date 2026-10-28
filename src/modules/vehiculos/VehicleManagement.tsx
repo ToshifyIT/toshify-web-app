@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -290,6 +290,7 @@ export function VehicleManagement() {
     let vehiculosPkgOff = 0
     let vehiculosDestruccion = 0
     let vehiculosRetenido = 0
+    let vehiculosJubilados = 0
     let vehiculosSinGnc = 0
     let vehiculosConGnc = 0
     let vehiculosConTelepase = 0
@@ -350,6 +351,8 @@ export function VehicleManagement() {
         vehiculosDestruccion++
       } else if (estadoCodigo === 'RETENIDO_COMISARIA') {
         vehiculosRetenido++
+      } else if (estadoCodigo === 'JUBILADO') {
+        vehiculosJubilados++
       }
     }
 
@@ -369,6 +372,7 @@ export function VehicleManagement() {
       vehiculosPkgOff,
       vehiculosDestruccion,
       vehiculosRetenido,
+      vehiculosJubilados,
       categoriaCountMap,
     }
   }, [vehiculos])
@@ -1530,6 +1534,10 @@ export function VehicleManagement() {
         setStatCardEstadoFilter(['Destruccion'])
         setStatCardExcludeMode(false)
         break
+      case 'jubilados':
+        setStatCardEstadoFilter(['Jubilado'])
+        setStatCardExcludeMode(false)
+        break
       case 'retenido':
         setStatCardEstadoFilter(['RETENIDO_COMISARIA'])
         setStatCardExcludeMode(false)
@@ -1610,6 +1618,7 @@ export function VehicleManagement() {
         chapaPintura: 'Chapa y Pintura',
         corporativos: 'Corporativos',
         devueltos: 'Dev. Proveedor',
+        jubilados: 'Jubilado',
         robo: 'Robo',
         pkgOff: 'PKG OFF',
         destruccion: 'Destruccion Total',
@@ -2517,6 +2526,10 @@ export function VehicleManagement() {
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'devueltos' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('devueltos')} title="Click para filtrar: Devueltos a Proveedor">
             <Undo2 size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDevueltos}</span><span className="stat-label">Dev. Proveedor</span></div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'jubilados' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('jubilados')} title="Click para filtrar: Vehículos jubilados (fuera de la flota)">
+            <Archive size={18} className="stat-icon" />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosJubilados}</span><span className="stat-label">Jubilado</span></div>
           </div>
         </div>
         {/* Fila 2: Categorias */}
