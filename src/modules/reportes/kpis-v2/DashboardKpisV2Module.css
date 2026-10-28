@@ -910,3 +910,18 @@
 .dkv2-ranking li {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) 150px;
 }
+
+/* Dashboard General: todos los módulos uno debajo del otro, sin alto fijo */
+.dkv2-gen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dkv2-gen .dkv2-mod-cuerpo {
+  height: auto;
+}
+
+.dkv2-gen .dkv2-mod-pie {
+  margin-top: 12px;
+}

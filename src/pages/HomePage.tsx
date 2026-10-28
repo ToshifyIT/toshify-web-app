@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -48,6 +48,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'bitacora-gps': History,
   'cabify': MapPin,
   'twochat': Phone,
+  'cresium': Landmark,
   'gestion-usuarios': UserCog,
   'roles': Shield,
   'menu-por-rol': List,
@@ -275,10 +276,13 @@ const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExceso
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
 const TwoChatLlamadasPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatLlamadasPage })))
 const TwoChatContactosPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatContactosPage })))
+const Cresium44DreamsPage = lazy(() => import('./integraciones/cresium/CresiumPage').then(m => ({ default: m.Cresium44DreamsPage })))
+const CresiumGrupoCgPage = lazy(() => import('./integraciones/cresium/CresiumPage').then(m => ({ default: m.CresiumGrupoCgPage })))
 const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
 const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then(m => ({ default: m.DashboardKpisPage })))
 const DashboardDirectivoPage = lazy(() => import('./reportes/DashboardDirectivoPage').then(m => ({ default: m.DashboardDirectivoPage })))
 const DashboardKpisV2Page = lazy(() => import('./reportes/DashboardKpisV2Page').then(m => ({ default: m.DashboardKpisV2Page })))
+const DashboardGeneralPage = lazy(() => import('./reportes/DashboardGeneralPage').then(m => ({ default: m.DashboardGeneralPage })))
 const DashboardMarketingPage = lazy(() => import('./reportes/DashboardMarketingPage').then(m => ({ default: m.DashboardMarketingPage })))
 const RolesPage = lazy(() => import('./administracion/RolesPage').then(m => ({ default: m.RolesPage })))
 const GestionUsuariosPage = lazy(() => import('./administracion/GestionUsuariosPage').then(m => ({ default: m.GestionUsuariosPage })))
@@ -2159,6 +2163,18 @@ export function HomePage() {
                   <LazyPage><TwoChatContactosPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              {/* Cresium: movimientos bancarios de 44 Dreams y Grupo CG y su carga en Alegra */}
+              <Route path="/integraciones/cresium" element={<Navigate to="/integraciones/cresium/44dreams" replace />} />
+              <Route path="/integraciones/cresium/44dreams" element={
+                <ProtectedRoute submenuName="cresium-44dreams" action="view">
+                  <LazyPage><Cresium44DreamsPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/integraciones/cresium/grupocg" element={
+                <ProtectedRoute submenuName="cresium-grupocg" action="view">
+                  <LazyPage><CresiumGrupoCgPage /></LazyPage>
+                </ProtectedRoute>
+              } />
 
               {/* Reportes */}
               <Route path="/reportes" element={
@@ -2179,6 +2195,11 @@ export function HomePage() {
               <Route path="/reportes/dashboard-kpis-v2" element={
                 <ProtectedRoute menuName="reportes" submenuName="dashboard-kpis-v2" action="view">
                   <LazyPage><DashboardKpisV2Page /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/reportes/dashboard-general" element={
+                <ProtectedRoute menuName="reportes" submenuName="dashboard-general" action="view">
+                  <LazyPage><DashboardGeneralPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/reportes/dashboard-marketing" element={

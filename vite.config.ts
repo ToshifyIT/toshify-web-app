@@ -66,9 +66,39 @@ function twoChatDevApi(): Plugin {
   }
 }
 
+/**
+ * Monta la API de la integración Cresium -> Alegra (/api/cresium) dentro del dev
+ * server de Vite, igual que twoChatDevApi. En producción la sirve server.js.
+ */
+function cresiumDevApi(): Plugin {
+  return {
+    name: 'toshify-cresium-dev-api',
+    apply: 'serve',
+    async configureServer(server) {
+      try {
+        const rutaModulo = path.resolve(server.config.root, 'server-cresium.js')
+        const { mtimeMs } = await stat(rutaModulo)
+        const modulo = `${pathToFileURL(rutaModulo).href}?v=${mtimeMs}`
+        const { cresiumRouter } = await import(/* @vite-ignore */ modulo)
+        server.middlewares.use('/api/cresium', cresiumRouter)
+        server.watcher.add(rutaModulo)
+        server.watcher.on('change', (archivo) => {
+          if (path.resolve(archivo) !== rutaModulo) return
+          void server.restart()
+        })
+      } catch (err) {
+        server.config.logger.warn(
+          '  [cresium] No se pudo montar /api/cresium: ' +
+            (err instanceof Error ? err.message : String(err)),
+        )
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), insightsDirectivoDevApi(), twoChatDevApi()],
+  plugins: [react(), insightsDirectivoDevApi(), twoChatDevApi(), cresiumDevApi()],
   esbuild: {
     drop: ['console', 'debugger'],
   },
