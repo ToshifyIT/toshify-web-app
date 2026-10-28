@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS cresium_movimientos (
   alegra_cargado_en TIMESTAMPTZ,
   -- Conciliación de Alegra (borrador) en la que quedó incluido
   alegra_conciliacion_id TEXT,
+  -- Conciliado en Alegra (se guarda la primera vez que se ve conciliado: no se vuelve a consultar)
+  alegra_conciliado BOOLEAN NOT NULL DEFAULT false,
+  alegra_conciliado_en TIMESTAMPTZ,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -78,6 +81,8 @@ CREATE TABLE IF NOT EXISTS cresium_movimientos (
 
 -- Para bases creadas con la primera versión de este script
 ALTER TABLE cresium_movimientos ADD COLUMN IF NOT EXISTS alegra_conciliacion_id TEXT;
+ALTER TABLE cresium_movimientos ADD COLUMN IF NOT EXISTS alegra_conciliado BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE cresium_movimientos ADD COLUMN IF NOT EXISTS alegra_conciliado_en TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_cresium_mov_empresa_fecha ON cresium_movimientos(empresa, fecha);
 CREATE INDEX IF NOT EXISTS idx_cresium_mov_alegra_estado ON cresium_movimientos(empresa, alegra_estado);

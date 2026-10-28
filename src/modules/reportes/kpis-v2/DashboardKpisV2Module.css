@@ -925,3 +925,49 @@
 .dkv2-gen .dkv2-mod-pie {
   margin-top: 12px;
 }
+
+/* Detalle de bajas */
+.dkv2-ver-detalle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.dkv2-ver-detalle:hover {
+  color: var(--color-primary, #ff0033);
+  border-color: var(--color-primary, #ff0033);
+}
+
+.dkv2-modal.dkv2-modal--ancho {
+  width: min(960px, 100%);
+}
+
+.dkv2-bajas-tabla td {
+  vertical-align: top;
+  text-align: left;
+}
+
+.dkv2-bajas-tabla th {
+  text-align: left;
+}
+
+.dkv2-bajas-nombre {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dkv2-bajas-motivo {
+  white-space: normal;
+  min-width: 260px;
+  line-height: 1.4;
+}

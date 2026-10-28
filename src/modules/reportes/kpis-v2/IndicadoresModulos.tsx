@@ -2,38 +2,35 @@
 // Vista general por módulo, sin entrar a cada módulo. Cada pestaña muestra
 // pocos números y el enlace al módulo. Lo que depende del tiempo se compara
 // contra el período anterior (semana o mes, según lo elegido arriba).
-// - Conductores: altas, bajas, neto, licencias y deuda; motivos de baja por tema.
+// - Conductores: altas, bajas, neto, licencias, deuda y multas; motivos de baja por
+//   tema y conductores con más multas.
 // - Ventas: embudo del período (get_dashboard_marketing, como Dashboard Marketing).
 // - Vehículos: estado de la flota hoy (misma clasificación que el módulo Vehículos).
-// - Multas y km: multas y excesos de km del período.
-// - Siniestros: siniestros y robos del período, días sin siniestro.
-// - Garantías y deuda: foto de hoy (useDashboardStats).
+// (2026-10-28: se quitaron por ahora Multas y km, Siniestros y Garantías y deuda.)
 // Todo se pide una vez al abrir la pantalla y queda en memoria unos minutos.
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Eye } from 'lucide-react'
 import type { Diferencia, Motivo, Periodo } from './kpisV2Types'
 import type { MarketingRaw } from '../marketing/marketingTypes'
-import type { IndicadoresConductores, IndicadoresMultas, IndicadoresSiniestros, IndicadoresVehiculos, Rango, Ranking } from './indicadoresModulosService'
+import type { IndicadoresConductores, IndicadoresMultas, IndicadoresVehiculos, Rango, Ranking } from './indicadoresModulosService'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useDashboardStats } from '../../../hooks/useDashboardStats'
 import { embudoDe } from '../marketing/marketingTypes'
-import { cargarConductores, cargarMultas, cargarSiniestros, cargarVehiculos } from './indicadoresModulosService'
+import { DetalleBajasModal } from './DetalleBajasModal'
+import { cargarConductores, cargarMultas, cargarVehiculos } from './indicadoresModulosService'
 import {
   INICIO_DATOS, difPuntos, difRelativa, difUnidades, fechaCorta, fmtInt, fmtMonedaCorta, fmtPct, sumarDias,
 } from './kpisV2Types'
 
-type Pestana = 'conductores' | 'ventas' | 'vehiculos' | 'multas' | 'siniestros' | 'garantias'
+type Pestana = 'conductores' | 'ventas' | 'vehiculos'
 
 const PESTANAS: { id: Pestana; label: string }[] = [
   { id: 'conductores', label: 'Conductores' },
   { id: 'ventas', label: 'Ventas' },
   { id: 'vehiculos', label: 'Vehículos' },
-  { id: 'multas', label: 'Multas y km' },
-  { id: 'siniestros', label: 'Siniestros' },
-  { id: 'garantias', label: 'Garantías y deuda' },
 ]
 
 interface Dato {
@@ -165,13 +162,24 @@ function usarCarga<T>(carga: Carga<T>, render: (data: T) => ReactNode): ReactNod
 
 // ───────────── Conductores ─────────────
 
-function ListaMotivos({ titulo, subtitulo, motivos }: { titulo: string; subtitulo: string; motivos: Motivo[] }) {
+function ListaMotivos({ titulo, subtitulo, motivos, onVerDetalle }: {
+  titulo: string
+  subtitulo: string
+  motivos: Motivo[]
+  /** Si viene, muestra el ojito para ver quiénes se fueron y su motivo. */
+  onVerDetalle?: () => void
+}) {
   const max = Math.max(1, ...motivos.map(m => m.cantidad))
   const total = motivos.reduce((s, m) => s + m.cantidad, 0)
   return (
     <div className="dkv2-motivos-panel">
       <h3 className="dkv2-motivos-titulo">
         {titulo} <span className="dkv2-muted">· {subtitulo} · {total} {total === 1 ? 'baja' : 'bajas'}</span>
+        {onVerDetalle && total > 0 ? (
+          <button type="button" className="dkv2-ver-detalle" onClick={onVerDetalle} title="Ver quiénes se fueron y el motivo">
+            <Eye size={14} /> Ver detalle
+          </button>
+        ) : null}
       </h3>
       {motivos.length ? (
         <ul className="dkv2-motivos">
@@ -195,12 +203,42 @@ function ListaMotivos({ titulo, subtitulo, motivos }: { titulo: string; subtitul
   )
 }
 
-function Conductores({ periodo, anterior, general, carga }: {
+function ListaRanking({ titulo, unidad, filas }: { titulo: string; unidad: string; filas: Ranking[] }) {
+  const max = Math.max(1, ...filas.map(f => f.cantidad))
+  return (
+    <div className="dkv2-motivos-panel">
+      <h3 className="dkv2-motivos-titulo">{titulo}</h3>
+      {filas.length ? (
+        <ul className="dkv2-motivos dkv2-ranking">
+          {filas.map(f => (
+            <li key={f.nombre}>
+              <span className="dkv2-motivo-texto" title={f.nombre}>{f.nombre}</span>
+              <span className="dkv2-motivo-barra" aria-hidden="true">
+                <span style={{ width: `${(f.cantidad / max) * 100}%` }} />
+              </span>
+              <span className="dkv2-motivo-n">
+                {fmtInt(f.cantidad)} {unidad}
+                <span className="dkv2-muted"> · {f.detalle}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="dkv2-card-subtitle">Sin registros en el período.</p>
+      )}
+    </div>
+  )
+}
+
+function Conductores({ periodo, anterior, general, carga, multas }: {
   periodo: Periodo
   anterior: Periodo | null
   general: Motivo[]
   carga: Carga<IndicadoresConductores>
+  multas: Carga<IndicadoresMultas>
 }) {
+  const m = multas.data
+  const [verBajas, setVerBajas] = useState(false)
   const c = periodo.conductores
   const a = anterior?.conductores ?? null
   const neto = c.altas - c.bajas
@@ -223,19 +261,44 @@ function Conductores({ periodo, anterior, general, carga }: {
       value: extra ? fmtInt(extra.activosConDeuda) : '…',
       detalle: extra ? `${fmtMonedaCorta(extra.deudaActivos)} adeudados` : undefined,
     },
+    {
+      label: 'MULTAS',
+      value: m ? fmtInt(m.actual.cantidad) : multas.error ? '—' : '…',
+      dif: m ? alReves(difUnidades(m.actual.cantidad, m.anterior.cantidad)) : null,
+      detalle: m ? `${fmtMonedaCorta(m.actual.monto)} · por fecha de infracción` : undefined,
+    },
+    {
+      label: 'CONDUCTORES CON MULTAS',
+      value: m ? fmtInt(m.actual.conductores) : multas.error ? '—' : '…',
+      detalle: m && m.actual.conductores
+        ? `${(m.actual.cantidad / m.actual.conductores).toLocaleString('es-AR', { maximumFractionDigits: 1 })} multas por conductor`
+        : undefined,
+    },
   ]
   return (
     <Cuerpo>
       <Tarjetas datos={datos} />
       <div className="dkv2-motivos-grid dkv2-mod-motivos">
-        <ListaMotivos titulo="Motivos de baja" subtitulo={periodo.labelLargo} motivos={c.motivos} />
+        <ListaMotivos
+          titulo="Motivos de baja"
+          subtitulo={periodo.labelLargo}
+          motivos={c.motivos}
+          onVerDetalle={() => setVerBajas(true)}
+        />
         <ListaMotivos
           titulo="General"
           subtitulo={`desde ${fechaCorta(INICIO_DATOS)}/${INICIO_DATOS.slice(2, 4)}`}
           motivos={general}
         />
       </div>
-      <Pie nota={`Altas y bajas: ${periodo.labelLargo} contra el período anterior. Licencias y deuda: hoy.`} ruta="/conductores" />
+      <div className="dkv2-motivos-grid dkv2-mod-motivos">
+        <ListaRanking titulo={`Conductores con más multas · ${periodo.labelLargo}`} unidad="" filas={m?.topMultas ?? []} />
+      </div>
+      <Pie
+        nota={`Altas, bajas y multas: ${periodo.labelLargo} contra el período anterior. Licencias y deuda: hoy.`}
+        ruta="/conductores"
+      />
+      {verBajas ? <DetalleBajasModal periodo={periodo} onClose={() => setVerBajas(false)} /> : null}
     </Cuerpo>
   )
 }
@@ -287,96 +350,11 @@ function Vehiculos({ v, turnosLibres }: { v: IndicadoresVehiculos; turnosLibres:
 
 // ───────────── Multas y km ─────────────
 
-function ListaRanking({ titulo, unidad, filas }: { titulo: string; unidad: string; filas: Ranking[] }) {
-  const max = Math.max(1, ...filas.map(f => f.cantidad))
-  return (
-    <div className="dkv2-motivos-panel">
-      <h3 className="dkv2-motivos-titulo">{titulo}</h3>
-      {filas.length ? (
-        <ul className="dkv2-motivos dkv2-ranking">
-          {filas.map(f => (
-            <li key={f.nombre}>
-              <span className="dkv2-motivo-texto" title={f.nombre}>{f.nombre}</span>
-              <span className="dkv2-motivo-barra" aria-hidden="true">
-                <span style={{ width: `${(f.cantidad / max) * 100}%` }} />
-              </span>
-              <span className="dkv2-motivo-n">
-                {fmtInt(f.cantidad)} {unidad}
-                <span className="dkv2-muted"> · {f.detalle}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="dkv2-card-subtitle">Sin registros en el período.</p>
-      )}
-    </div>
-  )
-}
-
-function Multas({ periodo, m, cobradas }: { periodo: Periodo; m: IndicadoresMultas; cobradas: string | null }) {
-  const a = m.actual
-  const b = m.anterior
-  return (
-    <Cuerpo>
-      <Tarjetas
-        datos={[
-          { label: 'MULTAS', value: fmtInt(a.cantidad), dif: alReves(difUnidades(a.cantidad, b.cantidad)), detalle: fmtMonedaCorta(a.monto) },
-          {
-            label: 'CONDUCTORES CON MULTAS',
-            value: fmtInt(a.conductores),
-            detalle: a.conductores ? `${(a.cantidad / a.conductores).toLocaleString('es-AR', { maximumFractionDigits: 1 })} multas por conductor` : undefined,
-          },
-          { label: 'KM EXCEDIDOS', value: fmtInt(Math.round(a.kmExcedidos)), dif: alReves(difRelativa(a.kmExcedidos, b.kmExcedidos)), detalle: `${fmtMonedaCorta(a.montoExcesos)} facturados` },
-          { label: 'CONDUCTORES CON EXCESO', value: fmtInt(a.conductoresConExceso) },
-          { label: 'MULTAS COBRADAS', value: cobradas ?? '…', detalle: 'Acumulado enviado a facturación' },
-        ]}
-      />
-      <div className="dkv2-motivos-grid dkv2-mod-motivos">
-        <ListaRanking titulo="Más multas en el período" unidad="" filas={m.topMultas} />
-        <ListaRanking titulo="Más km excedidos en el período" unidad="km" filas={m.topExcesos} />
-      </div>
-      <Pie
-        nota={`${periodo.labelLargo} contra el período anterior. Multas por fecha de infracción; km por semana facturada.`}
-        ruta="/multas-telepase/multas"
-      />
-    </Cuerpo>
-  )
-}
-
-// ───────────── Siniestros ─────────────
-
-function Siniestros({ periodo, s, diasSinSiniestro, diasSinRobo }: {
-  periodo: Periodo
-  s: IndicadoresSiniestros
-  diasSinSiniestro: string | null
-  diasSinRobo: string | null
-}) {
-  return (
-    <Datos
-      ruta="/siniestros"
-      nota={`${periodo.labelLargo} · comparado con el período anterior`}
-      datos={[
-        { label: 'SINIESTROS', value: fmtInt(s.actual.total), dif: alReves(difUnidades(s.actual.total, s.anterior.total)) },
-        { label: 'CON CULPA DEL CONDUCTOR', value: fmtInt(s.actual.culpaConductor), dif: alReves(difUnidades(s.actual.culpaConductor, s.anterior.culpaConductor)) },
-        { label: 'ROBOS', value: fmtInt(s.actual.robos), dif: alReves(difUnidades(s.actual.robos, s.anterior.robos)) },
-        { label: 'DÍAS SIN SINIESTRO', value: diasSinSiniestro ?? '…', detalle: 'Hoy' },
-        { label: 'DÍAS SIN ROBO', value: diasSinRobo ?? '…', detalle: 'Hoy' },
-      ]}
-    />
-  )
-}
-
-// ───────────── Pantalla ─────────────
-
 /** Subtítulo de cada módulo en la vista completa (Dashboard General). */
 const DESCRIPCION: Record<Pestana, string> = {
-  conductores: 'Altas, bajas, licencias, deuda y por qué se van los conductores.',
+  conductores: 'Altas, bajas, licencias, deuda, multas y por qué se van los conductores.',
   ventas: 'Embudo de leads del período, como en Dashboard Marketing.',
   vehiculos: 'Estado de la flota hoy.',
-  multas: 'Multas y excesos de kilometraje del período, y quiénes suman más.',
-  siniestros: 'Siniestros y robos del período.',
-  garantias: 'Fondo de garantía, reintegros y deuda de conductores, hoy.',
 }
 
 /**
@@ -414,44 +392,15 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
   const conductores = useCarga(`conductores|${sede}|${hoy}`, () => cargarConductores(filtroSede, hoy), 'No se pudieron cargar los datos de conductores.')
   const vehiculos = useCarga(`vehiculos|${sede}`, () => cargarVehiculos(filtroSede), 'No se pudieron cargar los vehículos.')
   const multas = useCarga(`multas|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}`, () => cargarMultas(filtroSede, actual, previo), 'No se pudieron cargar las multas.')
-  const siniestros = useCarga(`siniestros|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}`, () => cargarSiniestros(filtroSede, actual, previo), 'No se pudieron cargar los siniestros.')
   const foto = useDashboardStats()
   const stats = foto.stats
 
   const contenidoDe = (pestana: Pestana): ReactNode => {
-    let contenido: ReactNode
     if (pestana === 'conductores') {
-      contenido = <Conductores periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} />
-    } else if (pestana === 'ventas') {
-      contenido = usarCarga(ventas, d => <Ventas periodo={periodo} data={d} />)
-    } else if (pestana === 'vehiculos') {
-      contenido = usarCarga(vehiculos, v => <Vehiculos v={v} turnosLibres={stats?.turnosDisponibles.value ?? null} />)
-    } else if (pestana === 'multas') {
-      contenido = usarCarga(multas, m => <Multas periodo={periodo} m={m} cobradas={stats?.cobroMultas.value ?? null} />)
-    } else if (pestana === 'siniestros') {
-      contenido = usarCarga(siniestros, s => (
-        <Siniestros periodo={periodo} s={s} diasSinSiniestro={stats?.diasSinSiniestro.value ?? null} diasSinRobo={stats?.diasSinRobo.value ?? null} />
-      ))
-    } else if (foto.loading) {
-      contenido = <Cargando />
-    } else if (!stats) {
-      contenido = <Aviso texto="No se pudieron cargar los datos." />
-    } else {
-      contenido = (
-        <Datos
-          ruta="/reportes/facturacion"
-          nota="Foto de hoy"
-          datos={[
-            { label: 'FONDO DE GARANTÍA', value: stats.fondoGarantia.value, detalle: stats.fondoGarantia.subtitle },
-            { label: 'REINTEGROS A DEVOLVER', value: stats.reintegroReciente.value, detalle: stats.reintegroReciente.subtitle },
-            { label: 'REINTEGROS VENCIDOS', value: stats.reintegroAntiguo.value, detalle: stats.reintegroAntiguo.subtitle },
-            { label: 'DEUDA DE CONDUCTORES', value: stats.totalSaldoPendiente.value, detalle: stats.totalSaldoPendiente.subtitle },
-            { label: 'DEUDA SIN GARANTÍA QUE LA CUBRA', value: stats.deudaNoCubierta.value, detalle: stats.deudaNoCubierta.subtitle },
-          ]}
-        />
-      )
+      return <Conductores periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} multas={multas} />
     }
-    return contenido
+    if (pestana === 'ventas') return usarCarga(ventas, d => <Ventas periodo={periodo} data={d} />)
+    return usarCarga(vehiculos, v => <Vehiculos v={v} turnosLibres={stats?.turnosDisponibles.value ?? null} />)
   }
 
   if (completo) {

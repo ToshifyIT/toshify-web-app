@@ -549,6 +549,14 @@ async function datosAlegra(empresa, cred, { forzar = false } = {}) {
   return renovar()
 }
 
+/** Un pago de Alegra está conciliado si trae su conciliación (el formato varía según la cuenta) */
+function estaConciliado(p) {
+  const c = p.conciliation
+  if (c && typeof c === 'object') return !!(c.id || c.status === 'conciliated' || c.date)
+  if (typeof c === 'number' || (typeof c === 'string' && c !== '' && c !== '0')) return true
+  return p.conciliated === true || p.isConciliated === true
+}
+
 const cachePagosMes = new Map() // `${empresa}|${mes}` -> { en, pagos }
 
 /**
@@ -564,13 +572,19 @@ async function pagosAlegraDelMes(empresa, cred, bancoId, mes, { forzar = false }
   const siguiente = new Date(Date.UTC(a, m, 1)).toISOString().slice(0, 10)
   const pagos = []
   for (let start = 0; start < 30000; start += 30) {
-    const qs = new URLSearchParams({ start: String(start), limit: '30', order_field: 'date', order_direction: 'DESC' })
+    const qs = new URLSearchParams({
+      start: String(start), limit: '30', order_field: 'date', order_direction: 'DESC', fields: 'conciliation',
+    })
     const r = await alegra(cred, `/payments?${qs}`)
     if (!r.ok) throw new Error(errorAlegra(r))
     const pagina = Array.isArray(r.data) ? r.data : (r.data?.data || [])
     for (const p of pagina) {
       if (p.date >= primerDia && p.date < siguiente && String(p.bankAccount?.id) === String(bancoId) && p.status !== 'void') {
-        pagos.push({ id: String(p.id), fecha: p.date, monto: redondear(p.amount), tipo: p.type })
+        pagos.push({
+          id: String(p.id), fecha: p.date, monto: redondear(p.amount), tipo: p.type,
+          conciliado: estaConciliado(p),
+          con_contacto: !!p.client?.id,
+        })
       }
     }
     const masViejo = pagina[pagina.length - 1]?.date
@@ -578,6 +592,13 @@ async function pagosAlegraDelMes(empresa, cred, bancoId, mes, { forzar = false }
   }
   cachePagosMes.set(clave, { en: Date.now(), pagos })
   return pagos
+}
+
+const PESOS_AR = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
+/** 'AAAA-MM-DD' -> 'DD/MM/AA' */
+const fechaCorta = (d) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''))
+  return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : 's/f'
 }
 
 const normalizar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
@@ -632,7 +653,19 @@ function proponer(empresa, fila, alg, ultimaCategoriaPorCuit) {
     crear_contacto: !contacto && !!fila.cuit,
     destino,
     ajuste,
-    opciones_factura: opcionesFactura.map((f) => ({ id: f.id, nombre: `Factura ${f.numero} · saldo ${f.saldo}`, saldo: f.saldo })),
+    opciones_factura: [...opcionesFactura]
+      .sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')))
+      .map((f) => {
+        const dif = redondear(fila.importe - f.saldo)
+        const coincide = dif >= 0 && dif <= TOLERANCIA_FACTURA
+        return {
+          id: f.id,
+          nombre: `${coincide ? '✓ ' : ''}Factura ${f.numero} · ${f.proveedor || 'Proveedor'} · ` +
+            `${fechaCorta(f.fecha)} · saldo ${PESOS_AR.format(f.saldo)}`,
+          saldo: f.saldo,
+          coincide,
+        }
+      }),
   }
 }
 
@@ -736,19 +769,27 @@ const COLUMNAS_LISTADO = [
   'cresium_id', 'fecha', 'procesado_en', 'tipo', 'estado', 'direccion', 'contraparte', 'cuit',
   'cuenta_contraparte', 'banco_contraparte', 'importe', 'impuesto', 'tag', 'nota',
   'alegra_estado', 'alegra_pago_id', 'alegra_impuesto_pago_id', 'alegra_ajuste_pago_id',
-  'alegra_detalle', 'alegra_error', 'alegra_cargado_en', 'alegra_conciliacion_id', 'updated_at',
+  'alegra_detalle', 'alegra_error', 'alegra_cargado_en', 'alegra_conciliacion_id', 'alegra_conciliado', 'updated_at',
 ].join(',')
 
 async function filasDelMes(cfg, empresa, mes) {
   const [a, m] = mes.split('-').map(Number)
   const primerDia = `${mes}-01`
   const siguiente = new Date(Date.UTC(a, m, 1)).toISOString().slice(0, 10)
-  const filas = await selectTodo(
-    cfg,
-    `cresium_movimientos?select=${COLUMNAS_LISTADO}&empresa=eq.${empresa}` +
-      `&fecha=gte.${primerDia}&fecha=lt.${siguiente}&order=procesado_en.asc`,
-  )
-  return filas.map((f) => ({ ...f, importe: Number(f.importe) || 0, impuesto: Number(f.impuesto) || 0 }))
+  const filtro = `&empresa=eq.${empresa}&fecha=gte.${primerDia}&fecha=lt.${siguiente}&order=procesado_en.asc`
+  let filas
+  try {
+    filas = await selectTodo(cfg, `cresium_movimientos?select=${COLUMNAS_LISTADO}${filtro}`)
+  } catch (err) {
+    // Base sin las columnas de conciliación (falta correr de nuevo sql/cresium_integracion.sql)
+    if (!/alegra_concilia/.test(err.message)) throw err
+    const sinConciliacion = COLUMNAS_LISTADO.split(',').filter((c) => !c.startsWith('alegra_concilia')).join(',')
+    filas = await selectTodo(cfg, `cresium_movimientos?select=${sinConciliacion}${filtro}`)
+    console.warn('[cresium] Faltan columnas de conciliación: correr sql/cresium_integracion.sql')
+  }
+  return filas.map((f) => ({
+    ...f, importe: Number(f.importe) || 0, impuesto: Number(f.impuesto) || 0, alegra_conciliado: !!f.alegra_conciliado,
+  }))
 }
 
 /** Movimientos del mes desde la base (rápido: no consulta Cresium ni Alegra) */
@@ -774,33 +815,222 @@ async function armarListado(ctx, empresa, mes) {
 }
 
 /** Propuesta de carga en Alegra para los pendientes del mes (consulta Alegra, con caché) */
+/**
+ * ¿Sigue existiendo (y sin anular) este pago en Alegra y es de este movimiento?
+ * esperado: { fecha, monto } -> si el pago existe pero no coincide, está mal vinculado.
+ * Devuelve true | false | null (no se pudo saber).
+ */
+async function pagoExisteEnAlegra(cred, id, esperado = null, chequeos = null) {
+  const r = await alegra(cred, `/payments/${id}`)
+  const texto = String(r.texto || '').slice(0, 200)
+  chequeos?.push({
+    id, status: r.status, estado: r.data?.status ?? null, texto: r.ok ? '' : texto,
+    fecha: r.data?.date ?? null, monto: r.data?.amount ?? null, banco: r.data?.bankAccount?.name ?? null,
+  })
+  if (r.status === 404 || r.status === 410) return false
+  // Alegra a veces responde 400 con "no existe" para documentos eliminados
+  if (!r.ok) return /no exist|not found|elimin|deleted/i.test(texto) ? false : null
+  if (r.data?.status === 'void' || r.data?.deleted === true) return false
+  if (esperado && (r.data?.date !== esperado.fecha || Math.abs(redondear(r.data?.amount) - redondear(esperado.monto)) >= 0.01)) {
+    return false // existe pero es de otro movimiento
+  }
+  return true
+}
+
+/**
+ * Movimientos marcados como cargados cuyo pago ya no está en Alegra: se limpian los
+ * ids que faltan y, si falta el principal, el movimiento vuelve a pendiente (lo que
+ * siga existiendo, por ejemplo el impuesto, se conserva para no duplicarlo).
+ * Lo conciliado no se revisa salvo con "Actualizar Alegra".
+ */
+async function revisarEliminados(ctx, empresa, cred, exitosas, pagosPorId, { refrescar = false } = {}) {
+  const resultado = { filas: 0, pagos: [], chequeos: [] }
+  const cargadas = exitosas.filter((f) => f.alegra_estado === 'cargado' && f.alegra_pago_id && (refrescar || !f.alegra_conciliado))
+  for (const fila of cargadas) {
+    const campos = ['alegra_pago_id', 'alegra_impuesto_pago_id', 'alegra_ajuste_pago_id']
+    const faltan = []
+    // Monto esperado de cada pago: el principal (con o sin ajuste de factura), el impuesto y el ajuste
+    const esperados = {
+      alegra_pago_id: null, // el principal se compara solo por fecha (puede ir contra factura con ajuste)
+      alegra_impuesto_pago_id: { fecha: fila.fecha, monto: fila.impuesto },
+      alegra_ajuste_pago_id: null,
+    }
+    for (const campo of campos) {
+      const id = fila[campo] ? String(fila[campo]) : null
+      if (!id) continue
+      const enMes = pagosPorId.get(id)
+      // Está en los pagos del mes de la cuenta Cresium: existe y es de este mes
+      if (enMes && (!esperados[campo] || Math.abs(enMes.monto - esperados[campo].monto) < 0.01)) continue
+      const esperado = esperados[campo] || { fecha: fila.fecha, monto: null }
+      const existe = await pagoExisteEnAlegra(
+        cred, id, esperado.monto === null ? null : esperado, resultado.chequeos,
+      )
+      const otraFecha = resultado.chequeos.at(-1)?.fecha && resultado.chequeos.at(-1).fecha !== fila.fecha
+      if (existe === false || (existe === true && otraFecha)) faltan.push(campo)
+    }
+    if (faltan.length === 0) continue
+    const cambios = {}
+    for (const campo of faltan) {
+      resultado.pagos.push(String(fila[campo]))
+      cambios[campo] = null
+      fila[campo] = null
+    }
+    if (faltan.includes('alegra_pago_id')) {
+      Object.assign(cambios, {
+        alegra_estado: 'pendiente',
+        alegra_detalle: null,
+        alegra_error: 'El pago de Alegra se eliminó, se anuló o no correspondía a este movimiento',
+        alegra_conciliado: false,
+        alegra_conciliado_en: null,
+        alegra_conciliacion_id: null,
+        alegra_categoria_id: null,
+        alegra_factura_id: null,
+      })
+      fila.alegra_estado = 'pendiente'
+      fila.alegra_conciliado = false
+    }
+    try {
+      await actualizarMovimiento(ctx.cfg, empresa, fila.cresium_id, cambios)
+    } catch (err) {
+      // Base sin columnas de conciliación: se guarda lo demás
+      if (!/alegra_concilia/.test(err.message)) throw err
+      for (const k of Object.keys(cambios)) if (k.startsWith('alegra_concilia')) delete cambios[k]
+      await actualizarMovimiento(ctx.cfg, empresa, fila.cresium_id, cambios)
+    }
+    resultado.filas += 1
+  }
+  return resultado
+}
+
+/**
+ * Propuesta de carga en Alegra para los pendientes del mes (consulta Alegra, con caché).
+ * Además:
+ *  - vincula sola cada fila pendiente que ya está cargada a mano en la cuenta Cresium
+ *    de Alegra (mismo día, importe y tipo; el impuesto igual, como pago aparte), y
+ *  - devuelve si cada movimiento cargado está conciliado en Alegra.
+ */
 async function armarPropuestas(ctx, empresa, mes, { refrescar = false } = {}) {
   const cred = credenciales(empresa)
-  if (!cred.alegraOk) return { propuestas: {}, categorias: [], error_alegra: null }
-  const [filas, alg, ultima, vinculadosFilas] = await Promise.all([
-    filasDelMes(ctx.cfg, empresa, mes),
+  if (!cred.alegraOk) return { propuestas: {}, conciliacion: {}, vinculados_auto: 0, categorias: [], error_alegra: null }
+  const filas = await filasDelMes(ctx.cfg, empresa, mes)
+  const exitosas = filas.filter((f) => f.estado === 'SUCCESS')
+  const hayPendientes = exitosas.some((f) => ['pendiente', 'error'].includes(f.alegra_estado))
+  const sinConciliar = exitosas.filter((f) => f.alegra_estado === 'cargado' && f.alegra_pago_id && !f.alegra_conciliado)
+  // Mes cerrado (todo cargado y conciliado, ya guardado en la base): no hace falta consultar Alegra
+  if (!refrescar && !hayPendientes && sinConciliar.length === 0) {
+    return { propuestas: {}, conciliacion: {}, vinculados_auto: 0, categorias: [], error_alegra: null, sin_consulta: true }
+  }
+  const [alg, ultima, vinculadosFilas] = await Promise.all([
     datosAlegra(empresa, cred.alegra, { forzar: refrescar }),
     ultimaCategoriaPorCuit(ctx.cfg, empresa),
-    selectTodo(ctx.cfg, `cresium_movimientos?select=alegra_pago_id&empresa=eq.${empresa}&alegra_pago_id=not.is.null`),
+    selectTodo(
+      ctx.cfg,
+      `cresium_movimientos?select=alegra_pago_id,alegra_impuesto_pago_id,alegra_ajuste_pago_id` +
+        `&empresa=eq.${empresa}&alegra_pago_id=not.is.null`,
+    ),
   ])
-  const pendientes = filas.filter((f) => f.estado === 'SUCCESS' && ['pendiente', 'error'].includes(f.alegra_estado))
-  const pagos = pendientes.length > 0
+  const pagos = exitosas.length > 0
     ? await pagosAlegraDelMes(empresa, cred.alegra, alg.banco.id, mes, { forzar: refrescar })
     : []
-  // Pagos de Alegra ya vinculados a otro movimiento: no se proponen como duplicado
-  const vinculados = new Set(vinculadosFilas.map((t) => String(t.alegra_pago_id)))
-  const propuestas = {}
-  for (const fila of pendientes) {
-    const dup = posibleDuplicado(fila, pagos, vinculados)
-    if (dup) vinculados.add(dup.id)
-    propuestas[fila.cresium_id] = {
-      propuesta: proponer(empresa, fila, alg, ultima),
-      posible_duplicado: dup ? { id: dup.id, fecha: dup.fecha, monto: dup.monto } : null,
-    }
+  const pagosPorId = new Map(pagos.map((p) => [p.id, p]))
+  // Pagos de Alegra ya vinculados a algún movimiento: no se vuelven a usar
+  const usados = new Set()
+  for (const t of vinculadosFilas) {
+    for (const id of [t.alegra_pago_id, t.alegra_impuesto_pago_id, t.alegra_ajuste_pago_id]) if (id) usados.add(String(id))
   }
+
+  // 0) Lo cargado que ya no está en Alegra (se eliminó o se anuló): vuelve a pendiente.
+  //    Se revisa uno por uno solo lo que no aparece en los pagos del mes.
+  const revertidos = await revisarEliminados(ctx, empresa, cred.alegra, exitosas, pagosPorId, { refrescar })
+  // (los ids revertidos siguen en `usados`: o ya no existen o son de otro movimiento)
+
+  // 1) Lo que ya está en Alegra (cargado a mano): se vincula solo
+  let vinculadosAuto = 0
+  const pendientes = exitosas.filter((f) => ['pendiente', 'error'].includes(f.alegra_estado) && !f.alegra_pago_id)
+  for (const fila of pendientes) {
+    const principal = posibleDuplicado(fila, pagos, usados)
+    if (!principal) continue
+    usados.add(principal.id)
+    const impuesto = fila.impuesto > 0
+      ? pagos.find((x) => !usados.has(x.id) && x.tipo === 'out' && x.fecha === fila.fecha &&
+          !x.con_contacto && Math.abs(x.monto - fila.impuesto) < 0.01)
+      : null
+    if (impuesto) usados.add(impuesto.id)
+    await actualizarMovimiento(ctx.cfg, empresa, fila.cresium_id, {
+      alegra_estado: 'cargado',
+      alegra_pago_id: principal.id,
+      alegra_impuesto_pago_id: impuesto?.id || null,
+      alegra_detalle: 'Ya estaba en Alegra' + (fila.impuesto > 0 && !impuesto ? ' (impuesto no encontrado)' : ''),
+      alegra_error: null,
+      alegra_cargado_en: new Date().toISOString(),
+    })
+    fila.alegra_estado = 'cargado'
+    fila.alegra_pago_id = principal.id
+    fila.alegra_impuesto_pago_id = impuesto?.id || null
+    vinculadosAuto += 1
+  }
+
+  // 2) Propuesta para lo que sigue pendiente
+  const propuestas = {}
+  for (const fila of pendientes.filter((f) => f.alegra_estado !== 'cargado')) {
+    propuestas[fila.cresium_id] = { propuesta: proponer(empresa, fila, alg, ultima), posible_duplicado: null }
+  }
+
+  // 3) Conciliación en Alegra de lo cargado (principal + impuesto + ajuste)
+  //    Lo ya guardado como conciliado no se vuelve a mirar; lo nuevo conciliado se guarda.
+  const conciliacion = {}
+  const nuevosConciliados = []
+  const desconciliados = [] // estaban conciliados y en Alegra se deshizo la conciliación
+  for (const fila of exitosas.filter((f) => f.alegra_estado === 'cargado' && f.alegra_pago_id)) {
+    // Ya guardado como conciliado: solo se revisa con "Actualizar Alegra" (refrescar)
+    if (fila.alegra_conciliado && !refrescar) {
+      conciliacion[fila.cresium_id] = { conciliado: true }
+      continue
+    }
+    const ids = [fila.alegra_pago_id, fila.alegra_impuesto_pago_id, fila.alegra_ajuste_pago_id].filter(Boolean).map(String)
+    const encontrados = ids.map((id) => pagosPorId.get(id)).filter(Boolean)
+    if (encontrados.length === 0) {
+      if (fila.alegra_conciliado) conciliacion[fila.cresium_id] = { conciliado: true }
+      continue // el pago no está en ese mes en Alegra: se deja como estaba
+    }
+    const conciliado = encontrados.every((p) => p.conciliado)
+    conciliacion[fila.cresium_id] = { conciliado }
+    if (conciliado && !fila.alegra_conciliado) nuevosConciliados.push(fila.cresium_id)
+    if (!conciliado && fila.alegra_conciliado) desconciliados.push(fila.cresium_id)
+  }
+  if (nuevosConciliados.length > 0) {
+    const res = await fetchConTimeout(
+      `${ctx.cfg.url}/rest/v1/cresium_movimientos?empresa=eq.${empresa}&cresium_id=in.(${nuevosConciliados.join(',')})`,
+      {
+        method: 'PATCH',
+        headers: { ...headersServicio(ctx.cfg), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          alegra_conciliado: true, alegra_conciliado_en: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }),
+      },
+    )
+    if (!res.ok) console.warn('[cresium] No se pudo guardar la conciliación:', (await res.text()).slice(0, 200))
+  }
+  if (desconciliados.length > 0) {
+    const res = await fetchConTimeout(
+      `${ctx.cfg.url}/rest/v1/cresium_movimientos?empresa=eq.${empresa}&cresium_id=in.(${desconciliados.join(',')})`,
+      {
+        method: 'PATCH',
+        headers: { ...headersServicio(ctx.cfg), Prefer: 'return=minimal' },
+        body: JSON.stringify({ alegra_conciliado: false, alegra_conciliado_en: null, updated_at: new Date().toISOString() }),
+      },
+    )
+    if (!res.ok) console.warn('[cresium] No se pudo guardar la conciliación:', (await res.text()).slice(0, 200))
+  }
+
   return {
     propuestas,
-    categorias: alg.categorias.filter((c) => ['income', 'expense', 'asset', 'liability', 'cost'].includes(c.tipo)),
+    conciliacion,
+    vinculados_auto: vinculadosAuto,
+    revertidos: revertidos.filas,
+    // Diagnóstico: qué respondió Alegra al buscar pagos que no aparecen en el mes
+    chequeos_pagos: revertidos.chequeos,
+    categorias: alg.categorias.filter((c) => ['income', 'expense', 'asset', 'liability', 'cost', 'equity'].includes(c.tipo)),
     error_alegra: null,
   }
 }
@@ -809,17 +1039,27 @@ async function armarPropuestas(ctx, empresa, mes, { refrescar = false } = {}) {
 /* Carga en Alegra                                                            */
 /* -------------------------------------------------------------------------- */
 
-async function crearContacto(cred, fila) {
+/** Condiciones de IVA que usa Alegra Argentina (las que hay en los contactos de las empresas) */
+const CONDICIONES_IVA = ['IVA_RESPONSABLE', 'UNIQUE_TRIBUTE_RESPONSABLE']
+
+/**
+ * Crea el contacto en Alegra con el CUIT del movimiento.
+ * opciones: { nombre?, ivaCondition?, tipo?: 'provider'|'client' } (si no vienen, se deducen)
+ */
+async function crearContacto(cred, fila, opciones = {}) {
   const empresaJuridica = /^3[034]/.test(fila.cuit)
   const body = {
-    name: fila.contraparte || `CUIT ${fila.cuit}`,
+    name: String(opciones.nombre || fila.contraparte || `CUIT ${fila.cuit}`).replace(/\s+/g, ' ').trim(),
     identificationObject: { type: 'CUIT', number: fila.cuit },
-    type: [fila.direccion === 'entrada' ? 'client' : 'provider'],
-    ivaCondition: empresaJuridica ? 'IVA_RESPONSABLE' : 'CONSUMIDOR_FINAL',
+    type: [opciones.tipo || (fila.direccion === 'entrada' ? 'client' : 'provider')],
+    // Persona jurídica: Responsable Inscripto; persona humana: Monotributo (se puede cambiar)
+    ivaCondition: CONDICIONES_IVA.includes(opciones.ivaCondition)
+      ? opciones.ivaCondition
+      : (empresaJuridica ? 'IVA_RESPONSABLE' : 'UNIQUE_TRIBUTE_RESPONSABLE'),
     address: { province: 'Buenos Aires', city: '[POR CONFIRMAR]', address: '[POR CONFIRMAR]' },
     observations:
       `Creado desde Toshibase (Cresium). CBU/CVU: ${fila.cuenta_contraparte || '-'} ` +
-      `(${fila.banco_contraparte || '-'}). Revisar condición de IVA y domicilio.`,
+      `(${fila.banco_contraparte || '-'}). Revisar domicilio.`,
   }
   const r = await alegra(cred, '/contacts', { method: 'POST', body })
   if (!r.ok) throw new Error(`No se pudo crear el contacto ${body.name}: ${errorAlegra(r)}`)
@@ -829,8 +1069,18 @@ async function crearContacto(cred, fila) {
 async function crearPago(cred, body) {
   const r = await alegra(cred, '/payments', { method: 'POST', body })
   if (!r.ok) throw new Error(errorAlegra(r))
+  const id = r.data?.id !== undefined && r.data?.id !== null ? String(r.data.id) : ''
+  if (!id) throw new Error('Alegra no devolvió el número del pago creado')
+  // Control: el pago creado tiene que ser el de este movimiento (fecha e importe)
+  const monto = redondear((body.categories || []).reduce((s, c) => s + Number(c.price) * Number(c.quantity || 1), 0) +
+    (body.bills || []).reduce((s, b) => s + Number(b.amount), 0))
+  const fechaR = r.data?.date
+  const montoR = redondear(r.data?.amount)
+  if ((fechaR && fechaR !== body.date) || (r.data?.amount !== undefined && Math.abs(montoR - monto) >= 0.01)) {
+    throw new Error(`Alegra devolvió el pago ${id} con fecha ${fechaR} e importe ${montoR}, distinto de lo cargado (${body.date}, ${monto}). Revisalo en Alegra.`)
+  }
   await esperar(PAUSA_ALEGRA_MS)
-  return String(r.data.id)
+  return id
 }
 
 let cargando = false
@@ -972,7 +1222,7 @@ cresiumRouter.get('/:empresa/propuestas', async (req, res) => {
       res.json(await armarPropuestas(ctx, empresa, mes, { refrescar: req.query.refrescar === '1' }))
     } catch (err) {
       // Si Alegra falla, la tabla igual se ve: solo falta la propuesta
-      res.json({ propuestas: {}, categorias: [], error_alegra: err.message })
+      res.json({ propuestas: {}, conciliacion: {}, vinculados_auto: 0, categorias: [], error_alegra: err.message })
     }
   } catch (error) {
     console.error('[cresium/propuestas]', error.message)
@@ -1073,6 +1323,45 @@ cresiumRouter.post('/:empresa/cargar', async (req, res) => {
 })
 
 /**
+ * POST /api/cresium/:empresa/contacto { cresium_id, nombre, iva_condicion, tipo: 'provider'|'client' }
+ * Crea en Alegra el contacto (proveedor o cliente) del CUIT de ese movimiento.
+ */
+cresiumRouter.post('/:empresa/contacto', async (req, res) => {
+  try {
+    const empresa = leerEmpresa(req, res)
+    if (!empresa) return
+    const ctx = await requireUsuario(req, res, empresa, 'edit')
+    if (!ctx) return
+    const cresiumId = req.body?.cresium_id
+    const nombre = String(req.body?.nombre || '').replace(/\s+/g, ' ').trim()
+    const tipo = req.body?.tipo === 'client' ? 'client' : 'provider'
+    const ivaCondition = String(req.body?.iva_condicion || '')
+    if (!Number.isInteger(cresiumId) || nombre.length < 3 || !CONDICIONES_IVA.includes(ivaCondition)) {
+      return res.status(400).json({ error: 'Completá el nombre y la condición de IVA' })
+    }
+    const cred = credenciales(empresa)
+    if (!cred.alegraOk) return res.status(500).json({ error: 'Falta el token de Alegra en el .env del servidor' })
+    const [fila] = await selectTodo(
+      ctx.cfg,
+      `cresium_movimientos?select=cuit,contraparte,direccion,cuenta_contraparte,banco_contraparte` +
+        `&empresa=eq.${empresa}&cresium_id=eq.${cresiumId}`,
+    )
+    if (!fila) return res.status(404).json({ error: 'Movimiento no encontrado' })
+    if (!fila.cuit) return res.status(400).json({ error: 'El movimiento no tiene CUIT' })
+    // Datos frescos: puede que el contacto ya exista (lo creó otro usuario o se cargó a mano)
+    const alg = await datosAlegra(empresa, cred.alegra, { forzar: true })
+    const existente = alg.porCuit.get(fila.cuit)
+    if (existente) return res.json({ contacto: existente, existente: true })
+    const contacto = await crearContacto(cred.alegra, fila, { nombre, ivaCondition, tipo })
+    alg.porCuit.set(fila.cuit, contacto)
+    res.json({ contacto, existente: false })
+  } catch (error) {
+    console.error('[cresium/contacto]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
  * POST /api/cresium/:empresa/marcar { cresium_id, accion: 'ignorar'|'pendiente'|'vincular', alegra_pago_id? }
  *  - vincular: el movimiento ya estaba cargado a mano en Alegra (queda como cargado)
  *  - ignorar / pendiente: sacarlo o volverlo a la lista de pendientes
@@ -1142,10 +1431,28 @@ const efectoEnSaldo = (f) => redondear(
 async function conciliar(ctx, empresa, hasta, confirmar) {
   const cred = credenciales(empresa)
   if (!cred.cresiumOk || !cred.alegraOk) throw new Error('Faltan claves de Cresium o Alegra en el .env del servidor')
+  const desde = `${hasta.slice(0, 7)}-01`
+  // Ya conciliado (guardado en la base): no se vuelve a conciliar
+  let yaConciliados = new Set()
+  try {
+    const conc = await selectTodo(
+      ctx.cfg,
+      `cresium_movimientos?select=cresium_id,alegra_estado,alegra_conciliado&empresa=eq.${empresa}` +
+        `&fecha=gte.${desde}&fecha=lte.${hasta}&estado=eq.SUCCESS`,
+    )
+    yaConciliados = new Set(conc.filter((f) => f.alegra_conciliado).map((f) => Number(f.cresium_id)))
+    const cargados = conc.filter((f) => f.alegra_estado === 'cargado')
+    if (cargados.length > 0 && cargados.every((f) => f.alegra_conciliado) &&
+        !conc.some((f) => ['pendiente', 'error'].includes(f.alegra_estado))) {
+      return { ok: false, error: `Los movimientos hasta el ${hasta} ya están conciliados en Alegra.` }
+    }
+  } catch (err) {
+    if (!/alegra_concilia/.test(err.message)) throw err // base sin la columna: se sigue sin este control
+  }
+
   // Base al día: el saldo se calcula hacia atrás desde el saldo actual
   await sincronizarEmpresa(ctx.cfg, empresa, { forzar: true })
 
-  const desde = `${hasta.slice(0, 7)}-01`
   const todas = await selectTodo(
     ctx.cfg,
     `cresium_movimientos?select=cresium_id,fecha,estado,direccion,contraparte,importe,impuesto,alegra_estado,` +
@@ -1161,11 +1468,12 @@ async function conciliar(ctx, empresa, hasta, confirmar) {
         'Cargalos o marcalos como "No cargar" antes de conciliar.',
     }
   }
-  const aConciliar = enRango.filter((f) => f.alegra_estado === 'cargado' && !f.alegra_conciliacion_id)
+  const aConciliar = enRango.filter((f) =>
+    f.alegra_estado === 'cargado' && !f.alegra_conciliacion_id && !yaConciliados.has(Number(f.cresium_id)))
   const transacciones = [...new Set(aConciliar.flatMap((f) =>
     [f.alegra_pago_id, f.alegra_impuesto_pago_id, f.alegra_ajuste_pago_id].filter(Boolean).map(String)))]
   if (transacciones.length === 0) {
-    return { ok: false, error: 'No hay movimientos cargados sin conciliar en ese rango.' }
+    return { ok: false, error: 'No hay movimientos cargados sin conciliar en ese rango: ya está todo conciliado.' }
   }
 
   const saldoActual = await saldoCresiumActual(cred.cresium)
@@ -1194,11 +1502,11 @@ async function conciliar(ctx, empresa, hasta, confirmar) {
   if (!confirmar) return { ok: true, ...resumen }
 
   const alg = await datosAlegra(empresa, cred.alegra)
-  const r = await alegra(cred.alegra, '/conciliations', {
+  const crear = (fecha) => alegra(cred.alegra, '/conciliations', {
     method: 'POST',
     body: {
       account: { id: Number(alg.banco.id) },
-      date: hasta,
+      date: fecha,
       realBalance: saldoBancario,
       bankExpenses: 0,
       bankTaxes: 0,
@@ -1207,6 +1515,15 @@ async function conciliar(ctx, empresa, hasta, confirmar) {
       transactions: transacciones.map(Number),
     },
   })
+  let fechaConciliacion = hasta
+  let r = await crear(fechaConciliacion)
+  // Alegra no deja fechar una conciliación antes de la última que ya existe. Los
+  // movimientos y el saldo bancario siguen siendo los del corte: solo cambia la fecha
+  // del documento, que pasa a ser hoy.
+  if (!r.ok && /menor a la de la [uú]ltima conciliaci/i.test(String(r.texto || JSON.stringify(r.data || '')))) {
+    fechaConciliacion = fechaART(new Date().toISOString())
+    r = await crear(fechaConciliacion)
+  }
   if (!r.ok) throw new Error(errorAlegra(r))
   const conciliacionId = String(r.data?.id ?? '')
   const ids = aConciliar.map((f) => f.cresium_id).join(',')
@@ -1219,7 +1536,8 @@ async function conciliar(ctx, empresa, hasta, confirmar) {
     },
   )
   if (!upd.ok) console.warn('[cresium] Conciliación creada pero no se pudo marcar en la base:', await upd.text())
-  return { ok: true, ...resumen, conciliacion_id: conciliacionId }
+  for (const k of cachePagosMes.keys()) if (k.startsWith(`${empresa}|`)) cachePagosMes.delete(k)
+  return { ok: true, ...resumen, conciliacion_id: conciliacionId, fecha_conciliacion: fechaConciliacion }
 }
 
 /**

@@ -150,6 +150,7 @@ rangos AS (
 leads_base AS (
   SELECT
     l.id,
+    btrim(COALESCE(l.nombre_completo, '')) AS nombre,
     l.created_at,
     (l.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS ingreso,
     regexp_replace(COALESCE(l.dni, ''), '\D', '', 'g') AS dni,
@@ -277,7 +278,7 @@ primer_auto_dni AS (
 leads_v AS (
   SELECT
     r.rango,
-    ln.id, ln.dni, ln.ingreso, ln.segmento, ln.canal, ln.id_fuente, ln.descartado, ln.causal, ln.estado, ln.edad,
+    ln.id, ln.nombre, ln.dni, ln.ingreso, ln.segmento, ln.canal, ln.id_fuente, ln.descartado, ln.causal, ln.estado, ln.edad,
     COALESCE(ln.zona, 'Sin dato') AS zona,
     (ln.zona IS NULL) AS sin_zona,
     -- Edad: con la edad cargada (o calculada de la fecha de nacimiento) manda la edad;
@@ -445,6 +446,16 @@ SELECT jsonb_build_object(
     FROM (SELECT segmento, motivo, COUNT(*) AS cantidad FROM leads_act WHERE descartado GROUP BY segmento, motivo) x
   ),
 
+  -- Detalle de los descartados (para el ojito de cada motivo): quién, de qué canal
+  -- y anuncio vino, su zona y la causal cargada.
+  'descartes_detalle', (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'segmento', segmento, 'motivo', motivo, 'canal', canal, 'anuncio', id_fuente,
+      'nombre', nombre, 'zona', zona, 'ingreso', ingreso, 'causal', causal)
+      ORDER BY ingreso DESC, nombre), '[]'::jsonb)
+    FROM leads_act WHERE descartado
+  ),
+
   'causales', (
     -- Causales más frecuentes, para revisar la clasificación. Los códigos en
     -- inglés que manda el chatbot se muestran traducidos (disagreement, price,
@@ -537,6 +548,14 @@ SELECT jsonb_build_object(
         WHERE con_auto
         GROUP BY segmento
       ) x
+    ),
+    -- Quiénes son y de qué canal / anuncio vinieron (pedido 2026-10-28)
+    'detalle', (
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'segmento', segmento, 'canal', canal, 'anuncio', id_fuente, 'nombre', nombre,
+        'dni', dni, 'ingreso', ingreso, 'primer_auto', primer_turno)
+        ORDER BY primer_turno DESC, nombre), '[]'::jsonb)
+      FROM leads_act WHERE con_auto
     ),
     'fuera_de_rango', (
       SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'cantidad', cantidad) ORDER BY cantidad DESC, segmento), '[]'::jsonb)

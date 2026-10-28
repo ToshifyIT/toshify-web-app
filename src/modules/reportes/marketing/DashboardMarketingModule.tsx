@@ -5,7 +5,7 @@
 // Solo datos agregados: no muestra nombres, teléfonos ni DNI. No incluye costos de pauta.
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronDown, ChevronUp, ChevronsUpDown, Info } from 'lucide-react'
+import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Info } from 'lucide-react'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { ZonasPendientesChart } from '../../dashboard/components/ZonasPendientesChart'
@@ -39,6 +39,7 @@ import {
 } from './marketingTypes'
 import type { FiltroSegmento, FilaRendimiento, MarketingRaw, Perfil } from './marketingTypes'
 import { useMarketingData } from './useMarketingData'
+import { DescartesDetalleModal } from './DescartesDetalleModal'
 import '../directivo/DashboardDirectivoModule.css'
 import '../DashboardKpisModule.css'
 import './DashboardMarketingModule.css'
@@ -190,6 +191,13 @@ function Filtros({ rango, d, filtro, cargando, onRango, onFiltro }: {
 }
 
 // ───────────── Secciones ─────────────
+
+/** "2026-10-27" → "27/10/26" */
+function fechaDia(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const t = String(iso).slice(0, 10)
+  return `${t.slice(8, 10)}/${t.slice(5, 7)}/${t.slice(2, 4)}`
+}
 
 /** Time to driver (mediana de días de lead a primer auto) del período y del anterior. */
 function timeToDriver(n: MarketingRaw['nuevos_conductores'], filtro: FiltroSegmento) {
@@ -505,6 +513,10 @@ function Zonas({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
 
 function Descartes({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
   const motivos = descartesDe(d, filtro)
+  const [verMotivo, setVerMotivo] = useState<string | null>(null)
+  const detalleMotivo = verMotivo
+    ? (d.descartes_detalle ?? []).filter(f => f.motivo === verMotivo && enSegmento(f.segmento, filtro))
+    : []
   const total = motivos.reduce((s, m) => s + m.cantidad, 0)
   const causales = causalesDe(d, filtro)
   return (
@@ -519,7 +531,20 @@ function Descartes({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
         <div className="ddir-funnel">
           {motivos.map(m => (
             <div className="ddir-funnel-row" key={m.motivo}>
-              <span className="ddir-funnel-label">{m.motivo}</span>
+              <span className="ddir-funnel-label mkt-descarte-label">
+                {m.motivo}
+                {d.descartes_detalle ? (
+                  <button
+                    type="button"
+                    className="mkt-ojito"
+                    onClick={() => setVerMotivo(m.motivo)}
+                    title={`Ver de qué anuncios vinieron los descartados por ${m.motivo}`}
+                    aria-label={`Ver detalle de ${m.motivo}`}
+                  >
+                    <Eye size={14} />
+                  </button>
+                ) : null}
+              </span>
               <div className="ddir-funnel-track"><div className="ddir-funnel-fill mkt-fill-descarte" style={{ width: `${(m.cantidad / Math.max(1, total)) * 100}%` }} /></div>
               <span className="ddir-funnel-value">{fmtInt(m.cantidad)}</span>
               <span className="ddir-funnel-pct">{fmtPct(ratio(m.cantidad, total))}</span>
@@ -537,6 +562,9 @@ function Descartes({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
             </div>
           ))}
         </div>
+      ) : null}
+      {verMotivo ? (
+        <DescartesDetalleModal motivo={verMotivo} filas={detalleMotivo} onClose={() => setVerMotivo(null)} />
       ) : null}
     </Card>
   )
@@ -559,6 +587,24 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
     ? n.dias_mediana
     : (n.dias_mediana_segmento ?? []).find(m => m.segmento === filtro)?.mediana ?? null
   const v = variacion(a.nuevos, b.nuevos, 'num', true)
+  // Agrupados por anuncio (cada conductor aparece una sola vez); los que no
+  // tienen link del anuncio van juntos al final. Cada grupo se despliega.
+  const gruposAnuncio = (() => {
+    const mapa = new Map<string, { clave: string; anuncio: string; canal: string; conductores: NonNullable<typeof n.detalle> }>()
+    for (const c of (n.detalle ?? []).filter(x => enSegmento(x.segmento, filtro))) {
+      const clave = c.anuncio || '__sin__'
+      const g = mapa.get(clave) ?? {
+        clave,
+        anuncio: c.anuncio,
+        canal: c.anuncio ? c.canal : c.segmento === 'Pauta redes' ? 'Pauta sin link' : c.segmento,
+        conductores: [],
+      }
+      g.conductores.push(c)
+      mapa.set(clave, g)
+    }
+    return [...mapa.values()].sort((x, y) =>
+      (x.anuncio ? 0 : 1) - (y.anuncio ? 0 : 1) || y.conductores.length - x.conductores.length)
+  })()
   return (
     <Card
       title="Conductores nuevos"
@@ -605,6 +651,52 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
           ))}
         </div>
       </div>
+      {gruposAnuncio.length > 0 ? (
+        <>
+          <span className="ddir-causales-title mkt-nuevos-titulo">De qué anuncio vinieron</span>
+          <div className="mkt-anuncios-grupos">
+            {gruposAnuncio.map(g => (
+              <details key={g.clave} className="mkt-anuncio-grupo">
+                <summary>
+                  <span className="mkt-anuncio-cab">
+                    {g.anuncio ? (
+                      <a
+                        className="mkt-link"
+                        href={g.anuncio}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={g.anuncio}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {anuncioCorto(g.anuncio)}
+                      </a>
+                    ) : (
+                      <span className="ddir-muted">Sin link del anuncio</span>
+                    )}
+                    <span className="ddir-muted">{g.canal}</span>
+                  </span>
+                  <span className="mkt-anuncio-n">
+                    {fmtInt(g.conductores.length)} {g.conductores.length === 1 ? 'conductor' : 'conductores'}
+                  </span>
+                </summary>
+                <ul className="mkt-anuncio-lista">
+                  {g.conductores.map((c, i) => (
+                    <li key={`${c.dni || c.nombre}-${i}`}>
+                      <span>
+                        {c.nombre || 'Sin nombre'}
+                        {c.dni ? <span className="ddir-muted"> · DNI {c.dni}</span> : null}
+                      </span>
+                      <span className="ddir-muted">
+                        lead {fechaDia(c.ingreso)} · primer auto {fechaDia(c.primer_auto)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ))}
+          </div>
+        </>
+      ) : null}
       {fueraDeRango > 0 ? (
         <p className="ddir-note">
           <strong>Fuera de rango:</strong> {fmtInt(fueraDeRango)} {fueraDeRango === 1 ? 'conductor recibió' : 'conductores recibieron'} su
