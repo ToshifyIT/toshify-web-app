@@ -49,6 +49,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'cabify': MapPin,
   'twochat': Phone,
   'cresium': Landmark,
+  'alegra-compras': Receipt,
   'gestion-usuarios': UserCog,
   'roles': Shield,
   'menu-por-rol': List,
@@ -278,6 +279,8 @@ const TwoChatLlamadasPage = lazy(() => import('./integraciones/twochat/TwoChatPa
 const TwoChatContactosPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatContactosPage })))
 const Cresium44DreamsPage = lazy(() => import('./integraciones/cresium/CresiumPage').then(m => ({ default: m.Cresium44DreamsPage })))
 const CresiumGrupoCgPage = lazy(() => import('./integraciones/cresium/CresiumPage').then(m => ({ default: m.CresiumGrupoCgPage })))
+const AlegraCompras44DreamsPage = lazy(() => import('./integraciones/alegra/AlegraComprasPage').then(m => ({ default: m.AlegraCompras44DreamsPage })))
+const AlegraComprasGrupoCgPage = lazy(() => import('./integraciones/alegra/AlegraComprasPage').then(m => ({ default: m.AlegraComprasGrupoCgPage })))
 const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
 const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then(m => ({ default: m.DashboardKpisPage })))
 const DashboardDirectivoPage = lazy(() => import('./reportes/DashboardDirectivoPage').then(m => ({ default: m.DashboardDirectivoPage })))
@@ -2173,6 +2176,18 @@ export function HomePage() {
               <Route path="/integraciones/cresium/grupocg" element={
                 <ProtectedRoute submenuName="cresium-grupocg" action="view">
                   <LazyPage><CresiumGrupoCgPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              {/* Alegra: Excel de ARCA (comprobantes recibidos) -> facturas de proveedor en Alegra */}
+              <Route path="/integraciones/alegra" element={<Navigate to="/integraciones/alegra/44dreams" replace />} />
+              <Route path="/integraciones/alegra/44dreams" element={
+                <ProtectedRoute submenuName="alegra-compras-44dreams" action="view">
+                  <LazyPage><AlegraCompras44DreamsPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/integraciones/alegra/grupocg" element={
+                <ProtectedRoute submenuName="alegra-compras-grupocg" action="view">
+                  <LazyPage><AlegraComprasGrupoCgPage /></LazyPage>
                 </ProtectedRoute>
               } />
 

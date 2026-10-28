@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronDown, ChevronRight, Clock, Shield, Globe,
-  Server, Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff,
+  Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff, Receipt, Landmark, Phone,
   AlertCircle, RefreshCw, Zap, ZapOff, Activity,
   Bot, Key, Plus, Trash2, Copy, Check, Power,
-  Play, Pause, Edit2, CalendarClock, Loader2,
+  Edit2, CalendarClock, Loader2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -61,78 +61,30 @@ interface TokensResponse {
 
 const INTEGRATIONS: IntegrationSystem[] = [
   {
-    id: 'wialon',
-    name: 'Wialon (GPS Tracking)',
-    description: 'Plataforma de rastreo GPS vehicular. Provee datos de bitacora, posicion y kilometraje de la flota.',
+    id: 'geotab',
+    name: 'Geotab (GPS)',
+    description: 'Telemetría de la flota: kilometraje y posición de los vehículos. Reemplazó a Wialon y USS.',
     icon: Radio,
     color: 'var(--color-info)',
     badgeColor: 'blue',
-    authType: 'API Token + Session',
-    authDescription: 'Token estatico de larga duracion generado manualmente desde el panel de Wialon. Cada ejecucion del script obtiene un Session ID (sid) temporal via token/login, lo usa para consultas, y cierra sesion con core/logout.',
-    baseUrl: 'https://hst-api.wialon.us/wialon/ajax.html',
+    authType: 'Usuario + contraseña (sesión MyGeotab)',
+    authDescription: 'El servidor de sincronización (toshify-sync) inicia sesión en MyGeotab con un usuario de servicio y obtiene una sesión temporal para las consultas. La web no se conecta directo a Geotab.',
+    baseUrl: 'https://my.geotab.com/apiv1',
     environment: 'server',
     status: 'active',
     endpoints: [
-      { method: 'POST', path: 'token/login', description: 'Obtener Session ID con el token' },
-      { method: 'POST', path: 'report/exec_report', description: 'Ejecutar reporte de bitacora' },
-      { method: 'POST', path: 'report/select_result_rows', description: 'Leer filas del reporte' },
-      { method: 'POST', path: 'report/cleanup_result', description: 'Limpiar reporte previo' },
-      { method: 'POST', path: 'core/logout', description: 'Cerrar sesion (liberar sid)' },
+      { method: 'POST', path: 'Authenticate', description: 'Iniciar sesión y obtener la sesión' },
+      { method: 'POST', path: 'Get (StatusData / LogRecord)', description: 'Odómetro y posiciones de cada vehículo' },
     ],
-    cronJobs: [
-      { schedule: '*/5 * * * *', description: 'Sync bitacora en tiempo real', script: 'run-wialon-bitacora.sh' },
-    ],
+    cronJobs: [],
     notes: [
-      'El token NO expira automaticamente — solo si se revoca desde el panel de Wialon',
-      'El Session ID (sid) es efimero y se crea/destruye en cada ejecucion',
-      'Los datos se guardan en la tabla wialon_bitacora de Supabase',
-      'El frontend NUNCA llama a la API de Wialon directamente',
+      'Corre en el servidor toshify-sync (sync-geotab-kilometraje), no en la web',
+      'Wialon y USS quedaron dados de baja: USS pausado desde el 06/08/2026',
     ],
     tokenInfo: {
-      type: 'API Token (long-lived)',
-      location: 'env.sh en servidor (/opt/toshify-sync/)',
-      rotation: 'Manual — solo si se revoca desde panel Wialon',
-    },
-    credentialKeys: {
-      systemKey: 'wialon',
-      fields: [
-        { key: 'token', label: 'WIALON_TOKEN' },
-      ],
-    },
-  },
-  {
-    id: 'uss',
-    name: 'USS (Excesos de Velocidad)',
-    description: 'Sistema de monitoreo de excesos de velocidad. Usa la infraestructura de Wialon para obtener datos de velocidad.',
-    icon: Server,
-    color: 'var(--color-warning)',
-    badgeColor: 'yellow',
-    authType: 'Wialon Token (compartido)',
-    authDescription: 'Reutiliza el mismo token de Wialon. La Edge Function de Supabase procesa los datos de uss_historico y genera registros en uss_excesos_velocidad.',
-    baseUrl: 'Supabase Edge Function',
-    environment: 'server',
-    status: 'active',
-    endpoints: [
-      { method: 'POST', path: 'sync-wialon-bitacora (Edge Function)', description: 'Agrega viajes de uss_historico a wialon_bitacora' },
-    ],
-    cronJobs: [
-      { schedule: '0 * * * *', description: 'Sync excesos de velocidad (cada hora)', script: 'run-uss.sh' },
-    ],
-    notes: [
-      'No tiene credenciales propias — depende de Wialon',
-      'Los parametros de velocidad se configuran en Administracion > Parametros USS',
-      'Datos en tablas: uss_excesos_velocidad, uss_historico',
-    ],
-    tokenInfo: {
-      type: 'Compartido con Wialon',
-      location: 'Misma variable WIALON_TOKEN',
-      rotation: 'N/A — depende de Wialon',
-    },
-    credentialKeys: {
-      systemKey: 'wialon',
-      fields: [
-        { key: 'token', label: 'WIALON_TOKEN (compartido)' },
-      ],
+      type: 'Sesión temporal (se renueva sola)',
+      location: 'Servidor toshify-sync (env.sh)',
+      rotation: 'Cambiar la contraseña del usuario de servicio si se compromete',
     },
   },
   {
@@ -287,6 +239,110 @@ const INTEGRATIONS: IntegrationSystem[] = [
         { key: 'conductores_folder_id', label: 'Carpeta Conductores' },
         { key: 'vehiculos_folder_id', label: 'Carpeta Vehiculos' },
         { key: 'private_key_preview', label: 'Private Key (preview)' },
+      ],
+    },
+  },
+  {
+    id: 'alegra',
+    name: 'Alegra (Contabilidad)',
+    description: 'Contabilidad de 44 Dreams y Grupo CG: carga de comprobantes de ARCA y de pagos/cobros bancarios.',
+    icon: Receipt,
+    color: '#00B19D',
+    badgeColor: 'green',
+    authType: 'Email + token de API (Basic)',
+    authDescription: 'Cada empresa tiene su propio usuario y token de API de Alegra. Las claves viven solo en el servidor; la web pasa por /api/alegra y /api/cresium.',
+    baseUrl: 'https://api.alegra.com/api/v1',
+    environment: 'server',
+    status: 'active',
+    endpoints: [
+      { method: 'POST', path: '/api/alegra/*', description: 'Comprobantes de ARCA: revisar y cargar en Alegra' },
+      { method: 'POST', path: '/bills, /payments', description: 'Facturas de proveedor y pagos/cobros' },
+    ],
+    cronJobs: [],
+    notes: [
+      'Nunca modifica comprobantes que ya existen en Alegra',
+      'Proveedores nuevos se crean por CUIT con domicilio provisorio',
+    ],
+    tokenInfo: {
+      type: 'Token de API (permanente)',
+      location: '.env (ALEGRA_44DREAMS_EMAIL/TOKEN, ALEGRA_GRUPOCG_EMAIL/TOKEN)',
+      rotation: 'Se regenera desde Alegra > Configuración > API',
+    },
+    credentialKeys: {
+      systemKey: 'alegra',
+      fields: [
+        { key: 'email_44dreams', label: '44 Dreams · Usuario' },
+        { key: 'token_44dreams', label: '44 Dreams · Token' },
+        { key: 'email_grupocg', label: 'Grupo CG · Usuario' },
+        { key: 'token_grupocg', label: 'Grupo CG · Token' },
+      ],
+    },
+  },
+  {
+    id: 'cresium',
+    name: 'Cresium (Banco)',
+    description: 'Movimientos bancarios de 44 Dreams y Grupo CG, para conciliarlos y cargarlos en Alegra.',
+    icon: Landmark,
+    color: '#6366F1',
+    badgeColor: 'blue',
+    authType: 'API Key + Secret (Partner API V3)',
+    authDescription: 'Cada empresa tiene su API key, secret y company ID. Los movimientos se guardan en la base; a Cresium solo se va a buscar lo nuevo.',
+    baseUrl: 'https://api.cresium.app',
+    environment: 'server',
+    status: 'active',
+    endpoints: [
+      { method: 'GET', path: '/api/cresium/*', description: 'Traer movimientos nuevos y proponer la carga en Alegra' },
+    ],
+    cronJobs: [],
+    notes: [
+      'Con CRESIUM_SYNC_AUTO=1 trae lo nuevo sola cada hora, de 9 a 18 h',
+      'Guarda los ids de Alegra para no cargar nada dos veces',
+    ],
+    tokenInfo: {
+      type: 'API Key + Secret (permanente)',
+      location: '.env (CRESIUM_44DREAMS_*, CRESIUM_GRUPOCG_*)',
+      rotation: 'Se regeneran desde el panel de Cresium',
+    },
+    credentialKeys: {
+      systemKey: 'cresium',
+      fields: [
+        { key: 'api_key_44dreams', label: '44 Dreams · API Key' },
+        { key: 'company_44dreams', label: '44 Dreams · Company ID' },
+        { key: 'api_key_grupocg', label: 'Grupo CG · API Key' },
+        { key: 'company_grupocg', label: 'Grupo CG · Company ID' },
+        { key: 'sync_auto', label: 'Actualización automática' },
+      ],
+    },
+  },
+  {
+    id: '2chat',
+    name: '2Chat (Llamadas)',
+    description: 'Central telefónica: conductores como contactos para llamarlos e historial de llamadas por agente.',
+    icon: Phone,
+    color: '#22C55E',
+    badgeColor: 'green',
+    authType: 'API Key (X-User-API-Key)',
+    authDescription: 'Una API key de la cuenta de 2Chat, solo en el servidor. La web pasa por /api/2chat.',
+    baseUrl: 'https://api.p.2chat.io/open',
+    environment: 'server',
+    status: 'active',
+    endpoints: [
+      { method: 'POST', path: '/api/2chat/*', description: 'Cargar contactos y traer llamadas' },
+    ],
+    cronJobs: [],
+    notes: [
+      'Con TWOCHAT_SYNC_AUTO=1 actualiza las llamadas cada hora, de 9 a 17 h',
+    ],
+    tokenInfo: {
+      type: 'API Key (permanente)',
+      location: '.env (TWOCHAT_API_KEY)',
+      rotation: 'Se regenera desde 2Chat',
+    },
+    credentialKeys: {
+      systemKey: 'twochat',
+      fields: [
+        { key: 'api_key', label: 'API Key' },
+        { key: 'sync_auto', label: 'Actualización automática' },
       ],
     },
   },
@@ -925,7 +981,7 @@ function EdgeFunctionsMonitor() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Error' }));
+        const err = await res.json().catch(() => ({ error: 'No responde el servidor de la API. En local, reiniciá npm run dev' }));
         setError(err.error || `Error ${res.status}`);
         return;
       }
@@ -1782,20 +1838,24 @@ const TIPO_LABELS: Record<string, { label: string; color: string }> = {
   script: { label: 'Script', color: '#3b82f6' },
   edge_function: { label: 'Edge Fn', color: '#8b5cf6' },
   email: { label: 'Email', color: '#10b981' },
+  pg_cron: { label: 'Base de datos', color: '#f59e0b' },
 };
 
 const INTEG_LABELS: Record<string, string> = {
-  wialon: 'Wialon', uss: 'USS', cabify_ba: 'Cabify BA', cabify_bari: 'Cabify Bari', sistema: 'Sistema',
+  geotab: 'Geotab', wialon: 'Wialon', uss: 'USS', cabify_ba: 'Cabify BA', cabify_bari: 'Cabify Bari', sistema: 'Sistema',
 };
 
 function CronJobsTab() {
   const [jobs, setJobs] = useState<CronJobRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<string | null>(null);
+  const [sinRefresco, setSinRefresco] = useState(false);
 
   const cargarJobs = useCallback(async () => {
     setLoading(true);
     try {
+      // Pone la tabla al día con lo que realmente corrió (logs de sync + pg_cron)
+      const { error: errRef } = await supabase.rpc('refrescar_cron_jobs' as any);
+      setSinRefresco(!!errRef);
       const { data, error } = await supabase.from('cron_jobs').select('*').order('integracion').order('nombre');
       if (error) throw error;
       setJobs((data || []) as CronJobRecord[]);
@@ -1804,15 +1864,6 @@ function CronJobsTab() {
   }, []);
 
   useEffect(() => { cargarJobs(); }, [cargarJobs]);
-
-  const toggleActivo = async (job: CronJobRecord) => {
-    setSaving(job.id);
-    try {
-      const { error } = await supabase.from('cron_jobs').update({ activo: !job.activo, updated_at: new Date().toISOString() }).eq('id', job.id);
-      if (error) throw error;
-      setJobs(prev => prev.map(j => j.id === job.id ? { ...j, activo: !j.activo } : j));
-    } finally { setSaving(null); }
-  };
 
   const editarJob = async (job: Partial<CronJobRecord> & { id: string }) => {
     const { default: Swal } = await import('sweetalert2');
@@ -1890,19 +1941,23 @@ function CronJobsTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{jobs.length} jobs · {jobs.filter(j => j.activo).length} activos</div>
-        <button onClick={() => editarJob({ id: '', nombre: '', schedule: '', tipo: 'script' })} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          {jobs.length} jobs · {jobs.filter(j => j.activo && (j.tipo === 'script' || j.tipo === 'pg_cron')).length} corriendo
+          <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}> · estado real según la última corrida registrada</span>
+          {sinRefresco ? <div style={{ fontSize: '11px', color: '#b45309', marginTop: '2px' }}>Falta ejecutar sql/cron_jobs_reales.sql en Supabase: hasta entonces esto es el registro manual.</div> : null}
+        </div>
+        <button onClick={() => editarJob({ id: '', nombre: '', schedule: '', tipo: 'script' })} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
           <Plus size={14} /> Nuevo Job
         </button>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {jobs.map(job => {
+      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: '8px', overflow: 'hidden' }}>
+        {jobs.map((job, idx) => {
           const ti = TIPO_LABELS[job.tipo] || { label: job.tipo, color: '#666' };
           return (
-            <div key={job.id} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: '10px', padding: '14px 16px', opacity: job.activo ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+            <div key={job.id} style={{ borderTop: idx === 0 ? 'none' : '1px solid var(--border-primary)', padding: '8px 14px', opacity: job.activo || !(job.tipo === 'script' || job.tipo === 'pg_cron') ? 1 : 0.6, transition: 'opacity 0.2s' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: job.activo ? '#10b981' : '#9ca3af' }} />
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: (job.tipo === 'script' || job.tipo === 'pg_cron') ? (job.activo ? '#10b981' : '#9ca3af') : '#d1d5db' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '13px', fontWeight: 600 }}>{job.nombre}</span>
@@ -1911,11 +1966,11 @@ function CronJobsTab() {
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{job.descripcion || job.comando || '-'}</div>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ textAlign: 'right', flexShrink: 0, width: '140px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 600 }}>{describeCron(job.schedule)}</div>
                   <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>{job.schedule}</div>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, minWidth: '80px' }}>
+                <div style={{ textAlign: 'right', flexShrink: 0, width: '100px' }}>
                   {job.ultima_ejecucion ? (
                     <>
                       <div style={{ fontSize: '10px', color: job.ultimo_estado === 'error' ? '#ef4444' : '#10b981', fontWeight: 600 }}>{job.ultimo_estado === 'error' ? 'Error' : 'OK'}</div>
@@ -1924,9 +1979,17 @@ function CronJobsTab() {
                   ) : <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Sin ejecución</div>}
                 </div>
                 <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                  <button onClick={() => toggleActivo(job)} disabled={saving === job.id} title={job.activo ? 'Desactivar' : 'Activar'} style={{ padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: job.activo ? '#10b981' : '#9ca3af' }}>{job.activo ? <Play size={14} /> : <Pause size={14} />}</button>
-                  <button onClick={() => editarJob(job)} title="Editar" style={{ padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit2 size={14} /></button>
-                  <button onClick={() => eliminarJob(job)} title="Eliminar" style={{ padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
+                  {(() => {
+                    const medible = job.tipo === 'script' || job.tipo === 'pg_cron';
+                    const txt = !medible ? 'Sin registro' : job.activo ? 'Corriendo' : 'Detenido';
+                    const color = !medible ? 'var(--text-tertiary)' : job.activo ? '#047857' : '#6b7280';
+                    const bg = !medible ? 'var(--bg-secondary)' : job.activo ? 'rgba(16,185,129,0.12)' : 'var(--bg-secondary)';
+                    return <span title={medible ? 'Según la última corrida registrada' : 'Este job no deja registro de sus corridas'} style={{ fontSize: '10px', fontWeight: 600, padding: '3px 8px', borderRadius: '999px', background: bg, color, alignSelf: 'center', minWidth: '62px', textAlign: 'center' }}>{txt}</span>;
+                  })()}
+                  {job.tipo !== 'pg_cron' && (<>
+                  <button onClick={() => editarJob(job)} title="Editar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit2 size={14} /></button>
+                  <button onClick={() => eliminarJob(job)} title="Eliminar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
+                  </>)}
                 </div>
               </div>
               {job.ultimo_estado === 'error' && job.ultimo_error && (
@@ -1990,7 +2053,7 @@ export function IntegracionesTokensModule() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
+        const err = await res.json().catch(() => ({ error: 'No responde el servidor de la API. En local, reiniciá npm run dev' }));
         setTokensError(err.error || `Error ${res.status}`);
         return;
       }
@@ -2018,14 +2081,7 @@ export function IntegracionesTokensModule() {
   const cronCount = cronJobCount ?? INTEGRATIONS.reduce((acc, s) => acc + s.cronJobs.length, 0);
 
   return (
-    <div className="module-container" style={{ maxWidth: '1100px' }}>
-      {/* Header */}
-      <div className="module-header" style={{ marginBottom: '16px' }}>
-        <h1 className="module-title">Integraciones & Servicios</h1>
-        <p className="module-subtitle">
-          Documentacion de sistemas externos, autenticacion y tareas programadas
-        </p>
-      </div>
+    <div className="module-container">
 
       {/* Stats */}
       <div className="bitacora-stats" style={{ marginBottom: '16px' }}>
@@ -2069,10 +2125,12 @@ export function IntegracionesTokensModule() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
+                flex: 1,
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '6px',
-                padding: '10px 20px',
+                padding: '10px 12px',
                 background: 'transparent',
                 border: 'none',
                 borderBottom: isActive ? '2px solid var(--color-primary)' : '2px solid transparent',

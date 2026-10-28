@@ -12,6 +12,7 @@ import { useSede } from '../../contexts/SedeContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
+import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showSuccess } from '../../utils/toast'
 import { getTodayDateString } from '../../utils/dateUtils'
 import { fechaISOART, partesART } from '../../utils/fechaArgentina'
@@ -1804,6 +1805,44 @@ export function AsignacionesModule() {
       return fechaLocal >= lunesSemanaStr && fechaLocal <= domingoSemanaStr
     }).length
   }, [asignaciones, calculatedStats])
+
+  // Completadas / canceladas de la semana anterior, del lunes hasta el mismo día de
+  // la semana (salen de los datos ya cargados: la flecha aparece desde hoy).
+  const semanaAnteriorAsig = useMemo(() => {
+    const d = (base: string, dias: number) => {
+      const f = new Date(`${base}T12:00:00`)
+      f.setDate(f.getDate() + dias)
+      return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`
+    }
+    const hoy = new Date()
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    const desde = d(calculatedStats.lunesSemanaStr, -7)
+    const hasta = d(hoyStr, -7)
+    const completadas = asignaciones.filter(x => {
+      if ((x.estado !== 'activa' && x.estado !== 'finalizada') || !x.fecha_inicio) return false
+      const f = getLocalDateStr(x.fecha_inicio)
+      return f >= desde && f <= hasta
+    }).length
+    const canceladas = asignaciones.filter(x => {
+      if (x.estado !== 'cancelada') return false
+      const ref = x.fecha_fin || x.created_at
+      if (!ref) return false
+      const f = getLocalDateStr(ref)
+      return f >= desde && f <= hasta
+    }).length
+    return { completadas, canceladas }
+  }, [asignaciones, calculatedStats])
+
+  // Foto diaria de las tarjetas (traza) y la de hace 7 días para las flechas.
+  // Los conteos "de la semana" se comparan con el mismo día de la semana anterior.
+  const fotoAnterior = useFotoSemanaAnterior('asignaciones', {
+    programadas: programadasCount,
+    completadas: calculatedStats.entregasCompletadasSemana,
+    canceladas: calculatedStats.entregasCanceladasSemana,
+    cond_nuevos: calculatedStats.conductoresCartaOferta,
+    cond_anexo: calculatedStats.conductoresAnexo,
+    entregas_hoy: calculatedStats.entregasHoy,
+  }, !loading && asignaciones.length > 0)
 
   // Manejar click en stat cards para filtrar
   // Cambia la tarifa de cobro (antigua/nueva) de UN conductor de la asignacion.
@@ -3862,6 +3901,7 @@ export function AsignacionesModule() {
               <span className="stat-value">{programadasCount}</span>
               <span className="stat-label">Programadas</span>
             </div>
+            <ComparacionSemana actual={programadasCount} anterior={fotoAnterior?.programadas} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'completadas' ? 'stat-card-active' : ''}`}
@@ -3873,6 +3913,7 @@ export function AsignacionesModule() {
               <span className="stat-value">{calculatedStats.entregasCompletadasSemana}</span>
               <span className="stat-label">Completadas</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.entregasCompletadasSemana} anterior={asignaciones.length ? semanaAnteriorAsig.completadas : fotoAnterior?.completadas} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'canceladas' ? 'stat-card-active' : ''}`}
@@ -3884,6 +3925,7 @@ export function AsignacionesModule() {
               <span className="stat-value">{calculatedStats.entregasCanceladasSemana}</span>
               <span className="stat-label">Canceladas</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.entregasCanceladasSemana} anterior={asignaciones.length ? semanaAnteriorAsig.canceladas : fotoAnterior?.canceladas} invertido />
           </div>
         </div>
         {/* Segunda fila de stats - Métricas por tipo de documento */}
@@ -3897,6 +3939,7 @@ export function AsignacionesModule() {
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.conductoresCartaOferta}</span>
               <span className="stat-label">Cond. Nuevos</span>
+              <ComparacionSemana actual={calculatedStats.conductoresCartaOferta} anterior={fotoAnterior?.cond_nuevos} abajo />
             </div>
             <div className="asig-turnos-desglose">
               <span className="asig-turnos-desglose-item">
@@ -3924,6 +3967,7 @@ export function AsignacionesModule() {
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.conductoresAnexo}</span>
               <span className="stat-label">Cond. Anexo</span>
+              <ComparacionSemana actual={calculatedStats.conductoresAnexo} anterior={fotoAnterior?.cond_anexo} abajo />
             </div>
             <div className="asig-turnos-desglose">
               <span className="asig-turnos-desglose-item">
@@ -3952,6 +3996,7 @@ export function AsignacionesModule() {
               <span className="stat-value">{calculatedStats.entregasHoy}</span>
               <span className="stat-label">Entregas Hoy</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.entregasHoy} anterior={fotoAnterior?.entregas_hoy} etiqueta="vs mismo día sem. ant." />
           </div>
         </div>
       </div>

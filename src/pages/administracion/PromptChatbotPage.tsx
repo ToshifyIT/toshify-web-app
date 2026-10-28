@@ -194,8 +194,7 @@ export function PromptChatbotPage() {
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '8px 4px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--text-primary, #111827)' }}>Prompt - Chatbot</h2>
-          <p style={{ margin: '2px 0 0', fontSize: 13, color: '#9ca3af' }}>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-tertiary, #9ca3af)' }}>
             Editá el prompt del chatbot. Cada cambio queda registrado en el historial.
             {updatedAt && <> · Última actualización: {fmt(updatedAt)}</>}
           </p>

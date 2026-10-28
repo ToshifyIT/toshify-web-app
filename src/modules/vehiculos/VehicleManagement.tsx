@@ -13,6 +13,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
+import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showSuccess } from '../../utils/toast'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import type {
@@ -376,6 +377,19 @@ export function VehicleManagement() {
       categoriaCountMap,
     }
   }, [vehiculos])
+
+  // Foto diaria de las tarjetas (traza) y la de hace 7 días para las flechas
+  const valoresTarjetas = useMemo(() => {
+    const v: Record<string, number> = {}
+    for (const k of ['totalVehiculos', 'vehiculosDisponibles', 'vehiculosEnUso', 'vehiculosTallerMecanico', 'vehiculosChapaPintura',
+      'vehiculosCorporativos', 'vehiculosPkgOff', 'vehiculosRetenido', 'vehiculosRobo', 'vehiculosDestruccion',
+      'vehiculosDevueltos', 'vehiculosJubilados'] as const) {
+      v[k] = calculatedStats[k]
+    }
+    for (const [cat, n] of calculatedStats.categoriaCountMap.entries()) v[`cat_${cat}`] = n
+    return v
+  }, [calculatedStats])
+  const fotoAnterior = useFotoSemanaAnterior('vehiculos', valoresTarjetas, !loading && vehiculos.length > 0)
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo - SOLO campos necesarios para tabla
   const loadAllData = async () => {
@@ -2486,50 +2500,62 @@ export function VehicleManagement() {
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('total')} title="Click para ver todos">
             <Car size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.totalVehiculos}</span><span className="stat-label">Total</span></div>
+            <ComparacionSemana actual={calculatedStats.totalVehiculos} anterior={fotoAnterior?.totalVehiculos} etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'enCochera' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('enCochera')} title="Click para filtrar: PKG ON">
             <Warehouse size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDisponibles}</span><span className="stat-label">Disponible</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosDisponibles} anterior={fotoAnterior?.vehiculosDisponibles} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'enUso' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('enUso')} title="Click para filtrar: EN USO">
             <Car size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosEnUso}</span><span className="stat-label">En Uso</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosEnUso} anterior={fotoAnterior?.vehiculosEnUso} etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'tallerMecanico' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('tallerMecanico')} title="Click para filtrar: Talleres mecanicos">
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosTallerMecanico}</span><span className="stat-label">Taller Mecanico</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosTallerMecanico} anterior={fotoAnterior?.vehiculosTallerMecanico} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'chapaPintura' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('chapaPintura')} title="Click para filtrar: Chapa y Pintura">
             <PaintBucket size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosChapaPintura}</span><span className="stat-label">Chapa y Pintura</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosChapaPintura} anterior={fotoAnterior?.vehiculosChapaPintura} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'corporativos' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('corporativos')} title="Click para filtrar: Corporativos">
             <Briefcase size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosCorporativos}</span><span className="stat-label">Corporativos</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosCorporativos} anterior={fotoAnterior?.vehiculosCorporativos} etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'pkgOff' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('pkgOff')} title="Click para filtrar: PKG OFF">
             <Warehouse size={18} className="stat-icon" style={{ color: '#9ca3af' }} />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosPkgOff}</span><span className="stat-label">PKG OFF</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosPkgOff} anterior={fotoAnterior?.vehiculosPkgOff} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'retenido' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('retenido')} title="Click para filtrar: Retenido en Comisaria">
             <Lock size={18} className="stat-icon" style={{ color: '#dc2626' }} />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosRetenido}</span><span className="stat-label">Retenido</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosRetenido} anterior={fotoAnterior?.vehiculosRetenido} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'robo' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('robo')} title="Click para filtrar: Vehiculos robados">
             <AlertTriangle size={18} className="stat-icon" style={{ color: '#dc2626' }} />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosRobo}</span><span className="stat-label">Robo</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosRobo} anterior={fotoAnterior?.vehiculosRobo} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'destruccion' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('destruccion')} title="Click para filtrar: Destruccion Total">
             <AlertTriangle size={18} className="stat-icon" style={{ color: '#991b1b' }} />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDestruccion}</span><span className="stat-label">Destruccion Total</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosDestruccion} anterior={fotoAnterior?.vehiculosDestruccion} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'devueltos' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('devueltos')} title="Click para filtrar: Devueltos a Proveedor">
             <Undo2 size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDevueltos}</span><span className="stat-label">Dev. Proveedor</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosDevueltos} anterior={fotoAnterior?.vehiculosDevueltos} invertido etiqueta="" />
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'jubilados' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('jubilados')} title="Click para filtrar: Vehículos jubilados (fuera de la flota)">
             <Archive size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosJubilados}</span><span className="stat-label">Jubilado</span></div>
+            <ComparacionSemana actual={calculatedStats.vehiculosJubilados} anterior={fotoAnterior?.vehiculosJubilados} invertido etiqueta="" />
           </div>
         </div>
         {/* Fila 2: Categorias */}
@@ -2540,6 +2566,7 @@ export function VehicleManagement() {
               <div key={`cat_${catName}`} className={`stat-card stat-card-clickable ${activeStatCard === `cat_${catName}` ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick(`cat_${catName}`)} title={`Click para filtrar: ${catName}`}>
                 <Tag size={18} className="stat-icon" />
                 <div className="stat-content"><span className="stat-value">{count}</span><span className="stat-label">{catName}</span></div>
+                <ComparacionSemana actual={count} anterior={fotoAnterior?.[`cat_${catName}`]} etiqueta="" />
               </div>
             ))
           }

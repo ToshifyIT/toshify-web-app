@@ -17,6 +17,9 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { cabifyService } from '../../../services/cabifyService'
 import { cargarPanelConductores, type ConductorPanelRow } from './conductoresPanelService'
 import { ConductorDetalleModal } from './ConductorDetalleModal'
+import { calificarConductor, referenciaIngresos, type Calificacion } from './calificacionConductor'
+import { CalificacionCelda, CalificacionModal } from './CalificacionEstrellas'
+import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes } from './calificacionesHistorial'
 import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
 
@@ -103,6 +106,28 @@ export function ConductoresPanelModule() {
   const [activeCard, setActiveCard] = useState<CardKey | null>('conAuto')
   const [reloadKey, setReloadKey] = useState(0)
   const [detalle, setDetalle] = useState<ConductorPanelRow | null>(null)
+  const [verCalificacion, setVerCalificacion] = useState<ConductorPanelRow | null>(null)
+  // Calificación 1-5 de cada conductor (ver calificacionConductor.ts)
+  // Excesos de km de las últimas 4 semanas (Facturación), para el factor "Límite de km"
+  const [excesosKm, setExcesosKm] = useState<Awaited<ReturnType<typeof cargarExcesosRecientes>>>(null)
+  useEffect(() => {
+    if (!rows.length) return
+    let activo = true
+    cargarExcesosRecientes(rows.map(r => r.id)).then(e => { if (activo) setExcesosKm(e) })
+    return () => { activo = false }
+  }, [rows])
+  const calificaciones = useMemo(() => {
+    const ref = referenciaIngresos(rows)
+    const m = new Map<string, Calificacion>()
+    for (const r of rows) m.set(r.id, calificarConductor(r, ref, excesosKm))
+    return m
+  }, [rows, excesosKm])
+  // Historial: la primera vez que se abre el panel desde el lunes se calcula y guarda
+  // la calificación de la semana que terminó (en segundo plano, sin trabar la pantalla).
+  useEffect(() => {
+    if (loading || !rows.length) return
+    void guardarSemanaCerradaSiFalta(sedeActualId ?? null, rows.map(r => r.id))
+  }, [loading, rows, sedeActualId])
   // Filas realmente visibles en la tabla: el DataTable las reporta ya pasadas por
   // TODOS sus filtros internos (columna, rangos numéricos, búsqueda global).
   // Es null hasta el primer aviso de la tabla; ahí se cae a filteredRows.
@@ -169,6 +194,7 @@ export function ConductoresPanelModule() {
     // sumarlos y filtrarlos; el formato de moneda lo pone la planilla.
     const dataExport = filasAExportar.map(c => ({
       'Conductor': c.nombre || '',
+      'Calificación (1-5)': calificaciones.get(c.id)?.estrellas ?? '',
       'DNI': c.dni || '',
       'CUIT': c.ruc || '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
@@ -207,6 +233,7 @@ export function ConductoresPanelModule() {
     const ws = XLSX.utils.json_to_sheet(dataExport)
     ws['!cols'] = [
       { wch: 30 }, // Conductor
+      { wch: 12 }, // Calificación
       { wch: 12 }, // DNI
       { wch: 14 }, // CUIT
       { wch: 12 }, // Estado
@@ -278,6 +305,18 @@ export function ConductoresPanelModule() {
           </div>
         </div>
       ),
+    },
+    {
+      id: 'calificacion',
+      accessorFn: (r) => calificaciones.get(r.id)?.puntaje ?? -1,
+      header: 'Calificación',
+      enableColumnFilter: false,
+      sortingFn: (a, b) => (calificaciones.get(a.original.id)?.puntaje ?? -1) - (calificaciones.get(b.original.id)?.puntaje ?? -1),
+      cell: ({ row }) => {
+        const c = calificaciones.get(row.original.id)
+        if (!c) return null
+        return <CalificacionCelda calificacion={c} onClick={() => setVerCalificacion(row.original)} />
+      },
     },
     {
       id: 'patente',
@@ -596,7 +635,7 @@ export function ConductoresPanelModule() {
         </button>
       ),
     },
-  ], [rangoCabifyLabel])
+  ], [rangoCabifyLabel, calificaciones])
 
   return (
     <div className="cond-module">
@@ -690,6 +729,14 @@ export function ConductoresPanelModule() {
         }
       />
 
+      {verCalificacion && calificaciones.get(verCalificacion.id) && (
+        <CalificacionModal
+          conductorId={verCalificacion.id}
+          nombre={verCalificacion.nombre || 'Conductor'}
+          calificacion={calificaciones.get(verCalificacion.id)!}
+          onClose={() => setVerCalificacion(null)}
+        />
+      )}
       {detalle && (
         <ConductorDetalleModal conductor={detalle} onClose={() => setDetalle(null)} tabInicial="facturacion" />
       )}
