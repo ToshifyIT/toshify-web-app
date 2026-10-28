@@ -27,6 +27,7 @@ import type {
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/ui/DataTable";
 import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
+import { ComparacionSemana, fechaHaceDias, useFotoSemanaAnterior } from "../../components/ui/ComparacionSemana";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
@@ -608,6 +609,26 @@ export function ConductoresModule() {
     return { inicio, fin: sunday };
   };
 
+  // Conductores manejando hace 7 días (foto diaria del Dashboard KPI's), para la
+  // flecha de "Activos con Auto". Sin dato, la tarjeta se muestra sin flecha.
+  const [activosConAutoAnterior, setActivosConAutoAnterior] = useState<number | null>(null);
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      try {
+        const { data, error } = await aplicarFiltroSede((supabase.from('kpi_diario' as any) as any)
+          .select('cd')
+          .eq('fecha', fechaHaceDias(7)));
+        if (error) throw error;
+        const filas = ((data || []) as { cd: number | null }[]).filter(f => f.cd !== null);
+        if (activo) setActivosConAutoAnterior(filas.length ? filas.reduce((t, f) => t + (Number(f.cd) || 0), 0) : null);
+      } catch {
+        if (activo) setActivosConAutoAnterior(null);
+      }
+    })();
+    return () => { activo = false; };
+  }, [sedeActualId, aplicarFiltroSede]);
+
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
   const calculatedStats = useMemo(() => {
     const hoy = new Date();
@@ -623,6 +644,9 @@ export function ConductoresModule() {
     let totalConductores = 0;
     let conductoresActivos = 0;
     let conductoresBajaSemana = 0; // Bajas de la semana actual
+    let conductoresBajaAnterior = 0; // Mismo tramo, una semana antes (para la flecha)
+    const inicioAnterior = new Date(inicioSemana.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const finAnterior = new Date(Math.min(finSemana.getTime(), Date.now()) - 7 * 24 * 60 * 60 * 1000);
     let conductoresAsignados = 0;
     let licenciasPorVencer = 0;
     let licenciasVencidas = 0;
@@ -640,6 +664,9 @@ export function ConductoresModule() {
           const fechaBaja = new Date(c.fecha_terminacion + 'T12:00:00');
           if (fechaBaja >= inicioSemana && fechaBaja <= finSemana) {
             conductoresBajaSemana++;
+          }
+          if (fechaBaja >= inicioAnterior && fechaBaja <= finAnterior) {
+            conductoresBajaAnterior++;
           }
         }
       }
@@ -673,10 +700,20 @@ export function ConductoresModule() {
       conductoresDisponibles,
       conductoresAsignados,
       conductoresBaja: conductoresBajaSemana,
+      conductoresBajaAnterior,
       licenciasPorVencer,
       licenciasVencidas,
     };
   }, [conductores]);
+
+  // Foto diaria de las tarjetas (traza) y la de hace 7 días para las flechas
+  const fotoAnterior = useFotoSemanaAnterior('conductores', {
+    activos_con_auto: calculatedStats.conductoresAsignados,
+    en_espera: calculatedStats.conductoresDisponibles,
+    bajas: calculatedStats.conductoresBaja,
+    lic_por_vencer: calculatedStats.licenciasPorVencer,
+    lic_vencidas: calculatedStats.licenciasVencidas,
+  }, !loading && conductores.length > 0);
 
   // Helper para manejar clicks en stat cards
   // IMPORTANTE: Usar filtros separados para stat cards, NO los mismos que los filtros de columna
@@ -3696,6 +3733,7 @@ export function ConductoresModule() {
               <span className="stat-value">{calculatedStats.conductoresAsignados}</span>
               <span className="stat-label">Activos con Auto</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.conductoresAsignados} anterior={activosConAutoAnterior ?? fotoAnterior?.activos_con_auto} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
@@ -3707,6 +3745,7 @@ export function ConductoresModule() {
               <span className="stat-value">{calculatedStats.conductoresDisponibles}</span>
               <span className="stat-label">En Espera</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.conductoresDisponibles} anterior={fotoAnterior?.en_espera} invertido />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'baja' ? 'stat-card-active' : ''}`}
@@ -3718,6 +3757,7 @@ export function ConductoresModule() {
               <span className="stat-value">{calculatedStats.conductoresBaja}</span>
               <span className="stat-label">Bajas</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.conductoresBaja} anterior={calculatedStats.conductoresBajaAnterior} invertido />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
@@ -3729,6 +3769,7 @@ export function ConductoresModule() {
               <span className="stat-value">{calculatedStats.licenciasPorVencer}</span>
               <span className="stat-label">Lic. por Vencer</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.licenciasPorVencer} anterior={fotoAnterior?.lic_por_vencer} invertido />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'licenciasVencidas' ? 'stat-card-active' : ''}`}
@@ -3740,6 +3781,7 @@ export function ConductoresModule() {
               <span className="stat-value">{calculatedStats.licenciasVencidas}</span>
               <span className="stat-label">Lic. Vencidas</span>
             </div>
+            <ComparacionSemana actual={calculatedStats.licenciasVencidas} anterior={fotoAnterior?.lic_vencidas} invertido />
           </div>
         </div>
       </div>

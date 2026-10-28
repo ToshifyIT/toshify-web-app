@@ -37,6 +37,38 @@ function insightsDirectivoDevApi(): Plugin {
 }
 
 /**
+ * Monta las rutas de Administración > Integraciones & Tokens (/api/admin/tokens,
+ * /api/admin/function-health, /api/admin/toggle-function) dentro del dev server,
+ * para que Credenciales y Monitor funcionen con `npm run dev` sin levantar dev:api.
+ * Las demás rutas /api/admin/* siguen yendo al proxy. En producción las sirve server.js.
+ */
+function adminIntegracionesDevApi(): Plugin {
+  return {
+    name: 'toshify-admin-integraciones-dev-api',
+    apply: 'serve',
+    async configureServer(server) {
+      try {
+        const rutaModulo = path.resolve(server.config.root, 'server-admin-integraciones.js')
+        const { mtimeMs } = await stat(rutaModulo)
+        const modulo = `${pathToFileURL(rutaModulo).href}?v=${mtimeMs}`
+        const { adminIntegracionesRouter } = await import(/* @vite-ignore */ modulo)
+        server.middlewares.use('/api/admin', adminIntegracionesRouter)
+        server.watcher.add(rutaModulo)
+        server.watcher.on('change', (archivo) => {
+          if (path.resolve(archivo) !== rutaModulo) return
+          void server.restart()
+        })
+      } catch (err) {
+        server.config.logger.warn(
+          '  [admin-integraciones] No se pudo montar /api/admin: ' +
+            (err instanceof Error ? err.message : String(err)),
+        )
+      }
+    },
+  }
+}
+
+/**
  * Monta la API de la integración 2Chat (/api/2chat) dentro del dev server de
  * Vite, igual que insightsDirectivoDevApi. En producción la sirve server.js.
  */
@@ -96,9 +128,39 @@ function cresiumDevApi(): Plugin {
   }
 }
 
+/**
+ * Monta la API de la integración Alegra: Excel de ARCA (/api/alegra) dentro del dev
+ * server de Vite, igual que twoChatDevApi. En producción la sirve server.js.
+ */
+function alegraDevApi(): Plugin {
+  return {
+    name: 'toshify-alegra-dev-api',
+    apply: 'serve',
+    async configureServer(server) {
+      try {
+        const rutaModulo = path.resolve(server.config.root, 'server-alegra.js')
+        const { mtimeMs } = await stat(rutaModulo)
+        const modulo = `${pathToFileURL(rutaModulo).href}?v=${mtimeMs}`
+        const { alegraRouter } = await import(/* @vite-ignore */ modulo)
+        server.middlewares.use('/api/alegra', alegraRouter)
+        server.watcher.add(rutaModulo)
+        server.watcher.on('change', (archivo) => {
+          if (path.resolve(archivo) !== rutaModulo) return
+          void server.restart()
+        })
+      } catch (err) {
+        server.config.logger.warn(
+          '  [alegra] No se pudo montar /api/alegra: ' +
+            (err instanceof Error ? err.message : String(err)),
+        )
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), insightsDirectivoDevApi(), twoChatDevApi(), cresiumDevApi()],
+  plugins: [react(), insightsDirectivoDevApi(), twoChatDevApi(), cresiumDevApi(), alegraDevApi(), adminIntegracionesDevApi()],
   esbuild: {
     drop: ['console', 'debugger'],
   },

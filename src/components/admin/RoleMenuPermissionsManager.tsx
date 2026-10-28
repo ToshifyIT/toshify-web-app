@@ -1,6 +1,6 @@
 // src/components/admin/RoleMenuPermissionsManager.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Check, AlertTriangle, Shield } from 'lucide-react'
+import { Check, AlertTriangle, Shield, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../ui/LoadingOverlay'
 import { useAuth } from '../../contexts/AuthContext'
@@ -86,6 +86,8 @@ interface PermissionRow {
   tab_id?: string
   submenuCount?: number
   parentMenuId?: string
+  ancestros?: string[] // ids de las filas padre (para desplegar/plegar)
+  tieneHijos?: boolean
   level?: number // 0 = menu, 1 = submenu nivel 1, 2 = sub-submenu, 3 = tab, etc.
 }
 
@@ -108,6 +110,8 @@ export function RoleMenuPermissionsManager() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [globalFilter, setGlobalFilter] = useState('')
+  // Módulos y submódulos desplegados (por defecto todo plegado)
+  const [expandidos, setExpandidos] = useState<Set<string>>(() => new Set())
   const [sorting, setSorting] = useState<SortingState>([])
   const [roleSearchTerm, setRoleSearchTerm] = useState('')
   const [showRoleDropdown, setShowRoleDropdown] = useState(false)
@@ -828,8 +832,35 @@ export function RoleMenuPermissionsManager() {
       addTabsForParent('menu', menu.id, menu.label, rows, 1)
     })
 
+    // Padres de cada fila según el nivel (las filas vienen en orden jerárquico)
+    const pila: string[] = []
+    rows.forEach((fila, idx) => {
+      const nivel = fila.level || 0
+      pila[nivel] = fila.id
+      pila.length = nivel + 1
+      fila.ancestros = pila.slice(0, nivel)
+      fila.tieneHijos = (rows[idx + 1]?.level || 0) > nivel
+    })
+
     return rows
   }, [menus, submenus, tabs, menuPermissions, submenuPermissions, tabPermissions])
+
+  // Solo se muestran las filas cuyos padres están desplegados; al buscar se muestra todo
+  const filasVisibles = useMemo(
+    () => (globalFilter.trim()
+      ? tableData
+      : tableData.filter(f => (f.ancestros || []).every(id => expandidos.has(id)))),
+    [tableData, expandidos, globalFilter],
+  )
+
+  const alternarFila = (id: string) => {
+    setExpandidos(prev => {
+      const sig = new Set(prev)
+      if (sig.has(id)) sig.delete(id)
+      else sig.add(id)
+      return sig
+    })
+  }
 
   // Definir columnas
   const columns = useMemo<ColumnDef<PermissionRow>[]>(
@@ -844,8 +875,17 @@ export function RoleMenuPermissionsManager() {
 
           return (
             <div className={`module-cell ${isTab ? 'is-tab' : isSubmenu ? 'is-submenu' : 'is-menu'} level-${level}`}>
+              {row.original.tieneHijos ? (
+                <button
+                  type="button"
+                  className={`expand-btn${expandidos.has(row.original.id) || globalFilter.trim() ? ' abierto' : ''}`}
+                  onClick={() => alternarFila(row.original.id)}
+                  aria-label={expandidos.has(row.original.id) ? 'Plegar' : 'Desplegar'}
+                >
+                  <ChevronRight size={14} />
+                </button>
+              ) : <span className="expand-hueco" />}
               {isTab && <span className="tab-indicator">⊟</span>}
-              {isSubmenu && <span className="submenu-indicator">└─</span>}
               <span className="module-name">
                 {row.original.label}
               </span>
@@ -871,7 +911,7 @@ export function RoleMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_view && <Check size={16} />}
+            {row.original.can_view && <Check size={13} strokeWidth={3} />}
           </div>
         ),
         enableSorting: true,
@@ -893,7 +933,7 @@ export function RoleMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_create && <Check size={16} />}
+            {row.original.can_create && <Check size={13} strokeWidth={3} />}
           </div>
         ),
         enableSorting: true,
@@ -915,7 +955,7 @@ export function RoleMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_edit && <Check size={16} />}
+            {row.original.can_edit && <Check size={13} strokeWidth={3} />}
           </div>
         ),
         enableSorting: true,
@@ -937,18 +977,18 @@ export function RoleMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_delete && <Check size={16} />}
+            {row.original.can_delete && <Check size={13} strokeWidth={3} />}
           </div>
         ),
         enableSorting: true,
       },
     ],
-    [menuPermissions, submenuPermissions, tabPermissions, saving]
+    [menuPermissions, submenuPermissions, tabPermissions, saving, expandidos, globalFilter]
   )
 
   // Configurar TanStack Table
   const table = useReactTable({
-    data: tableData,
+    data: filasVisibles,
     columns,
     state: {
       sorting,
@@ -963,7 +1003,7 @@ export function RoleMenuPermissionsManager() {
     autoResetPageIndex: false, // Evitar que la paginación se reinicie al actualizar datos
     initialState: {
       pagination: {
-        pageSize: 50,
+        pageSize: 200,
       },
     },
   })
@@ -1092,13 +1132,73 @@ export function RoleMenuPermissionsManager() {
         }
 
         .search-filter-container {
-          margin-bottom: 16px;
+          margin-bottom: 12px;
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .search-filter-container > div:first-child {
+          flex: 1;
+        }
+
+        .expand-acciones {
+          display: flex;
+          gap: 6px;
+        }
+
+        .expand-accion {
+          padding: 8px 12px;
+          font-size: 12px;
+          font-weight: 500;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-primary);
+          color: var(--text-secondary);
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .expand-accion:hover {
+          border-color: #ff0033;
+          color: #ff0033;
+        }
+
+        .expand-btn {
+          width: 20px;
+          height: 20px;
+          margin-right: 6px;
+          padding: 0;
+          border: none;
+          border-radius: 4px;
+          background: transparent;
+          color: var(--text-secondary);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: transform 0.15s, background 0.15s;
+        }
+
+        .expand-btn:hover {
+          background: var(--bg-tertiary, rgba(0,0,0,0.06));
+        }
+
+        .expand-btn.abierto {
+          transform: rotate(90deg);
+        }
+
+        .expand-hueco {
+          width: 20px;
+          margin-right: 6px;
+          flex-shrink: 0;
         }
 
         .search-input {
           width: 100%;
-          padding: 12px 16px 12px 42px;
-          font-size: 14px;
+          padding: 9px 14px 9px 40px;
+          font-size: 13px;
           border: 1px solid var(--border-primary);
           border-radius: 6px;
           background: var(--input-bg);
@@ -1126,7 +1226,7 @@ export function RoleMenuPermissionsManager() {
 
         .data-table th {
           background: var(--bg-secondary);
-          padding: 12px 16px;
+          padding: 8px 12px;
           text-align: left;
           font-size: 11px;
           font-weight: 600;
@@ -1139,7 +1239,7 @@ export function RoleMenuPermissionsManager() {
         }
 
         .data-table th:first-child {
-          width: 45%;
+          width: auto;
         }
 
         .data-table th.sortable:hover {
@@ -1151,7 +1251,7 @@ export function RoleMenuPermissionsManager() {
         .data-table th:nth-child(4),
         .data-table th:nth-child(5) {
           text-align: center;
-          width: 80px;
+          width: 72px;
         }
 
         .data-table td {
@@ -1166,7 +1266,7 @@ export function RoleMenuPermissionsManager() {
         .data-table td:nth-child(4),
         .data-table td:nth-child(5) {
           text-align: center;
-          padding: 12px 16px;
+          padding: 4px 6px;
         }
 
         .data-table tbody tr {
@@ -1225,8 +1325,8 @@ export function RoleMenuPermissionsManager() {
         .module-cell {
           display: flex;
           align-items: center;
-          min-height: 48px;
-          padding: 12px 16px;
+          min-height: 34px;
+          padding: 5px 12px;
         }
 
         .module-cell.is-menu {
@@ -1235,27 +1335,27 @@ export function RoleMenuPermissionsManager() {
 
         /* Nivel 1: Submenú directo del menú */
         .module-cell.is-submenu.level-1 {
-          padding-left: 40px;
+          padding-left: 30px;
           border-left: 3px solid #ff0033;
           background: linear-gradient(90deg, rgba(230, 57, 70, 0.05) 0%, transparent 100%);
         }
 
         /* Nivel 2: Sub-submenú */
         .module-cell.is-submenu.level-2 {
-          padding-left: 70px;
+          padding-left: 48px;
           border-left: 3px solid #F97316;
           background: linear-gradient(90deg, rgba(249, 115, 22, 0.05) 0%, transparent 100%);
         }
 
         /* Nivel 3+: Sub-sub-submenú */
         .module-cell.is-submenu.level-3 {
-          padding-left: 100px;
+          padding-left: 66px;
           border-left: 3px solid #EAB308;
           background: linear-gradient(90deg, rgba(234, 179, 8, 0.05) 0%, transparent 100%);
         }
 
         .module-name {
-          font-size: 14px;
+          font-size: 13px;
           line-height: 1.4;
         }
 
@@ -1305,15 +1405,15 @@ export function RoleMenuPermissionsManager() {
         }
 
         .module-cell.is-tab.level-1 {
-          padding-left: 40px;
+          padding-left: 30px;
         }
 
         .module-cell.is-tab.level-2 {
-          padding-left: 70px;
+          padding-left: 48px;
         }
 
         .module-cell.is-tab.level-3 {
-          padding-left: 100px;
+          padding-left: 66px;
         }
 
         .module-cell.is-tab .module-name {
@@ -1336,17 +1436,17 @@ export function RoleMenuPermissionsManager() {
         }
 
         .perm-checkbox {
-          width: 32px;
-          height: 32px;
-          border: 2px solid var(--border-primary);
-          border-radius: 6px;
+          width: 20px;
+          height: 20px;
+          border: 1.5px solid var(--border-primary);
+          border-radius: 4px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           transition: all 0.15s;
           background: var(--input-bg);
-          font-size: 14px;
+          font-size: 12px;
         }
 
         .perm-checkbox:hover {
@@ -1590,6 +1690,18 @@ export function RoleMenuPermissionsManager() {
                   onChange={(e) => setGlobalFilter(e.target.value)}
                 />
               </div>
+              <div className="expand-acciones">
+                <button
+                  type="button"
+                  className="expand-accion"
+                  onClick={() => setExpandidos(new Set(tableData.filter(f => f.tieneHijos).map(f => f.id)))}
+                >
+                  Desplegar todo
+                </button>
+                <button type="button" className="expand-accion" onClick={() => setExpandidos(new Set())}>
+                  Plegar todo
+                </button>
+              </div>
             </div>
 
             {/* Table */}
@@ -1680,7 +1792,7 @@ export function RoleMenuPermissionsManager() {
                       value={table.getState().pagination.pageSize}
                       onChange={e => table.setPageSize(Number(e.target.value))}
                     >
-                      {[10, 20, 50, 100].map(pageSize => (
+                      {[10, 20, 50, 100, 200].map(pageSize => (
                         <option key={pageSize} value={pageSize}>
                           {pageSize} por página
                         </option>

@@ -91,6 +91,25 @@
   white-space: nowrap;
 }
 
+/* Tarjetas que filtran la tabla (igual que Vehículos) */
+.admin-stats .stat-card.stat-card-clickable {
+  cursor: pointer;
+  border: 2px solid transparent;
+  text-align: left;
+  font: inherit;
+  transition: all 0.2s ease;
+}
+
+.admin-stats .stat-card.stat-card-clickable:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.admin-stats .stat-card.stat-card-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
 /* Responsive Stats */
 @media (max-width: 1200px) {
   .admin-stats-grid {
@@ -535,11 +554,11 @@
 
 .audit-tab {
   flex: 1;
-  padding: 12px 20px;
+  padding: 7px 16px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -586,7 +605,7 @@
 .audit-filters {
   background: var(--bg-primary);
   border-radius: 8px;
-  padding: 16px;
+  padding: 10px 12px;
   border: 1px solid var(--border-primary);
 }
 
@@ -601,7 +620,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 140px;
+  min-width: 130px;
 }
 
 .audit-filter-group label {
@@ -615,7 +634,7 @@
 
 .audit-filter-group select,
 .audit-filter-group input {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid var(--border-primary);
   border-radius: 6px;
   background: var(--bg-secondary);
@@ -630,7 +649,7 @@
 }
 
 .audit-filter-clear {
-  padding: 8px 16px;
+  padding: 6px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;

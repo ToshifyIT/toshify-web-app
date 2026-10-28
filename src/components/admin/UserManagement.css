@@ -420,3 +420,88 @@
   outline: 2px solid var(--color-primary, #ff0033);
   outline-offset: -2px;
 }
+
+/* Auditoría: solo lo importante + resumen por usuario (compacto) */
+.audit-importantes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  align-self: center;
+}
+
+.audit-resumen-linea {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-primary);
+  flex-wrap: wrap;
+}
+
+.audit-resumen-totales {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.audit-resumen-totales svg {
+  color: var(--color-primary);
+}
+
+.audit-resumen-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.audit-resumen-muted {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.audit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.audit-chip:hover {
+  border-color: var(--color-primary);
+}
+
+.audit-chip.activo {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.audit-chip-nombre {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.audit-chip-total {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.audit-chip-det {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
