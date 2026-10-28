@@ -11,6 +11,7 @@ import { CrearCobroMultaModal } from './components/CrearCobroMultaModal'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
+import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1270,6 +1271,21 @@ export default function MultasModule() {
     }] : [])
   ]
 
+  // Foto diaria de las tarjetas (traza) y la de hace 7 días para las flechas.
+  // Solo sin filtros ni búsqueda (con filtros los números no son comparables). Una
+  // foto por vista (pendientes / enviadas / desestimadas).
+  const sinFiltrosMultas = activeFilters.length === 0 && !busqueda.trim()
+    && (multasVisibles === null || multasVisibles.length === multasFiltradas.length)
+  const fotoAnteriorMultas = useFotoSemanaAnterior(`multas_${vista}`.replace(/[^a-z_]/g, '_'), {
+    total: multasKpiSinRechazadas.length,
+    vehiculos: patentesUnicasCount,
+    conductores: conductoresUnicosCount,
+    pendiente: Math.round(montosPorPago.pendiente),
+    pagado: Math.round(montosPorPago.pagado),
+    proceso: Math.round(montosPorPago.proceso),
+  }, !loading && multas.length > 0 && sinFiltrosMultas)
+  const fotoMultas = sinFiltrosMultas ? fotoAnteriorMultas : null
+
   function clearAllFilters() {
     setFechaCargaDesde(null)
     setFechaCargaHasta(null)
@@ -1791,6 +1807,7 @@ export default function MultasModule() {
               <span className="stat-value">{multasKpiSinRechazadas.length}</span>
               <span className="stat-label">Total Multas</span>
             </div>
+            <ComparacionSemana actual={multasKpiSinRechazadas.length} anterior={fotoMultas?.total} invertido />
           </div>
           <div className="stat-card">
             <Car size={18} className="stat-icon" />
@@ -1798,6 +1815,7 @@ export default function MultasModule() {
               <span className="stat-value">{patentesUnicasCount}</span>
               <span className="stat-label">Vehiculos</span>
             </div>
+            <ComparacionSemana actual={patentesUnicasCount} anterior={fotoMultas?.vehiculos} invertido />
           </div>
           <div className="stat-card">
             <Users size={18} className="stat-icon" />
@@ -1805,12 +1823,14 @@ export default function MultasModule() {
               <span className="stat-value">{conductoresUnicosCount}</span>
               <span className="stat-label">Conductores</span>
             </div>
+            <ComparacionSemana actual={conductoresUnicosCount} anterior={fotoMultas?.conductores} invertido />
           </div>
           <div className="stat-card">
             <DollarSign size={18} className="stat-icon" style={{ color: '#dc2626' }} />
             <div className="stat-content">
               <span className="stat-value">{formatMoney(montosPorPago.pendiente)}</span>
               <span className="stat-label">Monto Total Pendiente</span>
+              <ComparacionSemana actual={Math.round(montosPorPago.pendiente)} anterior={fotoMultas?.pendiente} moneda abajo invertido />
             </div>
             <button
               type="button"
@@ -1827,6 +1847,7 @@ export default function MultasModule() {
             <div className="stat-content">
               <span className="stat-value">{formatMoney(montosPorPago.pagado)}</span>
               <span className="stat-label">Monto Total Pagado</span>
+              <ComparacionSemana actual={Math.round(montosPorPago.pagado)} anterior={fotoMultas?.pagado} moneda abajo />
             </div>
             <button
               type="button"
@@ -1843,6 +1864,7 @@ export default function MultasModule() {
             <div className="stat-content">
               <span className="stat-value">{formatMoney(montosPorPago.proceso)}</span>
               <span className="stat-label">Monto Total en Proceso</span>
+              <ComparacionSemana actual={Math.round(montosPorPago.proceso)} anterior={fotoMultas?.proceso} moneda abajo />
             </div>
             <button
               type="button"

@@ -5,7 +5,7 @@ import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { Menu, Submenu } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Menu as MenuIcon } from 'lucide-react'
+import { Menu as MenuIcon, ChevronRight } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import './MenuHierarchyManager.css'
@@ -22,6 +22,8 @@ interface MenuRow {
   parent_id?: string | null
   level: number
   data: Menu | Submenu
+  hijos: number
+  ancestros: string[]
 }
 
 export function MenuHierarchyManager() {
@@ -34,6 +36,9 @@ export function MenuHierarchyManager() {
   const [editingMenu, setEditingMenu] = useState<Menu | null>(null)
   const [editingSubmenu, setEditingSubmenu] = useState<Submenu | null>(null)
   const [saving, setSaving] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
+  // Menús y submenús desplegados (por defecto todo plegado)
+  const [expandidos, setExpandidos] = useState<Set<string>>(() => new Set())
 
   const [menuForm, setMenuForm] = useState({
     name: '',
@@ -382,7 +387,8 @@ export function MenuHierarchyManager() {
     rows: MenuRow[],
     menuId: string,
     parentId: string | null,
-    menuSubmenus: Submenu[]
+    menuSubmenus: Submenu[],
+    ancestros: string[]
   ) => {
     const children = menuSubmenus
       .filter(sub => sub.parent_id === parentId)
@@ -398,11 +404,13 @@ export function MenuHierarchyManager() {
         order_index: submenu.order_index,
         menu_id: menuId,
         parent_id: submenu.parent_id,
-        level: submenu.level || 1,
-        data: submenu
+        level: ancestros.length,
+        data: submenu,
+        hijos: menuSubmenus.filter(sub => sub.parent_id === submenu.id).length,
+        ancestros,
       })
       // Agregar hijos de este submenú recursivamente
-      addSubmenusRecursively(rows, menuId, submenu.id, menuSubmenus)
+      addSubmenusRecursively(rows, menuId, submenu.id, menuSubmenus, [...ancestros, submenu.id])
     })
   }
 
@@ -418,55 +426,75 @@ export function MenuHierarchyManager() {
         route: menu.route,
         order_index: menu.order_index,
         level: 0,
-        data: menu
+        data: menu,
+        hijos: 0,
+        ancestros: [],
       })
+      const filaMenu = rows[rows.length - 1]
 
       // Obtener submenús de este menú
       const menuSubmenus = submenus.filter(sub => sub.menu_id === menu.id)
+      filaMenu.hijos = menuSubmenus.filter(sub => !sub.parent_id).length
       // Agregar recursivamente empezando por los de nivel 1 (parent_id = null)
-      addSubmenusRecursively(rows, menu.id, null, menuSubmenus)
+      addSubmenusRecursively(rows, menu.id, null, menuSubmenus, [menu.id])
     })
     return rows
   }, [menus, submenus])
+
+  // Al buscar se muestra todo; si no, solo lo que tiene a sus padres desplegados
+  const filasVisibles = useMemo(
+    () => (busqueda.trim() ? tableData : tableData.filter(f => f.ancestros.every(id => expandidos.has(id)))),
+    [tableData, expandidos, busqueda],
+  )
+
+  const alternarFila = (id: string) => {
+    setExpandidos(prev => {
+      const sig = new Set(prev)
+      if (sig.has(id)) sig.delete(id)
+      else sig.add(id)
+      return sig
+    })
+  }
 
   // Definir columnas para DataTable
   const columns = useMemo<ColumnDef<MenuRow, any>[]>(
     () => [
       {
-        accessorKey: 'type',
-        header: 'Tipo',
-        cell: ({ getValue }) => {
-          const type = getValue() as 'menu' | 'submenu'
+        accessorKey: 'label',
+        header: 'Módulo',
+        enableSorting: false,
+        meta: { expand: true },
+        cell: ({ row }) => {
+          const f = row.original
+          const abierto = expandidos.has(f.id) || !!busqueda.trim()
           return (
-            <span className={`dt-badge ${type === 'menu' ? 'mhm-type-menu' : 'mhm-type-submenu'}`}>
-              {type === 'menu' ? 'Menú' : 'Submenú'}
-            </span>
+            <div className={`mhm-modulo ${f.type === 'menu' ? 'es-menu' : 'es-submenu'}`} style={{ paddingLeft: `${f.level * 22}px` }}>
+              {f.hijos > 0 ? (
+                <button
+                  type="button"
+                  className={`mhm-expand${abierto ? ' abierto' : ''}`}
+                  onClick={() => alternarFila(f.id)}
+                  aria-label={abierto ? 'Plegar' : 'Desplegar'}
+                >
+                  <ChevronRight size={14} />
+                </button>
+              ) : <span className="mhm-expand-hueco" />}
+              <span className="mhm-modulo-label">{f.label}</span>
+              {f.hijos > 0 ? <span className="mhm-hijos">{f.hijos}</span> : null}
+            </div>
           )
         }
       },
       {
         accessorKey: 'name',
-        header: 'Nombre',
-        cell: ({ row, getValue }) => {
-          const level = row.original.level
-          const indent = level > 0 ? '─'.repeat(level) + ' ' : ''
-          const indicator = level > 0 ? '└' + indent : ''
-          return (
-            <span style={{ paddingLeft: `${level * 16}px` }}>
-              {level > 0 && <span className="mhm-submenu-indicator">{indicator}</span>}
-              <strong>{getValue() as string}</strong>
-            </span>
-          )
-        }
-      },
-      {
-        accessorKey: 'label',
-        header: 'Etiqueta',
-        cell: ({ getValue }) => <span>{getValue() as string}</span>
+        header: 'Nombre (ID)',
+        enableSorting: false,
+        cell: ({ getValue }) => <span className="mhm-id">{getValue() as string}</span>
       },
       {
         accessorKey: 'route',
         header: 'Ruta',
+        enableSorting: false,
         cell: ({ getValue }) => {
           const route = getValue() as string
           return route ? <code className="mhm-route-code">{route}</code> : <span style={{ color: '#9CA3AF' }}>-</span>
@@ -475,6 +503,7 @@ export function MenuHierarchyManager() {
       {
         accessorKey: 'order_index',
         header: 'Orden',
+        enableSorting: false,
         cell: ({ getValue }) => <span style={{ textAlign: 'center', display: 'block' }}>{getValue() as number}</span>
       },
       {
@@ -527,7 +556,8 @@ export function MenuHierarchyManager() {
         )
       }
     ],
-    []
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [expandidos, busqueda]
   )
 
   return (
@@ -535,7 +565,10 @@ export function MenuHierarchyManager() {
       <LoadingOverlay show={loading} message="Cargando menus..." size="lg" />
       {/* DataTable with integrated action buttons */}
       <DataTable
-        data={tableData}
+        data={filasVisibles}
+        globalFilter={busqueda}
+        onGlobalFilterChange={setBusqueda}
+        disableAutoFilters
         columns={columns}
         loading={loading}
         error={error}
@@ -544,10 +577,20 @@ export function MenuHierarchyManager() {
       />}
         emptyTitle="No hay menús"
         emptyDescription="Crea el primer menú usando el botón '+ Menú'"
-pageSize={100}
-        pageSizeOptions={[10, 20, 50, 100]}
+        pageSize={200}
+        pageSizeOptions={[50, 100, 200]}
         headerAction={
           <div className="mhm-header-actions">
+            <button
+              type="button"
+              className="mhm-accion-sec"
+              onClick={() => setExpandidos(new Set(tableData.filter(f => f.hijos > 0).map(f => f.id)))}
+            >
+              Desplegar todo
+            </button>
+            <button type="button" className="mhm-accion-sec" onClick={() => setExpandidos(new Set())}>
+              Plegar todo
+            </button>
             <button className="btn-primary" onClick={() => setShowMenuModal(true)}>
               + Menú
             </button>

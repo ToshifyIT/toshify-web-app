@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/sedes/SedesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Building2, Plus, Edit2, Trash2, Eye, MapPin, Check, X } from 'lucide-react'
+import { Building2, Edit2, Trash2, Eye, MapPin, Check, X } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -10,6 +10,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import '../../components/admin/AdminStyles.css'
 
 interface Sede {
   id: string
@@ -598,58 +599,36 @@ export function SedesModule() {
   void sedesContext
 
   return (
-    <div style={{ padding: '24px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-            Sedes
-          </h1>
-          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-            Gestión de sedes y sucursales
-          </p>
-        </div>
-        {canCreate && (
-          <button
-            onClick={() => { setFormData(initialFormData); setShowCreateModal(true) }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '10px 20px', borderRadius: '8px', border: 'none',
-              background: 'var(--color-primary)', color: '#fff',
-              fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            <Plus size={16} /> Nueva Sede
-          </button>
-        )}
-      </div>
-
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        {[
-          { label: 'Total', value: stats.total, color: 'var(--color-primary)', filter: 'all' as const },
-          { label: 'Activas', value: stats.activas, color: '#10B981', filter: 'active' as const },
-          { label: 'Inactivas', value: stats.inactivas, color: '#EF4444', filter: 'inactive' as const },
-        ].map(s => (
-          <button
-            key={s.label}
-            onClick={() => setActiveFilter(activeFilter === s.filter ? 'all' : s.filter)}
-            style={{
-              padding: '16px', borderRadius: '12px',
-              border: activeFilter === s.filter ? `2px solid ${s.color}` : '1px solid var(--border-primary)',
-              background: 'var(--bg-primary)', cursor: 'pointer', textAlign: 'left',
-            }}
-          >
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>{s.label}</div>
-            <div style={{ fontSize: '28px', fontWeight: 700, color: s.color }}>{s.value}</div>
-          </button>
-        ))}
-        <div style={{
-          padding: '16px', borderRadius: '12px',
-          border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
-        }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>Principal</div>
-          <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>{stats.principal}</div>
+    <div className="admin-module">
+      {/* Stats (mismo estilo que el resto de los módulos) */}
+      <div className="admin-stats">
+        <div className="admin-stats-grid">
+          {[
+            { label: 'Total', value: stats.total, icon: Building2, filter: 'all' as const },
+            { label: 'Activas', value: stats.activas, icon: Check, filter: 'active' as const },
+            { label: 'Inactivas', value: stats.inactivas, icon: X, filter: 'inactive' as const },
+          ].map(s => (
+            <button
+              key={s.label}
+              type="button"
+              className={`stat-card stat-card-clickable${activeFilter === s.filter && s.filter !== 'all' ? ' stat-card-active' : ''}`}
+              onClick={() => setActiveFilter(activeFilter === s.filter ? 'all' : s.filter)}
+              title={`Click para filtrar: ${s.label}`}
+            >
+              <s.icon size={18} className="stat-icon" />
+              <div className="stat-content">
+                <span className="stat-value">{s.value}</span>
+                <span className="stat-label">{s.label}</span>
+              </div>
+            </button>
+          ))}
+          <div className="stat-card">
+            <MapPin size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.principal}</span>
+              <span className="stat-label">Principal</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -658,10 +637,18 @@ export function SedesModule() {
         columns={columns}
         data={filteredSedes}
         loading={loading}
-        emptyIcon={<Building2 size={64}
-      />}
+        emptyIcon={<Building2 size={64} />}
         emptyTitle="No hay sedes"
         emptyDescription="Crea la primera sede para comenzar"
+        headerAction={canCreate ? (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => { setFormData(initialFormData); setShowCreateModal(true) }}
+          >
+            + Nueva Sede
+          </button>
+        ) : undefined}
       />
 
       {/* Create Modal */}

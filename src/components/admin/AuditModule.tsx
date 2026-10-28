@@ -4,8 +4,9 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../ui/LoadingOverlay'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { History, Eye, Filter, Calendar, User, Database, Monitor, Users, ChevronLeft, ChevronRight } from 'lucide-react'
+import { History, Eye, Monitor, Calendar, Users, ChevronLeft, ChevronRight } from 'lucide-react'
 import Swal from 'sweetalert2'
+import { detalleLegible } from './auditoriaDetalle'
 import './UserManagement.css'
 import './AdminStyles.css'
 
@@ -61,6 +62,7 @@ const TABLA_LABELS: Record<string, string> = {
   roles: 'Roles',
   role_menu_permissions: 'Permisos Menú',
   role_submenu_permissions: 'Permisos Submenú',
+  role_tab_permissions: 'Permisos Pestaña',
   saldos_conductores: 'Saldos',
   sedes: 'Sedes',
   siniestros: 'Siniestros',
@@ -85,6 +87,34 @@ const ACCION_LABELS: Record<string, { label: string; color: string }> = {
 
 const PAGE_SIZE = 100
 
+// Tablas con mucho movimiento automático (sincronizaciones, históricos): se ocultan
+// con "Solo lo importante" para que la consulta sea rápida y se vea lo que hace la gente.
+const TABLAS_RUIDO = [
+  'cabify_historico', 'cabify_sync_log', 'uss_sync_log', 'wialon_bitacora',
+  'wialon_bitacora_sync_log', 'telepase_historico', 'conductores_semana_facturacion',
+  'facturacion_detalle', 'facturacion_cabify',
+]
+
+type Periodo = 'hora' | 'hoy' | '7d' | 'rango'
+
+const PERIODO_LABELS: Record<Periodo, string> = {
+  hora: 'Última hora',
+  hoy: 'Hoy',
+  '7d': 'Últimos 7 días',
+  rango: 'Elegir fechas',
+}
+
+interface ResumenUsuario {
+  nombre: string
+  email: string | null
+  total: number
+  creaciones: number
+  modificaciones: number
+  eliminaciones: number
+  modulos: [string, number][]
+  ultima: string
+}
+
 // Helper: fecha hace N días en formato yyyy-MM-dd
 function daysAgo(n: number): string {
   const d = new Date()
@@ -101,7 +131,14 @@ export function AuditModule() {
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
 
-  // Filtros - default últimos 7 días
+  // Período: por defecto la última hora (carga rápido); se puede ampliar
+  const [periodo, setPeriodo] = useState<Periodo>('hora')
+  const [desdeCalculado, setDesdeCalculado] = useState<string>(() => new Date(Date.now() - 3600_000).toISOString())
+  const [soloImportantes, setSoloImportantes] = useState(true)
+  const [resumen, setResumen] = useState<ResumenUsuario[]>([])
+  const [cargandoResumen, setCargandoResumen] = useState(false)
+
+  // Filtros
   const [filtroTabla, setFiltroTabla] = useState<string>('')
   const [filtroAccion, setFiltroAccion] = useState<string>('')
   const [filtroUsuario, setFiltroUsuario] = useState<string>('')
@@ -109,8 +146,28 @@ export function AuditModule() {
   const [filtroFechaInicio, setFiltroFechaInicio] = useState<string>(daysAgo(7))
   const [filtroFechaFin, setFiltroFechaFin] = useState<string>('')
 
-  // Tablas disponibles (dinámicas, se cargan de la BD)
-  const [tablasDisponibles, setTablasDisponibles] = useState<string[]>(Object.keys(TABLA_LABELS))
+  // Tablas para el filtro (lista fija: consultarlas a la base hacía lenta la pantalla)
+  const tablasDisponibles = useMemo(
+    () => Object.keys(TABLA_LABELS).filter(t => !soloImportantes || !TABLAS_RUIDO.includes(t)),
+    [soloImportantes],
+  )
+
+  // Rango efectivo de la consulta (ISO)
+  const desdeISO = periodo === 'rango'
+    ? (filtroFechaInicio ? `${filtroFechaInicio}T00:00:00` : `${daysAgo(7)}T00:00:00`)
+    : desdeCalculado
+  const hastaISO = periodo === 'rango' && filtroFechaFin ? `${filtroFechaFin}T23:59:59` : null
+
+  const elegirPeriodo = (p: Periodo) => {
+    setPeriodo(p)
+    if (p === 'hora') setDesdeCalculado(new Date(Date.now() - 3600_000).toISOString())
+    if (p === 'hoy') {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      setDesdeCalculado(d.toISOString())
+    }
+    if (p === '7d') setDesdeCalculado(`${daysAgo(7)}T00:00:00`)
+  }
 
   // Debounce para filtro usuario
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -125,29 +182,25 @@ export function AuditModule() {
   // Reset page al cambiar filtros
   useEffect(() => {
     setPage(0)
-  }, [filtroTabla, filtroAccion, filtroUsuarioDebounced, filtroFechaInicio, filtroFechaFin, activeTab])
+  }, [filtroTabla, filtroAccion, filtroUsuarioDebounced, desdeISO, hastaISO, soloImportantes, activeTab])
 
   useEffect(() => {
     loadLogs()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroTabla, filtroAccion, filtroUsuarioDebounced, filtroFechaInicio, filtroFechaFin, activeTab, page])
+  }, [filtroTabla, filtroAccion, filtroUsuarioDebounced, desdeISO, hastaISO, soloImportantes, activeTab, page])
 
-  // Cargar contadores de pestañas (con rango de fecha para no timeout)
+  // Contadores de pestañas (mismo período y mismo criterio de "importantes")
   useEffect(() => {
     const loadCounts = async () => {
-      const fechaDesde = filtroFechaInicio || daysAgo(7)
+      const base = () => {
+        let q = supabase.from('audit_log').select('id', { count: 'exact', head: true }).gte('created_at', desdeISO)
+        if (hastaISO) q = q.lte('created_at', hastaISO)
+        if (soloImportantes) q = q.not('tabla', 'in', `(${TABLAS_RUIDO.join(',')})`)
+        return q
+      }
       const [sistemaResult, usuariosResult] = await Promise.all([
-        supabase
-          .from('audit_log')
-          .select('id', { count: 'exact', head: true })
-          .or('usuario_nombre.is.null,usuario_nombre.eq.Sistema')
-          .gte('created_at', `${fechaDesde}T00:00:00`),
-        supabase
-          .from('audit_log')
-          .select('id', { count: 'exact', head: true })
-          .not('usuario_nombre', 'is', null)
-          .neq('usuario_nombre', 'Sistema')
-          .gte('created_at', `${fechaDesde}T00:00:00`),
+        base().or('usuario_nombre.is.null,usuario_nombre.eq.Sistema'),
+        base().not('usuario_nombre', 'is', null).neq('usuario_nombre', 'Sistema'),
       ])
       setTabCounts({
         sistema: sistemaResult.count || 0,
@@ -155,25 +208,57 @@ export function AuditModule() {
       })
     }
     loadCounts()
-   
-  }, [filtroFechaInicio, filtroFechaFin])
+  }, [desdeISO, hastaISO, soloImportantes])
 
-  // Cargar tablas disponibles dinámicamente (últimos 30 días)
+  // Resumen de actividad por usuario (qué hizo cada uno en el período)
   useEffect(() => {
-    const loadTablas = async () => {
-      const { data } = await supabase
-        .from('audit_log')
-        .select('tabla')
-        .gte('created_at', `${daysAgo(30)}T00:00:00`)
-        .order('tabla')
-        .limit(5000)
-      if (data) {
-        const tablas = [...new Set(data.map((r: { tabla: string }) => r.tabla))].sort()
-        if (tablas.length > 0) setTablasDisponibles(tablas)
+    if (activeTab !== 'usuarios') return
+    let activo = true
+    const cargar = async () => {
+      setCargandoResumen(true)
+      try {
+        let q = supabase
+          .from('audit_log')
+          .select('usuario_nombre, usuario_email, tabla, accion, created_at')
+          .not('usuario_nombre', 'is', null)
+          .neq('usuario_nombre', 'Sistema')
+          .gte('created_at', desdeISO)
+          .order('created_at', { ascending: false })
+          .limit(5000)
+        if (hastaISO) q = q.lte('created_at', hastaISO)
+        if (soloImportantes) q = q.not('tabla', 'in', `(${TABLAS_RUIDO.join(',')})`)
+        const { data, error: e } = await q
+        if (e) throw e
+        const mapa = new Map<string, ResumenUsuario & { porModulo: Map<string, number> }>()
+        for (const l of (data || []) as Pick<AuditLog, 'usuario_nombre' | 'usuario_email' | 'tabla' | 'accion' | 'created_at'>[]) {
+          const nombre = l.usuario_nombre || 'Sin nombre'
+          const u = mapa.get(nombre) ?? {
+            nombre, email: l.usuario_email, total: 0, creaciones: 0, modificaciones: 0, eliminaciones: 0,
+            modulos: [], ultima: l.created_at, porModulo: new Map<string, number>(),
+          }
+          u.total++
+          if (l.accion === 'INSERT') u.creaciones++
+          else if (l.accion === 'UPDATE') u.modificaciones++
+          else if (l.accion === 'DELETE') u.eliminaciones++
+          const mod = TABLA_LABELS[l.tabla] || l.tabla
+          u.porModulo.set(mod, (u.porModulo.get(mod) || 0) + 1)
+          if (l.created_at > u.ultima) u.ultima = l.created_at
+          mapa.set(nombre, u)
+        }
+        const lista = [...mapa.values()]
+          .map(({ porModulo, ...u }) => ({ ...u, modulos: [...porModulo.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3) }))
+          .sort((a, b) => b.total - a.total)
+        if (activo) setResumen(lista)
+      } catch (err) {
+        console.error('[Auditoría] Error cargando el resumen por usuario', err)
+        if (activo) setResumen([])
+      } finally {
+        if (activo) setCargandoResumen(false)
       }
     }
-    loadTablas()
-  }, [])
+    cargar()
+    return () => { activo = false }
+  }, [activeTab, desdeISO, hastaISO, soloImportantes])
 
   const buildQuery = useCallback(() => {
     // Select solo columnas livianas (sin datos_anteriores/datos_nuevos que son JSONB pesados)
@@ -200,15 +285,16 @@ export function AuditModule() {
     if (filtroUsuarioDebounced) {
       query = query.or(`usuario_nombre.ilike.%${filtroUsuarioDebounced}%,usuario_email.ilike.%${filtroUsuarioDebounced}%`)
     }
-    if (filtroFechaInicio) {
-      query = query.gte('created_at', `${filtroFechaInicio}T00:00:00`)
+    query = query.gte('created_at', desdeISO)
+    if (hastaISO) {
+      query = query.lte('created_at', hastaISO)
     }
-    if (filtroFechaFin) {
-      query = query.lte('created_at', `${filtroFechaFin}T23:59:59`)
+    if (soloImportantes) {
+      query = query.not('tabla', 'in', `(${TABLAS_RUIDO.join(',')})`)
     }
 
     return query
-  }, [activeTab, filtroTabla, filtroAccion, filtroUsuarioDebounced, filtroFechaInicio, filtroFechaFin])
+  }, [activeTab, filtroTabla, filtroAccion, filtroUsuarioDebounced, desdeISO, hastaISO, soloImportantes])
 
   const loadLogs = async () => {
     setLoading(true)
@@ -240,59 +326,20 @@ export function AuditModule() {
       .eq('id', log.id)
       .single()
 
-    const datosAnteriores = fullLog?.datos_anteriores as Record<string, unknown> | null
-    const datosNuevos = fullLog?.datos_nuevos as Record<string, unknown> | null
-
-    let htmlContent = ''
-
-    if (log.accion === 'INSERT') {
-      htmlContent = `
-        <div style="text-align: left; max-height: 400px; overflow-y: auto;">
-          <h4 style="margin-bottom: 12px; color: #10b981;">Datos Creados:</h4>
-          <pre style="background: #f3f4f6; padding: 12px; border-radius: 8px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;">${JSON.stringify(datosNuevos, null, 2)}</pre>
-        </div>
-      `
-    } else if (log.accion === 'UPDATE') {
-      const camposModificados = log.campos_modificados || []
-      const anterior = datosAnteriores || {}
-      const nuevo = datosNuevos || {}
-
-      let cambiosHtml = '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">'
-      cambiosHtml += '<tr style="background: #f3f4f6;"><th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Campo</th><th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Valor Anterior</th><th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Valor Nuevo</th></tr>'
-
-      camposModificados.forEach(campo => {
-        const valorAnterior = anterior[campo] !== null && anterior[campo] !== undefined ? String(anterior[campo]) : '-'
-        const valorNuevo = nuevo[campo] !== null && nuevo[campo] !== undefined ? String(nuevo[campo]) : '-'
-        cambiosHtml += `<tr><td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: 600;">${campo}</td><td style="padding: 8px; border: 1px solid #e5e7eb; color: #ef4444; background: #fef2f2;">${valorAnterior.substring(0, 100)}${valorAnterior.length > 100 ? '...' : ''}</td><td style="padding: 8px; border: 1px solid #e5e7eb; color: #10b981; background: #f0fdf4;">${valorNuevo.substring(0, 100)}${valorNuevo.length > 100 ? '...' : ''}</td></tr>`
-      })
-      cambiosHtml += '</table>'
-
-      htmlContent = `
-        <div style="text-align: left; max-height: 400px; overflow-y: auto;">
-          <h4 style="margin-bottom: 12px; color: #f59e0b;">Campos Modificados (${camposModificados.length}):</h4>
-          ${cambiosHtml}
-        </div>
-      `
-    } else if (log.accion === 'DELETE') {
-      htmlContent = `
-        <div style="text-align: left; max-height: 400px; overflow-y: auto;">
-          <h4 style="margin-bottom: 12px; color: #ef4444;">Datos Eliminados:</h4>
-          <pre style="background: #fef2f2; padding: 12px; border-radius: 8px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;">${JSON.stringify(datosAnteriores, null, 2)}</pre>
-        </div>
-      `
-    }
+    const html = await detalleLegible({
+      accion: log.accion,
+      modulo: TABLA_LABELS[log.tabla] || log.tabla,
+      usuario: log.usuario_nombre || 'Sistema',
+      fecha: log.created_at,
+      anteriores: (fullLog?.datos_anteriores as Record<string, unknown> | null) ?? null,
+      nuevos: (fullLog?.datos_nuevos as Record<string, unknown> | null) ?? null,
+      campos: log.campos_modificados,
+    })
 
     Swal.fire({
-      title: `${ACCION_LABELS[log.accion]?.label || log.accion} - ${TABLA_LABELS[log.tabla] || log.tabla}`,
-      html: `
-        <div style="margin-bottom: 16px; text-align: left; font-size: 13px; color: #666;">
-          <p><strong>Registro ID:</strong> ${log.registro_id || 'N/A'}</p>
-          <p><strong>Usuario:</strong> ${log.usuario_nombre || 'Sistema'} ${log.usuario_email ? `(${log.usuario_email})` : ''}</p>
-          <p><strong>Fecha:</strong> ${new Date(log.created_at).toLocaleString('es-ES')}</p>
-        </div>
-        ${htmlContent}
-      `,
-      width: '700px',
+      title: `${ACCION_LABELS[log.accion]?.label || log.accion} · ${TABLA_LABELS[log.tabla] || log.tabla}`,
+      html,
+      width: '640px',
       confirmButtonText: 'Cerrar',
       confirmButtonColor: '#FF0033'
     })
@@ -305,6 +352,7 @@ export function AuditModule() {
     setFiltroUsuarioDebounced('')
     setFiltroFechaInicio(daysAgo(7))
     setFiltroFechaFin('')
+    elegirPeriodo('hora')
   }
 
   // Paginación
@@ -431,47 +479,12 @@ export function AuditModule() {
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="admin-stats">
-        <div className="admin-stats-grid">
-          <div className="stat-card">
-            <History size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.total.toLocaleString()}</span>
-              <span className="stat-label">Total Registros</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <Database size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.inserts}</span>
-              <span className="stat-label">Creaciones</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <Database size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.updates}</span>
-              <span className="stat-label">Modificaciones</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <Database size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.deletes}</span>
-              <span className="stat-label">Eliminaciones</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Filtros */}
       <div className="audit-filters">
         <div className="audit-filters-row">
           <div className="audit-filter-group">
-            <label><Database size={14} /> Módulo</label>
             <select value={filtroTabla} onChange={(e) => setFiltroTabla(e.target.value)}>
-              <option value="">Todos</option>
+              <option value="">Todos los módulos</option>
               {tablasDisponibles.map(tabla => (
                 <option key={tabla} value={tabla}>{TABLA_LABELS[tabla] || tabla}</option>
               ))}
@@ -479,9 +492,8 @@ export function AuditModule() {
           </div>
 
           <div className="audit-filter-group">
-            <label><Filter size={14} /> Acción</label>
             <select value={filtroAccion} onChange={(e) => setFiltroAccion(e.target.value)}>
-              <option value="">Todas</option>
+              <option value="">Todas las acciones</option>
               <option value="INSERT">Creación</option>
               <option value="UPDATE">Modificación</option>
               <option value="DELETE">Eliminación</option>
@@ -489,7 +501,6 @@ export function AuditModule() {
           </div>
 
           <div className="audit-filter-group">
-            <label><User size={14} /> Usuario</label>
             <input
               type="text"
               placeholder="Buscar usuario..."
@@ -498,6 +509,15 @@ export function AuditModule() {
             />
           </div>
 
+          <div className="audit-filter-group">
+            <select value={periodo} onChange={(e) => elegirPeriodo(e.target.value as Periodo)}>
+              {(Object.keys(PERIODO_LABELS) as Periodo[]).map(p => (
+                <option key={p} value={p}>{PERIODO_LABELS[p]}</option>
+              ))}
+            </select>
+          </div>
+
+          {periodo === 'rango' && (<>
           <div className="audit-filter-group">
             <label><Calendar size={14} /> Desde</label>
             <input
@@ -515,10 +535,48 @@ export function AuditModule() {
               onChange={(e) => setFiltroFechaFin(e.target.value)}
             />
           </div>
+          </>)}
+
+          <label className="audit-importantes" title="Oculta sincronizaciones e históricos automáticos">
+            <input type="checkbox" checked={soloImportantes} onChange={(e) => setSoloImportantes(e.target.checked)} />
+            Solo lo importante
+          </label>
 
           <button className="audit-filter-clear" onClick={limpiarFiltros}>
             Limpiar
           </button>
+        </div>
+
+        {/* Resumen del período y actividad por usuario (una línea) */}
+        <div className="audit-resumen-linea">
+          <span className="audit-resumen-totales">
+            <History size={14} />
+            <strong>{stats.total.toLocaleString()}</strong> registros
+            {stats.inserts ? <> · {stats.inserts} creaciones</> : null}
+            {stats.updates ? <> · {stats.updates} modificaciones</> : null}
+            {stats.deletes ? <> · {stats.deletes} eliminaciones</> : null}
+          </span>
+          {activeTab === 'usuarios' && (
+            <div className="audit-resumen-chips">
+              {cargandoResumen ? <span className="audit-resumen-muted">cargando…</span> : null}
+              {!cargandoResumen && resumen.length === 0 ? <span className="audit-resumen-muted">Nadie hizo cambios en este período.</span> : null}
+              {resumen.map(u => (
+                <button
+                  key={u.nombre}
+                  type="button"
+                  className={`audit-chip${filtroUsuario === u.nombre ? ' activo' : ''}`}
+                  onClick={() => setFiltroUsuario(filtroUsuario === u.nombre ? '' : u.nombre)}
+                  title={`${u.modulos.map(([m, n]) => `${m} (${n})`).join(' · ')}\nÚltimo cambio: ${new Date(u.ultima).toLocaleString('es-AR')}\nClick para ver solo sus cambios`}
+                >
+                  <span className="audit-chip-nombre">{u.nombre}</span>
+                  <span className="audit-chip-total">{u.total}</span>
+                  <span className="audit-chip-det">
+                    {[u.creaciones ? `${u.creaciones} creó` : '', u.modificaciones ? `${u.modificaciones} modif.` : '', u.eliminaciones ? `${u.eliminaciones} elim.` : ''].filter(Boolean).join(' · ')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

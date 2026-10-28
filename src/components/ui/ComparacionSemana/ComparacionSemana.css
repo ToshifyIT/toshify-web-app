@@ -1,0 +1,28 @@
+/* Flecha de comparación contra la semana anterior (tarjetas de métricas) */
+.cmp-sem {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.cmp-sem-sufijo {
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.cmp-sem.cmp-sem--abajo {
+  margin-left: 0;
+  display: block;
+  margin-top: 2px;
+}
+
+.cmp-sem--bueno { color: #16a34a; }
+.cmp-sem--malo { color: #dc2626; }
+.cmp-sem--neutro { color: var(--text-tertiary); }
+
+@media (max-width: 1400px) {
+  .cmp-sem-sufijo { display: none; }
+}

@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import { useConductoresEmbajador } from '../../hooks/useConductoresEmbajador'
 import Swal from 'sweetalert2'
+import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showSuccess } from '../../utils/toast'
 import type { Lead, LeadFormData } from '../../types/leads.types'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -1629,6 +1630,28 @@ export function LeadsModule() {
     const recontacto = base.filter(l => tieneAlertaRecontacto(l.observaciones)).length
     return { total, contactadoSellium, aptos, noAptos, convocatoria, listoEmparejar, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
   }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona])
+
+  // Foto diaria de las tarjetas (traza) y la de hace 7 días para las flechas.
+  // Solo con la vista por defecto (último mes, sin filtros, búsqueda ni tarjeta activa):
+  // con filtros los números no son comparables de una semana a otra.
+  const vistaPorDefecto = useMemo(() => {
+    const def = rangoUltimoMesART()
+    return !nombreFilter.length && !zonaFilter.length && !turnoFilter.length && !disponibilidadFilter.length
+      && !fuenteFilter.length && !estadoFilter.length && !activeStatCard
+      && creacionDesde === def.desde && creacionHasta === def.hasta
+      && (leadsVisibles === null || leadsVisibles.length === filteredLeads.length)
+  }, [nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCard,
+    creacionDesde, creacionHasta, leadsVisibles, filteredLeads])
+  const fotoAnteriorLeads = useFotoSemanaAnterior('leads', {
+    contactadoSellium: stats.contactadoSellium,
+    aptos: stats.aptos,
+    listoEmparejar: stats.listoEmparejar,
+    convocatoria: stats.convocatoria,
+    enZonaSegura: stats.enZonaSegura,
+    autoPueblo: stats.autoPueblo,
+    recontacto: stats.recontacto,
+  }, !loading && leads.length > 0 && vistaPorDefecto)
+  const fotoAnterior = vistaPorDefecto ? fotoAnteriorLeads : null
 
   // ---------- HANDLERS ----------
   function handleOpenDetails(lead: Lead) {
@@ -3319,6 +3342,7 @@ export function LeadsModule() {
               <span className="stat-value">{stats.contactadoSellium}</span>
               <span className="stat-label">Contactado Sellium</span>
             </div>
+            <ComparacionSemana actual={stats.contactadoSellium} anterior={fotoAnterior?.contactadoSellium} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'aptos' ? 'stat-card-active' : ''}`}
@@ -3330,6 +3354,7 @@ export function LeadsModule() {
               <span className="stat-value">{stats.aptos}</span>
               <span className="stat-label">Aptos</span>
             </div>
+            <ComparacionSemana actual={stats.aptos} anterior={fotoAnterior?.aptos} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'listoEmparejar' ? 'stat-card-active' : ''}`}
@@ -3341,6 +3366,7 @@ export function LeadsModule() {
               <span className="stat-value">{stats.listoEmparejar}</span>
               <span className="stat-label">Listo Emparejar</span>
             </div>
+            <ComparacionSemana actual={stats.listoEmparejar} anterior={fotoAnterior?.listoEmparejar} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'convocatoria' ? 'stat-card-active' : ''}`}
@@ -3351,6 +3377,7 @@ export function LeadsModule() {
               <span className="stat-value">{stats.convocatoria}</span>
               <span className="stat-label">Conv. Inducción</span>
             </div>
+            <ComparacionSemana actual={stats.convocatoria} anterior={fotoAnterior?.convocatoria} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'zonaSegura' ? 'stat-card-active' : ''}`}
@@ -3361,6 +3388,7 @@ export function LeadsModule() {
               <span className="stat-value">{stats.enZonaSegura}</span>
               <span className="stat-label">Zona Aprobada</span>
             </div>
+            <ComparacionSemana actual={stats.enZonaSegura} anterior={fotoAnterior?.enZonaSegura} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'autoPueblo' ? 'stat-card-active' : ''}`}
@@ -3371,6 +3399,7 @@ export function LeadsModule() {
               <span className="stat-value">{stats.autoPueblo}</span>
               <span className="stat-label">Auto del pueblo</span>
             </div>
+            <ComparacionSemana actual={stats.autoPueblo} anterior={fotoAnterior?.autoPueblo} invertido />
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'recontacto' ? 'stat-card-active' : ''}`}
@@ -3381,6 +3410,7 @@ export function LeadsModule() {
               <span className="stat-value">{stats.recontacto}</span>
               <span className="stat-label">Recontacto</span>
             </div>
+            <ComparacionSemana actual={stats.recontacto} anterior={fotoAnterior?.recontacto} invertido />
           </div>
         </div>
       </div>

@@ -46,3 +46,64 @@
   color: var(--color-danger);
   font-weight: 700;
 }
+
+/* Calificación por conductor (estrellas + detalle) */
+.cal-celda {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.cal-celda:hover { border-color: var(--border-primary, #e5e7eb); background: var(--bg-secondary, #f9fafb); }
+.cal-estrellas { display: inline-flex; gap: 1px; }
+.cal-estrella { position: relative; display: inline-flex; width: 14px; height: 14px; }
+.cal-estrella-vacia { color: #d1d5db; }
+.cal-estrella-llena { position: absolute; inset: 0 auto 0 0; overflow: hidden; color: #f59e0b; display: inline-flex; }
+.cal-estrella-llena svg { fill: #f59e0b; flex-shrink: 0; }
+.cal-numero { font-size: 12px; font-weight: 600; color: var(--text-primary, #111827); font-variant-numeric: tabular-nums; }
+.cal-parcial { font-size: 12px; color: var(--text-tertiary, #9ca3af); }
+
+.cal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.cal-modal {
+  width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+  background: var(--card-bg, #fff); border-radius: 12px; padding: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+.cal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.cal-header h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary, #111827); }
+.cal-resumen { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; color: var(--text-secondary, #4b5563); }
+.cal-resumen .cal-estrella { width: 18px; height: 18px; }
+.cal-resumen .cal-estrella svg { width: 18px; height: 18px; }
+.cal-cerrar { border: none; background: transparent; cursor: pointer; color: var(--text-tertiary, #9ca3af); padding: 4px; }
+.cal-factores { display: flex; flex-direction: column; gap: 12px; }
+.cal-factor { padding: 10px 12px; border-radius: 8px; background: var(--bg-secondary, #f9fafb); }
+.cal-factor-cab { display: flex; justify-content: space-between; gap: 8px; }
+.cal-factor-nombre { font-size: 13px; font-weight: 600; color: var(--text-primary, #111827); }
+.cal-factor-peso { font-size: 11px; color: var(--text-tertiary, #9ca3af); white-space: nowrap; }
+.cal-factor-valor { font-size: 12px; color: var(--text-secondary, #4b5563); margin-top: 2px; }
+.cal-barra { height: 6px; border-radius: 999px; background: var(--border-primary, #e5e7eb); margin: 8px 0 6px; overflow: hidden; }
+.cal-barra-relleno { display: block; height: 100%; border-radius: 999px; }
+.cal-bueno { background: #16a34a; }
+.cal-medio { background: #f59e0b; }
+.cal-malo { background: #dc2626; }
+.cal-nulo { background: transparent; }
+.cal-factor-expl { font-size: 12px; color: var(--text-secondary, #4b5563); }
+.cal-nota { margin: 14px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-tertiary, #9ca3af); }
+
+.cal-historial { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-primary, #e5e7eb); }
+.cal-historial-titulo { font-size: 12px; font-weight: 600; color: var(--text-primary, #111827); margin-bottom: 8px; }
+.cal-historial-vacio { font-size: 12px; color: var(--text-tertiary, #9ca3af); }
+.cal-historial-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cal-historial-lista li { display: grid; grid-template-columns: 110px auto 28px 1fr; align-items: center; gap: 8px; font-size: 12px; }
+.cal-historial-sem { color: var(--text-secondary, #4b5563); }
+.cal-sube { color: #16a34a; font-weight: 600; font-size: 11px; }
+.cal-baja { color: #dc2626; font-weight: 600; font-size: 11px; }

@@ -659,7 +659,9 @@ export function ConceptosFacturacionTab() {
     },
     {
       accessorKey: 'descripcion',
-      header: 'Descripción'
+      header: 'Descripción',
+      meta: { expand: true },
+      cell: ({ row }) => <span style={{ whiteSpace: 'normal', fontWeight: 500 }}>{row.original.descripcion}</span>
     },
     {
       accessorKey: 'tipo',
@@ -695,85 +697,63 @@ export function ConceptosFacturacionTab() {
         const tipo = row.original.tipo
         const style = getTipoStyle(tipo)
         const label = TIPOS_CONCEPTO.find(t => t.value === tipo)?.label || tipo
-        return (
-          <span style={{
-            padding: '4px 8px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            fontWeight: 500,
-            backgroundColor: style.bg,
-            color: style.color
-          }}>
-            {label}
-          </span>
-        )
-      }
-    },
-    {
-      accessorKey: 'tipo_parametro',
-      header: 'Tipo Param.',
-      cell: ({ row }) => {
         const tp = row.original.tipo_parametro || 'monto'
-        const info = TIPOS_PARAMETRO.find(t => t.value === tp)
+        const infoParam = TIPOS_PARAMETRO.find(t => t.value === tp)
         return (
-          <span style={{
-            padding: '3px 7px',
-            borderRadius: '4px',
-            fontSize: '11px',
-            fontWeight: 500,
-            backgroundColor: `${info?.color || '#6B7280'}18`,
-            color: info?.color || '#6B7280'
-          }}>
-            {info?.label || tp}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: 600,
+              backgroundColor: style.bg,
+              color: style.color
+            }}>
+              {label}
+            </span>
+            <span style={{ fontSize: '10px', color: infoParam?.color || 'var(--text-tertiary)' }}>
+              {infoParam?.label || tp}
+            </span>
+          </div>
         )
       }
     },
     {
+      // precio_base = diario sin IVA; precio_final = diario con IVA (así lo usa la facturación)
       accessorKey: 'precio_base',
-      header: 'Precio Base Diario (Sin IVA)',
+      header: 'Diario',
       cell: ({ row }) => row.original.es_variable
         ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
-        : <span style={{ fontFamily: 'monospace' }}>{formatCurrency(row.original.precio_base || 0)}</span>
-    },
-    {
-      // precio_final en BD ya es el diario con IVA: se muestra tal cual.
-      accessorKey: 'precio_final',
-      id: 'precio_base_con_iva',
-      header: 'Precio Base Diario (Con IVA)',
-      cell: ({ row }) => row.original.es_variable
-        ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
-        : <span style={{ fontFamily: 'monospace' }}>{formatCurrency(row.original.precio_final || 0)}</span>
-    },
-    {
-      id: 'precio_final',
-      header: 'Total por semana (Con IVA)',
-      // Misma unidad que el modal: semanal con IVA. En BD precio_final sigue
-      // siendo DIARIO (asi lo consume la facturacion), por eso se recompone.
-      // Porcentaje / Valor no son importes semanales: se muestran tal cual.
-      accessorFn: (row) => {
-        if (row.es_variable) return null
-        const esImporte = row.tipo_parametro !== 'porcentaje' && row.tipo_parametro !== 'valor'
-        if (!esImporte) return row.precio_final || 0
-        const factor = 1 + (row.iva_porcentaje || 0) / 100
-        return (row.precio_semanal || 0) > 0
-          ? Number(((row.precio_semanal || 0) * factor).toFixed(2))
-          : Number(((row.precio_final || 0) * 7).toFixed(2))
-      },
-      cell: ({ row, getValue }) => row.original.es_variable
-        ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
-        : <span style={{ fontFamily: 'monospace' }}>{formatCurrency((getValue() as number) || 0)}</span>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+            <span style={{ fontWeight: 600 }}>{formatCurrency(row.original.precio_base || 0)}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatCurrency(row.original.precio_final || 0)} con IVA</span>
+          </div>
+        )
     },
     {
       id: 'total_semana',
-      header: 'Total por semana (Sin IVA)',
-      // Lee precio_semanal de la BD (monto redondo). Respaldo: precio_final×7 si está vacío.
+      header: 'Semanal',
+      // Sin IVA: precio_semanal de la BD (monto redondo), respaldo precio_final×7.
+      // Con IVA: precio_semanal × (1 + IVA). Porcentaje / Valor no son importes semanales.
       accessorFn: (row) => row.es_variable ? null : (row.precio_semanal || Math.round((row.precio_final || 0) * 7)),
-      cell: ({ row }) => row.original.es_variable
-        ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>-</span>
-        : <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
-            {formatCurrency(row.original.precio_semanal || Math.round((row.original.precio_final || 0) * 7))}
-          </span>
+      cell: ({ row }) => {
+        const c = row.original
+        if (c.es_variable) return <span style={{ color: '#6B7280' }}>—</span>
+        const esImporte = c.tipo_parametro !== 'porcentaje' && c.tipo_parametro !== 'valor'
+        if (!esImporte) return <span style={{ color: '#6B7280' }}>—</span>
+        const sinIva = c.precio_semanal || Math.round((c.precio_final || 0) * 7)
+        const factor = 1 + (c.iva_porcentaje || 0) / 100
+        const conIva = (c.precio_semanal || 0) > 0
+          ? Number(((c.precio_semanal || 0) * factor).toFixed(2))
+          : Number(((c.precio_final || 0) * 7).toFixed(2))
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+            <span style={{ fontWeight: 600 }}>{formatCurrency(sinIva)}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatCurrency(conIva)} con IVA</span>
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'modalidad',
@@ -828,10 +808,10 @@ export function ConceptosFacturacionTab() {
       ),
       cell: ({ row }) => (
         <span style={{
-          padding: '4px 8px',
-          borderRadius: '4px',
-          fontSize: '12px',
-          fontWeight: 500,
+          padding: '2px 8px',
+          borderRadius: '999px',
+          fontSize: '11px',
+          fontWeight: 600,
           backgroundColor: row.original.activo ? '#DCFCE7' : '#FEE2E2',
           color: row.original.activo ? '#166534' : '#991B1B'
         }}>
