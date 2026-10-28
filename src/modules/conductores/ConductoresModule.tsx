@@ -1057,6 +1057,8 @@ export function ConductoresModule() {
             licencia_vencimiento,
             telefono_contacto,
             fecha_contratacion,
+            fecha_terminacion,
+            motivo_baja,
             estado_id,
             created_at,
             url_documentacion,
@@ -3138,6 +3140,24 @@ export function ConductoresModule() {
   const columns = useMemo<ColumnDef<ConductorWithRelations>[]>(
     () => [
       {
+        // Primera columna y angosta (pedido 2026-10-28): dd/mm/aa
+        accessorKey: "created_at",
+        header: "Creación",
+        size: 84,
+        maxSize: 90,
+        cell: ({ getValue }) => {
+          const val = getValue() as string;
+          if (!val) return "-";
+          const d = new Date(val);
+          return (
+            <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+              {`${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear().toString().slice(2)}`}
+            </span>
+          );
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: "nombres",
         header: () => (
           <div className="dt-column-filter">
@@ -3209,17 +3229,6 @@ export function ConductoresModule() {
             </span>
           </div>
         ),
-        enableSorting: true,
-      },
-      {
-        accessorKey: "created_at",
-        header: "Creación",
-        cell: ({ getValue }) => {
-          const val = getValue() as string;
-          if (!val) return "-";
-          const d = new Date(val);
-          return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-        },
         enableSorting: true,
       },
       {
@@ -3410,7 +3419,50 @@ export function ConductoresModule() {
           );
         },
         enableSorting: true,
+        // Ordena por fecha de baja (pedido 2026-10-28): las bajas por su fecha y,
+        // a igual fecha o sin baja, por estado.
+        sortingFn: (a, b) => {
+          const fechaBaja = (r: typeof a) => {
+            const codigo = (r.original.conductores_estados?.codigo || '').toLowerCase();
+            return codigo === 'baja' ? String((r.original as any).fecha_terminacion || '') : '';
+          };
+          const fa = fechaBaja(a);
+          const fb = fechaBaja(b);
+          if (fa !== fb) return fa < fb ? -1 : 1;
+          return String(a.original.conductores_estados?.codigo || '').localeCompare(String(b.original.conductores_estados?.codigo || ''));
+        },
       },
+
+      // Motivo de baja: solo cuando el filtro de Estado muestra únicamente bajas
+      ...(estadoFilter.length > 0 && estadoFilter.every(e => e.toLowerCase() === 'baja')
+        ? [{
+            id: 'motivo_baja',
+            accessorFn: (row: ConductorWithRelations) => ((row as any).motivo_baja as string | null) || '',
+            header: 'Motivo de baja',
+            size: 220,
+            cell: ({ getValue }: { getValue: () => unknown }) => {
+              const motivo = String(getValue() || '').trim();
+              if (!motivo) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>;
+              return (
+                <span
+                  title={motivo}
+                  style={{
+                    fontSize: '12px',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    maxWidth: '240px',
+                    whiteSpace: 'normal',
+                  }}
+                >
+                  {motivo}
+                </span>
+              );
+            },
+            enableSorting: true,
+          } as ColumnDef<ConductorWithRelations>]
+        : []),
 
       {
         id: "vehiculo_asignado",
@@ -3990,7 +4042,7 @@ export function ConductoresModule() {
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
-        stickyLeftColumns={1}
+        stickyLeftColumns={3}
       />
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}

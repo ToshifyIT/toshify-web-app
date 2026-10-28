@@ -1,6 +1,6 @@
 // src/modules/reportes/kpis-v2/DashboardGeneralModule.tsx
 // Dashboard General (Reportes > Dashboard General): los indicadores de cada módulo
-// (conductores, ventas, vehículos, multas y km, siniestros, garantías y deuda) en una
+// (conductores con sus multas, ventas y vehículos) en una
 // sola pantalla, uno debajo del otro. Mismo selector de período que Dashboard KPI's:
 // lo que depende del tiempo se compara contra la semana o el mes anterior.
 import { useEffect, useMemo, useState } from 'react'

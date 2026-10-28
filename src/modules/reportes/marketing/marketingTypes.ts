@@ -83,6 +83,19 @@ export interface FilaDescarte {
   cantidad: number
 }
 
+/** Un lead descartado, para el detalle por motivo y anuncio. */
+export interface FilaDescarteDetalle {
+  segmento: Segmento
+  motivo: string
+  canal: string
+  /** Link del anuncio ('' si no tiene) */
+  anuncio: string
+  nombre: string
+  zona: string
+  ingreso: string
+  causal: string | null
+}
+
 export interface FilaCausal extends FilaDescarte {
   causal: string
 }
@@ -99,6 +112,19 @@ export interface FilaControl {
   perfil_sin_datos: number
 }
 
+export interface NuevoConductorDetalle {
+  segmento: Segmento
+  canal: string
+  /** Link del anuncio ('' si el lead no lo tiene) */
+  anuncio: string
+  nombre: string
+  dni: string
+  /** Día que entró como lead */
+  ingreso: string
+  /** Día de su primer auto */
+  primer_auto: string
+}
+
 export interface NuevosConductores {
   total: number
   total_anterior: number
@@ -110,6 +136,8 @@ export interface NuevosConductores {
   por_zona: { segmento: Segmento; zona: string; cantidad: number }[]
   por_segmento: { segmento: Segmento; cantidad: number }[]
   turnos: { segmento: Segmento; diurno: number; nocturno: number; cargo: number }[]
+  /** Quiénes son y de qué canal / anuncio vinieron (puede faltar si la función SQL es vieja) */
+  detalle?: NuevoConductorDetalle[]
   /** Recibieron su primer auto en el período pero su lead es anterior al período */
   fuera_de_rango: { segmento: Segmento; cantidad: number }[]
 }
@@ -122,6 +150,8 @@ export interface MarketingRaw {
   anuncios: FilaAnuncio[]
   zonas: FilaZona[]
   descartes: FilaDescarte[]
+  /** Puede faltar si la función SQL es vieja */
+  descartes_detalle?: FilaDescarteDetalle[]
   causales: FilaCausal[]
   control: FilaControl[]
   nuevos_conductores: NuevosConductores

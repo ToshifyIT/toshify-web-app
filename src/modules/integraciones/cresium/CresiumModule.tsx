@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownLeft, ArrowUpRight, Receipt, Clock, CheckCircle2, AlertTriangle, List,
-  RefreshCw, DownloadCloud, UploadCloud, ExternalLink, Landmark, EyeOff, Undo2, Link2, Scale,
+  RefreshCw, DownloadCloud, UploadCloud, ExternalLink, Landmark, EyeOff, Undo2, Link2, Scale, UserPlus,
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -25,12 +25,14 @@ import {
   cargarEnAlegra,
   marcarMovimiento,
   conciliarEnAlegra,
+  crearContactoAlegra,
   urlPagoAlegra,
   LOTE_CARGA_ALEGRA,
 } from '../../../services/cresiumService'
 import type {
   EmpresaCresium,
   EstadoAlegra,
+  CondicionIva,
   ItemCarga,
   MovimientoCresium,
   MovimientosCresiumResponse,
@@ -65,6 +67,21 @@ const ETIQUETA_TIPO: Record<string, string> = {
 function formatDia(dia: string | null | undefined): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dia || '')
   return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '-'
+}
+
+/** Tipos del plan de cuentas de Alegra -> nombre del grupo en el desplegable */
+const GRUPO_CUENTA: Record<string, string> = {
+  expense: 'Gastos',
+  cost: 'Costos',
+  income: 'Ingresos',
+  asset: 'Activos',
+  liability: 'Pasivos',
+  equity: 'Patrimonio',
+}
+/** Orden de los grupos según el movimiento: lo más probable primero */
+const ORDEN_GRUPOS: Record<'entrada' | 'salida', string[]> = {
+  salida: ['expense', 'cost', 'asset', 'liability', 'equity', 'income'],
+  entrada: ['income', 'liability', 'asset', 'equity', 'expense', 'cost'],
 }
 
 const PESOS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
@@ -118,9 +135,23 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
   const leerPropuestas = useCallback(async (refrescar = false) => {
     setCargandoPropuestas(true)
     try {
-      setPropuestas(await obtenerPropuestasAlegra(empresa, mes, refrescar))
+      const r = await obtenerPropuestasAlegra(empresa, mes, refrescar)
+      setPropuestas(r)
+      // Había movimientos ya cargados a mano en Alegra: se vincularon, se relee la base
+      if (r.vinculados_auto > 0 || (r.revertidos ?? 0) > 0) {
+        setDatos(await obtenerMovimientosCresium(empresa, mes))
+        if (r.vinculados_auto > 0) {
+          showSuccess('Ya estaban en Alegra', `${r.vinculados_auto} movimientos se marcaron como cargados`)
+        }
+        if ((r.revertidos ?? 0) > 0) {
+          showSuccess('Eliminados en Alegra', `${r.revertidos} movimientos volvieron a pendiente`)
+        }
+      }
     } catch (err) {
-      setPropuestas({ propuestas: {}, categorias: [], error_alegra: err instanceof Error ? err.message : 'No se pudo leer Alegra' })
+      setPropuestas({
+        propuestas: {}, conciliacion: {}, vinculados_auto: 0, categorias: [],
+        error_alegra: err instanceof Error ? err.message : 'No se pudo leer Alegra',
+      })
     } finally {
       setCargandoPropuestas(false)
     }
@@ -156,8 +187,25 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
 
   const filas = useMemo<MovimientoCresium[]>(() => (datos?.filas ?? []).map((f) => {
     const p = propuestas?.propuestas[String(f.cresium_id)]
-    return p ? { ...f, propuesta: p.propuesta, posible_duplicado: p.posible_duplicado } : f
+    const c = propuestas?.conciliacion?.[String(f.cresium_id)]
+    const conciliado = c ? c.conciliado : f.alegra_conciliado ? true : null
+    return p ? { ...f, propuesta: p.propuesta, posible_duplicado: p.posible_duplicado, conciliado } : { ...f, conciliado }
   }), [datos, propuestas])
+  /** Plan de cuentas agrupado por tipo y en orden alfabético, para cada dirección */
+  const cuentasAgrupadas = useMemo(() => {
+    const cats = propuestas?.categorias ?? []
+    const armar = (dir: 'entrada' | 'salida') => ORDEN_GRUPOS[dir]
+      .map((tipo) => ({
+        tipo,
+        label: GRUPO_CUENTA[tipo],
+        cuentas: cats
+          .filter((c) => c.tipo === tipo)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })),
+      }))
+      .filter((g) => g.cuentas.length > 0)
+    return { entrada: armar('entrada'), salida: armar('salida') }
+  }, [propuestas])
+
   const puedeCargar = !!datos?.puede_cargar && !!propuestas && !propuestas.error_alegra
 
   const resumen = useMemo(() => {
@@ -171,8 +219,13 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       cargado: ok.filter((f) => f.alegra_estado === 'cargado').length,
       error: ok.filter((f) => f.alegra_estado === 'error').length,
       ignorado: ok.filter((f) => f.alegra_estado === 'ignorado').length,
+      conciliado: ok.filter((f) => f.conciliado === true).length,
     }
   }, [filas])
+
+  /** Todo cargado (sin pendientes) y todo lo cargado conciliado en Alegra */
+  const mesConciliado = resumen.cargado > 0 && resumen.pendiente === 0 && resumen.error === 0 &&
+    resumen.conciliado === resumen.cargado
 
   const visibles = useMemo(
     () => (filtro === 'todos' ? filas : filas.filter((f) => f.alegra_estado === filtro)),
@@ -336,17 +389,76 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       })
       if (!ok.isConfirmed) return
       Swal.fire({ title: 'Creando conciliación...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
-      await conciliarEnAlegra(empresa, hasta, true)
+      const creada = await conciliarEnAlegra(empresa, hasta, true)
       Swal.close()
+      const otraFecha = creada.fecha_conciliacion && creada.fecha_conciliacion !== hasta
       await Swal.fire({
         title: 'Borrador creado en Alegra',
-        html: 'Abrí <b>Bancos → Conciliaciones bancarias</b> en Alegra, revisá que la diferencia sea $0 y confirmala.',
+        html: (otraFecha
+          ? `Como en Alegra ya hay una conciliación posterior, el documento quedó con fecha <b>${formatDia(creada.fecha_conciliacion)}</b>. Incluye los movimientos y el saldo al ${formatDia(hasta)}.<br/><br/>`
+          : '') + 'Abrí <b>Bancos → Conciliaciones bancarias</b> en Alegra, revisá que la diferencia sea $0 y confirmala.',
         icon: 'success',
       })
       await cargar()
     } catch (err) {
       Swal.close()
       Swal.fire('No se pudo conciliar', err instanceof Error ? err.message : 'Error', 'error')
+    }
+  }
+
+  const crearContacto = async (m: MovimientoCresium) => {
+    const esCliente = m.direccion === 'entrada'
+    const juridica = /^3[034]/.test(m.cuit ?? '')
+    const r = await Swal.fire({
+      title: esCliente ? 'Crear cliente en Alegra' : 'Crear proveedor en Alegra',
+      html: `
+        <div class="cr-swal cr-form">
+          <label>Nombre o razón social
+            <input id="cr-nombre" class="swal2-input" value="${escaparHtml(m.contraparte ?? '')}" />
+          </label>
+          <label>CUIT
+            <input class="swal2-input" value="${escaparHtml(m.cuit ?? '')}" disabled />
+          </label>
+          <label>Condición de IVA
+            <select id="cr-iva" class="swal2-select">
+              <option value="IVA_RESPONSABLE" ${juridica ? 'selected' : ''}>Responsable Inscripto</option>
+              <option value="UNIQUE_TRIBUTE_RESPONSABLE" ${juridica ? '' : 'selected'}>Monotributo</option>
+            </select>
+          </label>
+          <label>Tipo de contacto
+            <select id="cr-tipo" class="swal2-select">
+              <option value="provider" ${esCliente ? '' : 'selected'}>Proveedor</option>
+              <option value="client" ${esCliente ? 'selected' : ''}>Cliente</option>
+            </select>
+          </label>
+          <p class="cr-muted">El CBU (${escaparHtml(m.cuenta_contraparte ?? '-')}) queda en las observaciones. El domicilio se completa después en Alegra.</p>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Crear en Alegra',
+      cancelButtonText: 'Cancelar',
+      focusConfirm: false,
+      preConfirm: () => {
+        const nombre = (document.getElementById('cr-nombre') as HTMLInputElement | null)?.value.trim() ?? ''
+        if (nombre.length < 3) {
+          Swal.showValidationMessage('Ingresá el nombre')
+          return false
+        }
+        return {
+          nombre,
+          iva: (document.getElementById('cr-iva') as HTMLSelectElement | null)?.value as CondicionIva,
+          tipo: (document.getElementById('cr-tipo') as HTMLSelectElement | null)?.value as 'provider' | 'client',
+        }
+      },
+    })
+    if (!r.isConfirmed || !r.value) return
+    try {
+      const res = await crearContactoAlegra(empresa, {
+        cresium_id: m.cresium_id, nombre: r.value.nombre, iva_condicion: r.value.iva, tipo: r.value.tipo,
+      })
+      showSuccess(res.existente ? 'Ya existía en Alegra' : 'Contacto creado', res.contacto.nombre)
+      void leerPropuestas()
+    } catch (err) {
+      showError('No se pudo crear', err instanceof Error ? err.message : 'Error')
     }
   }
 
@@ -489,17 +601,24 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
                     ))}
                   </optgroup>
                 )}
-                <optgroup label="Cuentas contables">
-                  {(propuestas?.categorias ?? []).map((c) => (
-                    <option key={`cat-${c.id}`} value={`cat:${c.id}`}>{c.nombre}</option>
-                  ))}
-                </optgroup>
+                {cuentasAgrupadas[m.direccion].map((g) => (
+                  <optgroup key={g.tipo} label={g.label}>
+                    {g.cuentas.map((c) => (
+                      <option key={`cat-${c.id}`} value={`cat:${c.id}`}>{c.nombre}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             ) : (
               <span>{p.destino?.nombre ?? 'Sin definir'}</span>
             )}
+            {!p.contacto && p.crear_contacto && puedeCargar && (
+              <button type="button" className="cr-link cr-link-btn" onClick={() => void crearContacto(m)}>
+                <UserPlus size={12} /> {m.direccion === 'entrada' ? 'Crear cliente' : 'Crear proveedor'}
+              </button>
+            )}
             <span className="cr-muted">
-              {p.contacto ? `Contacto: ${p.contacto.nombre}` : p.crear_contacto ? 'Se crea el contacto' : 'Sin contacto'}
+              {p.contacto ? `Contacto: ${p.contacto.nombre}` : p.crear_contacto ? 'No existe en Alegra (se crea al cargar)' : 'Sin contacto'}
               {p.ajuste > 0 && valor === valorPropuesta(m) ? ` · ajuste ${pesos(p.ajuste)}` : ''}
             </span>
           </div>
@@ -516,6 +635,8 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
             <span className={`cr-badge cr-badge--${m.alegra_estado}`} title={m.alegra_error ?? undefined}>
               {ETIQUETA_ESTADO[m.alegra_estado]}
             </span>
+            {m.conciliado === true && <span className="cr-badge cr-badge--conciliado">Conciliado</span>}
+            {m.conciliado === false && <span className="cr-muted">Sin conciliar</span>}
             {m.alegra_estado === 'error' && m.alegra_error && (
               <span className="cr-error" title={m.alegra_error}>{m.alegra_error}</span>
             )}
@@ -557,7 +678,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       },
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [seleccion, puedeCargar, propuestas, cargandoPropuestas, eleccionDe])
+  ], [seleccion, puedeCargar, propuestas, cargandoPropuestas, eleccionDe, cuentasAgrupadas])
 
   const tarjetas: Array<{ id: FiltroEstado | null; label: string; valor: string | number; icono: typeof List }> = [
     { id: 'todos', label: 'Movimientos', valor: resumen.total, icono: List },
@@ -567,6 +688,14 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
     { id: 'pendiente', label: 'Pendientes', valor: resumen.pendiente, icono: Clock },
     { id: 'cargado', label: 'En Alegra', valor: resumen.cargado, icono: CheckCircle2 },
     { id: 'error', label: 'Con error', valor: resumen.error, icono: AlertTriangle },
+    {
+      id: null,
+      label: mesConciliado
+        ? 'Mes conciliado'
+        : 'Conciliados en Alegra',
+      valor: `${resumen.conciliado} de ${resumen.cargado}`,
+      icono: Scale,
+    },
   ]
 
   const seleccionables = cargables.filter((f) => !seleccion.has(f.cresium_id))
@@ -609,12 +738,24 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
           <RefreshCw size={16} />
           Re-sincronizar mes
         </button>
-        {puedeCargar && (
-          <button className="btn-secondary" onClick={() => void conciliar()} disabled={loading} title="Crea la conciliación del mes en Alegra (borrador)">
+        {puedeCargar && (mesConciliado ? (
+          <span className="cr-mes-conciliado" title="Todo lo cargado de este mes ya está conciliado en Alegra">
+            <CheckCircle2 size={16} />
+            Mes conciliado
+          </span>
+        ) : (
+          <button
+            className="btn-secondary"
+            onClick={() => void conciliar()}
+            disabled={loading || cargandoPropuestas || resumen.cargado === resumen.conciliado}
+            title={resumen.cargado === resumen.conciliado
+              ? 'No hay movimientos cargados sin conciliar'
+              : 'Crea la conciliación del mes en Alegra (borrador)'}
+          >
             <Scale size={16} />
             Conciliar en Alegra
           </button>
-        )}
+        ))}
         <span className="cr-muted cr-actualizado">
           <Landmark size={14} />
           {datos?.ultimo_movimiento
@@ -650,8 +791,14 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
         getRowClassName={(m) => (seleccion.has(m.cresium_id) ? 'cr-fila-seleccionada' : undefined)}
         headerAction={
           <div className="cr-acciones">
-            <button className="btn-secondary" onClick={() => void cargar(true)} disabled={loading || cargandoPropuestas} title="Recargar (también relee Alegra)">
-              <RefreshCw size={16} />
+            <button
+              className="btn-secondary"
+              onClick={() => void cargar(true)}
+              disabled={loading || cargandoPropuestas}
+              title="Vuelve a revisar en Alegra conciliaciones, contactos, facturas y lo cargado a mano"
+            >
+              <RefreshCw size={16} className={cargandoPropuestas ? 'cr-girando' : undefined} />
+              Actualizar Alegra
             </button>
             {puedeCargar && (
               <>
