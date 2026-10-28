@@ -33,14 +33,12 @@ import {
   fmtMonedaCorta,
   fmtPct,
   hoyArgentina,
-  resumenMotivos,
   periodoPorDefecto,
   rangoConsulta,
 } from './kpisV2Types'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import { ForecastModal } from './ForecastModal'
-import { IndicadoresModulos } from './IndicadoresModulos'
 import './DashboardKpisV2Module.css'
 
 const SUBMENU = 'dashboard-kpis-v2'
@@ -445,7 +443,6 @@ export function DashboardKpisV2Module() {
     setSeleccionado(null)
   }, [granularidad, sedeActualId])
 
-  const motivosGeneral = useMemo(() => resumenMotivos(data?.bajas ?? []), [data])
   const porDefecto = useMemo(() => periodoPorDefecto(periodos), [periodos])
   const actual = useMemo(
     () => periodos.find(p => p.key === seleccionado) ?? porDefecto,
@@ -711,7 +708,6 @@ export function DashboardKpisV2Module() {
             seleccionado={actual?.key ?? null}
             onSeleccionar={setSeleccionado}
           />
-          {actual ? <IndicadoresModulos periodo={actual} anterior={anterior} hoy={hoy} motivosGeneral={motivosGeneral} /> : null}
         </>
       ) : null}
 

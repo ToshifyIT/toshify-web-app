@@ -16,6 +16,8 @@ import crypto from 'node:crypto'
 import { insightsDirectivoRouter } from './server-insights-directivo.js'
 // Integración 2Chat: contactos para llamadas + historial de llamadas (clave solo en el servidor)
 import { twoChatRouter } from './server-2chat.js'
+// Integración Cresium -> Alegra: movimientos bancarios y carga en Alegra (claves solo en el servidor)
+import { cresiumRouter } from './server-cresium.js'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
 
 const __filename = fileURLToPath(import.meta.url)
@@ -45,6 +47,9 @@ app.use('/api/insights-directivo', insightsDirectivoRouter)
 
 // Rutas /api/2chat (Integraciones > 2Chat, archivo aparte)
 app.use('/api/2chat', twoChatRouter)
+
+// Rutas /api/cresium (Integraciones > Cresium, archivo aparte)
+app.use('/api/cresium', cresiumRouter)
 
 // Google Drive service
 function getDriveService(writeAccess = false) {

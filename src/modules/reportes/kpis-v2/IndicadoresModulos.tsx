@@ -369,11 +369,26 @@ function Siniestros({ periodo, s, diasSinSiniestro, diasSinRobo }: {
 
 // ───────────── Pantalla ─────────────
 
-export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral }: {
+/** Subtítulo de cada módulo en la vista completa (Dashboard General). */
+const DESCRIPCION: Record<Pestana, string> = {
+  conductores: 'Altas, bajas, licencias, deuda y por qué se van los conductores.',
+  ventas: 'Embudo de leads del período, como en Dashboard Marketing.',
+  vehiculos: 'Estado de la flota hoy.',
+  multas: 'Multas y excesos de kilometraje del período, y quiénes suman más.',
+  siniestros: 'Siniestros y robos del período.',
+  garantias: 'Fondo de garantía, reintegros y deuda de conductores, hoy.',
+}
+
+/**
+ * `completo`: todos los módulos uno debajo del otro, cada uno en su tarjeta y sin
+ * alto fijo (Dashboard General). Sin `completo`: una tarjeta con pestañas.
+ */
+export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, completo = false }: {
   periodo: Periodo
   anterior: Periodo | null
   hoy: string
   motivosGeneral: Motivo[]
+  completo?: boolean
 }) {
   const [pestana, setPestana] = useState<Pestana>('conductores')
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -403,36 +418,57 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral }: {
   const foto = useDashboardStats()
   const stats = foto.stats
 
-  let contenido: ReactNode
-  if (pestana === 'conductores') {
-    contenido = <Conductores periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} />
-  } else if (pestana === 'ventas') {
-    contenido = usarCarga(ventas, d => <Ventas periodo={periodo} data={d} />)
-  } else if (pestana === 'vehiculos') {
-    contenido = usarCarga(vehiculos, v => <Vehiculos v={v} turnosLibres={stats?.turnosDisponibles.value ?? null} />)
-  } else if (pestana === 'multas') {
-    contenido = usarCarga(multas, m => <Multas periodo={periodo} m={m} cobradas={stats?.cobroMultas.value ?? null} />)
-  } else if (pestana === 'siniestros') {
-    contenido = usarCarga(siniestros, s => (
-      <Siniestros periodo={periodo} s={s} diasSinSiniestro={stats?.diasSinSiniestro.value ?? null} diasSinRobo={stats?.diasSinRobo.value ?? null} />
-    ))
-  } else if (foto.loading) {
-    contenido = <Cargando />
-  } else if (!stats) {
-    contenido = <Aviso texto="No se pudieron cargar los datos." />
-  } else {
-    contenido = (
-      <Datos
-        ruta="/reportes/facturacion"
-        nota="Foto de hoy"
-        datos={[
-          { label: 'FONDO DE GARANTÍA', value: stats.fondoGarantia.value, detalle: stats.fondoGarantia.subtitle },
-          { label: 'REINTEGROS A DEVOLVER', value: stats.reintegroReciente.value, detalle: stats.reintegroReciente.subtitle },
-          { label: 'REINTEGROS VENCIDOS', value: stats.reintegroAntiguo.value, detalle: stats.reintegroAntiguo.subtitle },
-          { label: 'DEUDA DE CONDUCTORES', value: stats.totalSaldoPendiente.value, detalle: stats.totalSaldoPendiente.subtitle },
-          { label: 'DEUDA SIN GARANTÍA QUE LA CUBRA', value: stats.deudaNoCubierta.value, detalle: stats.deudaNoCubierta.subtitle },
-        ]}
-      />
+  const contenidoDe = (pestana: Pestana): ReactNode => {
+    let contenido: ReactNode
+    if (pestana === 'conductores') {
+      contenido = <Conductores periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} />
+    } else if (pestana === 'ventas') {
+      contenido = usarCarga(ventas, d => <Ventas periodo={periodo} data={d} />)
+    } else if (pestana === 'vehiculos') {
+      contenido = usarCarga(vehiculos, v => <Vehiculos v={v} turnosLibres={stats?.turnosDisponibles.value ?? null} />)
+    } else if (pestana === 'multas') {
+      contenido = usarCarga(multas, m => <Multas periodo={periodo} m={m} cobradas={stats?.cobroMultas.value ?? null} />)
+    } else if (pestana === 'siniestros') {
+      contenido = usarCarga(siniestros, s => (
+        <Siniestros periodo={periodo} s={s} diasSinSiniestro={stats?.diasSinSiniestro.value ?? null} diasSinRobo={stats?.diasSinRobo.value ?? null} />
+      ))
+    } else if (foto.loading) {
+      contenido = <Cargando />
+    } else if (!stats) {
+      contenido = <Aviso texto="No se pudieron cargar los datos." />
+    } else {
+      contenido = (
+        <Datos
+          ruta="/reportes/facturacion"
+          nota="Foto de hoy"
+          datos={[
+            { label: 'FONDO DE GARANTÍA', value: stats.fondoGarantia.value, detalle: stats.fondoGarantia.subtitle },
+            { label: 'REINTEGROS A DEVOLVER', value: stats.reintegroReciente.value, detalle: stats.reintegroReciente.subtitle },
+            { label: 'REINTEGROS VENCIDOS', value: stats.reintegroAntiguo.value, detalle: stats.reintegroAntiguo.subtitle },
+            { label: 'DEUDA DE CONDUCTORES', value: stats.totalSaldoPendiente.value, detalle: stats.totalSaldoPendiente.subtitle },
+            { label: 'DEUDA SIN GARANTÍA QUE LA CUBRA', value: stats.deudaNoCubierta.value, detalle: stats.deudaNoCubierta.subtitle },
+          ]}
+        />
+      )
+    }
+    return contenido
+  }
+
+  if (completo) {
+    return (
+      <div className="dkv2-gen">
+        {PESTANAS.map(p => (
+          <section key={p.id} className="dkv2-card">
+            <header className="dkv2-card-header">
+              <div>
+                <h2 className="dkv2-card-title">{p.label}</h2>
+                <p className="dkv2-card-subtitle">{DESCRIPCION[p.id]}</p>
+              </div>
+            </header>
+            {contenidoDe(p.id)}
+          </section>
+        ))}
+      </div>
     )
   }
 
@@ -458,7 +494,7 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral }: {
           ))}
         </div>
       </header>
-      {contenido}
+      {contenidoDe(pestana)}
     </section>
   )
 }
