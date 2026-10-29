@@ -18,6 +18,7 @@ import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
 import { cargarGoogleMaps, ubicacionDeComponentes, ubicacionDesdeCoordenadas } from '../../utils/ubicacionGoogle'
 import type { UbicacionDireccion } from '../../utils/ubicacionGoogle'
 import type { Lead } from '../../types/leads.types'
+import { guiaParaConductor } from './guias'
 
 /**
  * Tope para la geocodificacion. Es una llamada a Google que puede quedarse sin
@@ -75,7 +76,19 @@ export interface ResultadoConversion {
   conductorId: string
   /** true = se completaron los campos vacios de un conductor que ya existia. */
   esFusion: boolean
+  /** true = el conductor existente no estaba ACTIVO y se reactivó (reingreso). */
+  reactivado: boolean
 }
+
+/**
+ * Cómo queda el lead cuando la persona YA era conductor (fusión). No cuenta
+ * como conversión de marketing: no se completa fecha_convertido, que es lo que
+ * usan los dashboards para contar convertidos.
+ *  - Reingreso: el conductor estaba de baja (u otro estado) y se reactivó.
+ *  - Ya era conductor: el conductor seguía activo; el lead era un duplicado.
+ */
+export const PROCESO_REINGRESO = 'Reingreso'
+export const PROCESO_YA_ERA_CONDUCTOR = 'Ya era conductor'
 
 /** Match flexible: compara lowercase e intenta coincidencia parcial */
 function matchCatalogo(
@@ -198,6 +211,12 @@ export async function buscarConductorExistente(lead: Lead): Promise<Record<strin
  * NO es transaccional: si falla despues de crear el conductor, el lead queda
  * sin marcar como convertido (se conserva el comportamiento original).
  */
+/** true si el error es porque todavía no se corrió sql/conductores_guia.sql. */
+function faltaColumnaGuia(err: { message?: string; code?: string } | null): boolean {
+  const m = String(err?.message || '')
+  return /\bguia\b/.test(m) && (err?.code === 'PGRST204' || err?.code === '42703' || /column/i.test(m))
+}
+
 export async function convertirLeadAConductor(
   params: ParametrosConversion
 ): Promise<ResultadoConversion> {
@@ -334,9 +353,12 @@ export async function convertirLeadAConductor(
       fuente_pauta: lead.fuente_pauta || null,
       id_fuente: lead.id_fuente || null,
       lead_origen_id: lead.id || null,
+      // Guía del lead (Ali, Manuel, Marina, Carla o Eunice) o, si no, quien lo convierte
+      guia: guiaParaConductor(lead.entrevistador_asignado, usuario),
     }
 
     let conductorId: string
+    let reactivado = false
 
     if (esFusion && conductorExistente) {
       // FUSION: solo actualizar campos vacios/nulos del conductor existente
@@ -373,11 +395,30 @@ export async function convertirLeadAConductor(
         }
       }
 
+      // REINGRESO: si el conductor no está ACTIVO (baja, etc.) se reactiva y
+      // queda la fecha de reincorporación. La baja anterior (fecha_terminacion y
+      // motivo) se conserva como historial.
+      const { data: estadosActivo } = await supabase
+        .from('conductores_estados')
+        .select('id')
+        .eq('codigo', 'ACTIVO')
+        .limit(1)
+      const estadoActivoId = estadosActivo?.[0]?.id
+      if (estadoActivoId && conductorExistente.estado_id !== estadoActivoId) {
+        updateData.estado_id = estadoActivoId
+        updateData.fecha_reincorpoaracion = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' })
+        reactivado = true
+      }
+
       if (Object.keys(updateData).length > 0) {
-        const { error: errUpdate } = await supabase
+        let { error: errUpdate } = await supabase
           .from('conductores')
           .update(updateData)
           .eq('id', conductorId)
+        if (errUpdate && 'guia' in updateData && faltaColumnaGuia(errUpdate)) {
+          delete updateData.guia
+          ;({ error: errUpdate } = await supabase.from('conductores').update(updateData).eq('id', conductorId))
+        }
         if (errUpdate) throw errUpdate
       }
     } else {
@@ -405,13 +446,21 @@ export async function convertirLeadAConductor(
         }
       })
 
-      const { data: createdConductor, error: errCond } = await supabase
+      let { data: createdConductor, error: errCond } = await supabase
         .from('conductores')
         .insert(conductorData)
         .select('id')
         .single()
+      if (errCond && 'guia' in conductorData && faltaColumnaGuia(errCond)) {
+        delete conductorData.guia
+        ;({ data: createdConductor, error: errCond } = await supabase
+          .from('conductores')
+          .insert(conductorData)
+          .select('id')
+          .single())
+      }
 
-      if (errCond) throw errCond
+      if (errCond || !createdConductor) throw errCond ?? new Error('No se pudo crear el conductor.')
       conductorId = createdConductor.id
     }
 
@@ -458,12 +507,21 @@ export async function convertirLeadAConductor(
       }
     }
 
-    await supabase.from('leads').update({
-      proceso: 'Convertido',
-      estado_de_lead: 'Conductor',
-      fecha_convertido: new Date().toLocaleString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).replace(' ', 'T'),
-      usuario: usuario || 'Sistema',
-    }).eq('id', lead.id)
+    await supabase.from('leads').update(
+      esFusion
+        ? {
+          // Ya era conductor: no es una conversión de marketing (sin fecha_convertido)
+          proceso: reactivado ? PROCESO_REINGRESO : PROCESO_YA_ERA_CONDUCTOR,
+          estado_de_lead: reactivado ? PROCESO_REINGRESO : 'Conductor',
+          usuario: usuario || 'Sistema',
+        }
+        : {
+          proceso: 'Convertido',
+          estado_de_lead: 'Conductor',
+          fecha_convertido: new Date().toLocaleString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).replace(' ', 'T'),
+          usuario: usuario || 'Sistema',
+        },
+    ).eq('id', lead.id)
 
-  return { conductorId, esFusion }
+  return { conductorId, esFusion, reactivado }
 }

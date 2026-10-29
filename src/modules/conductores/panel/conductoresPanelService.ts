@@ -47,6 +47,7 @@ export interface ConductorPanelRow {
   apellidos: string | null
   dni: string | null
   ruc: string | null                // CUIT (RUC)
+  guia: string | null               // guía del lead de origen o quien lo convirtió (conductores.guia)
   estadoCodigo: string | null
   activo: boolean
   tieneAsignacion: boolean
@@ -192,7 +193,7 @@ export async function cargarPanelConductores(
   // Las 5 consultas son independientes entre si: se lanzan EN PARALELO para no
   // sumar la latencia de cada una (antes iban en serie). Los datos traidos y el
   // procesamiento posterior son identicos; solo cambia el "cuando" se piden.
-  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias, cabifyDrivers] = await Promise.all([
+  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias, cabifyDrivers, guias] = await Promise.all([
     // 1. Conductores (con estado y dni).
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
@@ -273,7 +274,18 @@ export async function cargarPanelConductores(
           .then(r => r.drivers)
           .catch(() => [])
       : Promise.resolve(null),
+    // 10. Guía de cada conductor (conductores.guia, sql/conductores_guia.sql). Aparte y
+    // tolerante: si la columna todavía no existe, el panel carga igual.
+    fetchAll<{ id: string; guia: string | null }>((from, to) => {
+      let q = (supabase.from('conductores') as any)
+        .select('id, guia')
+        .not('guia', 'is', null)
+        .range(from, to)
+      if (sedeId) q = q.eq('sede_id', sedeId)
+      return q
+    }).catch(() => [] as { id: string; guia: string | null }[]),
   ])
+  const guiaPorConductor = new Map(guias.map(g => [g.id, g.guia]))
 
   // Ultimo saldo por conductor: primera aparicion en el kardex ya ordenado desc.
   const ultimoSaldoPorConductor = new Map<string, number>()
@@ -484,6 +496,7 @@ export async function cargarPanelConductores(
       apellidos: c.apellidos,
       dni: c.numero_dni,
       ruc: c.numero_cuit,
+      guia: guiaPorConductor.get(c.id) || null,
       estadoCodigo,
       activo: estadoCodigo === 'activo',
       tieneAsignacion: !!vehiculoAsignado,
