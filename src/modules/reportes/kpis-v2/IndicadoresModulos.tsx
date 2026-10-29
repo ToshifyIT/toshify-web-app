@@ -294,12 +294,6 @@ function Conductores({ periodo, anterior, general, carga, multas, turnos }: {
         ? `${fmtInt(t.actual.vehiculosNuevos)} ${t.actual.vehiculosNuevos === 1 ? 'auto nuevo' : 'autos nuevos'} · ${fmtInt(t.actual.nuevosYaAsignados)} ya asignados`
         : undefined,
     },
-    {
-      label: 'TURNOS GENERADOS',
-      value: t ? fmtInt(t.actual.porBajas + t.actual.porVehiculosNuevos) : sinDato,
-      dif: t ? difUnidades(t.actual.porBajas + t.actual.porVehiculosNuevos, t.anterior.porBajas + t.anterior.porVehiculosNuevos) : null,
-      detalle: 'Bajas + vehículos nuevos',
-    },
   ]
   return (
     <Cuerpo>
