@@ -296,6 +296,8 @@ export async function convertirLeadAConductor(
       numero_dni: (lead.dni || '').replace(/\D/g, ''),
       numero_cuit: (lead.cuit || '').replace(/\D/g, ''),
       telefono_contacto: lead.phone || '',
+      // Número secundario (sql/telefono_secundario.sql): solo si el lead lo tiene
+      ...(lead.telefono_secundario ? { telefono_secundario: lead.telefono_secundario } : {}),
       email: lead.email || '',
       direccion: lead.direccion || '',
       zona: zonaCalculada,

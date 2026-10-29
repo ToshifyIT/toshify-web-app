@@ -13,7 +13,7 @@ import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Layers, Link2,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin, LocateFixed, IdCard,
+  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -374,8 +374,6 @@ function esFuenteIntercom(l: Lead): boolean {
   return (l.fuente_de_lead || '').toLowerCase() !== 'damaro' && !esFuenteSellium(l)
 }
 
-/** Columna de casillas para "Coordenadas > Seleccionados" (oculta por pedido de negocio). */
-const MOSTRAR_COLUMNA_SELECCION_COORDS = false
 
 function formatPhoneAR(raw: unknown): string | null {
   if (raw == null) return null
@@ -433,6 +431,8 @@ function leadToFormData(lead: Lead): LeadFormData {
     email: lead.email || '',
     phone: lead.phone || '',
     whatsapp_number: lead.whatsapp_number || '',
+    // Solo si la columna existe (sql/telefono_secundario.sql): si no, no se manda al guardar
+    ...('telefono_secundario' in lead ? { telefono_secundario: lead.telefono_secundario || '' } : {}),
     dni: lead.dni || '',
     cuit: lead.cuit || '',
     edad: lead.edad ?? undefined,
@@ -1171,9 +1171,9 @@ export function LeadsModule() {
         return
       }
 
-      // Tope por carga para no exceder la cuota de Google en un solo golpe.
-      // Los restantes se procesan en la siguiente carga (el proceso converge).
-      const LOTE_MAX = 150
+      // Tope de seguridad por pasada (la cuota de Google). Los que entran nuevos
+      // son pocos; el tope solo importa si se acumula una tanda grande.
+      const LOTE_MAX = 500
       const lote = sinCoords.slice(0, LOTE_MAX)
 
       let actualizado = false
@@ -1212,198 +1212,35 @@ export function LeadsModule() {
     }
   }, [loadLeads, geocodificarYGuardarDireccion])
 
-  // ---------- BACKFILL DE PAIS / CIUDAD (boton manual) ----------
-  //
-  // El proceso automatico va de a 150 por carga del modulo: para completar
-  // ~1900 leads harian falta una docena de visitas. Este boton hace la pasada
-  // completa de una, con el total a la vista y con cancelacion, porque gasta
-  // una llamada de geocoding por lead y esa decision es del operador.
-  const [backfillUbicacion, setBackfillUbicacion] = useState<{ hechos: number; total: number; titulo?: string } | null>(null)
-  const cancelarBackfillRef = useRef(false)
 
-  /**
-   * Leads a los que les falta el pais y todavia tiene sentido preguntarle a
-   * Google. Sale de `leads`, que ya viene filtrado por la sede activa: el
-   * boton completa la sede en la que estas parado, no toda la base.
-   */
-  const leadsSinUbicacion = useMemo(
-    () =>
-      leads.filter(
-        (l) =>
-          l.direccion &&
-          !l.direccion_pais &&
-          l.direccion_geocode_estado !== 'sin_resultado' &&
-          l.direccion_geocode_estado !== 'manual'
-      ),
-    [leads]
-  )
-
-  const completarUbicacionLeads = useCallback(async () => {
-    const pendientes = leadsSinUbicacion
-    if (pendientes.length === 0) {
-      Swal.fire('Nada que completar', 'Todos los leads de esta sede ya tienen pais y ciudad.', 'info')
-      return
-    }
-
-    const confirmacion = await Swal.fire({
-      icon: 'warning',
-      title: 'Completar ubicacion',
-      html:
-        `Se van a geocodificar <b>${pendientes.length}</b> leads contra Google para obtener ` +
-        'pais y ciudad.<br><br>Es <b>una llamada por lead</b>: revisa la cuota diaria antes de ' +
-        'seguir. Se puede cancelar en cualquier momento y lo ya procesado queda guardado.',
-      showCancelButton: true,
-      confirmButtonText: `Procesar ${pendientes.length}`,
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#ff0033',
-    })
-    if (!confirmacion.isConfirmed) return
-
+  // ---------- UBICACIÓN AUTOMÁTICA ----------
+  // Ya no hay botones: todo lead con dirección y sin coordenadas (o sin país y
+  // ciudad) se ubica solo, en segundo plano, cada vez que cambia la lista: al
+  // abrir Leads, al crear o editar, después de la carga masiva y con los leads
+  // que entraron por la API. Cada lead se intenta una sola vez por sesión, así
+  // una dirección que Google no encuentra no se reintenta en bucle.
+  const leadsActualesRef = useRef<Lead[]>([])
+  leadsActualesRef.current = leads
+  const geocodIntentadosRef = useRef<Set<string>>(new Set())
+  const geocodEnCursoRef = useRef(false)
+  const procesarUbicacionesPendientes = useCallback(async () => {
+    if (geocodEnCursoRef.current) return
+    geocodEnCursoRef.current = true
     try {
-      await loadGoogleMapsAPI()
-    } catch {
-      Swal.fire('Error', 'No se pudo cargar Google Maps. Reintenta en un momento.', 'error')
-      return
-    }
-
-    cancelarBackfillRef.current = false
-    setBackfillUbicacion({ hechos: 0, total: pendientes.length })
-    let completados = 0
-    for (let i = 0; i < pendientes.length; i++) {
-      if (cancelarBackfillRef.current) break
-      try {
-        if (await geocodificarYGuardarDireccion(pendientes[i], { conservarCoordenadas: true })) completados++
-      } catch {
-        // Un lead que falla no corta la pasada.
+      // Vuelve a mirar al terminar: los que llegaron mientras procesaba
+      for (let vuelta = 0; vuelta < 5; vuelta++) {
+        const nuevos = leadsActualesRef.current.filter((l) => !geocodIntentadosRef.current.has(l.id))
+        if (nuevos.length === 0) break
+        nuevos.forEach((l) => geocodIntentadosRef.current.add(l.id))
+        await geocodificarLeadsSinCoordenadas(nuevos)
       }
-      setBackfillUbicacion({ hechos: i + 1, total: pendientes.length })
-      // Mismo respiro que el proceso automatico, por el rate limit del geocoder.
-      await new Promise((r) => setTimeout(r, 60))
+    } finally {
+      geocodEnCursoRef.current = false
     }
-
-    const cancelado = cancelarBackfillRef.current
-    setBackfillUbicacion(null)
-    loadLeads()
-    Swal.fire(
-      cancelado ? 'Backfill cancelado' : 'Listo',
-      `Se completaron ${completados} de ${pendientes.length} leads.`,
-      cancelado ? 'info' : 'success'
-    )
-  }, [leadsSinUbicacion, geocodificarYGuardarDireccion, loadLeads])
-
-  // ---------- ACTUALIZAR COORDENADAS DESDE LA DIRECCION (boton admin) ----------
-  //
-  // Dos alcances:
-  //  - Pendientes: leads con direccion y sin latitud/longitud (nuevos, o a los
-  //    que se les cambio la direccion y quedaron sin punto). Excluye los que
-  //    Google ya marco 'sin_resultado'.
-  //  - Seleccionados: los tildados en la tabla. Pisa el punto actual con el
-  //    resultado de Google, EXCEPTO los 'manual' (pin definido en el
-  //    formulario), que se omiten.
-  // Como el backfill de pais, sale de `leads` (sede activa) y corre en este
-  // navegador: una llamada a Google por lead, cancelable.
-  const [seleccionCoords, setSeleccionCoords] = useState<Set<string>>(() => new Set())
-
-  const leadsCoordsPendientes = useMemo(
-    () =>
-      leads.filter(
-        (l) =>
-          !!l.direccion?.trim() &&
-          (l.latitud == null || l.longitud == null) &&
-          l.direccion_geocode_estado !== 'sin_resultado'
-      ),
-    [leads]
-  )
-
-  const actualizarCoordenadasLeads = useCallback(async () => {
-    if (!esAdmin) return
-    const seleccionados = leads.filter((l) => seleccionCoords.has(l.id))
-    const seleccionadosConDireccion = seleccionados.filter((l) => !!l.direccion?.trim())
-    const seleccionadosValidos = seleccionadosConDireccion.filter((l) => l.direccion_geocode_estado !== 'manual')
-    const omitidosManual = seleccionadosConDireccion.length - seleccionadosValidos.length
-    const sinDireccion = seleccionados.length - seleccionadosConDireccion.length
-    const pendientes = leadsCoordsPendientes
-
-    if (pendientes.length === 0 && seleccionadosValidos.length === 0) {
-      Swal.fire(
-        'Nada que actualizar',
-        seleccionados.length > 0
-          ? 'Los leads seleccionados no tienen dirección o tienen ubicación manual (definida en el formulario).'
-          : 'Todos los leads de esta sede con dirección ya tienen coordenadas.',
-        'info'
-      )
-      return
-    }
-
-    const notas: string[] = []
-    if (omitidosManual > 0) notas.push(`${omitidosManual} seleccionado(s) con ubicación manual se omiten.`)
-    if (sinDireccion > 0) notas.push(`${sinDireccion} seleccionado(s) sin dirección se omiten.`)
-
-    const eleccion = await Swal.fire({
-      icon: 'warning',
-      title: 'Actualizar coordenadas',
-      html:
-        'Calcula <b>latitud y longitud</b> a partir de la dirección de cada lead.<br><br>' +
-        `<b>Pendientes:</b> ${pendientes.length} lead(s) con dirección y sin coordenadas.<br>` +
-        `<b>Seleccionados:</b> ${seleccionadosValidos.length} lead(s); su ubicación actual se reemplaza.<br>` +
-        (notas.length ? `<br><small>${notas.join('<br>')}</small><br>` : '') +
-        '<br>Es <b>una llamada a Google por lead</b>: revisa la cuota diaria antes de seguir. ' +
-        'Se puede cancelar en cualquier momento y lo ya procesado queda guardado.',
-      showConfirmButton: pendientes.length > 0,
-      confirmButtonText: `Pendientes (${pendientes.length})`,
-      showDenyButton: seleccionadosValidos.length > 0,
-      denyButtonText: `Seleccionados (${seleccionadosValidos.length})`,
-      showCancelButton: true,
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#ff0033',
-      denyButtonColor: '#374151',
-    })
-    if (eleccion.isDismissed) return
-    const lote = eleccion.isDenied ? seleccionadosValidos : pendientes
-    if (lote.length === 0) return
-
-    try {
-      await loadGoogleMapsAPI()
-    } catch {
-      Swal.fire('Error', 'No se pudo cargar Google Maps. Reintenta en un momento.', 'error')
-      return
-    }
-
-    cancelarBackfillRef.current = false
-    const titulo = 'Actualizando coordenadas…'
-    setBackfillUbicacion({ hechos: 0, total: lote.length, titulo })
-    let actualizados = 0
-    for (let i = 0; i < lote.length; i++) {
-      if (cancelarBackfillRef.current) break
-      try {
-        if (await geocodificarYGuardarDireccion(lote[i])) actualizados++
-      } catch {
-        // Un lead que falla no corta la pasada.
-      }
-      setBackfillUbicacion({ hechos: i + 1, total: lote.length, titulo })
-      // Mismo respiro que el resto de los procesos, por el rate limit del geocoder.
-      await new Promise((r) => setTimeout(r, 60))
-    }
-
-    const cancelado = cancelarBackfillRef.current
-    setBackfillUbicacion(null)
-    if (eleccion.isDenied) setSeleccionCoords(new Set())
-    loadLeads()
-    Swal.fire(
-      cancelado ? 'Proceso cancelado' : 'Listo',
-      `Se actualizaron ${actualizados} de ${lote.length} leads.` +
-        (actualizados < lote.length && !cancelado ? ' Los que no se pudieron ubicar quedaron sin cambios o marcados como "sin resultado".' : ''),
-      cancelado ? 'info' : 'success'
-    )
-  }, [esAdmin, leads, seleccionCoords, leadsCoordsPendientes, geocodificarYGuardarDireccion, loadLeads])
-
+  }, [geocodificarLeadsSinCoordenadas])
   useEffect(() => {
-    if (leads.length > 0) {
-      geocodificarLeadsSinCoordenadas(leads)
-    }
-  // Solo correr cuando leads cambie de 0 a >0 (carga inicial)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads.length > 0])
+    if (leads.length > 0) void procesarUbicacionesPendientes()
+  }, [leads, procesarUbicacionesPendientes])
 
   // ---------- SINCRONIZAR SEDE Y FUENTE DE LEADS ----------
   const sincronizarSedeLeads = useCallback(async () => {
@@ -1827,17 +1664,17 @@ export function LeadsModule() {
    */
   function prepararTelefonos(fields: Record<string, unknown>, original: Lead | null): boolean {
     const errores: Record<string, string> = {}
-    for (const campo of ['phone', 'whatsapp_number'] as const) {
+    for (const campo of ['phone', 'whatsapp_number', 'telefono_secundario'] as const) {
       const valor = String(fields[campo] ?? '').trim()
       if (!valor) continue
-      if (original && valor === (original[campo] || '').trim()) continue
+      if (original && valor === String(original[campo] || '').trim()) continue
       const normalizado = normalizarCelularAR(valor)
       if (normalizado) fields[campo] = normalizado
       else errores[campo] = validarCelularAR(valor) || 'Celular invalido'
     }
     setEditErrors(errores)
     if (Object.keys(errores).length === 0) return true
-    const etiquetas: Record<string, string> = { phone: 'Teléfono', whatsapp_number: 'WhatsApp' }
+    const etiquetas: Record<string, string> = { phone: 'Teléfono', whatsapp_number: 'WhatsApp', telefono_secundario: 'Teléfono secundario' }
     Swal.fire(
       'Celular inválido',
       Object.entries(errores).map(([campo, msg]) => `${etiquetas[campo]}: ${msg}`).join('<br>'),
@@ -2090,6 +1927,7 @@ export function LeadsModule() {
 
           // --- Contacto y direccion (detalle) ---
           'WhatsApp': l.whatsapp_number || '',
+          'Teléfono secundario': l.telefono_secundario || '',
           'Dirección': l.direccion || '',
           'Zona Restringida': tieneCoordenadas ? (zonaRestringida ? 'Sí' : 'No') : '',
           'Nombre Zona Restringida': zonaRestringida,
@@ -2786,10 +2624,6 @@ export function LeadsModule() {
   }
 
   // ---------- COLUMNS ----------
-  // Filas visibles (todas las paginas) para el tilde "seleccionar todos".
-  const visiblesCoordsRef = useRef<Lead[]>([])
-  visiblesCoordsRef.current = leadsVisibles ?? filteredLeads
-
   const columns = useMemo<ColumnDef<Lead>[]>(() => {
     const leadColumns: ColumnDef<Lead>[] = [
     // 2026-10-22: sin Fuente Pauta, Id Fuente, Teléfono (ya va bajo el nombre), RNR ni
@@ -3325,58 +3159,6 @@ export function LeadsModule() {
     },
     ]
 
-    // Casillas para "Actualizar coordenadas" > Seleccionados. Solo admin.
-    // El tilde del encabezado alcanza a TODOS los leads visibles con los
-    // filtros actuales (todas las paginas), no solo a la pagina en pantalla.
-    // OCULTA (2026-10-06, pedido de negocio): sin la columna, "Coordenadas" solo
-    // ofrece "Pendientes". Para volver a mostrarla, poner la constante en true.
-    if (esAdmin && MOSTRAR_COLUMNA_SELECCION_COORDS) {
-      leadColumns.unshift({
-        id: 'seleccion_coords',
-        header: () => {
-          // Se lee del ref al renderizar: las columnas NO dependen de las filas
-          // visibles (el DataTable las notifica via onFilteredDataChange y
-          // depender de ellas armaria un ciclo de renders).
-          const visibles = visiblesCoordsRef.current
-          const todosTildados = visibles.length > 0 && visibles.every((l) => seleccionCoords.has(l.id))
-          return (
-            <input
-              type="checkbox"
-              checked={todosTildados}
-              title="Seleccionar todos los leads visibles (para actualizar coordenadas)"
-              onChange={(e) => {
-                const marcar = e.target.checked
-                const lista = visiblesCoordsRef.current
-                setSeleccionCoords((prev) => {
-                  const next = new Set(prev)
-                  lista.forEach((l) => (marcar ? next.add(l.id) : next.delete(l.id)))
-                  return next
-                })
-              }}
-            />
-          )
-        },
-        cell: ({ row }) => (
-          <input
-            type="checkbox"
-            checked={seleccionCoords.has(row.original.id)}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              const marcar = e.target.checked
-              setSeleccionCoords((prev) => {
-                const next = new Set(prev)
-                if (marcar) next.add(row.original.id)
-                else next.delete(row.original.id)
-                return next
-              })
-            }}
-          />
-        ),
-        size: 36,
-        enableSorting: false,
-        meta: { cellAlign: 'center' },
-      })
-    }
 
     return leadColumns.map(column => ({
       ...column,
@@ -3386,7 +3168,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
@@ -3569,61 +3351,6 @@ export function LeadsModule() {
         </div>
       )}
 
-      {/* Progreso del backfill de ubicacion. Es un cartel propio y no un Swal
-          con barra: el proceso dura minutos y el operador tiene que poder
-          seguir trabajando y cancelarlo cuando quiera. */}
-      {backfillUbicacion && (
-        <div
-          style={{
-            position: 'fixed',
-            right: 16,
-            bottom: 16,
-            zIndex: 10050,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '12px 16px',
-            borderRadius: 10,
-            background: 'var(--modal-bg)',
-            border: '2px solid #ff0033',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
-            maxWidth: 360,
-          }}
-        >
-          <MapPin size={18} style={{ color: '#ff0033', flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {backfillUbicacion.titulo || 'Completando ubicación…'} {backfillUbicacion.hechos} de {backfillUbicacion.total}
-            </div>
-            <div
-              style={{
-                height: 4,
-                borderRadius: 2,
-                background: 'var(--border-primary)',
-                marginTop: 6,
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  height: '100%',
-                  width: `${Math.round((backfillUbicacion.hechos / Math.max(backfillUbicacion.total, 1)) * 100)}%`,
-                  background: '#ff0033',
-                  transition: 'width 0.2s',
-                }}
-              />
-            </div>
-          </div>
-          <button
-            className="btn-secondary btn-sm"
-            onClick={() => { cancelarBackfillRef.current = true }}
-            title="Detener el proceso; lo ya procesado queda guardado"
-          >
-            Cancelar
-          </button>
-        </div>
-      )}
-
       <DataTable
         data={leadsBase}
         rowFilter={filtroTarjeta}
@@ -3646,30 +3373,6 @@ export function LeadsModule() {
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
               <Download size={14} /> <span className="leads-btn-label leads-btn-label--sec">Exportar</span>
             </button>
-            {esAdmin && (
-              <button
-                className="btn-secondary btn-sm"
-                onClick={actualizarCoordenadasLeads}
-                disabled={!!backfillUbicacion}
-                title="Calcular latitud y longitud desde la dirección (pendientes o seleccionados)"
-              >
-                <LocateFixed size={14} />{' '}
-                <span className="leads-btn-label">
-                  Coordenadas ({leadsCoordsPendientes.length}{seleccionCoords.size > 0 ? ` · ${seleccionCoords.size} sel.` : ''})
-                </span>
-              </button>
-            )}
-            {leadsSinUbicacion.length > 0 && (
-              <button
-                className="btn-secondary btn-sm"
-                onClick={completarUbicacionLeads}
-                disabled={!!backfillUbicacion}
-                title="Completar pais y ciudad de los leads que todavia no los tienen"
-              >
-                <MapPin size={14} />{' '}
-                <span className="leads-btn-label leads-btn-label--sec">Ubicación ({leadsSinUbicacion.length})</span>
-              </button>
-            )}
             {canCreate && (
               <>
                 <input
