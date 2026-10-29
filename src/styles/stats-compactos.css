@@ -136,3 +136,68 @@
   text-transform: none;
   letter-spacing: normal;
 }
+
+/* Celular: nada se corta ni se pisa. El texto baja de renglón en vez de
+   cortarse con "…", los montos largos parten y los botones dentro de la
+   tarjeta (p. ej. "Detalle" en Multas) pasan a su propio renglón. */
+@media (max-width: 600px) {
+  #root :is(
+    .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+    .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+    .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+    .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+    .vencimientos-stats
+  ) :is(.stat-card, .fact-stat-card, .uss-stat-card):not(.skeleton) {
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+  }
+
+  #root :is(
+    .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+    .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+    .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+    .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+    .vencimientos-stats
+  ) :is(.stat-content, .fact-stat-content, .uss-stat-content) {
+    /* Nunca más angosto que su palabra más larga: si no entra al lado de los
+       extras (flechas, D/N), esos extras bajan de renglón. */
+    flex: 1 1 0;
+    min-width: min-content;
+  }
+
+  #root :is(
+    .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+    .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+    .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+    .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+    .vencimientos-stats
+  ) :is(.stat-value, .fact-stat-value, .uss-stat-value) {
+    overflow-wrap: anywhere;
+  }
+
+  #root :is(
+    .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+    .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+    .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+    .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+    .vencimientos-stats
+  ) :is(.stat-label, .fact-stat-label, .uss-stat-label) {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  #root :is(
+    .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+    .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+    .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+    .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+    .vencimientos-stats
+  ) :is(.stat-card, .fact-stat-card, .uss-stat-card) > button {
+    flex: 1 1 100%;
+    justify-content: center;
+    margin-left: 0 !important;
+    min-height: 32px;
+  }
+}

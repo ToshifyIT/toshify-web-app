@@ -1430,12 +1430,31 @@
     min-width: unset;
   }
 
+  /* Acciones en filas que se acomodan solas: los botones comparten el ancho en
+     vez de ir uno debajo del otro a lo ancho (los de solo ícono quedan chicos). */
   .dt-header-action {
     width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .dt-header-action > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .dt-header-action :is(div, span):has(> button) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .dt-header-action button {
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto;
+    min-height: 40px;
+    justify-content: center;
   }
 
   .dt-table th,
