@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { User, CreditCard, FileCheck, Phone, Shield, Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import { ReferidoEmbajadorFields } from './ReferidoEmbajadorFields'
+import { GUIAS_ACTIVOS } from '../../leads/guias'
 
 interface ConductorFormData {
   nombres: string
@@ -47,6 +48,8 @@ interface ConductorFormData {
   url_documentacion: string
   numero_ibutton: string
   sede_id: string
+  /** Guía del conductor (conductores.guia). Obligatorio al crear. */
+  guia?: string
 }
 
 interface ConductorWizardProps {
@@ -92,6 +95,7 @@ export function ConductorWizard({
 
     if (step === 1) {
       if (!formData.sede_id) newErrors.sede_id = 'La sede es requerida'
+      if (!formData.guia?.trim()) newErrors.guia = 'El guía es requerido'
       if (!formData.nombres.trim()) newErrors.nombres = 'Requerido'
       if (!formData.apellidos.trim()) newErrors.apellidos = 'Requerido'
       if (!formData.numero_dni.trim()) newErrors.numero_dni = 'Requerido'
@@ -165,6 +169,23 @@ export function ConductorWizard({
                 ))}
               </select>
               {errors.sede_id && <span className="error-message">{errors.sede_id}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Guía *</label>
+              <input
+                type="text"
+                className={`form-input ${errors.guia ? 'input-error' : ''}`}
+                list="wizard-conductor-guias"
+                value={formData.guia || ''}
+                onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
+                placeholder="Elegí el guía o escribí quién lo convirtió"
+                disabled={saving}
+              />
+              <datalist id="wizard-conductor-guias">
+                {GUIAS_ACTIVOS.map(g => <option key={g} value={g} />)}
+              </datalist>
+              {errors.guia && <span className="error-message">{errors.guia}</span>}
             </div>
 
             <div className="form-row">
