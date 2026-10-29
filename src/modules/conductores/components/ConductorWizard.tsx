@@ -17,6 +17,7 @@ interface ConductorFormData {
   licencia_estado_id: string
   licencia_tipo_id: string
   telefono_contacto: string
+  telefono_secundario?: string
   email: string
   direccion: string
   direccion_lat: number | null
@@ -351,6 +352,17 @@ export function ConductorWizard({
                   disabled={saving}
                 />
                 {errors.telefono_contacto && <span className="error-message">{errors.telefono_contacto}</span>}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Teléfono secundario <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+                <input
+                  type="tel"
+                  className="form-input"
+                  value={formData.telefono_secundario || ''}
+                  onChange={(e) => setFormData({ ...formData, telefono_secundario: e.target.value })}
+                  placeholder="Otro número que use (ej. el de DiDi)"
+                  disabled={saving}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Email *</label>

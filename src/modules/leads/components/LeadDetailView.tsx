@@ -264,6 +264,10 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             <span className="lead-detail-item-value">{lead.whatsapp_number || '-'}</span>
           </div>
           <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Teléfono secundario</span>
+            <span className="lead-detail-item-value">{lead.telefono_secundario || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
             <span className="lead-detail-item-label">Email</span>
             <span className="lead-detail-item-value">{lead.email || '-'}</span>
           </div>

@@ -128,8 +128,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
 
   // Al salir del campo, el celular se lleva al formato +549 + area + numero.
   // Si no se puede interpretar se deja como esta y se marca el error.
-  const [telefonosTocados, setTelefonosTocados] = useState<Set<'phone' | 'whatsapp_number'>>(new Set())
-  function normalizarTelefonoAlSalir(field: 'phone' | 'whatsapp_number') {
+  const [telefonosTocados, setTelefonosTocados] = useState<Set<'phone' | 'whatsapp_number' | 'telefono_secundario'>>(new Set())
+  function normalizarTelefonoAlSalir(field: 'phone' | 'whatsapp_number' | 'telefono_secundario') {
     setTelefonosTocados(prev => new Set(prev).add(field))
     const normalizado = normalizarCelularAR(formData[field])
     if (!normalizado || normalizado === formData[field]) return
@@ -144,6 +144,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
   }
   const errorTelefono = errors.phone || (telefonosTocados.has('phone') ? validarCelularAR(formData.phone) : null)
   const errorWhatsapp = errors.whatsapp_number || (telefonosTocados.has('whatsapp_number') ? validarCelularAR(formData.whatsapp_number) : null)
+  const errorSecundario = errors.telefono_secundario || (telefonosTocados.has('telefono_secundario') && formData.telefono_secundario ? validarCelularAR(formData.telefono_secundario) : null)
 
   function handleNext() {
     if (currentStep < STEPS.length) {
@@ -326,6 +327,21 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 />
                 {errorWhatsapp && <span className="error-text">{errorWhatsapp}</span>}
               </div>
+            </div>
+            <div className="lead-wizard-form-group">
+              <div className="lead-wizard-field">
+                <label>Teléfono secundario <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+                <input
+                  type="text"
+                  className={errorSecundario ? 'field-error' : ''}
+                  value={formData.telefono_secundario || ''}
+                  onChange={e => updateField('telefono_secundario', e.target.value)}
+                  onBlur={() => normalizarTelefonoAlSalir('telefono_secundario')}
+                  placeholder="Otro número que use (ej. el de DiDi)"
+                />
+                {errorSecundario && <span className="error-text">{errorSecundario}</span>}
+              </div>
+              <div className="lead-wizard-field" />
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
@@ -766,10 +782,10 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
         </button>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
-            className="btn-success"
+            className={currentStep < STEPS.length ? 'lead-wizard-guardar' : 'btn-primary'}
             onClick={onSave}
             disabled={saving}
-            style={{ minWidth: '100px' }}
+            title="Guardar los cambios sin pasar al siguiente paso"
           >
             {saving ? 'Guardando...' : 'Guardar'}
           </button>

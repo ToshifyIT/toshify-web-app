@@ -428,6 +428,7 @@ export function ConductoresModule() {
     licencia_estado_id: "",
     licencia_tipo_id: "",
     telefono_contacto: "",
+    telefono_secundario: undefined as string | undefined,
     email: "",
     direccion: "",
     direccion_lat: null as number | null,
@@ -1260,6 +1261,8 @@ export function ConductoresModule() {
             licencia_estado_id: formData.licencia_estado_id || null,
             licencia_tipo_id: formData.licencia_tipo_id || null,
             telefono_contacto: formData.telefono_contacto || null,
+            // Opcional (sql/telefono_secundario.sql): solo se manda si se cargó
+            ...(formData.telefono_secundario?.trim() ? { telefono_secundario: formData.telefono_secundario.trim() } : {}),
             email: formData.email || null,
             direccion: formData.direccion || null,
             direccion_lat: formData.direccion_lat,
@@ -1855,6 +1858,8 @@ export function ConductoresModule() {
         licencia_estado_id: formData.licencia_estado_id || null,
         licencia_tipo_id: formData.licencia_tipo_id || null,
         telefono_contacto: formData.telefono_contacto || null,
+        // Solo si la columna existe (se cargó al abrir la edición): vacío = se borra
+        ...(formData.telefono_secundario !== undefined ? { telefono_secundario: formData.telefono_secundario.trim() || null } : {}),
         email: formData.email || null,
         direccion: formData.direccion || null,
         direccion_lat: formData.direccion_lat,
@@ -2515,6 +2520,7 @@ export function ConductoresModule() {
       licencia_estado_id: fc.licencia_estado_id || "",
       licencia_tipo_id: fc.licencia_tipo_id || "",
       telefono_contacto: fc.telefono_contacto || "",
+      telefono_secundario: "telefono_secundario" in fc ? ((fc as any).telefono_secundario || "") : undefined,
       email: fc.email || "",
       direccion: fc.direccion || "",
       direccion_lat: fc.direccion_lat || null,
@@ -2762,6 +2768,7 @@ export function ConductoresModule() {
       licencia_estado_id: "",
       licencia_tipo_id: "",
       telefono_contacto: "",
+      telefono_secundario: undefined,
       email: "",
       direccion: "",
       direccion_lat: null,
@@ -4784,6 +4791,19 @@ function ModalEditar({
             />
             {editErrors.telefono_contacto && <span className="error-message">{editErrors.telefono_contacto}</span>}
           </div>
+          {formData.telefono_secundario !== undefined && (
+            <div className="form-group">
+              <label className="form-label">Teléfono secundario <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+              <input
+                type="tel"
+                className="form-input"
+                value={formData.telefono_secundario}
+                onChange={(e) => setFormData({ ...formData, telefono_secundario: e.target.value })}
+                placeholder="Otro número que use (ej. el de DiDi)"
+                disabled={saving}
+              />
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Email *</label>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -5696,6 +5716,12 @@ function ModalDetalles({
               {selectedConductor.telefono_contacto || "N/A"}
             </div>
           </div>
+          {(selectedConductor as any).telefono_secundario ? (
+            <div>
+              <label className="detail-label">Teléfono secundario</label>
+              <div className="detail-value">{(selectedConductor as any).telefono_secundario}</div>
+            </div>
+          ) : null}
           <div>
             <label className="detail-label">EMAIL</label>
             <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
