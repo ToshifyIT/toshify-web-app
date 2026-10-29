@@ -2111,11 +2111,14 @@ export function IntegracionesTokensModule() {
       </div>
 
       {/* Tabs */}
-      <div style={{
+      <div role="tablist" style={{
         display: 'flex',
         gap: '0',
         borderBottom: '2px solid var(--border-primary)',
         marginBottom: '20px',
+        // En celular las pestañas no entran: se desplazan de costado en vez de cortarse
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
       }}>
         {TABS.map(tab => {
           const isActive = activeTab === tab.id;
@@ -2123,9 +2126,12 @@ export function IntegracionesTokensModule() {
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                flex: 1,
+                flex: '1 0 auto',
+                whiteSpace: 'nowrap',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

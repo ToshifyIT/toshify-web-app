@@ -827,8 +827,8 @@
   border-radius: 8px;
   background: var(--bg-secondary, #f9fafb);
   min-width: 0;
-  height: 104px;
-  overflow: hidden;
+  /* Alto mínimo parejo; si el detalle es largo la tarjeta crece en vez de cortarlo */
+  min-height: 104px;
 }
 
 .dkv2-mod-valor {

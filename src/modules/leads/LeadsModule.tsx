@@ -3427,10 +3427,10 @@ export function LeadsModule() {
         emptyDescription="No se encontraron leads con los filtros aplicados"
         headerAction={
           <div className="leads-header-actions">
-            <button className="btn-secondary btn-sm" onClick={loadLeads} title="Recargar">
+            <button className="btn-secondary btn-sm" onClick={loadLeads} title="Recargar" aria-label="Recargar">
               <RefreshCw size={14} />
             </button>
-            <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
+            <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel" aria-label="Exportar Excel">
               <Download size={14} /> <span className="leads-btn-label leads-btn-label--sec">Exportar</span>
             </button>
             {canCreate && (
@@ -3442,7 +3442,7 @@ export function LeadsModule() {
                   style={{ display: 'none' }}
                   onChange={handleCargaMasiva}
                 />
-                <button className="btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} title="Carga Masiva">
+                <button className="btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} title="Carga Masiva" aria-label="Carga Masiva">
                   <Upload size={14} /> <span className="leads-btn-label leads-btn-label--sec">Carga Masiva</span>
                 </button>
               </>
@@ -3455,6 +3455,7 @@ export function LeadsModule() {
             <button
               className="btn-secondary btn-sm"
               onClick={() => setVerLeadsConductores(true)}
+              aria-label="Ver Lead/Conductores"
               title="Ver los leads que ya son conductores y los que tienen un conductor con el mismo documento pero siguen sin convertir"
             >
               <Link2 size={14} /> <span className="leads-btn-label leads-btn-label--sec">Ver Lead/Conductores</span>
