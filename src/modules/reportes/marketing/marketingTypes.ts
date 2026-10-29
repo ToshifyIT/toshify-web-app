@@ -140,6 +140,12 @@ export interface NuevosConductores {
   detalle?: NuevoConductorDetalle[]
   /** Recibieron su primer auto en el período pero su lead es anterior al período */
   fuera_de_rango: { segmento: Segmento; cantidad: number }[]
+  /** Ya fueron conductores (por DNI) y volvieron a recibir auto después del lead (puede faltar si la función SQL es vieja) */
+  reingresos?: {
+    total: number
+    total_anterior: number
+    detalle: (NuevoConductorDetalle & { reingreso: string })[]
+  }
 }
 
 export interface MarketingRaw {
