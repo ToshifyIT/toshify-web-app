@@ -21,6 +21,7 @@ export interface Lead {
   email?: string | null
   phone?: string | null
   whatsapp_number?: string | null
+  telefono_secundario?: string | null   // otro número que usa (ej. DiDi). Opcional
   contacto_de_emergencia?: string | null
   datos_de_emergencia?: string | null
   telefono_emergencia?: string | null
@@ -192,6 +193,7 @@ export interface LeadFormData {
   email?: string
   phone?: string
   whatsapp_number?: string
+  telefono_secundario?: string
   dni?: string
   cuit?: string
   edad?: number

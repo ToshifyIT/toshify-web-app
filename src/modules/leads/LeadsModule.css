@@ -1140,3 +1140,40 @@
   width: 30px;
   height: 30px;
 }
+
+/* Pie del formulario de lead: Siguiente es el principal (rojo); Guardar es
+   secundario mientras quedan pasos, y pasa a principal en el último paso. */
+.lead-wizard-footer .btn-primary,
+.lead-wizard-footer .btn-secondary,
+.lead-wizard-footer .lead-wizard-guardar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 104px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.lead-wizard-footer .lead-wizard-guardar {
+  border: 1px solid var(--border-primary, #d1d5db);
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary, #111827);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.lead-wizard-footer .lead-wizard-guardar:hover:not(:disabled) {
+  border-color: var(--color-primary, #ff0033);
+  color: var(--color-primary, #ff0033);
+}
+
+.lead-wizard-footer .lead-wizard-guardar:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
