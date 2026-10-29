@@ -197,6 +197,7 @@ export function ConductoresPanelModule() {
       'Calificación (1-5)': calificaciones.get(c.id)?.estrellas ?? '',
       'DNI': c.dni || '',
       'CUIT': c.ruc || '',
+      'Guía': c.guia || '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
       'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
       'Grupo de Flota': grupoFlotaLabel(c.grupoFlotaAsignado),
@@ -236,6 +237,7 @@ export function ConductoresPanelModule() {
       { wch: 12 }, // Calificación
       { wch: 12 }, // DNI
       { wch: 14 }, // CUIT
+      { wch: 18 }, // Guía
       { wch: 12 }, // Estado
       { wch: 16 }, // Patente Asignada
       { wch: 14 }, // Grupo de Flota
@@ -317,6 +319,14 @@ export function ConductoresPanelModule() {
         if (!c) return null
         return <CalificacionCelda calificacion={c} onClick={() => setVerCalificacion(row.original)} />
       },
+    },
+    {
+      id: 'guia',
+      accessorFn: (r) => r.guia || 'Sin guía',
+      header: 'Guía',
+      cell: ({ row }) => row.original.guia
+        ? <span>{row.original.guia}</span>
+        : <span className="cpanel-num cpanel-nulo">—</span>,
     },
     {
       id: 'patente',

@@ -80,6 +80,13 @@ function fecha(v: string | null | undefined): string | null {
   return v ? String(v).slice(0, 10) : null
 }
 
+/** Día (YYYY-MM-DD) en hora Argentina de un timestamp. */
+function fechaART(v: string | null | undefined): string | null {
+  if (!v) return null
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? null : d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
 function enRango(f: string | null, r: Rango): boolean {
   return f !== null && f >= r.desde && f <= r.hasta
 }
@@ -165,18 +172,132 @@ export async function cargarVehiculos(filtroSede: FiltroSede): Promise<Indicador
   return r
 }
 
+// ───────────── Turnos disponibles que se generaron ─────────────
+// Por bajas: el último turno de cada conductor dado de baja en el período. Si manejaba
+// en turno libera 1 turno (diurno o nocturno); si tenía el auto todo el día, el auto
+// queda libre = 2 turnos (1 D + 1 N, mismo criterio que Asignaciones). No cuenta si
+// esa asignación había terminado más de 30 días antes de la baja (ya estaba libre).
+// Por vehículos nuevos: autos dados de alta en el sistema en el período = 2 turnos c/u.
+// Se excluyen los de prueba (patente PRB…) y los eliminados.
+
+export interface PeriodoTurnos {
+  porBajas: number
+  bajasDiurno: number
+  bajasNocturno: number
+  bajasACargo: number
+  vehiculosNuevos: number
+  porVehiculosNuevos: number
+  nuevosYaAsignados: number
+}
+
+export interface IndicadoresTurnos { actual: PeriodoTurnos; anterior: PeriodoTurnos }
+
+const DIAS_TOLERANCIA_BAJA = 30
+
+export async function cargarTurnosGenerados(filtroSede: FiltroSede, actual: Rango, anterior: Rango): Promise<IndicadoresTurnos> {
+  const desde = anterior.desde < actual.desde ? anterior.desde : actual.desde
+  const [bajas, vehiculos] = await Promise.all([
+    leerTodo<{ fecha: string; conductor_id: string | null }>(
+      (a, b) => filtroSede((supabase.from('kpi_bajas' as any) as any)
+        .select('fecha, conductor_id')
+        .gte('fecha', desde)
+        .lte('fecha', actual.hasta))
+        .range(a, b),
+    ),
+    leerTodo<{ id: string; patente: string | null; created_at: string | null }>(
+      (a, b) => filtroSede((supabase.from('vehiculos') as any)
+        .select('id, patente, created_at')
+        .is('deleted_at', null)
+        .gte('created_at', `${desde}T00:00:00-03:00`)
+        .lte('created_at', `${actual.hasta}T23:59:59-03:00`))
+        .range(a, b),
+    ),
+  ])
+
+  // Asignaciones de los conductores dados de baja
+  type FilaAc = { conductor_id: string; horario: string | null; fecha_inicio: string | null; fecha_fin: string | null; asignaciones: { horario: string | null } | null }
+  const ids = [...new Set(bajas.map(b => b.conductor_id).filter((x): x is string => !!x))]
+  const porConductor = new Map<string, FilaAc[]>()
+  for (let i = 0; i < ids.length; i += 100) {
+    const lote = ids.slice(i, i + 100)
+    const filas = await leerTodo<FilaAc>(
+      (a, b) => (supabase.from('asignaciones_conductores') as any)
+        .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(horario)')
+        .in('conductor_id', lote)
+        .range(a, b),
+    )
+    for (const f of filas) {
+      const lista = porConductor.get(f.conductor_id) ?? []
+      lista.push(f)
+      porConductor.set(f.conductor_id, lista)
+    }
+  }
+
+  // Autos nuevos que ya recibieron asignación
+  const nuevos = vehiculos.filter(v => !/^PRB/i.test(String(v.patente || '').trim()))
+  const asignados = new Set<string>()
+  const idsNuevos = nuevos.map(v => v.id)
+  for (let i = 0; i < idsNuevos.length; i += 100) {
+    const filas = await leerTodo<{ vehiculo_id: string }>(
+      (a, b) => (supabase.from('asignaciones') as any)
+        .select('vehiculo_id')
+        .in('vehiculo_id', idsNuevos.slice(i, i + 100))
+        .not('fecha_inicio', 'is', null)
+        .range(a, b),
+    )
+    for (const f of filas) asignados.add(f.vehiculo_id)
+  }
+
+  const calcular = (r: Rango): PeriodoTurnos => {
+    const t: PeriodoTurnos = { porBajas: 0, bajasDiurno: 0, bajasNocturno: 0, bajasACargo: 0, vehiculosNuevos: 0, porVehiculosNuevos: 0, nuevosYaAsignados: 0 }
+    const vistos = new Set<string>()
+    for (const b of bajas) {
+      if (!b.conductor_id || !enRango(fecha(b.fecha), r) || vistos.has(b.conductor_id)) continue
+      vistos.add(b.conductor_id)
+      const tope = sumarDias(b.fecha, 1)
+      const ultima = (porConductor.get(b.conductor_id) ?? [])
+        .filter(f => (fecha(f.fecha_inicio) ?? '') <= tope)
+        .sort((x, y) => String(y.fecha_inicio).localeCompare(String(x.fecha_inicio)))[0]
+      if (!ultima) continue
+      const fin = fecha(ultima.fecha_fin)
+      if (fin && fin < sumarDias(b.fecha, -DIAS_TOLERANCIA_BAJA)) continue
+      const horarioAuto = String(ultima.asignaciones?.horario || '').toLowerCase()
+      const turno = String(ultima.horario || '').toLowerCase()
+      if (horarioAuto === 'turno') {
+        t.porBajas++
+        if (turno === 'nocturno') t.bajasNocturno++
+        else t.bajasDiurno++
+      } else {
+        t.porBajas += 2
+        t.bajasACargo++
+      }
+    }
+    for (const v of nuevos) {
+      if (!enRango(fechaART(v.created_at), r)) continue
+      t.vehiculosNuevos++
+      t.porVehiculosNuevos += 2
+      if (asignados.has(v.id)) t.nuevosYaAsignados++
+    }
+    return t
+  }
+  return { actual: calcular(actual), anterior: calcular(anterior) }
+}
+
 // ───────────── Multas y excesos de km ─────────────
 
 export async function cargarMultas(filtroSede: FiltroSede, actual: Rango, anterior: Rango): Promise<IndicadoresMultas> {
   const desde = anterior.desde < actual.desde ? anterior.desde : actual.desde
   const [multas, excesos] = await Promise.all([
-    leerTodo<{ fecha_infraccion: string | null; importe: unknown; conductor_responsable: string | null }>(
+    // Por FECHA DE CARGA (created_at), como el módulo Multas: las multas llegan semanas
+    // después de la infracción, así que por fecha de infracción la semana en curso
+    // siempre daba 0. Así se ven las que entraron en el período.
+    leerTodo<{ created_at: string | null; importe: unknown; conductor_responsable: string | null }>(
       (a, b) => filtroSede((supabase.from('multas_historico') as any)
-        .select('fecha_infraccion, importe, conductor_responsable')
+        .select('created_at, importe, conductor_responsable')
         .is('deleted_at', null)
         .is('desestimada_at', null)
-        .gte('fecha_infraccion', desde)
-        .lte('fecha_infraccion', `${actual.hasta}T23:59:59`))
+        .gte('created_at', `${desde}T00:00:00-03:00`)
+        .lte('created_at', `${actual.hasta}T23:59:59-03:00`))
         .range(a, b),
     ),
     leerTodo<{
@@ -192,7 +313,7 @@ export async function cargarMultas(filtroSede: FiltroSede, actual: Rango, anteri
     ),
   ])
 
-  const multasDe = (r: Rango) => multas.filter(x => enRango(fecha(x.fecha_infraccion), r))
+  const multasDe = (r: Rango) => multas.filter(x => enRango(fechaART(x.created_at), r))
   // Exceso de km: cuenta en la semana facturada (por el lunes de esa semana)
   const excesosDe = (r: Rango) => excesos.filter(x => {
     const p = x.periodos_facturacion
