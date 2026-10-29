@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -998,7 +998,8 @@ export function HomePage() {
           justify-content: space-between;
           gap: 10px;
           padding: 8px 12px;
-          color: var(--text-tertiary);
+          /* text-secondary: con text-tertiary el contraste no llegaba a 4.5:1 */
+          color: var(--text-secondary);
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s;
@@ -1014,7 +1015,7 @@ export function HomePage() {
 
         .nav-section-header:hover {
           background: var(--bg-secondary);
-          color: var(--text-secondary);
+          color: var(--text-primary);
         }
 
         .nav-section-title {
@@ -1282,6 +1283,40 @@ export function HomePage() {
           justify-content: center;
         }
 
+        /* Barra superior: en escritorio el botón de salir es solo texto */
+        .btn-logout-icono {
+          display: none;
+        }
+
+        /* Celular: la barra entra en una línea. La sede muestra solo su código
+           (el nombre completo queda en el aria-label y en el menú) y "Cerrar
+           sesión" queda como ícono de 40 px. */
+        @media (max-width: 600px) {
+          .topbar-acciones {
+            gap: 8px !important;
+            min-width: 0;
+          }
+          .topbar-sede-btn {
+            padding: 6px 10px !important;
+            min-height: 40px;
+          }
+          .topbar-sede-nombre {
+            display: none;
+          }
+          #root .btn-logout {
+            min-width: 40px;
+            min-height: 40px;
+            padding: 0 10px;
+            justify-content: center;
+          }
+          .btn-logout-icono {
+            display: inline-block;
+          }
+          .btn-logout-texto {
+            display: none;
+          }
+        }
+
         .sidebar-overlay {
           display: none;
           position: fixed;
@@ -1412,8 +1447,11 @@ export function HomePage() {
           .sidebar-header {
             padding: 14px 16px;
           }
+          /* La imagen del logo trae mucho margen propio: se recorta con margen
+             negativo, igual que en escritorio (con 20 px quedaba invisible). */
           .sidebar-logo-img {
-            height: 20px;
+            height: 100px;
+            margin: -32px 0;
           }
           .sidebar-logo-subtitle {
             font-size: 10px;
@@ -1705,15 +1743,18 @@ export function HomePage() {
         {/* Main Content */}
         <main className="main-content">
           <div className="topbar">
-            <button className="menu-toggle" onClick={toggleSidebar}>
+            <button className="menu-toggle" onClick={toggleSidebar} aria-label="Abrir menú">
               <Menu size={24} />
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
+            <div className="topbar-acciones" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
               {/* Selector de Sede */}
               {sedes.length > 0 && (
                 <div style={{ position: 'relative' }}>
                   <button
+                    className="topbar-sede-btn"
+                    aria-label={`Sede: ${verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sin sede')}`}
+                    aria-expanded={sedeDropdownOpen}
                     onClick={() => (puedeCambiarSede && (sedes.length > 1 || puedeVerTodasSedes)) ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
                     style={{
                       display: 'flex',
@@ -1735,7 +1776,7 @@ export function HomePage() {
                     ) : (
                       <Building2 size={16} style={{ color: 'var(--color-primary)' }} />
                     )}
-                    <span>{verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sin sede')}</span>
+                    <span className="topbar-sede-nombre">{verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sin sede')}</span>
                     {!verTodas && sedeActual?.codigo && (
                       <span style={{
                         fontSize: '10px',
@@ -1924,8 +1965,9 @@ export function HomePage() {
                 </div>
               )}
 
-              <button className="btn-logout" onClick={handleSignOut}>
-                Cerrar Sesión
+              <button className="btn-logout" onClick={handleSignOut} aria-label="Cerrar sesión" title="Cerrar sesión">
+                <LogOut size={16} className="btn-logout-icono" />
+                <span className="btn-logout-texto">Cerrar Sesión</span>
               </button>
             </div>
           </div>

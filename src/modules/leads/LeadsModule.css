@@ -252,8 +252,9 @@
     padding: 10px;
   }
 
-  /* Botones: ocultar texto, dejar solo icono */
-  .leads-btn-label {
+  /* Botones: las acciones secundarias quedan solo con ícono (tienen title y
+     aria-label); Nuevo Lead, Ver todos y Descartados conservan el texto. */
+  .leads-btn-label--sec {
     display: none;
   }
 
@@ -325,8 +326,8 @@
     font-size: 11px;
   }
 
-  /* Botones: solo iconos, mas compactos */
-  .leads-btn-label {
+  /* Botones: solo las acciones secundarias quedan con ícono */
+  .leads-btn-label--sec {
     display: none;
   }
 
