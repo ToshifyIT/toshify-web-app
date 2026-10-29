@@ -27,6 +27,9 @@ const GUIA_HOMOLOGADA: Record<string, string> = {
  */
 const GUIAS_INACTIVOS: ReadonlySet<string> = new Set(['manuel', 'marina'])
 
+/** Guías activos que se ofrecen para elegir (conductor y lead). */
+export const GUIAS_ACTIVOS: readonly string[] = ['Ali Verenzuela', 'Carla Noguera', "Eunice D'Urso"]
+
 /** false si el guía está dado de baja (ver GUIAS_INACTIVOS). */
 export function esGuiaActivo(nombre: string | null | undefined): boolean {
   return !GUIAS_INACTIVOS.has(normalizarTexto(nombre))

@@ -144,6 +144,8 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
     // Validar todos los campos obligatorios para conductores
     const camposFaltantes: string[] = []
     if (!lead.nombre_completo?.trim()) camposFaltantes.push('Nombre completo')
+    // Guía obligatorio: queda en conductores.guia (ver guias.ts)
+    if (!lead.entrevistador_asignado?.trim()) camposFaltantes.push('Guía')
     if (!lead.dni?.trim()) camposFaltantes.push('DNI')
     if (!lead.cuit?.trim()) camposFaltantes.push('CUIT')
     if (!lead.fecha_de_nacimiento) camposFaltantes.push('Fecha de nacimiento')

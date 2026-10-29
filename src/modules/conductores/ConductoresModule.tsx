@@ -1291,6 +1291,8 @@ export function ConductoresModule() {
         .from("conductores")
         .insert([
           {
+            // Guía obligatorio (se valida en el paso 1 del wizard)
+            guia: formData.guia?.replace(/\s+/g, ' ').trim() || null,
             nombres: formData.nombres?.toUpperCase(),
             apellidos: formData.apellidos?.toUpperCase(),
             numero_dni: formData.numero_dni || null,
@@ -1441,6 +1443,8 @@ export function ConductoresModule() {
     if (!formData.email?.trim()) newErrors.email = 'Requerido (usado en contratos)';
     if (!formData.direccion?.trim()) newErrors.direccion = 'Requerido (usado en contratos)';
     if (!formData.estado_id) newErrors.estado_id = 'Debe seleccionar un estado';
+    // Guía obligatorio (solo si la columna existe, ver sql/conductores_guia.sql)
+    if (formData.guia !== undefined && !formData.guia.trim()) newErrors.guia = 'Requerido';
     if (formData.referido === true && !formData.embajador_id) {
       newErrors.embajador_id = 'Seleccione el conductor embajador';
     }
@@ -1463,6 +1467,7 @@ export function ConductoresModule() {
         email: 'Email',
         direccion: 'Dirección',
         estado_id: 'Estado',
+        guia: 'Guía',
         embajador_id: 'Embajador (es referido)',
       };
       const faltantes = Object.keys(newErrors).map(k => labels[k] || k);
@@ -4878,10 +4883,10 @@ function ModalEditar({
           )}
           {formData.guia !== undefined && (
             <div className="form-group">
-              <label className="form-label">Guía</label>
+              <label className="form-label">Guía *</label>
               <input
                 type="text"
-                className="form-input"
+                className={`form-input ${editErrors.guia ? 'input-error' : ''}`}
                 list="conductor-guias"
                 value={formData.guia}
                 onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
