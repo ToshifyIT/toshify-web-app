@@ -1702,6 +1702,14 @@
   background: var(--bg-tertiary);
 }
 
+/* «Seleccionar todas» arriba de las opciones del filtro */
+.dt-filter-option-todas {
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-primary);
+  border-radius: 4px 4px 0 0;
+  margin-bottom: 4px;
+}
+
 .dt-filter-option input[type="checkbox"] {
   width: 16px;
   height: 16px;

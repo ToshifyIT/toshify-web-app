@@ -36,6 +36,8 @@
  */
 
 import express from 'express'
+import { google } from 'googleapis'
+import { Readable } from 'node:stream'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -49,12 +51,13 @@ const PARALELO_ALEGRA = 4
 const MAX_POR_LOTE = 10
 const MAX_FILAS_EXCEL = 3000
 // Datos de Alegra (plan de cuentas, proveedores, facturas, notas): se reusan este tiempo
-const CACHE_ALEGRA_MS = 2 * 60 * 1000
+const CACHE_ALEGRA_MS = 15 * 60 * 1000
 const TOLERANCIA = 0.05
 
 const EMPRESAS = {
-  '44dreams': { label: '44 Dreams', submenu: 'alegra-compras-44dreams', env: '44DREAMS' },
-  grupocg: { label: 'Grupo CG', submenu: 'alegra-compras-grupocg', env: 'GRUPOCG' },
+  // drive: carpeta de facturas de proveedor (se puede cambiar con ALEGRA_<EMP>_DRIVE_FOLDER_ID)
+  '44dreams': { label: '44 Dreams', submenu: 'alegra-compras-44dreams', env: '44DREAMS', drive: '1bbCv1-l8qi4tr23b_znckedtpL2_4uCz' },
+  grupocg: { label: 'Grupo CG', submenu: 'alegra-compras-grupocg', env: 'GRUPOCG', drive: '' },
 }
 
 /** Numeración de notas débito de 44 Dreams usada en octubre, si no se encuentra por nombre */
@@ -75,7 +78,9 @@ const DIR_PROVISORIA = { province: 'Buenos Aires', city: '[POR CONFIRMAR]', addr
 /* -------------------------------------------------------------------------- */
 
 const CLAVES_ENV = [
-  ...Object.values(EMPRESAS).flatMap(({ env }) => [`ALEGRA_${env}_EMAIL`, `ALEGRA_${env}_TOKEN`]),
+  ...Object.values(EMPRESAS).flatMap(({ env }) => [`ALEGRA_${env}_EMAIL`, `ALEGRA_${env}_TOKEN`, `ALEGRA_${env}_DRIVE_FOLDER_ID`]),
+  'GOOGLE_SERVICE_ACCOUNT_EMAIL',
+  'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'VITE_SUPABASE_URL',
   'VITE_SUPABASE_ANON_KEY',
@@ -295,6 +300,22 @@ function resumenNota(d) {
   }
 }
 
+/** Plan de cuentas: una sola llamada a Alegra, guardada 1 hora (para el desplegable) */
+const cacheCuentas = new Map() // empresa -> { en, categorias }
+async function cuentasAlegra(empresa, cred) {
+  const c = cacheCuentas.get(empresa)
+  if (c && Date.now() - c.en < 60 * 60 * 1000) return c.categorias
+  const base = cacheAlegra.get(empresa)
+  if (base && Date.now() - base.en < CACHE_ALEGRA_MS) return base.datos.categorias
+  const r = await alegra(cred, '/categories?format=plain')
+  if (!r.ok) throw new Error(errorAlegra(r))
+  const categorias = (Array.isArray(r.data) ? r.data : [])
+    .filter((x) => x.status !== 'inactive' && x.use === 'movement')
+    .map((x) => ({ id: String(x.id), nombre: x.name, tipo: x.type, codigo: x.code ? String(x.code) : null }))
+  cacheCuentas.set(empresa, { en: Date.now(), categorias })
+  return categorias
+}
+
 const cacheAlegra = new Map() // empresa -> { en, datos }
 const pendientesAlegra = new Map()
 
@@ -302,12 +323,20 @@ const pendientesAlegra = new Map()
  * Lo que hace falta de Alegra: plan de cuentas, impuestos IVA/EXENTO, proveedores
  * por CUIT, facturas de proveedor, notas débito y numeración de notas débito.
  */
-async function leerBaseAlegra(empresa, cred) {
+async function leerBaseAlegra(empresa, cred, { forzar = false } = {}) {
+  const cfg = config()
+  // Proveedores: de la tabla alegra_proveedores (rápido). Se releen de Alegra (y se
+  // actualiza la tabla) solo con «Revisar en Alegra» o si la tabla está vacía.
+  const leerContactos = async () => {
+    let filas = forzar ? [] : await selectTodo(cfg, `alegra_proveedores?empresa=eq.${empresa}&select=alegra_id,cuit,nombre`)
+    if (filas.length === 0) filas = await sincronizarProveedores(cfg, empresa, cred, { devolver: true })
+    return filas.map((f) => ({ id: f.alegra_id, name: f.nombre, identification: f.cuit }))
+  }
   const [rCat, rTax, rNum, contactos, bills, notas] = await Promise.all([
     alegra(cred, '/categories?format=plain'),
     alegra(cred, '/taxes'),
     alegra(cred, '/number-templates'),
-    alegraTodo(cred, '/contacts', { type: 'provider', mode: 'simple' }),
+    leerContactos(),
     alegraTodo(cred, '/bills'),
     alegraTodo(cred, '/debit-notes'),
   ])
@@ -390,7 +419,7 @@ async function datosAlegra(empresa, cred, { forzar = false } = {}) {
   const c = cacheAlegra.get(empresa)
   if (!forzar && c && Date.now() - c.en < CACHE_ALEGRA_MS) return c.datos
   if (pendientesAlegra.has(empresa)) return pendientesAlegra.get(empresa)
-  const p = leerBaseAlegra(empresa, cred).finally(() => pendientesAlegra.delete(empresa))
+  const p = leerBaseAlegra(empresa, cred, { forzar }).finally(() => pendientesAlegra.delete(empresa))
   pendientesAlegra.set(empresa, p)
   return p
 }
@@ -642,7 +671,7 @@ function evaluar(c, alg, ultimaCuentaPorCuit) {
   else if (c.otros_tributos) revisar = 'Tiene percepciones (Otros Tributos): cargar a mano'
   else if (c.no_gravado) revisar = 'Tiene neto no gravado: cargar a mano'
   else if (!cuenta) {
-    revisar = c.cuenta_excel ? `No existe en Alegra la cuenta «${c.cuenta_excel}»` : 'Falta la cuenta contable'
+    revisar = c.cuenta_excel ? `No existe en Alegra la cuenta «${c.cuenta_excel}»` : 'Elegí la cuenta contable (proveedor sin facturas anteriores en Alegra)'
   } else {
     const armado = armarLineas(c, alg, cuenta.id)
     if (armado.motivo) revisar = armado.motivo
@@ -675,7 +704,7 @@ const nombreComprobante = (c) => {
 /* Autenticación y permisos                                                   */
 /* -------------------------------------------------------------------------- */
 
-async function requireUsuario(req, res, empresa, accion = 'view') {
+async function requireUsuario(req, res, empresa, accion = 'view', submenuPropio = null) {
   const cfg = config()
   if (!cfg.url || !cfg.anonKey || !cfg.serviceKey) {
     res.status(500).json({ error: 'Configuración del servidor incompleta (Supabase)' })
@@ -713,7 +742,7 @@ async function requireUsuario(req, res, empresa, accion = 'view') {
       body: JSON.stringify({ p_user_id: user.id }),
     })
     const filas = r.ok ? await r.json() : []
-    const submenu = EMPRESAS[empresa].submenu
+    const submenu = submenuPropio || EMPRESAS[empresa].submenu
     const permiso = (Array.isArray(filas) ? filas : []).find(
       (f) => !f.is_menu && (f.menu_name === submenu || f.submenu_name === submenu),
     )
@@ -749,7 +778,8 @@ const COLUMNAS = [
   'moneda', 'tipo_cambio', 'neto_gravado', 'iva', 'no_gravado', 'exentas', 'otros_tributos', 'total', 'raw',
   'cuenta_excel', 'alegra_categoria_id', 'alegra_categoria_nombre', 'estado', 'revisar', 'alegra_tipo', 'alegra_id',
   'alegra_numero', 'alegra_total', 'alegra_proveedor_id', 'proveedor_creado', 'alegra_factura_asociada',
-  'alegra_detalle', 'alegra_error', 'cargado_en',
+  'alegra_detalle', 'alegra_error', 'cargado_en', 'confirmado', 'confirmado_en',
+  'drive_archivo_id', 'drive_nombre', 'drive_ruta', 'drive_link',
 ].join(',')
 
 /** Última cuenta usada por CUIT en lo que ya cargó este módulo */
@@ -870,6 +900,21 @@ async function comprobantesDe(cfg, empresa, importacionId) {
     `&select=${COLUMNAS}&order=fecha.asc,fila.asc`)
 }
 
+const MES_RE = /^\d{4}-(0[1-9]|1[0-2])$/
+function rangoMes(mes) {
+  const [a, m] = mes.split('-').map(Number)
+  const sig = m === 12 ? `${a + 1}-01` : `${a}-${pad(m + 1, 2)}`
+  return { desde: `${mes}-01`, hasta: `${sig}-01` }
+}
+
+/** Comprobantes de un mes (por fecha del comprobante), sin importar de qué Excel vinieron */
+async function comprobantesDelMes(cfg, empresa, mes) {
+  const { desde, hasta } = rangoMes(mes)
+  return selectTodo(cfg,
+    `alegra_comprobantes?empresa=eq.${empresa}&fecha=gte.${desde}&fecha=lt.${hasta}` +
+    `&select=${COLUMNAS}&order=fecha.asc,proveedor.asc,numero.asc`)
+}
+
 /* -------------------------------------------------------------------------- */
 /* Carga en Alegra                                                            */
 /* -------------------------------------------------------------------------- */
@@ -969,6 +1014,8 @@ async function cargarUno(ctx, empresa, cred, alg, c) {
     await actualizarComprobante(ctx.cfg, c.id, { revisar: ev.revisar })
     return { ok: false, error: ev.revisar }
   }
+  if (!c.confirmado) return { ok: false, error: 'Falta confirmar que la factura se recibió' }
+  if (!prov) return { ok: false, error: 'El proveedor no existe en Alegra: crealo primero (botón «Crear proveedor»)' }
 
   const info = TIPOS[c.tipo_cod]
   const { lineas } = armarLineas(c, alg, ev.cuenta.id)
@@ -1059,11 +1106,217 @@ async function cargarUno(ctx, empresa, cred, alg, c) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Facturas en Google Drive                                                   */
+/* -------------------------------------------------------------------------- */
+
+function carpetaDrive(empresa) {
+  const { env, drive } = EMPRESAS[empresa]
+  return (process.env[`ALEGRA_${env}_DRIVE_FOLDER_ID`] || drive || '').trim()
+}
+
+function driveLectura() {
+  return driveCon('https://www.googleapis.com/auth/drive.readonly')
+}
+
+/** Lectura y escritura (subir facturas a carpetas que no creó la cuenta de servicio) */
+function driveEscritura() {
+  return driveCon('https://www.googleapis.com/auth/drive')
+}
+
+function driveCon(scope) {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+  const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  if (!clientEmail || !privateKey) throw new Error('Faltan las credenciales de Google (GOOGLE_SERVICE_ACCOUNT_*) en el .env')
+  const auth = new google.auth.GoogleAuth({
+    credentials: { client_email: clientEmail, private_key: privateKey },
+    scopes: [scope],
+  })
+  return google.drive({ version: 'v3', auth })
+}
+
+const CARPETA_MIME = 'application/vnd.google-apps.folder'
+
+/** Todos los archivos de la carpeta y sus subcarpetas: { id, nombre, ruta, link } */
+async function listarDrive(drive, raiz, carpetas = null) {
+  const archivos = []
+  const pendientes = [{ id: raiz, ruta: '' }]
+  while (pendientes.length > 0) {
+    const { id, ruta } = pendientes.shift()
+    let pageToken
+    do {
+      const r = await drive.files.list({
+        q: `'${id}' in parents and trashed = false`,
+        fields: 'nextPageToken, files(id, name, mimeType, webViewLink)',
+        pageSize: 1000,
+        pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      })
+      for (const f of r.data.files || []) {
+        if (f.mimeType === CARPETA_MIME) {
+          const sub = ruta ? `${ruta}/${f.name}` : f.name
+          pendientes.push({ id: f.id, ruta: sub })
+          carpetas?.push({ id: f.id, ruta: sub })
+        }
+        else archivos.push({ id: f.id, nombre: f.name, ruta, link: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view` })
+      }
+      pageToken = r.data.nextPageToken
+    } while (pageToken)
+  }
+  return archivos
+}
+
+// No son la factura: pagos, recibos, resúmenes, remitos, anuladas
+const NO_ES_FACTURA = /\b(pago|recibo|resumen|remito|anulada)\b/i
+// "00001-00000240", "0002-00002612", "00002_00000181", "3-3" no (el número va con 8 dígitos)
+const NUMERO_EN_NOMBRE = /(\d{1,5})\s*[-_ ]+\s*(\d{8})(?!\d)/g
+
+function numerosDelArchivo(nombre) {
+  const sinExt = nombre.replace(/\.[a-z0-9]{2,4}$/i, '')
+  const out = []
+  for (const m of sinExt.matchAll(NUMERO_EN_NOMBRE)) out.push(`${Number(m[1])}-${Number(m[2])}`)
+  return out
+}
+
+/** Palabras del proveedor que sirven para reconocerlo en el nombre o la carpeta */
+function palabrasProveedor(nombre) {
+  const genericas = new Set(['sa', 'srl', 'sas', 'sociedad', 'anonima', 'inversiones', 'representaciones', 'de', 'la', 'el', 'y', 's', 'a', 'r', 'l'])
+  return normalizar(nombre).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter((w) => w.length >= 3 && !genericas.has(w))
+}
+
+/**
+ * Busca la factura de cada comprobante en el Drive por el número (punto de venta +
+ * número) del nombre del archivo. Si el mismo número aparece en archivos de varios
+ * proveedores, se usa el que tiene el nombre del proveedor o su CUIT.
+ */
+function buscarEnArchivos(comprobantes, archivos) {
+  const porNumero = new Map()
+  for (const a of archivos) {
+    if (NO_ES_FACTURA.test(a.nombre)) continue
+    for (const k of numerosDelArchivo(a.nombre)) {
+      if (!porNumero.has(k)) porNumero.set(k, [])
+      porNumero.get(k).push(a)
+    }
+  }
+  const resultado = new Map()
+  for (const c of comprobantes) {
+    const cands = porNumero.get(`${c.punto_venta}-${c.numero}`) || []
+    if (cands.length === 0) continue
+    const texto = (a) => normalizar(`${a.ruta} ${a.nombre}`)
+    const palabras = palabrasProveedor(c.proveedor)
+    const conProveedor = cands.filter((a) => a.nombre.includes(c.cuit) || palabras.some((w) => texto(a).includes(w)))
+    const elegido = conProveedor[0] || (cands.length === 1 ? cands[0] : null)
+    if (elegido) resultado.set(c.id, elegido)
+  }
+  return resultado
+}
+
+/* ------------------------- Adjuntar la factura ---------------------------- */
+
+const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+const RE_MES_NUM = /^\d{2}\.\d{4}$/                   // 10.2026
+const RE_MES_TXT = /^(.*\s-\s)(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)$/i // Facturas 44 - Octubre
+
+/** Carpeta del mes del comprobante, con el mismo estilo que la carpeta de referencia */
+function rutaDelMes(rutaRef, fecha, carpetas) {
+  const [anio, mes] = String(fecha).split('-')
+  const segs = rutaRef ? rutaRef.split('/') : []
+  const ultimo = segs[segs.length - 1] || ''
+  if (RE_MES_NUM.test(ultimo)) return [...segs.slice(0, -1), `${mes}.${anio}`].join('/')
+  const m = RE_MES_TXT.exec(ultimo)
+  if (m) return [...segs.slice(0, -1), `${m[1]}${MESES_ES[Number(mes) - 1]}`].join('/')
+  // Carpeta del proveedor: si adentro usa subcarpetas por mes, la del mes
+  const hijas = carpetas.filter((c) => c.ruta.startsWith(`${rutaRef}/`) && !c.ruta.slice(rutaRef.length + 1).includes('/'))
+  const nombres = hijas.map((c) => c.ruta.split('/').pop())
+  if (nombres.some((n) => RE_MES_NUM.test(n))) return `${rutaRef}/${mes}.${anio}`
+  const txt = nombres.map((n) => RE_MES_TXT.exec(n)).find(Boolean)
+  if (txt) return `${rutaRef}/${txt[1]}${MESES_ES[Number(mes) - 1]}`
+  return rutaRef
+}
+
+/** "MJ MOTOR S.R.L." -> "Mj Motor" (como se nombran los archivos hoy) */
+function nombreCorto(proveedor) {
+  const sinSociedad = String(proveedor || '')
+    .replace(/\b(s\.?\s?r\.?\s?l\.?|s\.?\s?a\.?\s?s\.?|s\.?\s?a\.?|sociedad an[oó]nima)\s*$/i, '')
+    .replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim()
+  return sinSociedad.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) || 'Proveedor'
+}
+
+function nombreArchivo(c, extension) {
+  const tipo = TIPOS[c.tipo_cod]?.clase === 'nc' ? 'NC' : 'FC'
+  return `${nombreCorto(c.proveedor)} - ${pad(c.punto_venta, 5)}-${pad(c.numero, 8)} - ${tipo}${extension}`
+}
+
+/**
+ * Carpeta propuesta para la factura de un comprobante:
+ * 1) donde está la última factura de ese CUIT (vinculada o adjuntada antes), en el mes del comprobante;
+ * 2) una carpeta cuyo nombre tenga el nombre del proveedor;
+ * 3) si no hay, una nueva: "<Proveedor>/<MM.AAAA>".
+ */
+async function carpetaSugerida(cfg, empresa, c, carpetas) {
+  const previas = await selectTodo(cfg,
+    `alegra_comprobantes?empresa=eq.${empresa}&cuit=eq.${c.cuit}&drive_ruta=not.is.null&select=drive_ruta,fecha&order=fecha.desc&limit=1`)
+  if (previas[0]?.drive_ruta) return { ruta: rutaDelMes(previas[0].drive_ruta, c.fecha, carpetas), origen: 'anterior' }
+  const palabras = palabrasProveedor(c.proveedor)
+  const porNombre = carpetas
+    .filter((x) => palabras.some((w) => normalizar(x.ruta.split('/').pop()).includes(w)))
+    .sort((a, b) => a.ruta.split('/').length - b.ruta.split('/').length)[0]
+  if (porNombre) return { ruta: rutaDelMes(porNombre.ruta, c.fecha, carpetas), origen: 'nombre' }
+  const [anio, mes] = String(c.fecha).split('-')
+  return { ruta: `${nombreCorto(c.proveedor).toUpperCase()}/${mes}.${anio}`, origen: 'nueva' }
+}
+
+/** Id de la carpeta de esa ruta; crea las que falten */
+async function asegurarRuta(drive, raiz, ruta, carpetas) {
+  let padre = raiz
+  let actual = ''
+  for (const seg of ruta.split('/').filter(Boolean)) {
+    actual = actual ? `${actual}/${seg}` : seg
+    const existe = carpetas.find((x) => normalizar(x.ruta) === normalizar(actual))
+    if (existe) {
+      padre = existe.id
+      continue
+    }
+    const r = await drive.files.create({
+      requestBody: { name: seg, mimeType: CARPETA_MIME, parents: [padre] },
+      fields: 'id',
+      supportsAllDrives: true,
+    })
+    carpetas.push({ id: r.data.id, ruta: actual })
+    padre = r.data.id
+  }
+  return padre
+}
+
+const cacheDrive = new Map() // empresa -> { en, archivos, carpetas }
+async function contenidoDrive(empresa, { forzar = false } = {}) {
+  const c = cacheDrive.get(empresa)
+  if (!forzar && c && Date.now() - c.en < 5 * 60 * 1000) return c
+  const carpetas = []
+  const archivos = await listarDrive(driveLectura(), carpetaDrive(empresa), carpetas)
+  const datos = { en: Date.now(), archivos, carpetas }
+  cacheDrive.set(empresa, datos)
+  return datos
+}
+
+function errorDrive(err) {
+  const msg = String(err?.message || err)
+  if (/storage quota|storageQuotaExceeded/i.test(msg)) {
+    return 'La cuenta de servicio no puede guardar archivos en esa carpeta (sin espacio propio). Hay que usar una unidad compartida de Google Drive.'
+  }
+  if (/not found|insufficient|permission|forbidden|404|403/i.test(msg)) {
+    return `No tengo acceso a la carpeta de Drive. Compartila como EDITOR con ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || 'la cuenta de servicio de Toshibase'}`
+  }
+  return `Drive: ${msg}`
+}
+
+/* -------------------------------------------------------------------------- */
 /* Rutas                                                                      */
 /* -------------------------------------------------------------------------- */
 
 export const alegraRouter = express()
-alegraRouter.use(express.json({ limit: '5mb' }))
+// 20 mb: el Excel de ARCA y las facturas adjuntas (PDF/imagen en base64)
+alegraRouter.use(express.json({ limit: '20mb' }))
 
 function manejar(nombre, fn) {
   return async (req, res) => {
@@ -1076,6 +1329,182 @@ function manejar(nombre, fn) {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Proveedores (Integraciones > Alegra > Proveedores)                         */
+/* -------------------------------------------------------------------------- */
+// Alegra es la fuente: «Actualizar desde Alegra» trae todos los proveedores a
+// alegra_proveedores; al editar o crear desde Toshibase se guarda primero en
+// Alegra y después en la tabla. nombre_comercial y dias_pago son solo de Toshibase.
+
+const SUBMENU_PROVEEDORES = 'alegra-proveedores'
+const CONDICIONES_IVA = ['IVA_RESPONSABLE', 'UNIQUE_TRIBUTE_RESPONSABLE', 'IVA_EXEMPT', 'FINAL_CONSUMER', 'IVA_NO_RESPONSABLE']
+const COLUMNAS_PROV = [
+  'id', 'empresa', 'alegra_id', 'cuit', 'nombre', 'nombre_comercial', 'iva_condicion', 'email', 'telefono',
+  'celular', 'provincia', 'ciudad', 'domicilio', 'codigo_postal', 'dias_pago', 'observaciones', 'sincronizado_en', 'updated_at',
+].join(',')
+
+/** Contacto de Alegra -> fila de alegra_proveedores (sin los datos propios de Toshibase) */
+function aProveedor(empresa, ct) {
+  const dir = ct.address || {}
+  return {
+    empresa,
+    alegra_id: String(ct.id),
+    cuit: soloDigitos(ct.identificationObject?.number ?? ct.identification) || null,
+    nombre: ct.name || '',
+    iva_condicion: ct.ivaCondition || null,
+    email: ct.email || null,
+    telefono: ct.phonePrimary || null,
+    celular: ct.mobile || null,
+    provincia: dir.province || dir.department || null,
+    ciudad: dir.city || null,
+    domicilio: dir.address || null,
+    codigo_postal: dir.postalCode || dir.zipCode || null,
+    observaciones: ct.observations || null,
+    sincronizado_en: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+}
+
+async function sincronizarProveedores(cfg, empresa, cred, { devolver = false } = {}) {
+  const contactos = await alegraTodo(cred, '/contacts', { type: 'provider' })
+  const filas = contactos
+    .filter((ct) => (Array.isArray(ct.type) ? ct.type.includes('provider') : String(ct.type || '').includes('provider')))
+    .filter((ct) => ct.status !== 'inactive')
+    .map((ct) => aProveedor(empresa, ct))
+  for (let i = 0; i < filas.length; i += 500) {
+    await insertar(cfg, 'alegra_proveedores', filas.slice(i, i + 500), { onConflict: 'empresa,alegra_id' })
+  }
+  return devolver ? filas : filas.length
+}
+
+/** Cuerpo de Alegra a partir del formulario */
+function cuerpoContacto(d, { nuevo }) {
+  const body = {
+    name: d.nombre,
+    ivaCondition: d.iva_condicion,
+    email: d.email || '',
+    phonePrimary: d.telefono || '',
+    mobile: d.celular || '',
+    address: {
+      province: d.provincia || DIR_PROVISORIA.province,
+      city: d.ciudad || DIR_PROVISORIA.city,
+      address: d.domicilio || DIR_PROVISORIA.address,
+      ...(d.codigo_postal ? { postalCode: d.codigo_postal } : {}),
+    },
+    observations: d.observaciones || '',
+  }
+  if (nuevo) {
+    body.identificationObject = { type: 'CUIT', number: d.cuit }
+    body.type = ['provider']
+  }
+  if (!body.email) delete body.email
+  return body
+}
+
+function validarProveedor(d) {
+  if (!d.nombre || String(d.nombre).trim().length < 2) return 'Falta el nombre o razón social'
+  if (soloDigitos(d.cuit).length !== 11) return 'El CUIT debe tener 11 dígitos'
+  if (!CONDICIONES_IVA.includes(d.iva_condicion)) return 'Elegí la condición de IVA'
+  if (d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email)) return 'El email no es válido'
+  if (d.dias_pago !== null && d.dias_pago !== undefined && d.dias_pago !== '' && !(Number(d.dias_pago) >= 0)) return 'Días de pago inválidos'
+  return null
+}
+
+/**
+ * Crea o edita el proveedor en Alegra y lo guarda en alegra_proveedores.
+ * Si se crea y ya existía ese CUIT en Alegra, se usa el existente (y se le aplican los datos).
+ */
+async function guardarProveedor(ctx, empresa, cred, datos) {
+  const d = {
+    ...datos,
+    nombre: String(datos.nombre || '').trim(),
+    cuit: soloDigitos(datos.cuit),
+    email: String(datos.email || '').trim() || null,
+  }
+  const error = validarProveedor(d)
+  if (error) throw Object.assign(new Error(error), { status: 400 })
+
+  let alegraId = d.alegra_id ? String(d.alegra_id) : null
+  if (!alegraId) {
+    const r = await alegra(cred, `/contacts?${new URLSearchParams({ identification: d.cuit, limit: '30' })}`)
+    const existe = (Array.isArray(r.data) ? r.data : [])
+      .find((ct) => soloDigitos(ct.identificationObject?.number ?? ct.identification) === d.cuit)
+    if (existe) alegraId = String(existe.id)
+  }
+  const r = alegraId
+    ? await alegra(cred, `/contacts/${alegraId}`, { method: 'PUT', body: cuerpoContacto(d, { nuevo: false }) })
+    : await alegra(cred, '/contacts', { method: 'POST', body: cuerpoContacto(d, { nuevo: true }) })
+  if (!r.ok || !r.data?.id) throw Object.assign(new Error(errorAlegra(r)), { status: 400 })
+
+  const fila = {
+    ...aProveedor(empresa, r.data),
+    nombre_comercial: String(d.nombre_comercial || '').trim() || null,
+    dias_pago: d.dias_pago === '' || d.dias_pago === null || d.dias_pago === undefined ? null : Math.trunc(Number(d.dias_pago)),
+  }
+  const [guardado] = await insertar(ctx.cfg, 'alegra_proveedores', [fila], { onConflict: 'empresa,alegra_id', devolver: true })
+
+  // Comprobantes de ese CUIT y caché de Alegra
+  await fetchConTimeout(
+    `${ctx.cfg.url}/rest/v1/alegra_comprobantes?empresa=eq.${empresa}&cuit=eq.${fila.cuit}&estado=in.(pendiente,error)`,
+    {
+      method: 'PATCH',
+      headers: { ...headersServicio(ctx.cfg), Prefer: 'return=minimal' },
+      body: JSON.stringify({ alegra_proveedor_id: fila.alegra_id, updated_at: new Date().toISOString() }),
+    },
+  )
+  cacheAlegra.get(empresa)?.datos.porCuit.set(fila.cuit, { id: fila.alegra_id, nombre: fila.nombre })
+  return { proveedor: guardado ?? fila, creado: !alegraId }
+}
+
+/** GET /api/alegra/proveedores/:empresa -> desde la base */
+alegraRouter.get('/proveedores/:empresa', manejar('proveedores', async (req, res) => {
+  const empresa = leerEmpresa(req, res)
+  if (!empresa) return
+  const ctx = await requireUsuario(req, res, empresa, 'view', SUBMENU_PROVEEDORES)
+  if (!ctx) return
+  const filas = await selectTodo(ctx.cfg, `alegra_proveedores?empresa=eq.${empresa}&select=${COLUMNAS_PROV}&order=nombre.asc`)
+  res.json({
+    empresa,
+    empresa_label: EMPRESAS[empresa].label,
+    filas,
+    puede_editar: ctx.puedeEditar,
+    alegra_configurado: credAlegra(empresa).ok,
+    sincronizado_en: filas.reduce((m, f) => (f.sincronizado_en > m ? f.sincronizado_en : m), '') || null,
+  })
+}))
+
+/** POST /api/alegra/proveedores/:empresa/sincronizar -> trae todos los proveedores de Alegra */
+alegraRouter.post('/proveedores/:empresa/sincronizar', manejar('proveedores-sync', async (req, res) => {
+  const empresa = leerEmpresa(req, res)
+  if (!empresa) return
+  const ctx = await requireUsuario(req, res, empresa, 'view', SUBMENU_PROVEEDORES)
+  if (!ctx) return
+  const cred = credAlegra(empresa)
+  if (!cred.ok) return res.status(400).json({ error: `Falta el token de Alegra de ${EMPRESAS[empresa].label}` })
+  res.json({ proveedores: await sincronizarProveedores(ctx.cfg, empresa, cred) })
+}))
+
+async function rutaGuardarProveedor(req, res, submenu) {
+  const empresa = leerEmpresa(req, res)
+  if (!empresa) return
+  const ctx = await requireUsuario(req, res, empresa, 'edit', submenu)
+  if (!ctx) return
+  const cred = credAlegra(empresa)
+  if (!cred.ok) return res.status(400).json({ error: `Falta el token de Alegra de ${EMPRESAS[empresa].label}` })
+  try {
+    res.json(await guardarProveedor(ctx, empresa, cred, req.body || {}))
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message })
+  }
+}
+
+/** POST /api/alegra/proveedores/:empresa/guardar -> crear/editar desde el submódulo Proveedores */
+alegraRouter.post('/proveedores/:empresa/guardar', manejar('proveedores-guardar', (req, res) =>
+  rutaGuardarProveedor(req, res, SUBMENU_PROVEEDORES)))
+
+/** POST /api/alegra/:empresa/proveedor -> crear el proveedor desde un comprobante */
+alegraRouter.post('/:empresa/proveedor', manejar('proveedor', (req, res) => rutaGuardarProveedor(req, res, null)))
+
 /** GET /api/alegra/:empresa/importaciones -> Excel subidos (el último primero) */
 alegraRouter.get('/:empresa/importaciones', manejar('importaciones', async (req, res) => {
   const empresa = leerEmpresa(req, res)
@@ -1085,24 +1514,27 @@ alegraRouter.get('/:empresa/importaciones', manejar('importaciones', async (req,
   const importaciones = await selectTodo(ctx.cfg,
     `alegra_importaciones?empresa=eq.${empresa}&select=id,archivo,comprobantes,columna_cuenta,desde,hasta,created_at` +
     '&order=created_at.desc')
+  const [ultimo] = await selectTodo(ctx.cfg,
+    `alegra_comprobantes?empresa=eq.${empresa}&fecha=not.is.null&select=fecha&order=fecha.desc&limit=1`)
   res.json({
     empresa,
     empresa_label: EMPRESAS[empresa].label,
+    ultimo_mes: ultimo?.fecha ? String(ultimo.fecha).slice(0, 7) : null,
     importaciones,
     puede_editar: ctx.puedeEditar,
     alegra_configurado: credAlegra(empresa).ok,
   })
 }))
 
-/** GET /api/alegra/:empresa/comprobantes?importacion=ID -> de la base (rápido) */
+/** GET /api/alegra/:empresa/comprobantes?mes=AAAA-MM -> de la base (rápido) */
 alegraRouter.get('/:empresa/comprobantes', manejar('comprobantes', async (req, res) => {
   const empresa = leerEmpresa(req, res)
   if (!empresa) return
   const ctx = await requireUsuario(req, res, empresa, 'view')
   if (!ctx) return
-  const importacion = String(req.query.importacion || '')
-  if (!UUID_RE.test(importacion)) return res.status(400).json({ error: 'Importación inválida' })
-  const filas = await comprobantesDe(ctx.cfg, empresa, importacion)
+  const mes = String(req.query.mes || '')
+  if (!MES_RE.test(mes)) return res.status(400).json({ error: 'Mes inválido (AAAA-MM)' })
+  const filas = await comprobantesDelMes(ctx.cfg, empresa, mes)
   res.json({ filas: filas.map(({ raw, ...f }) => ({ ...f, netos: raw?._netos ?? {} })) })
 }))
 
@@ -1114,8 +1546,8 @@ alegraRouter.get('/:empresa/cuentas', manejar('cuentas', async (req, res) => {
   if (!ctx) return
   const cred = credAlegra(empresa)
   if (!cred.ok) return res.status(400).json({ error: `Falta el token de Alegra de ${EMPRESAS[empresa].label} en el .env del servidor` })
-  const alg = await datosAlegra(empresa, cred)
-  res.json({ categorias: alg.categorias.map(({ id, nombre, tipo }) => ({ id, nombre, tipo })) })
+  const categorias = await cuentasAlegra(empresa, cred)
+  res.json({ categorias: categorias.map(({ id, nombre, tipo }) => ({ id, nombre, tipo })) })
 }))
 
 /**
@@ -1208,6 +1640,7 @@ alegraRouter.post('/:empresa/importar', manejar('importar', async (req, res) => 
 
   const resultado = {
     importacion_id: imp.id,
+    meses: [...new Set(fechas.map((f) => f.slice(0, 7)))],
     comprobantes: comprobantes.length,
     nuevos: comprobantes.filter((c) => !existentes.has(`${c.cuit}|${c.tipo_cod}|${c.punto_venta}|${c.numero}`)).length,
     ya_cargados_antes: cerrados.length,
@@ -1221,7 +1654,7 @@ alegraRouter.post('/:empresa/importar', manejar('importar', async (req, res) => 
   const cred = credAlegra(empresa)
   if (cred.ok) {
     try {
-      const alg = await datosAlegra(empresa, cred, { forzar: true })
+      const alg = await datosAlegra(empresa, cred)
       resultado.revision = await revisarComprobantes(ctx, empresa, await comprobantesDe(ctx.cfg, empresa, imp.id), alg)
     } catch (err) {
       resultado.error_alegra = err.message
@@ -1230,18 +1663,18 @@ alegraRouter.post('/:empresa/importar', manejar('importar', async (req, res) => 
   res.json(resultado)
 }))
 
-/** POST /api/alegra/:empresa/revisar { importacion_id } -> relee Alegra y actualiza estados */
+/** POST /api/alegra/:empresa/revisar { mes } -> relee Alegra y actualiza estados del mes */
 alegraRouter.post('/:empresa/revisar', manejar('revisar', async (req, res) => {
   const empresa = leerEmpresa(req, res)
   if (!empresa) return
   const ctx = await requireUsuario(req, res, empresa, 'view')
   if (!ctx) return
-  const importacion = String(req.body?.importacion_id || '')
-  if (!UUID_RE.test(importacion)) return res.status(400).json({ error: 'Importación inválida' })
+  const mes = String(req.body?.mes || '')
+  if (!MES_RE.test(mes)) return res.status(400).json({ error: 'Mes inválido (AAAA-MM)' })
   const cred = credAlegra(empresa)
   if (!cred.ok) return res.status(400).json({ error: `Falta el token de Alegra de ${EMPRESAS[empresa].label} en el .env del servidor` })
   const alg = await datosAlegra(empresa, cred, { forzar: true })
-  res.json(await revisarComprobantes(ctx, empresa, await comprobantesDe(ctx.cfg, empresa, importacion), alg))
+  res.json(await revisarComprobantes(ctx, empresa, await comprobantesDelMes(ctx.cfg, empresa, mes), alg))
 }))
 
 /** POST /api/alegra/:empresa/cuenta { id, categoria_id } -> cuenta elegida a mano */
@@ -1255,18 +1688,178 @@ alegraRouter.post('/:empresa/cuenta', manejar('cuenta', async (req, res) => {
   if (!UUID_RE.test(id) || !categoriaId) return res.status(400).json({ error: 'Datos inválidos' })
   const cred = credAlegra(empresa)
   if (!cred.ok) return res.status(400).json({ error: 'Falta el token de Alegra' })
-  const alg = await datosAlegra(empresa, cred)
-  const cuenta = alg.categorias.find((x) => x.id === categoriaId)
+  const cuenta = (await cuentasAlegra(empresa, cred)).find((x) => x.id === categoriaId)
   if (!cuenta) return res.status(400).json({ error: 'La cuenta no existe en Alegra' })
   const [c] = await selectTodo(ctx.cfg, `alegra_comprobantes?id=eq.${id}&empresa=eq.${empresa}&select=${COLUMNAS}`)
   if (!c) return res.status(404).json({ error: 'Comprobante no encontrado' })
   if (c.estado === 'cargado') return res.status(400).json({ error: 'Ya está cargado en Alegra: cambiá la cuenta allá' })
   c.alegra_categoria_id = cuenta.id
-  const ev = evaluar(c, alg, new Map())
+  // Si ya se leyó Alegra se re-evalúa todo; si no, solo se saca el aviso de cuenta (rápido)
+  const base = cacheAlegra.get(empresa)
+  const revisar = base
+    ? evaluar(c, base.datos, new Map()).revisar
+    : (/cuenta/i.test(c.revisar || '') ? null : c.revisar)
   await actualizarComprobante(ctx.cfg, id, {
-    alegra_categoria_id: cuenta.id, alegra_categoria_nombre: cuenta.nombre, revisar: ev.revisar,
+    alegra_categoria_id: cuenta.id, alegra_categoria_nombre: cuenta.nombre, revisar,
   })
-  res.json({ ok: true, revisar: ev.revisar, cuenta: { id: cuenta.id, nombre: cuenta.nombre } })
+  res.json({ ok: true, revisar, cuenta: { id: cuenta.id, nombre: cuenta.nombre } })
+}))
+
+/**
+ * POST /api/alegra/:empresa/buscar-drive { mes }
+ * Busca en la carpeta de Drive la factura de cada comprobante del mes. La que se
+ * encuentra queda vinculada (link al archivo) y marcada como «Factura recibida».
+ */
+alegraRouter.post('/:empresa/buscar-drive', manejar('buscar-drive', async (req, res) => {
+  const empresa = leerEmpresa(req, res)
+  if (!empresa) return
+  const ctx = await requireUsuario(req, res, empresa, 'edit')
+  if (!ctx) return
+  const mes = String(req.body?.mes || '')
+  if (!MES_RE.test(mes)) return res.status(400).json({ error: 'Mes inválido (AAAA-MM)' })
+  const carpeta = carpetaDrive(empresa)
+  if (!carpeta) return res.status(400).json({ error: `Falta la carpeta de Drive de ${EMPRESAS[empresa].label} (ALEGRA_${EMPRESAS[empresa].env}_DRIVE_FOLDER_ID)` })
+
+  let archivos
+  try {
+    ({ archivos } = await contenidoDrive(empresa, { forzar: true }))
+  } catch (err) {
+    return res.status(400).json({ error: errorDrive(err) })
+  }
+
+  const comprobantes = (await comprobantesDelMes(ctx.cfg, empresa, mes)).filter((c) => c.estado !== 'ignorado')
+  const encontrados = buscarEnArchivos(comprobantes, archivos)
+  const ahora = new Date().toISOString()
+  let nuevos = 0
+  for (const c of comprobantes) {
+    const a = encontrados.get(c.id)
+    if (!a || c.drive_archivo_id === a.id) continue
+    nuevos += 1
+    const abierto = c.estado === 'pendiente' || c.estado === 'error'
+    await actualizarComprobante(ctx.cfg, c.id, {
+      drive_archivo_id: a.id,
+      drive_nombre: a.nombre,
+      drive_ruta: a.ruta || null,
+      drive_link: a.link,
+      ...(abierto && !c.confirmado ? { confirmado: true, confirmado_por: ctx.userId, confirmado_en: ahora } : {}),
+    })
+  }
+  res.json({
+    archivos: archivos.length,
+    comprobantes: comprobantes.length,
+    encontrados: encontrados.size,
+    nuevos,
+    sin_archivo: comprobantes.length - encontrados.size,
+  })
+}))
+
+/** GET /api/alegra/:empresa/carpeta-sugerida?id= -> dónde y con qué nombre se guardaría la factura */
+alegraRouter.get('/:empresa/carpeta-sugerida', manejar('carpeta-sugerida', async (req, res) => {
+  const empresa = leerEmpresa(req, res)
+  if (!empresa) return
+  const ctx = await requireUsuario(req, res, empresa, 'edit')
+  if (!ctx) return
+  const id = String(req.query.id || '')
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Comprobante inválido' })
+  if (!carpetaDrive(empresa)) return res.status(400).json({ error: `Falta la carpeta de Drive de ${EMPRESAS[empresa].label}` })
+  const [c] = await selectTodo(ctx.cfg, `alegra_comprobantes?id=eq.${id}&empresa=eq.${empresa}&select=${COLUMNAS}`)
+  if (!c) return res.status(404).json({ error: 'Comprobante no encontrado' })
+  let carpetas
+  try {
+    ({ carpetas } = await contenidoDrive(empresa))
+  } catch (err) {
+    return res.status(400).json({ error: errorDrive(err) })
+  }
+  const sug = await carpetaSugerida(ctx.cfg, empresa, c, carpetas)
+  res.json({
+    sugerida: sug.ruta,
+    origen: sug.origen,
+    existe: carpetas.some((x) => normalizar(x.ruta) === normalizar(sug.ruta)),
+    carpetas: carpetas.map((x) => x.ruta).sort((a, b) => a.localeCompare(b, 'es')),
+    nombre: nombreArchivo(c, '.pdf'),
+  })
+}))
+
+/**
+ * POST /api/alegra/:empresa/adjuntar { id, archivo, mime, base64, carpeta }
+ * Sube la factura a la carpeta del proveedor en Drive (crea la del mes si no existe),
+ * la vincula al comprobante y lo marca como «Factura recibida».
+ */
+alegraRouter.post('/:empresa/adjuntar', manejar('adjuntar', async (req, res) => {
+  const empresa = leerEmpresa(req, res)
+  if (!empresa) return
+  const ctx = await requireUsuario(req, res, empresa, 'edit')
+  if (!ctx) return
+  const { id, archivo, mime, base64, carpeta } = req.body || {}
+  if (!UUID_RE.test(String(id || '')) || !base64 || !carpeta) return res.status(400).json({ error: 'Datos inválidos' })
+  const raiz = carpetaDrive(empresa)
+  if (!raiz) return res.status(400).json({ error: `Falta la carpeta de Drive de ${EMPRESAS[empresa].label}` })
+  const [c] = await selectTodo(ctx.cfg, `alegra_comprobantes?id=eq.${id}&empresa=eq.${empresa}&select=${COLUMNAS}`)
+  if (!c) return res.status(404).json({ error: 'Comprobante no encontrado' })
+
+  const buffer = Buffer.from(String(base64), 'base64')
+  if (buffer.length === 0) return res.status(400).json({ error: 'El archivo está vacío' })
+  const ext = (/\.[a-z0-9]{2,5}$/i.exec(String(archivo || '')) || ['.pdf'])[0].toLowerCase()
+  const ruta = String(carpeta).split('/').map((x) => x.trim()).filter(Boolean).join('/')
+  const nombre = nombreArchivo(c, ext)
+
+  let subido
+  try {
+    const drive = driveEscritura()
+    const { carpetas } = await contenidoDrive(empresa)
+    const padre = await asegurarRuta(drive, raiz, ruta, carpetas)
+    const r = await drive.files.create({
+      requestBody: { name: nombre, parents: [padre] },
+      media: { mimeType: String(mime || 'application/pdf'), body: Readable.from(buffer) },
+      fields: 'id, name, webViewLink',
+      supportsAllDrives: true,
+    })
+    subido = r.data
+  } catch (err) {
+    return res.status(400).json({ error: errorDrive(err) })
+  }
+  cacheDrive.delete(empresa)
+
+  const ahora = new Date().toISOString()
+  const abierto = c.estado === 'pendiente' || c.estado === 'error'
+  const cambios = {
+    drive_archivo_id: subido.id,
+    drive_nombre: subido.name || nombre,
+    drive_ruta: ruta,
+    drive_link: subido.webViewLink || `https://drive.google.com/file/d/${subido.id}/view`,
+    ...(abierto ? { confirmado: true, confirmado_por: ctx.userId, confirmado_en: ahora } : {}),
+  }
+  await actualizarComprobante(ctx.cfg, c.id, cambios)
+  res.json({ ok: true, ...cambios })
+}))
+
+/**
+ * POST /api/alegra/:empresa/confirmar { ids: [], confirmado: boolean }
+ * Marca que la factura se recibió (el documento llegó). Solo lo confirmado se puede cargar.
+ */
+alegraRouter.post('/:empresa/confirmar', manejar('confirmar', async (req, res) => {
+  const empresa = leerEmpresa(req, res)
+  if (!empresa) return
+  const ctx = await requireUsuario(req, res, empresa, 'edit')
+  if (!ctx) return
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter((x) => UUID_RE.test(x)) : []
+  if (ids.length === 0 || ids.length > 500) return res.status(400).json({ error: 'Datos inválidos' })
+  const confirmado = req.body?.confirmado !== false
+  const r = await fetchConTimeout(
+    `${ctx.cfg.url}/rest/v1/alegra_comprobantes?empresa=eq.${empresa}&id=in.(${ids.join(',')})&estado=in.(pendiente,error)`,
+    {
+      method: 'PATCH',
+      headers: { ...headersServicio(ctx.cfg), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        confirmado,
+        confirmado_por: confirmado ? ctx.userId : null,
+        confirmado_en: confirmado ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  )
+  if (!r.ok) throw new Error(`No se pudo guardar: ${(await r.text()).slice(0, 200)}`)
+  res.json({ ok: true })
 }))
 
 /** POST /api/alegra/:empresa/marcar { id, accion: 'ignorar' | 'pendiente' } */
@@ -1325,4 +1918,4 @@ alegraRouter.post('/:empresa/cargar', manejar('cargar', async (req, res) => {
 }))
 
 // Exportado para pruebas
-export const _internos = { mapearColumnas, aComprobante, evaluar, armarLineas, cuentaPorNombre, fechaIso, num, codigoTipo, totalLineas, facturaParaNota, existenteEnAlegra, netosPorAlicuota }
+export const _internos = { rutaDelMes, nombreCorto, nombreArchivo, buscarEnArchivos, numerosDelArchivo, mapearColumnas, aComprobante, evaluar, armarLineas, cuentaPorNombre, fechaIso, num, codigoTipo, totalLineas, facturaParaNota, existenteEnAlegra, netosPorAlicuota }

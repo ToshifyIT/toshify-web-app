@@ -86,3 +86,96 @@
     width: 100%;
   }
 }
+
+.ac-recibida {
+  display: inline-flex;
+  justify-content: center;
+  width: 100%;
+  cursor: pointer;
+}
+
+.ac-badge--esperando {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+.ac-recibida-celda {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ac-archivo {
+  white-space: nowrap;
+}
+
+.ac-moneda {
+  align-items: center;
+  text-align: center;
+}
+
+.ac-moneda--ars {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
+.ac-moneda--ext {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #ddd6fe;
+}
+
+/* Proveedores */
+.ap-stats .stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ap-empresas {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.ap-empresas button {
+  height: 40px;
+}
+
+.ap-form-fila {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ap-form .swal2-textarea {
+  width: 100%;
+  margin: 0;
+  min-height: 70px;
+  font-size: 14px;
+}
+
+.ac-crear-prov {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ac-crear-prov:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .ap-stats .stats-grid,
+  .ap-form-fila {
+    grid-template-columns: 1fr 1fr;
+  }
+}
