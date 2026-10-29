@@ -1,6 +1,7 @@
 // src/modules/leads/components/LeadWizard.tsx
 import { useState, useEffect, useRef } from 'react'
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, IdCard } from 'lucide-react'
+import { supabase } from '../../../lib/supabase'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import { ConductorAutocomplete } from '../../../components/ui/ConductorAutocomplete'
 import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
@@ -126,6 +127,79 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  // ---------- Ya es / fue conductor (por DNI) ----------
+  // Si el DNI cargado coincide con un conductor, se ofrece completar los datos
+  // del lead con los del conductor. Solo se llenan los campos VACÍOS: lo que el
+  // lead ya tiene (un teléfono o una dirección nueva) se respeta y después, al
+  // reactivar o convertir, se fusiona en el conductor.
+  const [conductorPorDni, setConductorPorDni] = useState<Record<string, any> | null>(null)
+  const [completadoDesdeConductor, setCompletadoDesdeConductor] = useState<number | null>(null)
+  useEffect(() => {
+    const dni = (formData.dni || '').replace(/\D/g, '')
+    setCompletadoDesdeConductor(null)
+    if (dni.length < 7) { setConductorPorDni(null); return }
+    let vigente = true
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('conductores')
+        .select('*')
+        .eq('numero_dni', dni)
+        .limit(1)
+      const c = ((data as Record<string, any>[] | null) || [])[0] ?? null
+      if (c?.estado_id) {
+        const { data: est } = await supabase
+          .from('conductores_estados').select('codigo, descripcion').eq('id', c.estado_id).maybeSingle()
+        c.conductores_estados = est ?? null
+      }
+      if (vigente) setConductorPorDni(c)
+    }, 400)
+    return () => { vigente = false; clearTimeout(t) }
+  }, [formData.dni])
+
+  function completarDesdeConductor() {
+    const c = conductorPorDni
+    if (!c) return
+    const nacionalidad = nacionalidades.find(n => n.id === c.nacionalidad_id)?.descripcion
+    const estadoCivil = estadosCiviles.find(e => e.id === c.estado_civil_id)?.descripcion
+    const fechaNac = c.fecha_nacimiento ? String(c.fecha_nacimiento).slice(0, 10) : ''
+    const candidatos: Partial<LeadFormData> = {
+      nombre_completo: `${c.nombres || ''} ${c.apellidos || ''}`.trim().toUpperCase(),
+      cuit: c.numero_cuit || '',
+      fecha_de_nacimiento: fechaNac,
+      edad: fechaNac ? calcularEdad(fechaNac) : undefined,
+      nacionalidad: nacionalidad || '',
+      estado_civil: estadoCivil || '',
+      phone: c.telefono_contacto || '',
+      telefono_secundario: c.telefono_secundario || '',
+      email: c.email || '',
+      direccion: c.direccion || '',
+      zona: c.zona || '',
+      latitud: typeof c.direccion_lat === 'number' ? c.direccion_lat : undefined,
+      longitud: typeof c.direccion_lng === 'number' ? c.direccion_lng : undefined,
+      numero_licencia: c.numero_licencia || '',
+      vencimiento_licencia: c.licencia_vencimiento ? String(c.licencia_vencimiento).slice(0, 10) : '',
+      cbu: c.cbu || '',
+    }
+    const next = { ...formData } as Record<string, unknown>
+    let completados = 0
+    for (const [k, v] of Object.entries(candidatos)) {
+      if (k === 'latitud' || k === 'longitud') continue
+      const actual = next[k]
+      const vacio = actual === undefined || actual === null || actual === ''
+      if (vacio && v !== undefined && v !== null && v !== '') {
+        next[k] = v
+        completados++
+      }
+    }
+    // Si la dirección vino del conductor, también su punto en el mapa
+    if (!formData.direccion && next.direccion && candidatos.latitud != null && candidatos.longitud != null) {
+      next.latitud = candidatos.latitud
+      next.longitud = candidatos.longitud
+    }
+    setFormData(next as unknown as LeadFormData)
+    setCompletadoDesdeConductor(completados)
+  }
+
   // Al salir del campo, el celular se lleva al formato +549 + area + numero.
   // Si no se puede interpretar se deja como esta y se marca el error.
   const [telefonosTocados, setTelefonosTocados] = useState<Set<'phone' | 'whatsapp_number' | 'telefono_secundario'>>(new Set())
@@ -181,6 +255,32 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
           </div>
         ))}
       </div>
+
+      {/* Ya es / fue conductor (por DNI) */}
+      {conductorPorDni && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            margin: '0 0 12px', padding: '10px 14px', borderRadius: 8,
+            background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e3a8a', fontSize: 13,
+          }}
+        >
+          <IdCard size={16} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 200 }}>
+            Este DNI {String(conductorPorDni.conductores_estados?.codigo || '').toUpperCase() === 'ACTIVO' ? 'ya es' : 'ya fue'} conductor:{' '}
+            <b>{`${conductorPorDni.nombres || ''} ${conductorPorDni.apellidos || ''}`.trim()}</b>
+            {conductorPorDni.conductores_estados?.descripcion ? ` (${conductorPorDni.conductores_estados.descripcion})` : ''}
+            {completadoDesdeConductor !== null && (
+              <span style={{ marginLeft: 6, color: '#166534' }}>
+                · {completadoDesdeConductor > 0 ? `${completadoDesdeConductor} datos completados` : 'no había datos vacíos para completar'}
+              </span>
+            )}
+          </span>
+          <button type="button" className="btn-secondary btn-sm" onClick={completarDesdeConductor}>
+            Completar datos desde conductor
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="lead-wizard-content">

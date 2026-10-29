@@ -306,6 +306,31 @@ async function cancelarFraccionamientosPorBaja(
 
 
 
+/** Guías que se ofrecen al editar (se puede escribir otro nombre, p. ej. quien convirtió el lead). */
+const GUIAS_CONDUCTOR = ['Ali Verenzuela', 'Carla Noguera', "Eunice D'Urso", 'Manuel', 'Marina']
+
+/**
+ * Guía de cada conductor (conductores.guia, sql/conductores_guia.sql). Consulta aparte y
+ * tolerante: si la columna todavía no existe, el listado carga igual (sin guía).
+ */
+async function cargarGuiasConductores(): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>()
+  try {
+    for (let desde = 0; desde < 50000; desde += 1000) {
+      const { data, error } = await (supabase.from('conductores') as any)
+        .select('id, guia')
+        .not('guia', 'is', null)
+        .range(desde, desde + 999)
+      if (error) break
+      for (const f of (data || []) as { id: string; guia: string | null }[]) if (f.guia) mapa.set(f.id, f.guia)
+      if (!data || data.length < 1000) break
+    }
+  } catch {
+    // sin columna guia: se sigue sin el dato
+  }
+  return mapa
+}
+
 export function ConductoresModule() {
   const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([]);
@@ -383,6 +408,7 @@ export function ConductoresModule() {
   const [companeroFilter, setCompaneroFilter] = useState<string[]>([]);
   const [vencimientoFilter, setVencimientoFilter] = useState<string[]>([]);
   const [telefonoFilter, setTelefonoFilter] = useState<string[]>([]);
+  const [guiaFilter, setGuiaFilter] = useState<string[]>([]);
   const [licenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
@@ -429,6 +455,7 @@ export function ConductoresModule() {
     licencia_tipo_id: "",
     telefono_contacto: "",
     telefono_secundario: undefined as string | undefined,
+    guia: undefined as string | undefined,
     email: "",
     direccion: "",
     direccion_lat: null as number | null,
@@ -864,9 +891,16 @@ export function ConductoresModule() {
         onClear: () => setTelefonoFilter([])
       });
     }
+    if (guiaFilter.length > 0) {
+      filters.push({
+        id: 'guia',
+        label: `Guía: ${guiaFilter.length === 1 ? guiaFilter[0] : `${guiaFilter.length} seleccionados`}`,
+        onClear: () => setGuiaFilter([])
+      });
+    }
 
     return filters;
-  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter, companeroFilter, vencimientoFilter, telefonoFilter]);
+  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter, companeroFilter, vencimientoFilter, telefonoFilter, guiaFilter]);
 
   const handleClearAllFilters = () => {
     setActiveStatCard(null);
@@ -883,6 +917,7 @@ export function ConductoresModule() {
     setCompaneroFilter([]);
     setVencimientoFilter([]);
     setTelefonoFilter([]);
+    setGuiaFilter([]);
   };
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
@@ -994,6 +1029,7 @@ export function ConductoresModule() {
       if (!conductoresRes.data || conductoresRes.data.length === 0) {
         setConductores([]);
       } else {
+        const guiasMap = await cargarGuiasConductores();
         const conductoresConRelaciones = conductoresRes.data.map((conductor: any) => {
           const relaciones: any = { ...conductor };
 
@@ -1011,6 +1047,8 @@ export function ConductoresModule() {
 
           // Sin asignación activa no hay turno que compartir: 'na'.
           relaciones.companero_estado = companeroMap.get(conductor.id) || 'na';
+
+          relaciones.guia = guiasMap.get(conductor.id) || null;
 
           // Agregar metadatos para búsqueda global
           const estadoCodigo = relaciones.conductores_estados?.codigo?.toLowerCase();
@@ -1157,6 +1195,7 @@ export function ConductoresModule() {
       if (!conductoresRes.data || conductoresRes.data.length === 0) {
         setConductores([]);
       } else {
+        const guiasMap = await cargarGuiasConductores();
         const conductoresConRelaciones = conductoresRes.data.map((conductor: any) => {
           const relaciones: any = { ...conductor };
 
@@ -1172,6 +1211,8 @@ export function ConductoresModule() {
 
           // Sin asignación activa no hay turno que compartir: 'na'.
           relaciones.companero_estado = companeroMap.get(conductor.id) || 'na';
+
+          relaciones.guia = guiasMap.get(conductor.id) || null;
 
           return relaciones;
         });
@@ -1860,6 +1901,8 @@ export function ConductoresModule() {
         telefono_contacto: formData.telefono_contacto || null,
         // Solo si la columna existe (se cargó al abrir la edición): vacío = se borra
         ...(formData.telefono_secundario !== undefined ? { telefono_secundario: formData.telefono_secundario.trim() || null } : {}),
+        // Guía (sql/conductores_guia.sql): solo si la columna existe; vacío = se borra
+        ...(formData.guia !== undefined ? { guia: formData.guia.replace(/\s+/g, ' ').trim() || null } : {}),
         email: formData.email || null,
         direccion: formData.direccion || null,
         direccion_lat: formData.direccion_lat,
@@ -2521,6 +2564,7 @@ export function ConductoresModule() {
       licencia_tipo_id: fc.licencia_tipo_id || "",
       telefono_contacto: fc.telefono_contacto || "",
       telefono_secundario: "telefono_secundario" in fc ? ((fc as any).telefono_secundario || "") : undefined,
+      guia: "guia" in fc ? ((fc as any).guia || "") : undefined,
       email: fc.email || "",
       direccion: fc.direccion || "",
       direccion_lat: fc.direccion_lat || null,
@@ -2769,6 +2813,7 @@ export function ConductoresModule() {
       licencia_tipo_id: "",
       telefono_contacto: "",
       telefono_secundario: undefined,
+      guia: undefined,
       email: "",
       direccion: "",
       direccion_lat: null,
@@ -2932,6 +2977,9 @@ export function ConductoresModule() {
         // 'na' cubre tanto vehículo a cargo como conductor sin asignación activa.
         if (!companeroSet.has((c as any).companero_estado || 'na')) return false
       }
+      if (guiaFilter.length > 0) {
+        if (!guiaFilter.includes((c as any).guia || 'Sin guía')) return false
+      }
       if (telefonoFilter.length > 0) {
         if (!telefonoFilter.includes((c as any).telefono_contacto || '')) return false
       }
@@ -2986,7 +3034,7 @@ export function ConductoresModule() {
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, vencimientoFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, guiaFilter, vencimientoFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -3001,6 +3049,12 @@ export function ConductoresModule() {
 
     return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [conductores]);
+
+  const uniqueGuias = useMemo(() => {
+    const guias = new Set<string>()
+    conductores.forEach(c => guias.add((c as any).guia || 'Sin guía'))
+    return Array.from(guias).sort((a, b) => (a === 'Sin guía' ? 1 : b === 'Sin guía' ? -1 : a.localeCompare(b, 'es')))
+  }, [conductores])
 
   const uniqueTelefonos = useMemo(() => {
     const tels = new Set<string>()
@@ -3098,6 +3152,7 @@ export function ConductoresModule() {
           "Estado Licencia": d.licencias_estados?.descripcion || "",
           "Tipo Licencia": d.licencias_tipos?.descripcion || "",
           "Teléfono": c.telefono_contacto || "",
+          "Guía": (c as any).guia || "",
           "Email": d.email || "",
           "Dirección": d.direccion || "",
           "Contacto Emergencia": d.contacto_emergencia || "",
@@ -3377,6 +3432,23 @@ export function ConductoresModule() {
             selectedValues={telefonoFilter}
             onSelectionChange={setTelefonoFilter}
             filterId="telefono"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
+        cell: ({ getValue }) => (getValue() as string) || "-",
+        enableSorting: true,
+      },
+      {
+        id: "guia",
+        accessorFn: (row) => (row as any).guia || "",
+        header: () => (
+          <ExcelColumnFilter
+            label="Guía"
+            options={uniqueGuias}
+            selectedValues={guiaFilter}
+            onSelectionChange={setGuiaFilter}
+            filterId="guia"
             openFilterId={openColumnFilter}
             onOpenChange={setOpenColumnFilter}
           />
@@ -3719,7 +3791,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, uniqueTelefonos, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, uniqueTelefonos, guiaFilter, uniqueGuias, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
   );
 
   return (
@@ -4804,6 +4876,23 @@ function ModalEditar({
               />
             </div>
           )}
+          {formData.guia !== undefined && (
+            <div className="form-group">
+              <label className="form-label">Guía</label>
+              <input
+                type="text"
+                className="form-input"
+                list="conductor-guias"
+                value={formData.guia}
+                onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
+                placeholder="Guía del lead o quien lo convirtió"
+                disabled={saving}
+              />
+              <datalist id="conductor-guias">
+                {GUIAS_CONDUCTOR.map(g => <option key={g} value={g} />)}
+              </datalist>
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Email *</label>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -5716,6 +5805,12 @@ function ModalDetalles({
               {selectedConductor.telefono_contacto || "N/A"}
             </div>
           </div>
+          {(selectedConductor as any).guia ? (
+            <div>
+              <label className="detail-label">Guía</label>
+              <div className="detail-value">{(selectedConductor as any).guia}</div>
+            </div>
+          ) : null}
           {(selectedConductor as any).telefono_secundario ? (
             <div>
               <label className="detail-label">Teléfono secundario</label>

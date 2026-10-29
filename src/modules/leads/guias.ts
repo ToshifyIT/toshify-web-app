@@ -38,3 +38,19 @@ export function homologarGuia(valor: string | null | undefined): string | null {
   if (!limpio) return null
   return GUIA_HOMOLOGADA[normalizarTexto(limpio)] ?? limpio
 }
+
+/** Guías válidos para el conductor (primer nombre, sin acentos). */
+const GUIAS_CONDUCTOR: ReadonlySet<string> = new Set(['ali', 'manuel', 'marina', 'carla', 'eunice'])
+
+/**
+ * Guía que queda en conductores.guia al convertir un lead: el guía del lead
+ * (leads.entrevistador_asignado) si es Ali, Manuel, Marina, Carla o Eunice; si no
+ * tiene o es otro valor, el usuario que hizo la conversión.
+ * Mismo criterio que sql/conductores_guia.sql (carga de los conductores que ya existen).
+ */
+export function guiaParaConductor(guiaLead: string | null | undefined, usuarioConversion: string | null | undefined): string | null {
+  const guia = homologarGuia(guiaLead)
+  if (guia && GUIAS_CONDUCTOR.has(normalizarTexto(guia).split(' ')[0])) return guia
+  const usuario = (usuarioConversion || '').replace(/\s+/g, ' ').trim()
+  return usuario && normalizarTexto(usuario) !== 'sistema' ? usuario : null
+}

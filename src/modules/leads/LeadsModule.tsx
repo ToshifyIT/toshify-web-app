@@ -13,7 +13,7 @@ import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Layers, Link2,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard,
+  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -855,7 +855,7 @@ export function LeadsModule() {
         aplicarFiltroSede(
           (supabase.from('leads') as any)
             .select('*', contar ? { count: 'exact' } : undefined)
-            .or('proceso.is.null,proceso.neq.Convertido')
+            .or('proceso.is.null,proceso.not.in.(Convertido,Reingreso,"Ya era conductor")')
             .order('created_at', { ascending: false })
             .order('id', { ascending: true }),
           'sede_id'
@@ -1272,7 +1272,7 @@ export function LeadsModule() {
         const { data, error } = await supabase
           .from('leads')
           .select('id, sede, sede_id, fuente_de_lead, turno, estado_de_lead, zona, direccion, city, region')
-          .or('proceso.is.null,proceso.neq.Convertido')
+          .or('proceso.is.null,proceso.not.in.(Convertido,Reingreso,"Ya era conductor")')
           .order('id', { ascending: true })
           .range(from, from + PAGE_SYNC - 1)
         if (error) throw error
@@ -1503,7 +1503,7 @@ export function LeadsModule() {
   /** Leads con los filtros propios del módulo (columnas y fechas), SIN la tarjeta activa. */
   const leadsBase = useMemo(() => {
     // Ocultar leads "Conductor" siempre (ya no son leads)
-    let result = leads.filter(l => l.estado_de_lead !== 'Conductor')
+    let result = leads.filter(l => l.estado_de_lead !== 'Conductor' && l.estado_de_lead !== 'Reingreso')
 
     // Column filters
     if (nombreFilter.length > 0) {
@@ -1819,7 +1819,7 @@ export function LeadsModule() {
             <p style="margin:4px 0;"><strong>Email:</strong> ${ce.email || '-'}</p>
             <p style="margin:4px 0;"><strong>Dirección:</strong> ${ce.direccion || '-'}</p>
           </div>
-          <p style="margin-top:12px; font-size:13px; color:#6B7280;">Solo se completarán los campos vacíos del conductor con los datos del lead.</p>
+          <p style="margin-top:12px; font-size:13px; color:#6B7280;">Solo se completarán los campos vacíos del conductor con los datos del lead. Si estaba de baja se reactiva y el lead queda como «Reingreso» (no cuenta como conversión).</p>
         `,
         showConfirmButton: false,
         allowOutsideClick: false,
@@ -1852,7 +1852,7 @@ export function LeadsModule() {
 
     setSaving(true)
     try {
-      await convertirLeadAConductor({
+      const res = await convertirLeadAConductor({
         lead,
         catalogos: { estadosLicencia, tiposLicencia, nacionalidades, estadosCiviles, categoriasLicencia },
         usuario: profile?.full_name || 'Sistema',
@@ -1861,15 +1861,69 @@ export function LeadsModule() {
       })
 
       if (esFusion) Swal.close()
-      const msgExito = esFusion
-        ? `El lead "${nombre}" fue fusionado con el conductor existente.`
-        : `El lead "${nombre}" fue convertido a conductor exitosamente.`
-      showSuccess(esFusion ? 'Fusionado' : 'Convertido', msgExito)
+      const msgExito = !esFusion
+        ? `El lead "${nombre}" fue convertido a conductor exitosamente.`
+        : res.reactivado
+          ? `El conductor fue reactivado (ACTIVO) y el lead "${nombre}" quedó como Reingreso.`
+          : `El lead "${nombre}" ya era un conductor activo: se completaron sus datos.`
+      showSuccess(!esFusion ? 'Convertido' : res.reactivado ? 'Reingreso' : 'Ya era conductor', msgExito)
       loadLeads()
     } catch (err) {
       if (esFusion) Swal.close()
       const msg = err instanceof Error ? err.message : 'No se pudo convertir el lead a conductor'
       Swal.fire('Error', msg, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ---------- REACTIVAR CONDUCTOR (el lead ya fue conductor) ----------
+  //
+  // Usa el conductor que detectó el indicador «Ya fue conductor» (por DNI,
+  // teléfono o nombre). No crea un conductor nuevo: completa los datos vacíos,
+  // lo pasa a ACTIVO con fecha de reincorporación y deja el lead como
+  // «Reingreso», que no suma como conversión de marketing.
+  async function handleReactivar(lead: Lead, previo: CoincidenciaConductor) {
+    const { data: conductor, error: errC } = await supabase
+      .from('conductores').select('*').eq('id', previo.conductor.id).maybeSingle()
+    if (errC || !conductor) {
+      Swal.fire('Error', 'No se encontró el conductor', 'error')
+      return
+    }
+    const c = conductor as Record<string, unknown>
+    const esc = (t: unknown) => String(t ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const r = await Swal.fire({
+      icon: 'question',
+      title: 'Reactivar conductor',
+      html: `
+        <div style="text-align:left; padding:12px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px;">
+          <p style="margin:4px 0;"><strong>Conductor:</strong> ${esc(`${c.nombres ?? ''} ${c.apellidos ?? ''}`.trim())}</p>
+          <p style="margin:4px 0;"><strong>DNI:</strong> ${esc(c.numero_dni)}</p>
+          <p style="margin:4px 0;"><strong>Estado actual:</strong> ${esc(previo.estado)}</p>
+          ${c.fecha_terminacion ? `<p style="margin:4px 0;"><strong>Baja:</strong> ${esc(String(c.fecha_terminacion).slice(0, 10).split('-').reverse().join('/'))}${c.motivo_baja ? ` · ${esc(c.motivo_baja)}` : ''}</p>` : ''}
+        </div>
+        <p style="margin-top:12px; font-size:13px;">Pasa a <b>ACTIVO</b> con fecha de reincorporación de hoy. Se completan los datos que le falten con los del lead.</p>
+        <p style="margin-top:8px; font-size:13px; color:#92400e;">El lead queda como «Reingreso»: no cuenta como conversión de marketing.</p>
+`,
+      showCancelButton: true,
+      confirmButtonText: 'Reactivar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+    })
+    if (!r.isConfirmed) return
+    setSaving(true)
+    try {
+      await convertirLeadAConductor({
+        lead,
+        catalogos: { estadosLicencia, tiposLicencia, nacionalidades, estadosCiviles, categoriasLicencia },
+        usuario: profile?.full_name || 'Sistema',
+        sedeFallbackId: sedeActual?.id,
+        conductorExistente: c,
+      })
+      showSuccess('Conductor reactivado', `${lead.nombre_completo || 'El lead'} quedó como Reingreso`)
+      loadLeads()
+    } catch (err) {
+      Swal.fire('Error', err instanceof Error ? err.message : 'No se pudo reactivar', 'error')
     } finally {
       setSaving(false)
     }
@@ -3148,7 +3202,13 @@ export function LeadsModule() {
           variant: tieneFolder ? 'success' : undefined,
           disabled: !tieneFolder,
         })
-        if (canEdit && lead.proceso !== 'Convertido') {
+        const previo = leadsConductorPrevio.get(lead.id)
+        // Reactivar solo con coincidencia por DNI (por teléfono o nombre no hay certeza
+        // de que sea la misma persona: en ese caso queda «Convertir a Conductor»)
+        if (canEdit && lead.proceso !== 'Convertido' && previo && previo.por === 'DNI' && !previo.activo) {
+          // Ya fue conductor y está de baja: no es una conversión, es un reingreso
+          actions.push({ label: 'Reactivar conductor', icon: <UserCheck size={15} />, onClick: () => handleReactivar(lead, previo), variant: 'success' })
+        } else if (canEdit && lead.proceso !== 'Convertido') {
           actions.push({ label: 'Convertir a Conductor', icon: <UserPlus size={15} />, onClick: () => handleConvertir(lead), variant: 'success' })
         }
         if (canDelete) {

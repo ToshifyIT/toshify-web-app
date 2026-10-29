@@ -5,6 +5,7 @@
 // - Conductores: altas, bajas, neto, licencias, deuda y multas; motivos de baja por
 //   tema y conductores con más multas.
 // - Ventas: embudo del período (get_dashboard_marketing, como Dashboard Marketing).
+// - Conductores también muestra los turnos que quedaron libres (por bajas y autos nuevos).
 // - Vehículos: estado de la flota hoy (misma clasificación que el módulo Vehículos).
 // (2026-10-28: se quitaron por ahora Multas y km, Siniestros y Garantías y deuda.)
 // Todo se pide una vez al abrir la pantalla y queda en memoria unos minutos.
@@ -14,13 +15,13 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Eye } from 'lucide-react'
 import type { Diferencia, Motivo, Periodo } from './kpisV2Types'
 import type { MarketingRaw } from '../marketing/marketingTypes'
-import type { IndicadoresConductores, IndicadoresMultas, IndicadoresVehiculos, Rango, Ranking } from './indicadoresModulosService'
+import type { IndicadoresConductores, IndicadoresMultas, IndicadoresTurnos, IndicadoresVehiculos, Rango, Ranking } from './indicadoresModulosService'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useDashboardStats } from '../../../hooks/useDashboardStats'
 import { embudoDe } from '../marketing/marketingTypes'
 import { DetalleBajasModal } from './DetalleBajasModal'
-import { cargarConductores, cargarMultas, cargarVehiculos } from './indicadoresModulosService'
+import { cargarConductores, cargarMultas, cargarTurnosGenerados, cargarVehiculos } from './indicadoresModulosService'
 import {
   INICIO_DATOS, difPuntos, difRelativa, difUnidades, fechaCorta, fmtInt, fmtMonedaCorta, fmtPct, sumarDias,
 } from './kpisV2Types'
@@ -230,14 +231,24 @@ function ListaRanking({ titulo, unidad, filas }: { titulo: string; unidad: strin
   )
 }
 
-function Conductores({ periodo, anterior, general, carga, multas }: {
+function Conductores({ periodo, anterior, general, carga, multas, turnos }: {
   periodo: Periodo
   anterior: Periodo | null
   general: Motivo[]
   carga: Carga<IndicadoresConductores>
   multas: Carga<IndicadoresMultas>
+  turnos: Carga<IndicadoresTurnos>
 }) {
   const m = multas.data
+  const t = turnos.data
+  const sinDato = turnos.error ? '—' : '…'
+  const detalleBajas = t
+    ? [
+        t.actual.bajasDiurno ? `${fmtInt(t.actual.bajasDiurno)} D` : '',
+        t.actual.bajasNocturno ? `${fmtInt(t.actual.bajasNocturno)} N` : '',
+        t.actual.bajasACargo ? `${fmtInt(t.actual.bajasACargo)} ${t.actual.bajasACargo === 1 ? 'auto' : 'autos'} a cargo (2 c/u)` : '',
+      ].filter(Boolean).join(' · ') || 'Sin bajas con auto en el período'
+    : undefined
   const [verBajas, setVerBajas] = useState(false)
   const c = periodo.conductores
   const a = anterior?.conductores ?? null
@@ -257,15 +268,10 @@ function Conductores({ periodo, anterior, general, carga, multas }: {
       detalle: extra ? `vencidas · ${fmtInt(extra.licenciasPorVencer)} vencen en 30 días` : 'Conductores activos',
     },
     {
-      label: 'ACTIVOS CON DEUDA',
-      value: extra ? fmtInt(extra.activosConDeuda) : '…',
-      detalle: extra ? `${fmtMonedaCorta(extra.deudaActivos)} adeudados` : undefined,
-    },
-    {
       label: 'MULTAS',
       value: m ? fmtInt(m.actual.cantidad) : multas.error ? '—' : '…',
       dif: m ? alReves(difUnidades(m.actual.cantidad, m.anterior.cantidad)) : null,
-      detalle: m ? `${fmtMonedaCorta(m.actual.monto)} · por fecha de infracción` : undefined,
+      detalle: m ? `${fmtMonedaCorta(m.actual.monto)} · cargadas en el período` : undefined,
     },
     {
       label: 'CONDUCTORES CON MULTAS',
@@ -273,6 +279,26 @@ function Conductores({ periodo, anterior, general, carga, multas }: {
       detalle: m && m.actual.conductores
         ? `${(m.actual.cantidad / m.actual.conductores).toLocaleString('es-AR', { maximumFractionDigits: 1 })} multas por conductor`
         : undefined,
+    },
+    {
+      label: 'TURNOS LIBERADOS POR BAJAS',
+      value: t ? fmtInt(t.actual.porBajas) : sinDato,
+      dif: t ? alReves(difUnidades(t.actual.porBajas, t.anterior.porBajas)) : null,
+      detalle: detalleBajas,
+    },
+    {
+      label: 'TURNOS POR VEHÍCULOS NUEVOS',
+      value: t ? fmtInt(t.actual.porVehiculosNuevos) : sinDato,
+      dif: t ? difUnidades(t.actual.porVehiculosNuevos, t.anterior.porVehiculosNuevos) : null,
+      detalle: t
+        ? `${fmtInt(t.actual.vehiculosNuevos)} ${t.actual.vehiculosNuevos === 1 ? 'auto nuevo' : 'autos nuevos'} · ${fmtInt(t.actual.nuevosYaAsignados)} ya asignados`
+        : undefined,
+    },
+    {
+      label: 'TURNOS GENERADOS',
+      value: t ? fmtInt(t.actual.porBajas + t.actual.porVehiculosNuevos) : sinDato,
+      dif: t ? difUnidades(t.actual.porBajas + t.actual.porVehiculosNuevos, t.anterior.porBajas + t.anterior.porVehiculosNuevos) : null,
+      detalle: 'Bajas + vehículos nuevos',
     },
   ]
   return (
@@ -295,7 +321,7 @@ function Conductores({ periodo, anterior, general, carga, multas }: {
         <ListaRanking titulo={`Conductores con más multas · ${periodo.labelLargo}`} unidad="" filas={m?.topMultas ?? []} />
       </div>
       <Pie
-        nota={`Altas, bajas y multas: ${periodo.labelLargo} contra el período anterior. Licencias y deuda: hoy.`}
+        nota={`Altas, bajas, multas y turnos: ${periodo.labelLargo} contra el período anterior. Licencias: hoy.`}
         ruta="/conductores"
       />
       {verBajas ? <DetalleBajasModal periodo={periodo} onClose={() => setVerBajas(false)} /> : null}
@@ -352,7 +378,7 @@ function Vehiculos({ v, turnosLibres }: { v: IndicadoresVehiculos; turnosLibres:
 
 /** Subtítulo de cada módulo en la vista completa (Dashboard General). */
 const DESCRIPCION: Record<Pestana, string> = {
-  conductores: 'Altas, bajas, licencias, deuda, multas y por qué se van los conductores.',
+  conductores: 'Altas, bajas, licencias, multas, turnos que quedaron libres y por qué se van los conductores.',
   ventas: 'Embudo de leads del período, como en Dashboard Marketing.',
   vehiculos: 'Estado de la flota hoy.',
 }
@@ -392,12 +418,13 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
   const conductores = useCarga(`conductores|${sede}|${hoy}`, () => cargarConductores(filtroSede, hoy), 'No se pudieron cargar los datos de conductores.')
   const vehiculos = useCarga(`vehiculos|${sede}`, () => cargarVehiculos(filtroSede), 'No se pudieron cargar los vehículos.')
   const multas = useCarga(`multas|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}`, () => cargarMultas(filtroSede, actual, previo), 'No se pudieron cargar las multas.')
+  const turnos = useCarga(`turnos|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}`, () => cargarTurnosGenerados(filtroSede, actual, previo), 'No se pudieron calcular los turnos generados.')
   const foto = useDashboardStats()
   const stats = foto.stats
 
   const contenidoDe = (pestana: Pestana): ReactNode => {
     if (pestana === 'conductores') {
-      return <Conductores periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} multas={multas} />
+      return <Conductores periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} multas={multas} turnos={turnos} />
     }
     if (pestana === 'ventas') return usarCarga(ventas, d => <Ventas periodo={periodo} data={d} />)
     return usarCarga(vehiculos, v => <Vehiculos v={v} turnosLibres={stats?.turnosDisponibles.value ?? null} />)
