@@ -46,6 +46,10 @@
 --   Conversión = conductores nuevos / leads del período.
 --   FUERA DE RANGO: recibieron su primer auto en el período pero su lead es anterior:
 --   se informan aparte porque no corresponden a la pauta del rango filtrado.
+-- REINGRESOS (pedido 2026-10-29): leads creados en el período de personas que YA
+--   habían sido conductores (primer auto ANTES del lead), confirmado SOLO por DNI,
+--   y que volvieron a recibir auto después de entrar como lead. No son conductores
+--   nuevos (no suman en la conversión): se informan aparte.
 --
 -- PERFIL DEL LEAD (solo leads que llegaron a "Propuesta enviada" o más: antes de
 -- esa etapa el chatbot todavía no preguntó licencia, monotributo ni experiencia):
@@ -266,6 +270,14 @@ primer_turno AS (
   JOIN cond_base cb ON cb.id = t.id
   ORDER BY t.id, t.fecha
 ),
+-- Asignaciones por DNI (para los reingresos: auto recibido después del lead)
+turnos_dni AS (
+  SELECT cb.dni, array_agg(DISTINCT t.fecha ORDER BY t.fecha) AS fechas
+  FROM turnos t
+  JOIN cond_base cb ON cb.id = t.id
+  WHERE length(cb.dni) >= 7
+  GROUP BY cb.dni
+),
 -- Primer auto por DNI (una persona puede tener más de un registro de conductor)
 primer_auto_dni AS (
   SELECT DISTINCT ON (dni) dni, fecha AS primer_turno, horario, zona_ficha
@@ -307,6 +319,12 @@ leads_v AS (
     (ln.dni <> '' AND pad.primer_turno IS NOT NULL AND pad.primer_turno >= ln.ingreso
       AND ROW_NUMBER() OVER (PARTITION BY r.rango, ln.dni ORDER BY ln.created_at DESC) = 1) AS con_auto,
     pad.primer_turno, pad.horario AS horario_auto, pad.zona_ficha,
+    -- Reingreso: ya era conductor (primer auto ANTES del lead, solo por DNI) y volvió a
+    -- recibir auto después de entrar como lead. Una vez por persona (su último lead).
+    (length(ln.dni) >= 7 AND pad.primer_turno IS NOT NULL AND pad.primer_turno < ln.ingreso
+      AND ra.fecha IS NOT NULL
+      AND ROW_NUMBER() OVER (PARTITION BY r.rango, ln.dni ORDER BY ln.created_at DESC) = 1) AS reingreso,
+    ra.fecha AS fecha_reingreso,
     -- Calificable: llegó a la propuesta (el chatbot ya preguntó licencia, monotributo y experiencia)
     (COALESCE(ln.nivel_estado, 0) >= 1.3 OR ln.convertido
       OR (ln.descartado AND (ln.tiene_licencia OR ln.tiene_monotributo OR ln.tiene_experiencia OR ln.sin_licencia OR ln.sin_experiencia))) AS calificable,
@@ -335,6 +353,10 @@ leads_v AS (
   FROM leads_n ln
   JOIN rangos r ON ln.ingreso BETWEEN r.desde AND r.hasta
   LEFT JOIN primer_auto_dni pad ON pad.dni = ln.dni
+  LEFT JOIN turnos_dni td ON td.dni = ln.dni AND pad.primer_turno < ln.ingreso
+  LEFT JOIN LATERAL (
+    SELECT MIN(f) AS fecha FROM unnest(td.fechas) f WHERE f >= ln.ingreso
+  ) ra ON true
 ),
 leads_act AS (
   SELECT * FROM leads_v WHERE rango = 'actual'
@@ -560,6 +582,18 @@ SELECT jsonb_build_object(
     'fuera_de_rango', (
       SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'cantidad', cantidad) ORDER BY cantidad DESC, segmento), '[]'::jsonb)
       FROM (SELECT segmento, COUNT(*) AS cantidad FROM fuera_de_rango GROUP BY segmento) x
+    ),
+    -- Ya fueron conductores (por DNI) y volvieron a recibir auto después del lead
+    'reingresos', jsonb_build_object(
+      'total', (SELECT COUNT(*) FROM leads_act WHERE reingreso),
+      'total_anterior', (SELECT COUNT(*) FROM leads_v WHERE rango = 'anterior' AND reingreso),
+      'detalle', (
+        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'segmento', segmento, 'canal', canal, 'anuncio', id_fuente, 'nombre', nombre,
+          'dni', dni, 'ingreso', ingreso, 'primer_auto', primer_turno, 'reingreso', fecha_reingreso)
+          ORDER BY fecha_reingreso DESC, nombre), '[]'::jsonb)
+        FROM leads_act WHERE reingreso
+      )
     )
   )
 )

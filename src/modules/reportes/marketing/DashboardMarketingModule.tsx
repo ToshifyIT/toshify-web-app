@@ -575,6 +575,7 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
   const a = embudoDe(d, 'actual', filtro)
   const b = embudoDe(d, 'anterior', filtro)
   const fueraDeRango = sumarPorSegmento(n.fuera_de_rango, filtro, f => f.cantidad)
+  const reingresos = (n.reingresos?.detalle ?? []).filter(x => enSegmento(x.segmento, filtro))
   const porZona = new Map<string, number>()
   for (const z of n.por_zona) if (enSegmento(z.segmento, filtro)) porZona.set(z.zona, (porZona.get(z.zona) || 0) + z.cantidad)
   const zonas = [...porZona.entries()].sort((x, y) => y[1] - x[1])
@@ -607,8 +608,8 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
   })()
   return (
     <Card
-      title="Conductores nuevos"
-      subtitle="Leads creados en el período que ya recibieron su primer auto"
+      title="Conductores nuevos y reingresos"
+      subtitle="Leads creados en el período que ya recibieron su primer auto, y los que ya habían sido conductores y volvieron"
       info="Se cuentan por la fecha de creación del lead, igual que el resto del dashboard: así corresponden a la pauta del período filtrado. Los leads más recientes todavía pueden recibir auto más adelante. Zona de su domicilio: la de su ficha de conductor. Turno: el de su primer auto."
     >
       <div className="ddir-mini-grid">
@@ -617,6 +618,16 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
           <span className="ddir-mini-value">{fmtInt(a.nuevos)}</span>
           {v ? <span className={`ddir-kpi-var ddir-kpi-var--${v.tono}`}>{v.texto}</span> : null}
         </div>
+        {n.reingresos ? (
+          <div className="ddir-mini" title="Ya habían sido conductores (confirmado por DNI) y volvieron a recibir auto después de entrar como lead. No suman como conductores nuevos.">
+            <span className="ddir-mini-label">Reingresos</span>
+            <span className="ddir-mini-value">{fmtInt(reingresos.length)}</span>
+            {filtro === 'Todos' && n.reingresos.total_anterior !== undefined ? (() => {
+              const vr = variacion(n.reingresos!.total, n.reingresos!.total_anterior, 'num', true)
+              return vr ? <span className={`ddir-kpi-var ddir-kpi-var--${vr.tono}`}>{vr.texto}</span> : null
+            })() : null}
+          </div>
+        ) : null}
         <div className="ddir-mini">
           <span className="ddir-mini-label">Días de lead a primer auto (mediana)</span>
           <span className="ddir-mini-value">{mediana === null ? '—' : fmtInt(Math.round(mediana))}</span>
@@ -694,6 +705,37 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
                 </ul>
               </details>
             ))}
+          </div>
+        </>
+      ) : null}
+      {reingresos.length > 0 ? (
+        <>
+          <span className="ddir-causales-title mkt-nuevos-titulo">Reingresos (ya fueron conductores · confirmado por DNI)</span>
+          <div className="mkt-anuncios-grupos">
+            <details className="mkt-anuncio-grupo">
+              <summary>
+                <span className="mkt-anuncio-cab">
+                  <span>Volvieron a recibir auto después de entrar como lead</span>
+                </span>
+                <span className="mkt-anuncio-n">
+                  {fmtInt(reingresos.length)} {reingresos.length === 1 ? 'conductor' : 'conductores'}
+                </span>
+              </summary>
+              <ul className="mkt-anuncio-lista">
+                {reingresos.map((c, i) => (
+                  <li key={`${c.dni}-${i}`}>
+                    <span>
+                      {c.nombre || 'Sin nombre'}
+                      {c.dni ? <span className="ddir-muted"> · DNI {c.dni}</span> : null}
+                      {c.anuncio ? <span className="ddir-muted"> · {c.canal}</span> : null}
+                    </span>
+                    <span className="ddir-muted">
+                      lead {fechaDia(c.ingreso)} · primer auto {fechaDia(c.primer_auto)} · reingreso {fechaDia(c.reingreso)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
           </div>
         </>
       ) : null}
