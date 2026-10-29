@@ -20,6 +20,8 @@ export interface ImportacionArca {
 export interface ImportacionesResponse {
   empresa: EmpresaAlegra
   empresa_label: string
+  /** Mes del comprobante más reciente guardado ('AAAA-MM') */
+  ultimo_mes: string | null
   importaciones: ImportacionArca[]
   puede_editar: boolean
   alegra_configurado: boolean
@@ -39,6 +41,7 @@ export interface ComprobanteArca {
   cuit: string
   proveedor: string | null
   moneda: string | null
+  tipo_cambio: number | null
   neto_gravado: number | null
   iva: number | null
   no_gravado: number | null
@@ -66,6 +69,14 @@ export interface ComprobanteArca {
   alegra_detalle: string | null
   alegra_error: string | null
   cargado_en: string | null
+  /** Se confirmó que la factura llegó: solo así se puede cargar */
+  confirmado: boolean
+  confirmado_en: string | null
+  /** Factura encontrada en la carpeta de Drive */
+  drive_archivo_id: string | null
+  drive_nombre: string | null
+  drive_ruta: string | null
+  drive_link: string | null
 }
 
 export interface CuentaAlegra {
@@ -86,6 +97,8 @@ export interface RevisionResponse {
 
 export interface ImportarResponse {
   importacion_id: string
+  /** Meses ('AAAA-MM') que trae el Excel */
+  meses: string[]
   comprobantes: number
   nuevos: number
   ya_cargados_antes: number
@@ -130,8 +143,9 @@ export function obtenerImportaciones(empresa: EmpresaAlegra): Promise<Importacio
   return pedir<ImportacionesResponse>(`/${empresa}/importaciones`)
 }
 
-export function obtenerComprobantes(empresa: EmpresaAlegra, importacionId: string): Promise<{ filas: ComprobanteArca[] }> {
-  return pedir(`/${empresa}/comprobantes?${new URLSearchParams({ importacion: importacionId })}`)
+/** Comprobantes de un mes (por fecha del comprobante), de todos los Excel subidos */
+export function obtenerComprobantes(empresa: EmpresaAlegra, mes: string): Promise<{ filas: ComprobanteArca[] }> {
+  return pedir(`/${empresa}/comprobantes?${new URLSearchParams({ mes })}`)
 }
 
 export function obtenerCuentasAlegra(empresa: EmpresaAlegra): Promise<{ categorias: CuentaAlegra[] }> {
@@ -146,11 +160,64 @@ export function importarExcelArca(
   return pedir<ImportarResponse>(`/${empresa}/importar`, { method: 'POST', body: JSON.stringify(datos) })
 }
 
-export function revisarEnAlegra(empresa: EmpresaAlegra, importacionId: string): Promise<RevisionResponse> {
-  return pedir<RevisionResponse>(`/${empresa}/revisar`, {
-    method: 'POST',
-    body: JSON.stringify({ importacion_id: importacionId }),
+export function revisarEnAlegra(empresa: EmpresaAlegra, mes: string): Promise<RevisionResponse> {
+  return pedir<RevisionResponse>(`/${empresa}/revisar`, { method: 'POST', body: JSON.stringify({ mes }) })
+}
+
+export interface BuscarDriveResponse {
+  archivos: number
+  comprobantes: number
+  encontrados: number
+  /** Vinculados en esta búsqueda (quedan como «Factura recibida») */
+  nuevos: number
+  sin_archivo: number
+}
+
+/** Busca en la carpeta de Drive la factura de cada comprobante del mes */
+export function buscarEnDrive(empresa: EmpresaAlegra, mes: string): Promise<BuscarDriveResponse> {
+  return pedir<BuscarDriveResponse>(`/${empresa}/buscar-drive`, { method: 'POST', body: JSON.stringify({ mes }) })
+}
+
+export interface CarpetaSugerida {
+  /** Ruta dentro de la carpeta de facturas, ej. "RDA/10.2026" */
+  sugerida: string
+  /** anterior = donde está la última factura del proveedor; nombre = carpeta con su nombre; nueva = se crea */
+  origen: 'anterior' | 'nombre' | 'nueva'
+  existe: boolean
+  carpetas: string[]
+  /** Nombre con el que se guarda, ej. "Mj Motor - 00001-00000246 - FC.pdf" */
+  nombre: string
+}
+
+export function obtenerCarpetaSugerida(empresa: EmpresaAlegra, id: string): Promise<CarpetaSugerida> {
+  return pedir<CarpetaSugerida>(`/${empresa}/carpeta-sugerida?${new URLSearchParams({ id })}`)
+}
+
+/** Sube la factura (PDF o imagen) a la carpeta del proveedor en Drive y la marca como recibida */
+export async function adjuntarFactura(
+  empresa: EmpresaAlegra,
+  id: string,
+  archivo: File,
+  carpeta: string,
+): Promise<{ ok: boolean; drive_link: string; drive_nombre: string; drive_ruta: string }> {
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const lector = new FileReader()
+    lector.onload = () => resolve(String(lector.result).split(',')[1] ?? '')
+    lector.onerror = () => reject(new Error('No se pudo leer el archivo'))
+    lector.readAsDataURL(archivo)
   })
+  return pedir(`/${empresa}/adjuntar`, {
+    method: 'POST',
+    body: JSON.stringify({ id, archivo: archivo.name, mime: archivo.type || 'application/pdf', base64, carpeta }),
+  })
+}
+
+/** Tamaño máximo de la factura adjunta */
+export const MAX_ADJUNTO_MB = 12
+
+/** Marca (o desmarca) «Factura recibida» */
+export function confirmarComprobantes(empresa: EmpresaAlegra, ids: string[], confirmado: boolean): Promise<{ ok: boolean }> {
+  return pedir(`/${empresa}/confirmar`, { method: 'POST', body: JSON.stringify({ ids, confirmado }) })
 }
 
 export function elegirCuenta(
@@ -195,4 +262,73 @@ export async function leerExcelArca(archivo: File): Promise<{ encabezados: strin
     .map((valores, i) => ({ fila: rango.s.r + idx + 2 + i, valores }))
     .filter((f) => f.valores.some((v) => v !== null && v !== ''))
   return { encabezados, filas }
+}
+
+/* ------------------------------ Proveedores ------------------------------- */
+
+export type CondicionIvaAlegra =
+  | 'IVA_RESPONSABLE'
+  | 'UNIQUE_TRIBUTE_RESPONSABLE'
+  | 'IVA_EXEMPT'
+  | 'FINAL_CONSUMER'
+  | 'IVA_NO_RESPONSABLE'
+
+export const ETIQUETA_IVA: Record<CondicionIvaAlegra, string> = {
+  IVA_RESPONSABLE: 'Responsable Inscripto',
+  UNIQUE_TRIBUTE_RESPONSABLE: 'Monotributo',
+  IVA_EXEMPT: 'Exento',
+  FINAL_CONSUMER: 'Consumidor final',
+  IVA_NO_RESPONSABLE: 'No responsable',
+}
+
+export interface ProveedorAlegra {
+  id?: string
+  alegra_id: string | null
+  cuit: string
+  nombre: string
+  nombre_comercial: string | null
+  iva_condicion: CondicionIvaAlegra | null
+  email: string | null
+  telefono: string | null
+  celular: string | null
+  provincia: string | null
+  ciudad: string | null
+  domicilio: string | null
+  codigo_postal: string | null
+  /** Plazo de pago (solo Toshibase) */
+  dias_pago: number | null
+  observaciones: string | null
+  sincronizado_en?: string | null
+  updated_at?: string | null
+}
+
+export interface ProveedoresResponse {
+  empresa: EmpresaAlegra
+  empresa_label: string
+  filas: ProveedorAlegra[]
+  puede_editar: boolean
+  alegra_configurado: boolean
+  sincronizado_en: string | null
+}
+
+export function obtenerProveedores(empresa: EmpresaAlegra): Promise<ProveedoresResponse> {
+  return pedir<ProveedoresResponse>(`/proveedores/${empresa}`)
+}
+
+/** Trae de Alegra todos los proveedores (y lo que se cambió allá) */
+export function sincronizarProveedores(empresa: EmpresaAlegra): Promise<{ proveedores: number }> {
+  return pedir(`/proveedores/${empresa}/sincronizar`, { method: 'POST' })
+}
+
+/**
+ * Crea o edita el proveedor en Alegra (y en Toshibase).
+ * desdeComprobante = true usa el permiso de la pantalla de comprobantes.
+ */
+export function guardarProveedor(
+  empresa: EmpresaAlegra,
+  datos: ProveedorAlegra,
+  desdeComprobante = false,
+): Promise<{ proveedor: ProveedorAlegra; creado: boolean }> {
+  const ruta = desdeComprobante ? `/${empresa}/proveedor` : `/proveedores/${empresa}/guardar`
+  return pedir(ruta, { method: 'POST', body: JSON.stringify(datos) })
 }

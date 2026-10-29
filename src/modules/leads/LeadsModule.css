@@ -73,10 +73,24 @@
 
 /* Las tarjetas se acomodan solas al ancho: con 7 columnas fijas la última
    ("Recontacto") quedaba cortada en pantallas medianas. */
+/* Las 8 tarjetas en una sola línea, todas del mismo ancho; el texto largo se corta
+   con "…" (el título completo queda en el tooltip). En pantallas medianas, 4 por línea. */
 .leads-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 8px;
+}
+
+.leads-stats .stat-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1280px) {
+  .leads-stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .leads-stats .stat-card {

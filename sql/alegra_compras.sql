@@ -16,6 +16,9 @@
 --    Los names DEBEN coincidir con el submenuName de HomePage.tsx
 --    ('alegra-compras-44dreams' y 'alegra-compras-grupocg').
 --
+-- Se ve por MES (fecha del comprobante), sin importar de qué Excel vino.
+-- Un comprobante solo se carga en Alegra si antes se confirma «Factura recibida».
+--
 -- Permisos (Administración > Menú por rol): ver = can_view; subir el Excel y
 -- cargar en Alegra = can_edit. Al crearlos solo los ven los admin.
 -- Las tablas solo las escribe el servidor (server-alegra.js, service role).
@@ -99,6 +102,48 @@ CREATE TABLE IF NOT EXISTS alegra_comprobantes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (empresa, cuit, tipo_cod, punto_venta, numero)
 );
+
+-- Factura recibida: solo lo confirmado se puede cargar en Alegra
+ALTER TABLE alegra_comprobantes ADD COLUMN IF NOT EXISTS confirmado BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE alegra_comprobantes ADD COLUMN IF NOT EXISTS confirmado_por UUID REFERENCES user_profiles(id) ON DELETE SET NULL;
+ALTER TABLE alegra_comprobantes ADD COLUMN IF NOT EXISTS confirmado_en TIMESTAMPTZ;
+
+-- Factura encontrada en la carpeta de Drive (botón «Buscar en Drive»)
+ALTER TABLE alegra_comprobantes ADD COLUMN IF NOT EXISTS drive_archivo_id TEXT;
+ALTER TABLE alegra_comprobantes ADD COLUMN IF NOT EXISTS drive_nombre TEXT;
+ALTER TABLE alegra_comprobantes ADD COLUMN IF NOT EXISTS drive_ruta TEXT;
+ALTER TABLE alegra_comprobantes ADD COLUMN IF NOT EXISTS drive_link TEXT;
+
+-- Proveedores de Alegra (submódulo Proveedores). Alegra es la fuente; nombre_comercial
+-- y dias_pago son datos propios de Toshibase.
+CREATE TABLE IF NOT EXISTS alegra_proveedores (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa TEXT NOT NULL,
+  alegra_id TEXT NOT NULL,
+  cuit TEXT,
+  nombre TEXT NOT NULL,
+  nombre_comercial TEXT,
+  iva_condicion TEXT,
+  email TEXT,
+  telefono TEXT,
+  celular TEXT,
+  provincia TEXT,
+  ciudad TEXT,
+  domicilio TEXT,
+  codigo_postal TEXT,
+  dias_pago INTEGER,
+  observaciones TEXT,
+  sincronizado_en TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (empresa, alegra_id)
+);
+CREATE INDEX IF NOT EXISTS idx_alegra_prov_cuit ON alegra_proveedores(empresa, cuit);
+ALTER TABLE alegra_proveedores ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "alegra_proveedores_select_autenticados" ON alegra_proveedores;
+CREATE POLICY "alegra_proveedores_select_autenticados"
+  ON alegra_proveedores FOR SELECT TO authenticated USING (true);
+REVOKE INSERT, UPDATE, DELETE ON alegra_proveedores FROM anon, authenticated;
 
 CREATE INDEX IF NOT EXISTS idx_alegra_comp_importacion ON alegra_comprobantes(importacion_id);
 CREATE INDEX IF NOT EXISTS idx_alegra_comp_empresa_fecha ON alegra_comprobantes(empresa, fecha);
@@ -184,6 +229,20 @@ BEGIN
     UPDATE submenus
     SET label = 'Grupo CG', route = '/integraciones/alegra/grupocg', menu_id = v_menu_id,
         parent_id = v_grupo_id, level = v_level + 1, order_index = 2, is_active = true
+    WHERE id = v_hijo_id;
+  END IF;
+
+  -- Proveedores (de las dos empresas, se elige adentro)
+  v_hijo_id := NULL;
+  SELECT id INTO v_hijo_id FROM submenus WHERE name = 'alegra-proveedores' LIMIT 1;
+  IF v_hijo_id IS NULL THEN
+    INSERT INTO submenus (name, label, route, menu_id, parent_id, level, order_index, is_active)
+    VALUES ('alegra-proveedores', 'Proveedores', '/integraciones/alegra/proveedores',
+            v_menu_id, v_grupo_id, v_level + 1, 3, true);
+  ELSE
+    UPDATE submenus
+    SET label = 'Proveedores', route = '/integraciones/alegra/proveedores', menu_id = v_menu_id,
+        parent_id = v_grupo_id, level = v_level + 1, order_index = 3, is_active = true
     WHERE id = v_hijo_id;
   END IF;
 END $$;

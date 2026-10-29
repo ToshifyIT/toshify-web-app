@@ -143,6 +143,8 @@ interface FilterHeaderProps {
   numberFilter?: { min?: number; max?: number };
   onToggle: (colId: string) => void;
   onSelectValue: (colId: string, value: string) => void;
+  /** Marca (seleccionar = true) o desmarca varias opciones de una vez («Seleccionar todas») */
+  onSelectMany?: (colId: string, values: string[], seleccionar: boolean) => void;
   onDateChange: (colId: string, field: 'from' | 'to', value: string) => void;
   onNumberChange?: (colId: string, field: 'min' | 'max', value: number | undefined) => void;
   onClearFilter: (colId: string) => void;
@@ -163,6 +165,7 @@ function FilterHeader({
   numberFilter,
   onToggle,
   onSelectValue,
+  onSelectMany,
   onDateChange,
   onNumberChange,
   onClearFilter,
@@ -535,6 +538,22 @@ function FilterHeader({
                 autoFocus
               />
               <div className="dt-filter-options">
+                {/* Con más de 3 opciones: marcar/desmarcar todas (las que coinciden con la búsqueda) */}
+                {onSelectMany && filteredOptions.length > 3 && (() => {
+                  const todas = filteredOptions.every(o => selectedValues.includes(o));
+                  const algunas = !todas && filteredOptions.some(o => selectedValues.includes(o));
+                  return (
+                    <label className="dt-filter-option dt-filter-option-todas">
+                      <input
+                        type="checkbox"
+                        checked={todas}
+                        ref={el => { if (el) el.indeterminate = algunas; }}
+                        onChange={() => onSelectMany(colId, filteredOptions, !todas)}
+                      />
+                      <span>{searchTerm ? 'Seleccionar resultados' : 'Seleccionar todas'} ({filteredOptions.length})</span>
+                    </label>
+                  );
+                })()}
                 {filteredOptions.length === 0 ? (
                   <div className="dt-filter-empty">Sin resultados</div>
                 ) : (
@@ -1210,6 +1229,16 @@ export function DataTable<T>({
     });
   }, []);
 
+  const handleSelectMany = useCallback((colId: string, values: string[], seleccionar: boolean) => {
+    setColumnFilters(prev => {
+      const current = prev[colId] || [];
+      const next = seleccionar
+        ? [...current, ...values.filter(v => !current.includes(v))]
+        : current.filter(v => !values.includes(v));
+      return { ...prev, [colId]: next };
+    });
+  }, []);
+
   const handleDateChange = useCallback((colId: string, field: 'from' | 'to', value: string) => {
     setDateFilters(prev => ({
       ...prev,
@@ -1262,6 +1291,27 @@ export function DataTable<T>({
   // This prevents the memo from recalculating when filter values change, which would cause
   // FilterHeader components to unmount/remount and lose their local state (viewDate, selectionMode).
   // The header callbacks read current values from refs at render time.
+  // Columnas con al menos 2 valores distintos en los datos: las demás no muestran
+  // filtro (no hay nada que elegir). Se calcula sobre todos los datos, no sobre lo
+  // filtrado, para que el filtro no desaparezca mientras se usa.
+  const columnasFiltrables = useMemo(() => {
+    const out = new Set<string>();
+    if (disableAutoFilters) return out;
+    regularColumns.forEach(col => {
+      const colDef = col as { accessorKey?: string; id?: string; accessorFn?: unknown };
+      const colId = colDef.accessorKey || colDef.id || "";
+      if (!colId || (!colDef.accessorKey && !colDef.accessorFn)) return;
+      const vistos = new Set<string>();
+      for (const row of data) {
+        const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+        if (value === null || value === undefined || value === '') continue;
+        vistos.add(String(value).trim().replace(/\s+/g, ' ').toUpperCase());
+        if (vistos.size > 1) { out.add(colId); break; }
+      }
+    });
+    return out;
+  }, [data, regularColumns, disableAutoFilters, getNestedValueForFilter]);
+
   const columnsWithFilters = useMemo(() => {
     // If auto-filters are disabled, return columns as-is
     if (disableAutoFilters) {
@@ -1278,6 +1328,11 @@ export function DataTable<T>({
 
       // Force enableSorting on all data columns
       const sortingOverride = colDef.enableSorting === false ? { enableSorting: true } : {};
+
+      // Sin opciones para elegir (columna vacía o con un solo valor): sin filtro
+      if (!columnasFiltrables.has(colId)) {
+        return { ...col, ...sortingOverride } as ColumnDef<T, unknown>;
+      }
 
       // Skip filter wrapping if header is already a custom function (module has its own filter)
       if (typeof colDef.header === 'function') {
@@ -1332,6 +1387,7 @@ export function DataTable<T>({
               numberFilter={currentNumberFilters[colId]}
               onToggle={handleFilterToggle}
               onSelectValue={handleSelectValue}
+              onSelectMany={handleSelectMany}
               onDateChange={handleDateChange}
               onNumberChange={handleNumberChange}
               onClearFilter={handleClearFilter}
@@ -1340,7 +1396,7 @@ export function DataTable<T>({
         },
       } as ColumnDef<T, unknown>;
     });
-  }, [regularColumns, disableAutoFilters, isDateColumn, isNumberColumn, isMoneyColumn, isNumericByData, pocosValoresNumericos, openFilterId, handleFilterToggle, handleSelectValue, handleDateChange, handleNumberChange, handleClearFilter]);
+  }, [regularColumns, disableAutoFilters, isDateColumn, isNumberColumn, isMoneyColumn, isNumericByData, pocosValoresNumericos, columnasFiltrables, openFilterId, handleFilterToggle, handleSelectValue, handleSelectMany, handleDateChange, handleNumberChange, handleClearFilter]);
 
   // Memoize final columns — all regular columns with filters + actions
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {

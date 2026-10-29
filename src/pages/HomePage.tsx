@@ -281,6 +281,7 @@ const Cresium44DreamsPage = lazy(() => import('./integraciones/cresium/CresiumPa
 const CresiumGrupoCgPage = lazy(() => import('./integraciones/cresium/CresiumPage').then(m => ({ default: m.CresiumGrupoCgPage })))
 const AlegraCompras44DreamsPage = lazy(() => import('./integraciones/alegra/AlegraComprasPage').then(m => ({ default: m.AlegraCompras44DreamsPage })))
 const AlegraComprasGrupoCgPage = lazy(() => import('./integraciones/alegra/AlegraComprasPage').then(m => ({ default: m.AlegraComprasGrupoCgPage })))
+const AlegraProveedoresPage = lazy(() => import('./integraciones/alegra/AlegraComprasPage').then(m => ({ default: m.AlegraProveedoresPage })))
 const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
 const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then(m => ({ default: m.DashboardKpisPage })))
 const DashboardDirectivoPage = lazy(() => import('./reportes/DashboardDirectivoPage').then(m => ({ default: m.DashboardDirectivoPage })))
@@ -2188,6 +2189,11 @@ export function HomePage() {
               <Route path="/integraciones/alegra/grupocg" element={
                 <ProtectedRoute submenuName="alegra-compras-grupocg" action="view">
                   <LazyPage><AlegraComprasGrupoCgPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/integraciones/alegra/proveedores" element={
+                <ProtectedRoute submenuName="alegra-proveedores" action="view">
+                  <LazyPage><AlegraProveedoresPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
