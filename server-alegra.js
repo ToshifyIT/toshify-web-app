@@ -57,7 +57,7 @@ const TOLERANCIA = 0.05
 const EMPRESAS = {
   // drive: carpeta de facturas de proveedor (se puede cambiar con ALEGRA_<EMP>_DRIVE_FOLDER_ID)
   '44dreams': { label: '44 Dreams', submenu: 'alegra-compras-44dreams', env: '44DREAMS', drive: '1bbCv1-l8qi4tr23b_znckedtpL2_4uCz' },
-  grupocg: { label: 'Grupo CG', submenu: 'alegra-compras-grupocg', env: 'GRUPOCG', drive: '' },
+  grupocg: { label: 'Grupo CG', submenu: 'alegra-compras-grupocg', env: 'GRUPOCG', drive: '1HbIq-4k9qWFXSn-05NH7PJi1MJOYF9Ix' },
 }
 
 /** Numeración de notas débito de 44 Dreams usada en octubre, si no se encuentra por nombre */
