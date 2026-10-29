@@ -9,3 +9,5 @@ export function AlegraCompras44DreamsPage() {
 export function AlegraComprasGrupoCgPage() {
   return <AlegraComprasModule key="grupocg" empresa="grupocg" />
 }
+
+export { AlegraProveedoresModule as AlegraProveedoresPage } from '../../../modules/integraciones/alegra/AlegraProveedoresModule'

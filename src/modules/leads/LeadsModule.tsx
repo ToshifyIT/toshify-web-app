@@ -13,7 +13,7 @@ import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Layers, Link2,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin, LocateFixed,
+  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin, LocateFixed, IdCard,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -309,6 +309,41 @@ function tieneAlertaRecontacto(observaciones?: string | null): boolean {
 function esFuenteSellium(l: Lead): boolean {
   const fuente = (l.fuente_de_lead || '').trim().toLowerCase()
   return fuente === FUENTE_SELLIUM.toLowerCase() || fuente === FUENTE_SELLIUM_ANTERIOR.toLowerCase()
+}
+
+/* ---------- Leads que ya fueron conductores ---------- */
+
+interface ConductorPrevio {
+  id: string
+  nombres: string | null
+  apellidos: string | null
+  numero_dni: string | null
+  telefono_contacto: string | null
+  estado_id: string | null
+  fecha_terminacion: string | null
+  motivo_baja: string | null
+}
+
+interface CoincidenciaConductor {
+  conductor: ConductorPrevio
+  /** Por qué dato coincidió (DNI y teléfono son seguros; el nombre conviene verificarlo) */
+  por: 'DNI' | 'teléfono' | 'nombre'
+  /** Estado del conductor (ACTIVO, BAJA, ...) */
+  estado: string
+  activo: boolean
+}
+
+const soloDigitosLead = (s: string | null | undefined) => String(s ?? '').replace(/\D/g, '')
+/** Últimos 10 dígitos: igual con o sin +54 9 / 0 / 15 */
+const claveTelefono = (s: string | null | undefined) => {
+  const d = soloDigitosLead(s)
+  return d.length >= 8 ? d.slice(-10) : ''
+}
+/** Nombre sin acentos, en mayúsculas y con las palabras ordenadas (para nombre/apellido invertidos) */
+const claveNombre = (s: string | null | undefined) => {
+  const palabras = String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+    .replace(/[^A-ZÑ ]/g, ' ').split(' ').filter(w => w.length > 1)
+  return palabras.length >= 2 ? [...new Set(palabras)].sort().join(' ') : ''
 }
 
 /** Tarjeta "Contactado Sellium": leads de fuente Sellium + los que tienen ese estado. */
@@ -946,6 +981,80 @@ export function LeadsModule() {
 
   useEffect(() => { loadLeads() }, [loadLeads])
 
+  // Conductores (actuales y antiguos) para avisar si un lead ya fue conductor.
+  // Se traen una vez: solo los campos para comparar DNI, teléfono y nombre.
+  const [conductoresPrevios, setConductoresPrevios] = useState<ConductorPrevio[]>([])
+  const [estadosConductor, setEstadosConductor] = useState<Map<string, string>>(new Map())
+  useEffect(() => {
+    let vigente = true
+    void (async () => {
+      const [cond, est] = await Promise.all([
+        traerTodasLasPaginas<ConductorPrevio>((desde, hasta, contar) =>
+          (supabase.from('conductores') as any)
+            .select('id, nombres, apellidos, numero_dni, telefono_contacto, estado_id, fecha_terminacion, motivo_baja', contar ? { count: 'exact' } : undefined)
+            .order('id', { ascending: true })
+            .range(desde, hasta)),
+        supabase.from('conductores_estados').select('id, codigo'),
+      ])
+      if (!vigente) return
+      if (!cond.error) setConductoresPrevios(cond.data)
+      setEstadosConductor(new Map(((est.data || []) as Array<{ id: string; codigo: string }>).map(e => [String(e.id), String(e.codigo || '')])))
+    })()
+    return () => { vigente = false }
+  }, [])
+
+  /** lead.id -> conductor con el mismo DNI, teléfono o nombre */
+  const leadsConductorPrevio = useMemo(() => {
+    const out = new Map<string, CoincidenciaConductor>()
+    if (conductoresPrevios.length === 0) return out
+    const porDni = new Map<string, ConductorPrevio>()
+    const porTel = new Map<string, ConductorPrevio>()
+    const porNombre = new Map<string, ConductorPrevio>()
+    for (const c of conductoresPrevios) {
+      const dni = soloDigitosLead(c.numero_dni)
+      if (dni.length >= 7) porDni.set(dni, c)
+      const tel = claveTelefono(c.telefono_contacto)
+      if (tel) porTel.set(tel, c)
+      const nom = claveNombre(`${c.nombres ?? ''} ${c.apellidos ?? ''}`)
+      if (nom) porNombre.set(nom, c)
+    }
+    for (const l of leads) {
+      const dni = soloDigitosLead(l.dni)
+      let c: ConductorPrevio | undefined
+      let por: CoincidenciaConductor['por'] = 'DNI'
+      if (dni.length >= 7) c = porDni.get(dni)
+      if (!c) { c = porTel.get(claveTelefono(l.phone)); por = 'teléfono' }
+      if (!c) { c = porNombre.get(claveNombre(l.nombre_completo)); por = 'nombre' }
+      if (!c) continue
+      const estado = (c.estado_id && estadosConductor.get(String(c.estado_id))) || 'SIN ESTADO'
+      out.set(l.id, { conductor: c, por, estado, activo: estado.toUpperCase() === 'ACTIVO' })
+    }
+    return out
+  }, [leads, conductoresPrevios, estadosConductor])
+
+  /** Ficha del conductor que coincide con el lead */
+  const verConductorPrevio = useCallback((lead: Lead, m: CoincidenciaConductor) => {
+    const c = m.conductor
+    const esc = (t: string | null | undefined) => String(t ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const fecha = (d: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('/') : '-')
+    void Swal.fire({
+      title: m.activo ? 'Ya es conductor' : 'Ya fue conductor',
+      icon: 'info',
+      html: `
+        <div style="text-align:left;font-size:14px;line-height:1.6">
+          <p><b>${esc(`${c.nombres ?? ''} ${c.apellidos ?? ''}`.trim())}</b></p>
+          <p>DNI: ${esc(c.numero_dni)}<br/>Teléfono: ${esc(c.telefono_contacto)}</p>
+          <p>Estado: <b>${esc(m.estado)}</b>${c.fecha_terminacion ? `<br/>Baja: ${fecha(c.fecha_terminacion)}` : ''}${c.motivo_baja ? `<br/>Motivo: ${esc(c.motivo_baja)}` : ''}</p>
+          <p style="color:var(--text-tertiary);font-size:12px">Coincide por <b>${m.por}</b> con el lead ${esc(lead.nombre_completo)}${m.por === 'nombre' ? ' (verificar: puede ser otra persona con el mismo nombre)' : ''}.</p>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Ver ficha del conductor',
+      cancelButtonText: 'Cerrar',
+    }).then((r) => {
+      if (r.isConfirmed) window.open(`/conductores/panel/${c.id}`, '_blank')
+    })
+  }, [])
+
   // Bloquear scroll del body cuando el modal de detalle está abierto
   useEffect(() => {
     if (showDetailsModal) {
@@ -1544,6 +1653,7 @@ export function LeadsModule() {
       case 'damaro': return (l.fuente_de_lead || '').toLowerCase() === 'damaro'
       case 'autoPueblo': return l.estado_de_lead === 'Auto del pueblo'
       case 'recontacto': return tieneAlertaRecontacto(l.observaciones)
+      case 'exConductor': return leadsConductorPrevio.has(l.id)
       case 'descartados': return l.estado_de_lead === 'Descartado'
       // 'todos': vista general para busquedas. No filtra por estado, por lo que
       // incluye los descartados junto al resto.
@@ -1551,7 +1661,7 @@ export function LeadsModule() {
       // Por defecto: excluir descartados de la tabla
       default: return l.estado_de_lead !== 'Descartado'
     }
-  }, [activeStatCard, leadsEnZona])
+  }, [activeStatCard, leadsEnZona, leadsConductorPrevio])
 
   /** Leads con los filtros propios del módulo (columnas y fechas), SIN la tarjeta activa. */
   const leadsBase = useMemo(() => {
@@ -1628,8 +1738,9 @@ export function LeadsModule() {
     // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
     const todos = sinTarjeta.length
     const recontacto = base.filter(l => tieneAlertaRecontacto(l.observaciones)).length
-    return { total, contactadoSellium, aptos, noAptos, convocatoria, listoEmparejar, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
-  }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona])
+    const exConductor = base.filter(l => leadsConductorPrevio.has(l.id)).length
+    return { total, contactadoSellium, aptos, noAptos, convocatoria, listoEmparejar, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, exConductor, todos }
+  }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona, leadsConductorPrevio])
 
   // Foto diaria de las tarjetas (traza) y la de hace 7 días para las flechas.
   // Solo con la vista por defecto (último mes, sin filtros, búsqueda ni tarjeta activa):
@@ -2788,6 +2899,25 @@ export function LeadsModule() {
                     <Bell size={14} />
                   </span>
                 )}
+                {(() => {
+                  const previo = leadsConductorPrevio.get(row.original.id)
+                  if (!previo) return null
+                  return (
+                    <button
+                      type="button"
+                      className="lead-alerta-conductor"
+                      onClick={(e) => { e.stopPropagation(); verConductorPrevio(row.original, previo) }}
+                      title={`${previo.activo ? 'Ya es conductor' : 'Ya fue conductor'} (${previo.estado}) · coincide por ${previo.por}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', flexShrink: 0, padding: 0, border: 'none',
+                        background: 'none', cursor: 'pointer',
+                        color: previo.por === 'nombre' ? 'var(--text-tertiary)' : '#2563eb',
+                      }}
+                    >
+                      <IdCard size={15} />
+                    </button>
+                  )
+                })()}
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
@@ -3256,7 +3386,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords, uniqueGuias, embajadorPorId])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
@@ -3313,6 +3443,7 @@ export function LeadsModule() {
         zonaSegura: 'Zona Aprobada',
         zonaRestringida: 'Zona Restringida',
         autoPueblo: 'Auto del pueblo',
+        exConductor: 'Ya fue conductor',
         descartados: 'Descartados',
         todos: 'Todos (incluye descartados)',
       }
@@ -3411,6 +3542,17 @@ export function LeadsModule() {
               <span className="stat-label">Recontacto</span>
             </div>
             <ComparacionSemana actual={stats.recontacto} anterior={fotoAnterior?.recontacto} invertido />
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'exConductor' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('exConductor')}
+            title="Leads con el mismo DNI, teléfono o nombre que un conductor (actual o antiguo)"
+          >
+            <IdCard size={18} className="stat-icon" style={{ color: '#2563eb' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.exConductor}</span>
+              <span className="stat-label">Ya fue conductor</span>
+            </div>
           </div>
         </div>
       </div>

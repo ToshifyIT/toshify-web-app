@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FileSpreadsheet, FileUp, RefreshCw, UploadCloud, ExternalLink, EyeOff, Undo2,
-  CheckCircle2, AlertTriangle, Clock, List, Receipt, FileMinus, CircleDollarSign, Ban,
+  CheckCircle2, AlertTriangle, Clock, List, Receipt, FileMinus, Inbox, Ban, FolderSearch, FileText, Paperclip, UserPlus,
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -25,7 +25,12 @@ import {
   obtenerCuentasAlegra,
   importarExcelArca,
   revisarEnAlegra,
+  buscarEnDrive,
+  obtenerCarpetaSugerida,
+  adjuntarFactura,
+  MAX_ADJUNTO_MB,
   elegirCuenta,
+  guardarProveedor,
   marcarComprobante,
   cargarComprobantes,
   urlComprobanteAlegra,
@@ -39,22 +44,24 @@ import type {
   ImportacionesResponse,
   RevisionResponse,
 } from '../../../services/alegraComprasService'
-import { formatFechaHoraART } from '../../../utils/fechaArgentina'
+import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
 import { showSuccess, showError } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import '../cresium/CresiumModule.css'
 import './AlegraComprasModule.css'
+import { abrirFormularioProveedor } from './proveedorForm'
 
 /** Estado que se ve en la tabla */
-type EstadoVista = 'listo' | 'revisar' | 'cargado' | 'error' | 'ignorado'
+type EstadoVista = 'esperando' | 'listo' | 'revisar' | 'cargado' | 'error' | 'ignorado'
 type Filtro = 'todos' | EstadoVista | 'nc'
 
 const ETIQUETA_ESTADO: Record<EstadoVista, string> = {
+  esperando: 'Esperando factura',
   listo: 'Lista para cargar',
   revisar: 'Revisar',
   cargado: 'En Alegra',
   error: 'Error',
-  ignorado: 'No se carga',
+  ignorado: 'Desestimada',
 }
 
 const CLASE_TIPO: Record<string, { letra: string; nc: boolean }> = {
@@ -76,6 +83,20 @@ const ORDEN_GRUPOS = ['expense', 'cost', 'asset', 'liability', 'equity', 'income
 
 const PESOS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
 const pesos = (n: number | null | undefined) => PESOS.format(n || 0)
+const NUM = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/** Moneda del comprobante: 'ARS' (ARCA la informa como "$" o "PES") o el código que venga */
+function codigoMoneda(m: string | null | undefined): string {
+  const x = String(m ?? '').trim().toUpperCase()
+  if (!x || x === '$' || x === 'PES' || x === 'ARS') return 'ARS'
+  if (x === 'DOL' || x === 'U$S' || x === 'US$') return 'USD'
+  return x
+}
+
+/** Importe en la moneda del comprobante: "$ 1.234,00" / "USD 2.857,50" */
+function importe(n: number, moneda: string): string {
+  return moneda === 'ARS' ? pesos(n) : `${moneda} ${NUM.format(n || 0)}`
+}
 
 function formatDia(dia: string | null | undefined): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dia || '')
@@ -88,7 +109,8 @@ function escaparHtml(txt: string): string {
 
 function estadoVista(c: ComprobanteArca): EstadoVista {
   if (c.estado === 'cargado' || c.estado === 'ignorado' || c.estado === 'error') return c.estado
-  return c.revisar ? 'revisar' : 'listo'
+  if (c.revisar) return 'revisar'
+  return c.confirmado ? 'listo' : 'esperando'
 }
 
 const esNc = (c: ComprobanteArca) => !!CLASE_TIPO[c.tipo_cod]?.nc
@@ -103,19 +125,23 @@ function nombreTipo(c: ComprobanteArca): string {
 const numeroArca = (c: ComprobanteArca) =>
   `${String(c.punto_venta).padStart(5, '0')}-${String(c.numero).padStart(8, '0')}`
 
-/** Se puede cargar: pendiente o con error, y sin nada para revisar */
-function esCargable(c: ComprobanteArca): boolean {
+/** Pendiente o con error y sin nada para revisar: se puede confirmar y cargar */
+function esSeleccionable(c: ComprobanteArca): boolean {
   return (c.estado === 'pendiente' || c.estado === 'error') && !c.revisar
 }
 
-function textoImportacion(i: { archivo: string | null; comprobantes: number; desde: string | null; hasta: string | null; created_at: string }) {
-  const rango = i.desde ? ` · ${formatDia(i.desde)} al ${formatDia(i.hasta)}` : ''
-  return `${i.archivo || 'Excel ARCA'} · ${i.comprobantes} comp.${rango} · subido ${formatFechaHoraART(i.created_at)}`
+/** Se puede cargar: además, se confirmó que la factura se recibió y el proveedor existe en Alegra */
+function esCargable(c: ComprobanteArca): boolean {
+  return esSeleccionable(c) && c.confirmado && !!c.alegra_proveedor_id
+}
+
+function mesActualART(): string {
+  return (fechaISOART(new Date().toISOString()) ?? new Date().toISOString().slice(0, 10)).slice(0, 7)
 }
 
 function resumenRevision(r: RevisionResponse): string {
   return [
-    `${r.listos} listos para cargar`,
+    `${r.listos} sin observaciones`,
     r.a_revisar ? `${r.a_revisar} para revisar` : '',
     r.ya_estaban ? `${r.ya_estaban} ya estaban en Alegra` : '',
     r.revertidos ? `${r.revertidos} se borraron en Alegra (vuelven a pendiente)` : '',
@@ -128,7 +154,7 @@ interface AlegraComprasModuleProps {
 
 export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
   const [info, setInfo] = useState<ImportacionesResponse | null>(null)
-  const [importacionId, setImportacionId] = useState<string>('')
+  const [mes, setMes] = useState<string>('')
   const [filas, setFilas] = useState<ComprobanteArca[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -136,48 +162,47 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [cuentas, setCuentas] = useState<CuentaAlegra[]>([])
   const [revisando, setRevisando] = useState(false)
+  const [buscandoDrive, setBuscandoDrive] = useState(false)
   const inputArchivo = useRef<HTMLInputElement>(null)
+  const inputAdjunto = useRef<HTMLInputElement>(null)
+  const [adjuntandoA, setAdjuntandoA] = useState<ComprobanteArca | null>(null)
 
   const puedeEditar = !!info?.puede_editar && !!info?.alegra_configurado
 
-  /** Importaciones de la empresa; elige la indicada o la última */
-  const leerImportaciones = useCallback(async (elegir?: string) => {
-    const r = await obtenerImportaciones(empresa)
-    setInfo(r)
-    const id = elegir ?? (r.importaciones[0]?.id || '')
-    setImportacionId(id)
-    return id
-  }, [empresa])
-
-  const leerFilas = useCallback(async (id: string) => {
-    if (!id) {
-      setFilas([])
-      return
-    }
-    const r = await obtenerComprobantes(empresa, id)
+  const leerFilas = useCallback(async (m: string) => {
+    if (!m) return
+    const r = await obtenerComprobantes(empresa, m)
     setFilas(r.filas)
   }, [empresa])
 
-  // Al abrir: importaciones -> comprobantes de la última
+  // Al abrir: mes del comprobante más reciente guardado (o el actual)
   useEffect(() => {
+    setInfo(null)
+    setMes('')
+    setError(null)
+    obtenerImportaciones(empresa)
+      .then((r) => {
+        setInfo(r)
+        setMes(r.ultimo_mes ?? mesActualART())
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'No se pudo leer la información')
+        setLoading(false)
+      })
+  }, [empresa])
+
+  // Comprobantes del mes elegido (de todos los Excel subidos)
+  useEffect(() => {
+    if (!mes) return
     let vigente = true
     setLoading(true)
-    setError(null)
-    setFilas([])
     setSeleccion(new Set())
     setFiltro('todos')
-    void (async () => {
-      try {
-        const id = await leerImportaciones()
-        if (vigente) await leerFilas(id)
-      } catch (err) {
-        if (vigente) setError(err instanceof Error ? err.message : 'No se pudo leer la información')
-      } finally {
-        if (vigente) setLoading(false)
-      }
-    })()
+    leerFilas(mes)
+      .catch((err) => { if (vigente) setError(err instanceof Error ? err.message : 'No se pudo leer') })
+      .finally(() => { if (vigente) setLoading(false) })
     return () => { vigente = false }
-  }, [leerImportaciones, leerFilas])
+  }, [mes, leerFilas])
 
   // Plan de cuentas de Alegra (para elegir a mano), solo si puede editar
   useEffect(() => {
@@ -186,20 +211,6 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       .then((r) => setCuentas(r.categorias))
       .catch(() => setCuentas([]))
   }, [empresa, puedeEditar])
-
-  const cambiarImportacion = async (id: string) => {
-    setImportacionId(id)
-    setSeleccion(new Set())
-    setFiltro('todos')
-    setLoading(true)
-    try {
-      await leerFilas(id)
-    } catch (err) {
-      showError('Error', err instanceof Error ? err.message : 'No se pudo leer')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const cuentasAgrupadas = useMemo(() => ORDEN_GRUPOS
     .map((tipo) => ({
@@ -213,15 +224,16 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
 
   const resumen = useMemo(() => {
     const cuenta = (e: EstadoVista) => filas.filter((c) => estadoVista(c) === e).length
+    const activas = filas.filter((c) => c.estado !== 'ignorado')
     return {
-      total: filas.length,
-      importe: filas.reduce((s, c) => s + (esNc(c) ? -c.total : c.total), 0),
+      total: activas.length,
+      esperando: cuenta('esperando'),
       listo: cuenta('listo'),
       revisar: cuenta('revisar'),
       cargado: cuenta('cargado'),
       error: cuenta('error'),
       ignorado: cuenta('ignorado'),
-      nc: filas.filter(esNc).length,
+      nc: activas.filter(esNc).length,
       importeCargado: filas
         .filter((c) => c.estado === 'cargado')
         .reduce((s, c) => s + (esNc(c) ? -c.total : c.total), 0),
@@ -229,12 +241,15 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
   }, [filas])
 
   const visibles = useMemo(() => {
-    if (filtro === 'todos') return filas
-    if (filtro === 'nc') return filas.filter(esNc)
+    // Las desestimadas solo se ven tocando su tarjeta
+    if (filtro === 'todos') return filas.filter((c) => c.estado !== 'ignorado')
+    if (filtro === 'nc') return filas.filter((c) => esNc(c) && c.estado !== 'ignorado')
     return filas.filter((c) => estadoVista(c) === filtro)
   }, [filas, filtro])
 
-  const cargables = useMemo(() => visibles.filter(esCargable), [visibles])
+  const seleccionablesVisibles = useMemo(() => visibles.filter(esCargable), [visibles])
+  const elegidos = useMemo(() => filas.filter((c) => seleccion.has(c.id) && esSeleccionable(c)), [filas, seleccion])
+  const elegidosCargables = elegidos.filter(esCargable)
 
   const toggle = (id: string) => {
     setSeleccion((prev) => {
@@ -264,19 +279,16 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
     try {
       const r = await importarExcelArca(empresa, { archivo: archivo.name, ...datos })
       Swal.close()
-      await leerImportaciones(r.importacion_id)
-      await leerFilas(r.importacion_id)
-      setSeleccion(new Set())
-      setFiltro('todos')
+      const ultimoMes = [...r.meses].sort().pop()
+      if (ultimoMes && ultimoMes !== mes) setMes(ultimoMes)
+      else await leerFilas(mes)
       await Swal.fire({
         title: `${r.comprobantes} comprobantes`,
         icon: r.error_alegra ? 'warning' : 'success',
         html: `
           <div class="cr-swal">
-            <p>${r.nuevos} nuevos${r.comprobantes - r.nuevos > 0 ? ` · ${r.comprobantes - r.nuevos} ya estaban de un Excel anterior` : ''}</p>
-            <p>Cuenta contable: ${r.columna_cuenta
-              ? `columna <b>${escaparHtml(r.columna_cuenta)}</b>`
-              : '<b>no encontré la columna</b> (agregala a la derecha con el nombre de la cuenta; mientras tanto se usa la de la última vez o se elige a mano)'}</p>
+            <p>${r.nuevos} nuevos${r.comprobantes - r.nuevos > 0 ? ` · ${r.comprobantes - r.nuevos} ya estaban guardados (no se duplican)` : ''}</p>
+            <p>Nada se cargó en Alegra. Tocá «Buscar en Drive» o adjuntá la factura con el clip; las que tienen factura se pueden cargar.</p>
             ${r.revision ? `<p>${escaparHtml(resumenRevision(r.revision))}</p>` : ''}
             ${r.error_alegra ? `<p class="cr-error" style="white-space:normal;max-width:none">No se pudo revisar en Alegra: ${escaparHtml(r.error_alegra)}</p>` : ''}
             ${r.filas_omitidas ? `<p class="cr-muted">${r.filas_omitidas} filas sin CUIT o número se omitieron.</p>` : ''}
@@ -291,11 +303,11 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
   /* ------------------------------ Revisar -------------------------------- */
 
   const revisar = async () => {
-    if (!importacionId) return
+    if (!mes) return
     setRevisando(true)
     try {
-      const r = await revisarEnAlegra(empresa, importacionId)
-      await leerFilas(importacionId)
+      const r = await revisarEnAlegra(empresa, mes)
+      await leerFilas(mes)
       showSuccess('Revisado en Alegra', resumenRevision(r))
     } catch (err) {
       showError('No se pudo revisar en Alegra', err instanceof Error ? err.message : 'Error')
@@ -307,19 +319,17 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
   /* ------------------------------- Cargar -------------------------------- */
 
   const cargarSeleccionados = async () => {
-    const elegidos = filas.filter((c) => seleccion.has(c.id) && esCargable(c))
-    if (elegidos.length === 0) return
-    const facturas = elegidos.filter((c) => !esNc(c))
-    const notas = elegidos.filter(esNc)
-    const sinProveedor = [...new Set(elegidos.filter((c) => !c.alegra_proveedor_id).map((c) => `${c.proveedor} (${c.cuit})`))]
+    const aCargar = filas.filter((c) => seleccion.has(c.id) && esCargable(c))
+    if (aCargar.length === 0) return
+    const facturas = aCargar.filter((c) => !esNc(c))
+    const notas = aCargar.filter(esNc)
     const confirmacion = await Swal.fire({
-      title: `Cargar ${elegidos.length} comprobantes en Alegra`,
+      title: `Cargar ${aCargar.length} comprobantes en Alegra`,
       html: `
         <div class="cr-swal">
           <p><b>${escaparHtml(info?.empresa_label ?? '')}</b></p>
           ${facturas.length ? `<p>${facturas.length} facturas de proveedor: <b>${pesos(facturas.reduce((s, c) => s + c.total, 0))}</b></p>` : ''}
           ${notas.length ? `<p>${notas.length} notas de crédito → notas débito asociadas a la factura: <b>${pesos(notas.reduce((s, c) => s + c.total, 0))}</b></p>` : ''}
-          ${sinProveedor.length ? `<p>Se crean estos proveedores (domicilio «[POR CONFIRMAR]»):<br/>${sinProveedor.map((n) => `• ${escaparHtml(n)}`).join('<br/>')}</p>` : ''}
           <p class="cr-muted">Si alguno ya existe en Alegra no se crea de nuevo: solo se vincula.</p>
         </div>`,
       icon: 'question',
@@ -359,7 +369,114 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       Swal.fire('Error', err instanceof Error ? err.message : 'No se pudo cargar en Alegra', 'error')
     }
     setSeleccion(new Set())
-    await leerFilas(importacionId)
+    await leerFilas(mes)
+  }
+
+  const buscarDrive = async () => {
+    if (!mes) return
+    setBuscandoDrive(true)
+    try {
+      const r = await buscarEnDrive(empresa, mes)
+      await leerFilas(mes)
+      showSuccess(
+        `${r.encontrados} de ${r.comprobantes} facturas en el Drive`,
+        `${r.nuevos > 0 ? `${r.nuevos} nuevas marcadas como recibidas · ` : ''}${r.sin_archivo} sin archivo`,
+      )
+    } catch (err) {
+      showError('No se pudo buscar en Drive', err instanceof Error ? err.message : 'Error')
+    } finally {
+      setBuscandoDrive(false)
+    }
+  }
+
+  /** Crea en Alegra el proveedor del comprobante con los datos mínimos */
+  const crearProveedor = async (c: ComprobanteArca) => {
+    const datos = await abrirFormularioProveedor({
+      alegra_id: null,
+      cuit: c.cuit,
+      nombre: c.proveedor ?? '',
+      nombre_comercial: null,
+      // Factura A la emite un responsable inscripto; C, un monotributista
+      iva_condicion: CLASE_TIPO[c.tipo_cod]?.letra === 'C' ? 'UNIQUE_TRIBUTE_RESPONSABLE' : 'IVA_RESPONSABLE',
+      email: null, telefono: null, celular: null, provincia: null, ciudad: null, domicilio: null,
+      codigo_postal: null, dias_pago: null, observaciones: null,
+    }, { titulo: 'Crear proveedor en Alegra', completo: false, confirmar: 'Crear en Alegra' })
+    if (!datos) return
+    try {
+      const r = await guardarProveedor(empresa, datos, true)
+      const id = r.proveedor.alegra_id
+      setFilas((prev) => prev.map((x) => (x.cuit === c.cuit && x.estado !== 'cargado' ? { ...x, alegra_proveedor_id: id } : x)))
+      showSuccess(r.creado ? 'Proveedor creado en Alegra' : 'Ya existía en Alegra (datos actualizados)', r.proveedor.nombre)
+    } catch (err) {
+      showError('No se pudo crear el proveedor', err instanceof Error ? err.message : 'Error')
+    }
+  }
+
+  const elegirAdjunto = (c: ComprobanteArca) => {
+    setAdjuntandoA(c)
+    inputAdjunto.current?.click()
+  }
+
+  /** Sube la factura a la carpeta del proveedor en Drive (se puede cambiar la carpeta antes) */
+  const adjuntar = async (c: ComprobanteArca, archivo: File) => {
+    if (archivo.size > MAX_ADJUNTO_MB * 1024 * 1024) {
+      showError('Archivo muy grande', `Máximo ${MAX_ADJUNTO_MB} MB`)
+      return
+    }
+    Swal.fire({ title: 'Buscando la carpeta del proveedor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    let sug
+    try {
+      sug = await obtenerCarpetaSugerida(empresa, c.id)
+    } catch (err) {
+      Swal.close()
+      Swal.fire('No se pudo leer el Drive', err instanceof Error ? err.message : 'Error', 'error')
+      return
+    }
+    Swal.close()
+    const ext = (/\.[a-z0-9]{2,5}$/i.exec(archivo.name)?.[0] ?? '.pdf').toLowerCase()
+    const nombre = sug.nombre.replace(/\.pdf$/, ext)
+    const opciones = [...new Set([sug.sugerida, ...sug.carpetas])]
+    const r = await Swal.fire({
+      title: 'Adjuntar factura',
+      html: `
+        <div class="cr-swal cr-form">
+          <p><b>${escaparHtml(c.proveedor ?? '')}</b> · ${escaparHtml(nombreTipo(c))} ${numeroArca(c)}</p>
+          <label>Carpeta en Drive
+            <select id="ac-carpeta" class="swal2-select">
+              ${opciones.map((o) => `<option value="${escaparHtml(o)}" ${o === sug.sugerida ? 'selected' : ''}>${escaparHtml(o)}${o === sug.sugerida && !sug.existe ? ' (se crea)' : ''}</option>`).join('')}
+            </select>
+          </label>
+          <p class="cr-muted">${sug.origen === 'anterior'
+            ? 'Donde están las facturas anteriores de este proveedor.'
+            : sug.origen === 'nombre' ? 'Carpeta con el nombre del proveedor.' : 'No encontré una carpeta del proveedor: se crea una nueva.'}</p>
+          <p>Se guarda como:<br/><b>${escaparHtml(nombre)}</b></p>
+          <p class="cr-muted">Archivo elegido: ${escaparHtml(archivo.name)}</p>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Subir al Drive',
+      cancelButtonText: 'Cancelar',
+      focusConfirm: false,
+      preConfirm: () => (document.getElementById('ac-carpeta') as HTMLSelectElement | null)?.value ?? sug.sugerida,
+    })
+    if (!r.isConfirmed || !r.value) return
+    Swal.fire({ title: 'Subiendo la factura...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    try {
+      const res = await adjuntarFactura(empresa, c.id, archivo, String(r.value))
+      Swal.close()
+      setFilas((prev) => prev.map((x) => (x.id === c.id
+        ? {
+          ...x,
+          drive_link: res.drive_link,
+          drive_nombre: res.drive_nombre,
+          drive_ruta: res.drive_ruta,
+          confirmado: x.estado === 'pendiente' || x.estado === 'error' ? true : x.confirmado,
+        }
+        : x)))
+      showSuccess('Factura guardada en el Drive', `${res.drive_ruta}/${res.drive_nombre}`)
+    } catch (err) {
+      Swal.close()
+      Swal.fire('No se pudo subir', err instanceof Error ? err.message : 'Error', 'error')
+    }
   }
 
   const cambiarCuenta = async (c: ComprobanteArca, categoriaId: string) => {
@@ -375,6 +492,17 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
   }
 
   const marcar = async (c: ComprobanteArca, accion: 'ignorar' | 'pendiente') => {
+    if (accion === 'ignorar') {
+      const ok = await Swal.fire({
+        title: 'Desestimar comprobante',
+        html: `<div class="cr-swal"><b>${escaparHtml(c.proveedor ?? '')}</b> · ${escaparHtml(nombreTipo(c))} ${numeroArca(c)}<br/>No se carga en Alegra y se oculta de la lista. Se ve en la tarjeta «Desestimadas» y se puede restaurar.</div>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Desestimar',
+        cancelButtonText: 'Cancelar',
+      })
+      if (!ok.isConfirmed) return
+    }
     try {
       await marcarComprobante(empresa, c.id, accion)
       setSeleccion((prev) => {
@@ -382,7 +510,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
         nuevo.delete(c.id)
         return nuevo
       })
-      await leerFilas(importacionId)
+      await leerFilas(mes)
     } catch (err) {
       showError('Error', err instanceof Error ? err.message : 'No se pudo actualizar')
     }
@@ -418,6 +546,8 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       id: 'comprobante',
       header: 'Comprobante',
       accessorFn: (c) => `${nombreTipo(c)} ${numeroArca(c)}`,
+      // El filtro agrupa por tipo (Factura A, Nota de crédito C, ...), no por número
+      meta: { filterValue: ((c: ComprobanteArca) => nombreTipo(c)) as (row: never) => unknown },
       cell: ({ row }) => {
         const c = row.original
         return (
@@ -441,9 +571,15 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
             <span className="cr-nombre">{c.proveedor || '-'}</span>
             <span className="cr-muted">
               CUIT {c.cuit}
-              {c.estado !== 'cargado' && !c.alegra_proveedor_id ? ' · no existe en Alegra (se crea)' : ''}
               {c.proveedor_creado ? ' · creado al cargar' : ''}
             </span>
+            {c.estado !== 'cargado' && c.estado !== 'ignorado' && !c.alegra_proveedor_id && (
+              puedeEditar ? (
+                <button type="button" className="ac-crear-prov" onClick={() => void crearProveedor(c)} title="No existe en Alegra">
+                  <UserPlus size={12} /> Crear proveedor
+                </button>
+              ) : <span className="cr-aviso">No existe en Alegra</span>
+            )}
           </div>
         )
       },
@@ -457,14 +593,56 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
         const neto = Object.entries(c.netos || {})
         return (
           <div className="cr-contraparte ac-derecha">
-            <span className="cr-importe">{esNc(c) ? '-' : ''}{pesos(c.total)}</span>
-            {c.moneda && !['$', 'PES', 'ARS'].includes(c.moneda.toUpperCase()) && <span className="cr-aviso">{c.moneda}</span>}
+            <span className="cr-importe">{esNc(c) ? '-' : ''}{importe(c.total, codigoMoneda(c.moneda))}</span>
             {neto.length > 0 && (
               <span className="cr-muted">
-                {neto.map(([p, n]) => `IVA ${String(p).replace('.', ',')}%: ${pesos(n)}`).join(' · ')}
+                {neto.map(([p, n]) => `IVA ${String(p).replace('.', ',')}%: ${importe(n, codigoMoneda(c.moneda))}`).join(' · ')}
               </span>
             )}
           </div>
+        )
+      },
+    },
+    {
+      id: 'moneda',
+      header: 'Moneda',
+      accessorFn: (c) => codigoMoneda(c.moneda),
+      meta: { cellAlign: 'center', headerAlign: 'center' },
+      cell: ({ row }) => {
+        const c = row.original
+        const m = codigoMoneda(c.moneda)
+        const tc = Number(c.tipo_cambio) || 1
+        return (
+          <div className="cr-contraparte ac-moneda">
+            <span className={`cr-badge ${m === 'ARS' ? 'ac-moneda--ars' : 'ac-moneda--ext'}`}>{m}</span>
+            {m !== 'ARS' && tc > 1 && (
+              <span className="cr-muted" title="Tipo de cambio informado en ARCA">
+                TC {NUM.format(tc)} · ≈ {pesos(c.total * tc)}
+              </span>
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      id: 'recibida',
+      header: 'Factura',
+      // Recibida = el archivo está en el Drive (encontrado con «Buscar en Drive» o adjuntado con el clip)
+      accessorFn: (c) => (c.drive_link ? 'Recibida' : 'Falta'),
+      meta: { cellAlign: 'center', headerAlign: 'center' },
+      cell: ({ row }) => {
+        const c = row.original
+        if (!c.drive_link) return <span className="cr-muted">{c.estado === 'cargado' || c.estado === 'ignorado' ? '-' : 'Falta'}</span>
+        return (
+          <a
+            className="cr-link ac-archivo"
+            href={c.drive_link}
+            target="_blank"
+            rel="noreferrer"
+            title={`${c.drive_ruta ? `${c.drive_ruta}/` : ''}${c.drive_nombre ?? ''}`}
+          >
+            <FileText size={12} /> Ver factura
+          </a>
         )
       },
     },
@@ -477,7 +655,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
         const c = row.original
         const distintaDelExcel = c.cuenta_excel && c.alegra_categoria_nombre &&
           c.cuenta_excel.toLowerCase() !== c.alegra_categoria_nombre.toLowerCase()
-        if (c.estado === 'cargado' || c.estado === 'ignorado' || !puedeEditar || cuentas.length === 0) {
+        if (c.estado === 'cargado' || c.estado === 'ignorado' || !puedeEditar) {
           return (
             <div className="cr-alegra">
               <span>{c.alegra_categoria_nombre ?? c.cuenta_excel ?? '-'}</span>
@@ -493,7 +671,11 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
               onChange={(e) => void cambiarCuenta(c, e.target.value)}
               aria-label="Cuenta contable de Alegra"
             >
-              <option value="">{c.cuenta_excel ? `«${c.cuenta_excel}» no existe: elegir…` : 'Elegir cuenta contable…'}</option>
+              <option value="">{cuentas.length === 0 ? 'Cargando cuentas…' : 'Elegir cuenta contable…'}</option>
+              {/* Mientras llega el plan de cuentas se ve la cuenta actual */}
+              {cuentas.length === 0 && c.alegra_categoria_id && (
+                <option value={c.alegra_categoria_id}>{c.alegra_categoria_nombre}</option>
+              )}
               {cuentasAgrupadas.map((g) => (
                 <optgroup key={g.tipo} label={g.label}>
                   {g.cuentas.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
@@ -501,7 +683,6 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
               ))}
             </select>
             {distintaDelExcel && <span className="cr-muted">Excel: {c.cuenta_excel}</span>}
-            {!c.cuenta_excel && c.alegra_categoria_nombre && <span className="cr-muted">Sin cuenta en el Excel</span>}
           </div>
         )
       },
@@ -545,13 +726,22 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
         if (!puedeEditar) return null
         return (
           <div className="cr-acciones-fila">
+            {c.estado !== 'ignorado' && !c.drive_link && (
+              <button
+                className="btn-secondary cr-btn-mini"
+                onClick={() => elegirAdjunto(c)}
+                title="Adjuntar la factura (se guarda en la carpeta del proveedor en Drive)"
+              >
+                <Paperclip size={14} />
+              </button>
+            )}
             {(c.estado === 'pendiente' || c.estado === 'error') && (
-              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(c, 'ignorar')} title="No cargar (lo cargo a mano o no va)">
+              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(c, 'ignorar')} title="Desestimar (no se carga en Alegra)">
                 <EyeOff size={14} />
               </button>
             )}
             {c.estado === 'ignorado' && (
-              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(c, 'pendiente')} title="Volver a pendiente">
+              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(c, 'pendiente')} title="Restaurar (deja de estar desestimada)">
                 <Undo2 size={14} />
               </button>
             )}
@@ -560,21 +750,20 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       },
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [seleccion, puedeEditar, cuentas, cuentasAgrupadas, importacionId])
+  ], [seleccion, puedeEditar, cuentas, cuentasAgrupadas, mes])
 
   const tarjetas: Array<{ id: Filtro | null; label: string; valor: string | number; icono: typeof List }> = [
     { id: 'todos', label: 'Comprobantes', valor: resumen.total, icono: List },
-    { id: null, label: 'Total del Excel', valor: pesos(resumen.importe), icono: CircleDollarSign },
+    { id: 'esperando', label: 'Esperando factura', valor: resumen.esperando, icono: Inbox },
     { id: 'listo', label: 'Listos para cargar', valor: resumen.listo, icono: Clock },
     { id: 'revisar', label: 'A revisar', valor: resumen.revisar, icono: AlertTriangle },
     { id: 'cargado', label: `En Alegra · ${pesos(resumen.importeCargado)}`, valor: resumen.cargado, icono: CheckCircle2 },
     { id: 'error', label: 'Con error', valor: resumen.error, icono: AlertTriangle },
-    { id: 'ignorado', label: 'No se cargan', valor: resumen.ignorado, icono: Ban },
+    { id: 'ignorado', label: 'Desestimadas', valor: resumen.ignorado, icono: Ban },
     { id: 'nc', label: 'Notas de crédito', valor: resumen.nc, icono: FileMinus },
   ]
 
-  const seleccionables = cargables.filter((c) => !seleccion.has(c.id))
-  const importaciones = info?.importaciones ?? []
+  const faltanSeleccionar = seleccionablesVisibles.filter((c) => !seleccion.has(c.id))
 
   return (
     <div className="cr-module">
@@ -603,20 +792,31 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       </div>
 
       <div className="cr-filtros">
-        <label className="cr-campo ac-campo-importacion">
-          <span>Excel de ARCA</span>
-          <select
+        <label className="cr-campo">
+          <span>Mes</span>
+          <input
+            type="month"
             className="form-input"
-            value={importacionId}
-            onChange={(e) => void cambiarImportacion(e.target.value)}
-            disabled={loading || importaciones.length === 0}
-          >
-            {importaciones.length === 0 && <option value="">Todavía no se subió ningún Excel</option>}
-            {importaciones.map((i) => <option key={i.id} value={i.id}>{textoImportacion(i)}</option>)}
-          </select>
+            value={mes}
+            onChange={(e) => e.target.value && setMes(e.target.value)}
+            disabled={!mes}
+          />
         </label>
         {info?.puede_editar && (
           <>
+            <input
+              ref={inputAdjunto}
+              type="file"
+              accept=".pdf,image/*"
+              className="ac-input-archivo"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                const c = adjuntandoA
+                setAdjuntandoA(null)
+                if (f && c) void adjuntar(c, f)
+              }}
+            />
             <input
               ref={inputArchivo}
               type="file"
@@ -649,17 +849,18 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
         pageSizeOptions={[20, 50, 100, 200]}
         searchPlaceholder="Buscar proveedor, CUIT, número o cuenta..."
         emptyIcon={<FileSpreadsheet size={48} />}
-        emptyTitle={importaciones.length === 0 ? 'Todavía no se subió ningún Excel' : 'No hay comprobantes'}
-        emptyDescription={importaciones.length === 0 ? 'Tocá «Subir Excel de ARCA»' : 'Probá con otro filtro'}
-        disableAutoFilters
-        alwaysVisibleColumns={['sel', 'cuenta', 'estado', 'acciones']}
+        emptyTitle="No hay comprobantes en este mes"
+        emptyDescription={(info?.importaciones.length ?? 0) === 0 ? 'Tocá «Subir Excel de ARCA»' : 'Elegí otro mes o subí el Excel de ARCA'}
+        alwaysVisibleColumns={['acciones']}
+        // Fijas al desplazar: selección, fecha, comprobante, proveedor y total
+        stickyLeftColumns={5}
         getRowClassName={(c) => (seleccion.has(c.id) ? 'cr-fila-seleccionada' : undefined)}
         headerAction={
           <div className="cr-acciones">
             <button
               className="btn-secondary"
               onClick={() => void revisar()}
-              disabled={loading || revisando || !importacionId || !info?.alegra_configurado}
+              disabled={loading || revisando || !mes || !info?.alegra_configurado}
               title="Vuelve a comparar con Alegra: lo que ya está cargado, lo que se borró y lo que falta"
             >
               <RefreshCw size={16} className={revisando ? 'cr-girando' : undefined} />
@@ -667,20 +868,29 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
             </button>
             {puedeEditar && (
               <>
-                {cargables.length > 0 && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => void buscarDrive()}
+                  disabled={loading || buscandoDrive || !mes}
+                  title="Busca la factura de cada comprobante del mes en la carpeta de Drive y marca las que encuentra"
+                >
+                  <FolderSearch size={16} className={buscandoDrive ? 'cr-girando' : undefined} />
+                  Buscar en Drive
+                </button>
+                {seleccionablesVisibles.length > 0 && (
                   <button
                     className="btn-secondary"
-                    onClick={() => setSeleccion(seleccionables.length > 0
-                      ? new Set([...seleccion, ...seleccionables.map((c) => c.id)])
+                    onClick={() => setSeleccion(faltanSeleccionar.length > 0
+                      ? new Set([...seleccion, ...faltanSeleccionar.map((c) => c.id)])
                       : new Set())}
                     disabled={loading}
                   >
-                    {seleccionables.length > 0 ? `Seleccionar listos (${cargables.length})` : 'Quitar selección'}
+                    {faltanSeleccionar.length > 0 ? `Seleccionar (${seleccionablesVisibles.length})` : 'Quitar selección'}
                   </button>
                 )}
-                <button className="btn-primary" onClick={() => void cargarSeleccionados()} disabled={loading || seleccion.size === 0}>
+                <button className="btn-primary" onClick={() => void cargarSeleccionados()} disabled={loading || elegidosCargables.length === 0}>
                   <UploadCloud size={16} />
-                  Cargar en Alegra ({seleccion.size})
+                  Cargar en Alegra ({elegidosCargables.length})
                 </button>
               </>
             )}
