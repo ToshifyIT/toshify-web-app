@@ -204,7 +204,7 @@ Permiso `conductores:api`. Filtros: `dni`, `zona`, `turno`, `search` (nombre/ape
 
 Campos: id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia,
 licencia_vencimiento, email, telefono_contacto, direccion, zona, preferencia_turno,
-fecha_contratacion, `conductores_estados{codigo,descripcion}`, `sedes{nombre}`.
+fecha_contratacion, fuente_pauta, id_fuente, `conductores_estados{codigo,descripcion}`, `sedes{nombre}`.
 
 ### `GET /api/v1/asignaciones` y `/asignaciones/:id`
 

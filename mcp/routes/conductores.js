@@ -30,6 +30,9 @@
  * Decision tomada con el usuario (2026-09-14): se exponen contacto (email y
  * telefono_contacto) y domicilio como texto (direccion). Las coordenadas NO,
  * y las fechas/motivos de baja tampoco.
+ *
+ * 2026-10-29: se agregan fuente_pauta (canal de la pauta) e id_fuente (link del
+ * anuncio), copiados del lead de origen. No son datos personales.
  */
 
 import express from 'express';
@@ -53,6 +56,8 @@ const CAMPOS = [
   'zona',
   'preferencia_turno',
   'fecha_contratacion',
+  'fuente_pauta',
+  'id_fuente',
   'conductores_estados(codigo,descripcion)',
   'sedes(nombre)',
 ];
