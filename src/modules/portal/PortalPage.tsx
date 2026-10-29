@@ -278,6 +278,35 @@ _logoImg.onload = () => {
   logoBase64 = c.toDataURL('image/png')
 }
 
+const TIPOS_PAGO_MANUAL = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
+
+/**
+ * Pagos manuales/efectivo del kardex que ya quedaron dentro del saldo_anterior de una
+ * facturación (más antiguo primero). Busca el pago cuyo saldo resultante es ese saldo
+ * anterior y suma los pagos manuales inmediatamente previos de la misma semana (ej. dos
+ * pagos en efectivo el mismo día): todos están ya descontados y no van en "Aportes".
+ * `movs` debe venir ordenado por created_at descendente. Solo display.
+ */
+function pagosEnSaldoAnterior<T extends {
+  tipo_movimiento: string; semana: number; anio: number
+  monto_movimiento: number | null; saldo_pendiente: number | null
+}>(movs: T[], saldoAnterior: number): T[] {
+  if (saldoAnterior === 0) return []
+  const esPagoManual = (m: T) => TIPOS_PAGO_MANUAL.includes(m.tipo_movimiento) && Number(m.monto_movimiento || 0) > 0
+  // El saldo_pendiente del kardex tiene signo invertido respecto a saldo_anterior
+  // (a favor = positivo en kardex, negativo en facturación).
+  const objetivo = Math.round(-saldoAnterior * 100)
+  const idx = movs.findIndex(m => Math.round(Number(m.saldo_pendiente || 0) * 100) === objetivo && esPagoManual(m))
+  if (idx < 0) return []
+  const cadena = [movs[idx]]
+  for (let i = idx + 1; i < movs.length; i++) {
+    const m = movs[i]
+    if (!esPagoManual(m) || m.semana !== movs[idx].semana || m.anio !== movs[idx].anio) break
+    cadena.push(m)
+  }
+  return cadena.reverse()
+}
+
 // =====================================================
 // COMPONENT
 // =====================================================
@@ -305,20 +334,14 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   // aplicadoAFraccionamiento: pago que bajó una deuda que después se fraccionó. Ya está
   // dentro de las cuotas (P010): se muestra pero no se resta de la semana.
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string; aplicadoAFraccionamiento: boolean }>>([])
-  // Desglose del saldo anterior: saldo previo + pago manual/efectivo = resultado.
+  // Desglose del saldo anterior: saldo previo - pagos manuales/efectivo = resultado.
   // Solo display; se lee del kardex (control_saldos). No afecta cálculos.
   const [detalleSaldoBreakdown, setDetalleSaldoBreakdown] = useState<{
     saldoPrevio: number
-    pago: number
-    pagoRef: string
+    // Pagos que ya quedaron aplicados en el saldo anterior (más antiguo primero).
+    // Sus IDs se usan para no volver a descontarlos dentro de "Aportes".
+    pagos: Array<{ id: string; monto: number; ref: string; tipo: string; fecha: string }>
     resultado: number
-    // ID del movimiento del kardex que ya quedó aplicado en el saldo anterior.
-    // Se usa para no volver a descontarlo dentro de "Aportes".
-    pagoId?: string | null
-    // Tipo del movimiento (para etiquetar el aporte arriba, ej. "Pago Manual").
-    pagoTipo?: string | null
-    // Fecha del movimiento (para mostrarla junto al aporte arriba).
-    pagoFecha?: string | null
   } | null>(null)
   // Semana con cuota 1 de un fraccionamiento de saldo: cierre - pagos - fraccionado.
   // Los pagos de este desglose no se repiten en Aportes.
@@ -902,25 +925,14 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       })
       setPagadoPorSemana(map)
 
-      // Aportes efectivos por factura = aportes de la semana EXCLUYENDO el pago que ya quedó
-      // aplicado dentro del saldo anterior (mismo criterio que el modal, evita doble conteo).
-      const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
+      // Aportes efectivos por factura = aportes de la semana EXCLUYENDO los pagos que ya quedaron
+      // aplicados dentro del saldo anterior (mismo criterio que el modal, evita doble conteo).
       const pagosEfectivos: Record<string, number> = {}
       facturasData.forEach((f) => {
         const per = f.periodos_facturacion
-        const saldoAnt = f.saldo_anterior || 0
-        let matchedId: string | null = null
-        if (saldoAnt !== 0) {
-          const objetivo = -saldoAnt
-          const match = pagosRows.find((m) =>
-            Math.round((m.saldo_pendiente || 0) * 100) === Math.round(objetivo * 100) &&
-            (m.monto_movimiento || 0) > 0 &&
-            tiposManuales.includes(m.tipo_movimiento)
-          )
-          matchedId = match?.id || null
-        }
+        const idsYaAplicados = new Set(pagosEnSaldoAnterior(pagosRows, f.saldo_anterior || 0).map(m => m.id))
         pagosEfectivos[f.id] = pagosRows
-          .filter((p) => p.semana === per.semana && p.anio === per.anio && tiposAporte.includes(p.tipo_movimiento) && p.id !== matchedId)
+          .filter((p) => p.semana === per.semana && p.anio === per.anio && tiposAporte.includes(p.tipo_movimiento) && !idsYaAplicados.has(p.id))
           .reduce((s, p) => s + Number(p.monto_movimiento || 0), 0)
       })
       setPagosEfectivosPorFactura(pagosEfectivos)
@@ -1377,44 +1389,36 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     })
 
     // Desglose del saldo anterior desde el kardex (control_saldos).
-    // Busca el movimiento de pago manual/efectivo cuyo saldo resultante coincide
-    // con el saldo_anterior de esta facturación, para mostrar: saldo previo, pago y resultado.
+    // Busca los pagos manuales/efectivo cuyo saldo resultante es el saldo_anterior de esta
+    // facturación (ver pagosEnSaldoAnterior), para mostrar: saldo previo, pagos y resultado.
     // Solo es visual: no modifica totales ni la facturación.
     const saldoAnt = factura.saldo_anterior || 0
     if (saldoAnt !== 0) {
       ;(supabase
         .from('control_saldos') as any)
-        .select('id, tipo_movimiento, saldo_adeudado, saldo_pendiente, monto_movimiento, referencia, created_at')
+        .select('id, tipo_movimiento, semana, anio, saldo_pendiente, monto_movimiento, referencia, created_at')
         .eq('conductor_id', factura.conductor_id)
         .order('created_at', { ascending: false })
-        .limit(15)
-        .then(({ data }: { data: Array<{ id: string; tipo_movimiento: string; saldo_adeudado: number | null; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null; created_at: string }> | null }) => {
+        .limit(30)
+        .then(({ data }: { data: Array<{ id: string; tipo_movimiento: string; semana: number; anio: number; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null; created_at: string }> | null }) => {
           if (!data) return
-          // El saldo_pendiente del kardex tiene signo invertido respecto a saldo_anterior
-          // (a favor = positivo en kardex, negativo en facturación).
-          const objetivo = -saldoAnt
-          const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
-          const match = data.find(m =>
-            Math.round((m.saldo_pendiente || 0) * 100) === Math.round(objetivo * 100) &&
-            (m.monto_movimiento || 0) > 0 &&
-            tiposManuales.includes(m.tipo_movimiento)
-          )
-          if (match) {
-            const pago = match.monto_movimiento || 0
-            const resultado = match.saldo_pendiente || 0
-            const saldoPrevio = match.saldo_adeudado != null && match.saldo_adeudado > 0
-              ? match.saldo_adeudado
-              : pago - resultado
-            setDetalleSaldoBreakdown({
-              saldoPrevio,
-              pago,
-              pagoRef: match.referencia || 'Pago en efectivo',
-              resultado,
-              pagoId: match.id,
-              pagoTipo: match.tipo_movimiento,
-              pagoFecha: match.created_at,
-            })
-          }
+          const cadena = pagosEnSaldoAnterior(data, saldoAnt)
+          if (cadena.length === 0) return
+          // saldo_adeudado del kardex es la deuda DESPUÉS del movimiento, no antes:
+          // la deuda previa al primer pago es su monto menos el saldo resultante.
+          const primero = cadena[0]
+          const saldoPrevio = Number(primero.monto_movimiento || 0) - Number(primero.saldo_pendiente || 0)
+          setDetalleSaldoBreakdown({
+            saldoPrevio,
+            pagos: cadena.map(m => ({
+              id: m.id,
+              monto: Number(m.monto_movimiento || 0),
+              ref: m.referencia || 'Pago en efectivo',
+              tipo: m.tipo_movimiento,
+              fecha: m.created_at,
+            })),
+            resultado: Number(cadena[cadena.length - 1].saldo_pendiente || 0),
+          })
         })
     }
 
@@ -1769,7 +1773,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         pdf.text(`${saldoAntPdf > 0 ? '+' : saldoAntPdf < 0 ? '-' : ''}${formatCurrency(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
         y += 6
       } else if (saldoAntPdf !== 0) {
-        checkPage(28)
+        checkPage(23 + (detalleSaldoBreakdown?.pagos.length || 1) * 5)
         y += 3
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(negro)
         pdf.text('SALDO ANTERIOR', margin, y); y += 6
@@ -1782,14 +1786,13 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           if (previoAFavor) pdf.setTextColor(verde)
           pdf.text(`${previoAFavor ? '-' : ''}${formatCurrency(Math.abs(detalleSaldoBreakdown.saldoPrevio))}`, pageWidth - margin, y, { align: 'right' })
           y += 5
-          const pagoLbl = tipoLabelPdf[detalleSaldoBreakdown.pagoTipo || ''] || 'Pago Manual'
-          const pagoRef = detalleSaldoBreakdown.pagoRef ? ` · ${detalleSaldoBreakdown.pagoRef}` : ''
-          const pagoFec = detalleSaldoBreakdown.pagoFecha ? ` · ${fechaCorta(detalleSaldoBreakdown.pagoFecha)}` : ''
-          pdf.setTextColor(negro)
-          pdf.text(`${pagoLbl}${pagoRef}${pagoFec}`, margin, y)
-          pdf.setTextColor(verde)
-          pdf.text(`-${formatCurrency(detalleSaldoBreakdown.pago)}`, pageWidth - margin, y, { align: 'right' })
-          y += 5
+          detalleSaldoBreakdown.pagos.forEach(p => {
+            pdf.setTextColor(negro)
+            pdf.text(`${tipoLabelPdf[p.tipo] || 'Pago Manual'} · ${p.ref} · ${fechaCorta(p.fecha)}`, margin, y)
+            pdf.setTextColor(verde)
+            pdf.text(`-${formatCurrency(p.monto)}`, pageWidth - margin, y, { align: 'right' })
+            y += 5
+          })
           pdf.setTextColor(negro)
           pdf.text(saldoAntPdf > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor', margin, y)
           pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
@@ -1804,10 +1807,10 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         }
       }
 
-      // APORTES (excluye el pago ya aplicado en el saldo anterior, igual que el modal)
-      const pagoYaAplicadoIdPdf = detalleSaldoBreakdown?.pagoId || null
+      // APORTES (excluye los pagos ya aplicados en el saldo anterior, igual que el modal)
+      const idsYaAplicadosPdf = new Set((detalleSaldoBreakdown?.pagos || []).map(p => p.id))
       const idsEnDesgloseFracPdf = new Set((desgloseFrac?.pagos || []).map(p => p.id))
-      const pagosAportesPdf = detallePagos.filter(p => p.id !== pagoYaAplicadoIdPdf && !idsEnDesgloseFracPdf.has(p.id))
+      const pagosAportesPdf = detallePagos.filter(p => !idsYaAplicadosPdf.has(p.id) && !idsEnDesgloseFracPdf.has(p.id))
       const totalPagadoSemanaPdf = pagosAportesPdf.filter(p => !p.aplicadoAFraccionamiento).reduce((s, p) => s + p.monto, 0)
       if (pagosAportesPdf.length > 0) {
         checkPage(16 + pagosAportesPdf.length * 5)
@@ -2396,11 +2399,11 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         <span className="portal-detail-item-amount">{formatCurrency(valor)}</span>
       </div>
     )
-    // El pago que ya quedó aplicado dentro del "Saldo Anterior" no debe volver a
-    // descontarse acá (si no, se resta dos veces). Lo excluimos de los aportes por su ID.
-    const pagoYaAplicadoId = detalleSaldoBreakdown?.pagoId || null
+    // Los pagos que ya quedaron aplicados dentro del "Saldo Anterior" no deben volver a
+    // descontarse acá (si no, se restan dos veces). Se excluyen de los aportes por su ID.
+    const idsYaAplicados = new Set((detalleSaldoBreakdown?.pagos || []).map(p => p.id))
     const idsEnDesgloseFrac = new Set((desgloseFrac?.pagos || []).map(p => p.id))
-    const pagosAportes = detallePagos.filter(p => p.id !== pagoYaAplicadoId && !idsEnDesgloseFrac.has(p.id))
+    const pagosAportes = detallePagos.filter(p => !idsYaAplicados.has(p.id) && !idsEnDesgloseFrac.has(p.id))
     // Saldo real = referencial - lo ya pagado (Cabify + ajustes + transferencias).
     // Si > 0 = todavia debe. Si <= 0 = cubierto o a favor.
     // Los pagos que ya quedaron dentro de una deuda fraccionada no se restan.
@@ -2602,26 +2605,28 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                               {detalleSaldoBreakdown.saldoPrevio < 0 ? '-' : ''}{formatCurrency(Math.abs(detalleSaldoBreakdown.saldoPrevio))}
                             </span>
                           </div>
-                          <div className="portal-detail-item">
-                            <span className="portal-detail-item-name">
-                              <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
-                              {({
-                                pago_manual: 'Pago Manual',
-                                pago_efectivo: 'Pago en efectivo',
-                                pago_cabify: 'Pago Cabify',
-                                pago_cuota: 'Pago Cuota',
-                                ajuste_manual: 'Ajuste',
-                                devolucion_garantia: 'Devolución Garantía',
-                              } as Record<string, string>)[detalleSaldoBreakdown.pagoTipo || ''] || 'Pago Manual'}
-                              <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
-                                {detalleSaldoBreakdown.pagoRef ? `· ${detalleSaldoBreakdown.pagoRef}` : ''}
-                                {detalleSaldoBreakdown.pagoFecha ? ` · ${new Date(detalleSaldoBreakdown.pagoFecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
+                          {detalleSaldoBreakdown.pagos.map(p => (
+                            <div key={p.id} className="portal-detail-item">
+                              <span className="portal-detail-item-name">
+                                <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
+                                {({
+                                  pago_manual: 'Pago Manual',
+                                  pago_efectivo: 'Pago en efectivo',
+                                  pago_cabify: 'Pago Cabify',
+                                  pago_cuota: 'Pago Cuota',
+                                  ajuste_manual: 'Ajuste',
+                                  devolucion_garantia: 'Devolución Garantía',
+                                } as Record<string, string>)[p.tipo] || 'Pago Manual'}
+                                <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
+                                  {`· ${p.ref}`}
+                                  {` · ${new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}`}
+                                </span>
                               </span>
-                            </span>
-                            <span className="portal-detail-item-amount" style={{ color: '#059669', fontWeight: 600 }}>
-                              -{formatCurrency(detalleSaldoBreakdown.pago)}
-                            </span>
-                          </div>
+                              <span className="portal-detail-item-amount" style={{ color: '#059669', fontWeight: 600 }}>
+                                -{formatCurrency(p.monto)}
+                              </span>
+                            </div>
+                          ))}
                         </>
                       )}
                       <div className="portal-detail-item">
