@@ -186,6 +186,30 @@ function isProximoAVencer(item: Vencimiento): boolean {
   return p === 'ALTO' || p === 'MEDIO'
 }
 
+/** Documentos de Vencimientos que también viven en la ficha del vehículo. */
+const CAMPO_VEHICULO_POR_DOCUMENTO: Record<string, string> = {
+  'VTV': 'vto_vtv_fecha',
+  'GNC': 'vto_gnc_fecha',
+  'Matafuegos': 'vto_matafuego_fecha',
+  'Seguro': 'vencimiento_seguro',
+}
+
+/** Copia la fecha de vencimiento a la ficha del vehículo (Vehículos) cuando corresponde. */
+async function sincronizarConVehiculo(documento: string | null | undefined, patente: string, fecha: string | null | undefined) {
+  const campo = CAMPO_VEHICULO_POR_DOCUMENTO[(documento || '').trim()]
+  if (!campo || !fecha || !patente?.trim()) return
+  const { error } = await supabase
+    .from('vehiculos' as any)
+    .update({ [campo]: fecha })
+    .eq('patente', patente.trim().toUpperCase())
+  if (error) console.error('Error sincronizando vencimiento con vehículo:', error)
+}
+
+/** Patentes de prueba (PRUEBA987, PRB001…): no son autos reales. */
+function esPatentePrueba(patente: string | null | undefined): boolean {
+  return /^(PRUEBA|PRB)/i.test(String(patente || '').replace(/\s+/g, ''))
+}
+
 export function VencimientosModule() {
   const { sedeActual } = useSede()
   const { user, profile } = useAuth()
@@ -194,6 +218,8 @@ export function VencimientosModule() {
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | 'proximos' | 'vencidos' | 'alta' | 'media' | 'baja'>('all')
 
+  // Patentes de autos eliminados o de prueba (sus vencimientos no se muestran)
+  const [patentesOcultas, setPatentesOcultas] = useState<Set<string>>(new Set())
   const [vehiculos, setVehiculos] = useState<Array<{ id: string; patente: string; marca: string; modelo: string; titular: string; sedeNombre?: string }>>([])
   const [patenteSedeMap, setPatenteSedeMap] = useState<Map<string, string>>(new Map())
   // patente normalizada -> estado actual del vehículo (vehiculos_estados.descripcion)
@@ -282,12 +308,21 @@ export function VencimientosModule() {
     try {
       const { data, error } = await supabase
         .from('vehiculos' as any)
-        .select('id, patente, marca, modelo, titular, sede_id, sedes(nombre), vehiculos_estados(descripcion)')
+        .select('id, patente, marca, modelo, titular, sede_id, deleted_at, sedes(nombre), vehiculos_estados(descripcion)')
         .order('patente', { ascending: true })
 
       if (error) throw error
 
-      const mapped = (data || []).map((v: any) => ({
+      // Autos eliminados o de prueba: no se ofrecen y sus vencimientos no se muestran
+      const ocultas = new Set<string>()
+      const vigentes = (data || []).filter((v: any) => {
+        const fuera = !!v.deleted_at || esPatentePrueba(v.patente)
+        if (fuera && v.patente) ocultas.add(normalizePatente(v.patente))
+        return !fuera
+      })
+      setPatentesOcultas(ocultas)
+
+      const mapped = vigentes.map((v: any) => ({
         id: v.id as string,
         patente: (v.patente || '') as string,
         marca: (v.marca || '') as string,
@@ -331,12 +366,14 @@ export function VencimientosModule() {
 
   // Dataset filtrado por sede (base para KPIs y tabla)
   const sedeFilteredItems = useMemo(() => {
-    if (!sedeActual || !sedeActual.id) return items
-    return items.filter(item => {
+    const visibles = items.filter(item =>
+      !esPatentePrueba(item.patente) && !patentesOcultas.has(normalizePatente(item.patente)))
+    if (!sedeActual || !sedeActual.id) return visibles
+    return visibles.filter(item => {
       const sedeNombre = patenteSedeMap.get(normalizePatente(item.patente))
       return sedeNombre === sedeActual.nombre
     })
-  }, [items, sedeActual, patenteSedeMap])
+  }, [items, sedeActual, patenteSedeMap, patentesOcultas])
 
   const totalRegistros = useMemo(() => sedeFilteredItems.length, [sedeFilteredItems])
 
@@ -536,6 +573,8 @@ export function VencimientosModule() {
         }
 
         setItems(prev => [mapped, ...prev])
+        // Sincronizar con módulo de vehículos si es VTV/GNC/Matafuegos/Seguro
+        await sincronizarConVehiculo(payload.documento, payload.patente, payload.fecha_vencimiento)
         showSuccess('Registro creado correctamente')
       } else if (modalMode === 'edit' && selectedItem) {
         const usuarioActual = profile?.full_name || user?.email || 'desconocido'
@@ -578,22 +617,8 @@ export function VencimientosModule() {
               : x
           )
         )
-        // Sincronizar con módulo de vehículos si es VTV/GNC/Matafuegos
-        const docNorm = (payload.documento || '').trim()
-        if (['VTV', 'GNC', 'Matafuegos'].includes(docNorm)) {
-          const campoMap: Record<string, string> = {
-            'VTV': 'vto_vtv_fecha',
-            'GNC': 'vto_gnc_fecha',
-            'Matafuegos': 'vto_matafuego_fecha',
-          }
-          const campo = campoMap[docNorm]
-          if (campo) {
-            await supabase
-              .from('vehiculos' as any)
-              .update({ [campo]: payload.fecha_vencimiento })
-              .eq('patente', payload.patente.toUpperCase())
-          }
-        }
+        // Sincronizar con módulo de vehículos si es VTV/GNC/Matafuegos/Seguro
+        await sincronizarConVehiculo(payload.documento, payload.patente, payload.fecha_vencimiento)
 
         showSuccess('Registro actualizado correctamente')
       }
@@ -854,30 +879,7 @@ export function VencimientosModule() {
         </div>
       </div>
 
-      <div className="vencimientos-header-row">
-        <div className="vencimientos-header-left">
-          <div className="vencimientos-tabs">
-            <button
-              type="button"
-              className="vencimientos-tab active"
-            >
-              <FileText size={16} />
-              Listado
-              <span className="tab-badge">{filteredItems.length}</span>
-            </button>
-          </div>
-          {/* Aviso compacto en la misma fila de la pestaña (componente global .aviso) */}
-          {totalProximosAVencer > 0 && (
-            <div className="aviso aviso--warning" style={{ marginLeft: 12 }}>
-              <AlertTriangle size={14} />
-              <span>
-                <strong>{totalProximosAVencer}</strong> operación(es) próximas a vencer
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
+      {/* Sin pestaña única ni aviso suelto: las próximas a vencer ya están en su tarjeta de arriba */}
       <div className="vencimientos-search-row">
         <div className="vencimientos-search">
           <div className="vencimientos-search-wrapper">
