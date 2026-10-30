@@ -6,8 +6,9 @@
 // (geotab_resync_runner.py, cada minuto) corre el sync de esa semana y sede.
 // Ver sql/geotab_resync_semana.sql.
 //
-// Solo se ofrece para una semana completa (lunes a domingo), ya empezada, cuyo
-// período de facturación de la sede NO esté cerrado.
+// Se ofrece para cualquier semana completa (lunes a domingo), también las de período
+// cerrado; solo se puede pedir si la semana ya empezó. En semanas cerradas no cambia la
+// facturación: los cobros de exceso de km ya creados se listan en el resumen.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../../../../lib/supabase'
@@ -23,6 +24,17 @@ export interface ResyncResumen {
   km_despues?: number
   duplicados_borrados?: number | null
   turnos_guardados?: number
+  /** Multas de la semana sincronizadas con el conductor de Geotab (trigger en la base,
+   *  ver sql/sincronizar_multas_geotab.sql). */
+  multas?: {
+    actualizadas?: number
+    detalle?: Array<{ id: number; patente: string; fecha: string; conductor: string; antes: string | null }>
+    omitidas_con_incidencia?: Array<{ id: number; patente: string; fecha: string; conductor_gps: string; actual: string | null }>
+    error?: string
+  }
+  /** Cobros de exceso de km de la semana cuyo conductor tuvo viajes reasignados
+   *  (no se recalculan; trigger en la base, ver sql/geotab_resync_todas_semanas.sql). */
+  excesos_afectados?: Array<{ conductor: string; patente: string | null; km_exceso: number | null; monto: number | null }>
 }
 
 export interface ResyncPedido {
@@ -66,28 +78,21 @@ export function useGeotabResync(
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
   const semanaEmpezada = !!semana && startDate <= hoy
 
-  const [periodoCerrado, setPeriodoCerrado] = useState<boolean | null>(null)
   const [pedido, setPedido] = useState<ResyncPedido | null>(null)
   const avisar = useRef({ onTerminado, onError })
   useEffect(() => { avisar.current = { onTerminado, onError } }, [onTerminado, onError])
 
-  // Estado del período de facturación + último pedido de esta semana.
+  // Último pedido de esta semana (para mostrar si hay uno en curso y cuándo fue el último).
   useEffect(() => {
     let vivo = true
-    setPeriodoCerrado(null)
     setPedido(null)
     if (!sedeId || !semanaEmpezada) return
     void (async () => {
-      const [{ data: periodos }, { data: pedidos }] = await Promise.all([
-        supabase.from('periodos_facturacion').select('estado')
-          .eq('sede_id', sedeId).eq('fecha_inicio', startDate),
-        (supabase.from('geotab_resync_solicitudes' as any) as any).select(COLUMNAS)
-          .eq('sede_id', sedeId).eq('desde', startDate)
-          .order('created_at', { ascending: false }).limit(1),
-      ])
+      const { data: pedidos } = await (supabase.from('geotab_resync_solicitudes' as any) as any)
+        .select(COLUMNAS)
+        .eq('sede_id', sedeId).eq('desde', startDate)
+        .order('created_at', { ascending: false }).limit(1)
       if (!vivo) return
-      setPeriodoCerrado(((periodos || []) as Array<{ estado: string | null }>)
-        .some(p => p.estado === 'cerrado'))
       setPedido(((pedidos || []) as ResyncPedido[])[0] ?? null)
     })()
     return () => { vivo = false }
@@ -127,15 +132,17 @@ export function useGeotabResync(
       .single()
     if (error) {
       if (error.code === '23505') throw new Error('Ya hay una actualización en curso para esta semana.')
-      if (error.code === '42501') throw new Error('Esta semana no se puede actualizar (período cerrado o fuera de rango).')
+      if (error.code === '42501') throw new Error('Esta semana todavía no empezó.')
       throw error
     }
     setPedido(data as ResyncPedido)
   }, [sedeId, numSemana, anioSemana, startDate, endDate])
 
   return {
-    /** Mostrar el botón: semana completa, empezada y con el período abierto. */
-    disponible: semanaEmpezada && periodoCerrado === false,
+    /** Mostrar el botón: hay una semana completa (lunes a domingo) elegida. */
+    disponible: !!semana,
+    /** Se puede pedir: la semana ya empezó. */
+    habilitado: semanaEmpezada,
     semana,
     pedido,
     enCurso,
