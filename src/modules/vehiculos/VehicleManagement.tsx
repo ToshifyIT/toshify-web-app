@@ -564,12 +564,13 @@ export function VehicleManagement() {
     }
   }
 
-  // Sincronizar vencimientos VTV/GNC/Matafuegos con el módulo de vencimientos
+  // Sincronizar vencimientos VTV/GNC/Matafuegos/Seguro con el módulo de vencimientos
   const sincronizarVencimientos = async (patente: string, titular: string, userName: string) => {
     const tipos: { aplica: boolean; fecha: string; documento: string }[] = [
       { aplica: formData.vto_vtv_aplica, fecha: formData.vto_vtv_fecha, documento: 'VTV' },
       { aplica: formData.vto_gnc_aplica, fecha: formData.vto_gnc_fecha, documento: 'GNC' },
       { aplica: formData.vto_matafuego_aplica, fecha: formData.vto_matafuego_fecha, documento: 'Matafuegos' },
+      { aplica: true, fecha: formData.vencimiento_seguro, documento: 'Seguro' },
     ]
 
     for (const tipo of tipos) {
@@ -1393,7 +1394,7 @@ export function VehicleManagement() {
       const { data: vencimientosVehiculo } = await (supabase.from('vencimientos') as any)
         .select('documento, fecha_vencimiento')
         .eq('patente', patenteUpper)
-        .in('documento', ['VTV', 'GNC', 'Matafuegos'])
+        .in('documento', ['VTV', 'GNC', 'Matafuegos', 'Seguro'])
         .order('created_at', { ascending: false })
 
       if (vencimientosVehiculo && vencimientosVehiculo.length > 0) {
@@ -1409,6 +1410,7 @@ export function VehicleManagement() {
           vto_gnc_aplica: vencMap.has('GNC') ? true : prev.vto_gnc_aplica,
           vto_matafuego_fecha: vencMap.get('Matafuegos') || prev.vto_matafuego_fecha,
           vto_matafuego_aplica: vencMap.has('Matafuegos') ? true : prev.vto_matafuego_aplica,
+          vencimiento_seguro: vencMap.get('Seguro')?.slice(0, 10) || prev.vencimiento_seguro,
         }))
       }
 
