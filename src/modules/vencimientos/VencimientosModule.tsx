@@ -9,6 +9,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type { ColumnDef } from '@tanstack/react-table'
 import { normalizePatente } from '../../utils/normalizeDocuments'
+import { StatsGrid } from '../../components/ui/StatsGrid'
 import './VencimientosModule.css'
 
 // Paleta semántica para el badge de estado del vehículo. Mapea por el texto de la
@@ -809,7 +810,7 @@ export function VencimientosModule() {
   return (
     <div className="vencimientos-module">
       <div className="vencimientos-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="VencimientosModule">
           <div
             className={`stat-card ${activeFilter === 'all' ? 'active' : ''}`}
             onClick={() => setActiveFilter('all')}
@@ -876,7 +877,7 @@ export function VencimientosModule() {
               <span className="stat-label">Prioridad baja</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       <div className="vencimientos-table">

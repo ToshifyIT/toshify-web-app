@@ -5,7 +5,7 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable'
-import { Search, ClipboardList, Download, ChevronDown, X, Plus, CheckCircle, Eye, Sun, Moon, Clock } from 'lucide-react'
+import { Search, ClipboardList, Download, ChevronDown, X, Plus, CheckCircle, Eye, Sun, Moon, Clock, AlertTriangle } from 'lucide-react'
 import type { Marcacion } from '../../bitacora/hooks/useUSSHistoricoData'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 import * as XLSX from 'xlsx'
@@ -368,7 +368,7 @@ export function ExcesoKmTable({
                 title={`${r.kmEstimados.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km sin conductor identificado en Geotab, atribuidos por su asignación y el horario del turno`}
                 style={{ fontSize: 10, color: '#b45309', whiteSpace: 'normal', lineHeight: 1.3, maxWidth: 260 }}
               >
-                ⚠ No se encontró coincidencia, este conductor es un aproximado/estimado
+                <AlertTriangle size={12} className="ico-inline" />No se encontró coincidencia, este conductor es un aproximado/estimado
                 ({r.kmEstimados.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km). Verificá que sea correcto en Geotab.
               </span>
             )}

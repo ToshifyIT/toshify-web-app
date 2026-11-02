@@ -13,6 +13,8 @@ import {
   type SaldoMovimiento,
   type FacturacionResumenSemana,
 } from './conductorDetalleService'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 
 interface Props {
   // El kardex lo carga el modal una sola vez y lo comparte con los KPIs.
@@ -270,9 +272,9 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
       )}
 
       {loading ? (
-        <div className="cdet-empty">Cargando…</div>
+        <Spinner size="sm" message="Cargando…" />
       ) : rows.length === 0 ? (
-        <div className="cdet-empty">Sin movimientos de saldo registrados.</div>
+        <EmptyState size="sm" title="Sin movimientos de saldo registrados." />
       ) : (
         <>
           <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px' }}>

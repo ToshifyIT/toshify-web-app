@@ -5,9 +5,23 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  Car, User, Calendar, FileText, Plus,
-  Eye, Trash2, CheckCircle, XCircle, Send,
-  MessageSquareText, Pencil, Copy, RefreshCw, Sun, Moon, ArrowLeftRight
+  Car,
+  User,
+  Calendar,
+  FileText,
+  Plus,
+  Eye,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  Send,
+  MessageSquareText,
+  Copy,
+  RefreshCw,
+  Sun,
+  Moon,
+  ArrowLeftRight,
+  Edit2,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -2001,7 +2015,7 @@ export function ProgramacionModule() {
             onClick={() => handleEdit(row.original)}
             disabled={!!row.original.asignacion_id}
           >
-            <Pencil size={16} />
+            <Edit2 size={16} />
           </button>
           <button
             className="prog-btn prog-btn-delete"
@@ -3086,7 +3100,7 @@ export function ProgramacionModule() {
                     onClick={handlePreviewEdit}
                     style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <Pencil size={16} />
+                    <Edit2 size={16} />
                     Editar
                   </button>
                   <button

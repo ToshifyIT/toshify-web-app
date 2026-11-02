@@ -14,6 +14,7 @@ import { es } from 'date-fns/locale'
 import { useFactCobComparativeData, type Granularity } from '../../../hooks/useFacturadoCobradoData'
 import { PeriodPicker } from './PeriodPicker'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './FacturadoComparativo.css'
 
 const formatCurrencyK = (value: number) => `$${Math.round(value / 1000)}K`
@@ -301,9 +302,7 @@ export function FacturadoComparativo({ granularity, onGranularityChange }: Props
       {/* Grafico */}
       <div className="fact-comp-chart-wrapper">
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            Cargando...
-          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Spinner size="sm" message="Cargando..." /></div>
         ) : mergedData.length === 0 ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#9ca3af', fontSize: 14 }}>
             No hay datos para comparar

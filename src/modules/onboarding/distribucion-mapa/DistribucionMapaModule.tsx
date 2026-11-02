@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api'
-import { Loader2, Map as MapIcon, Users, UserPlus, X } from 'lucide-react'
+import { Map as MapIcon, Users, UserPlus, X } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../types/leads.types'
@@ -37,6 +37,7 @@ import {
   coordsValidas,
   type EntidadMapa,
 } from './distribucionMapaService'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 // Cache perezoso del panel de conductores (consulta pesada). Se carga la primera
 // vez que se abre una ficha y se reusa; se invalida al cambiar de sede.
@@ -519,10 +520,7 @@ export function DistribucionMapaModule() {
             </CenterMsg>
           ) : !isLoaded || loading ? (
             <CenterMsg>
-              <span style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
-                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} />
-                {!isLoaded ? 'Cargando mapa...' : 'Cargando datos...'}
-              </span>
+              <Spinner size="sm" message={!isLoaded ? 'Cargando mapa...' : 'Cargando datos...'} />
             </CenterMsg>
           ) : (
             <GoogleMap
@@ -680,7 +678,7 @@ export function DistribucionMapaModule() {
               fontSize: 13,
             }}
           >
-            <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Cargando ficha...
+            <Spinner size="sm" message="Cargando ficha..." />
           </div>
         </div>
       )}

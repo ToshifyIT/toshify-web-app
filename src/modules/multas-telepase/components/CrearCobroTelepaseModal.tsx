@@ -12,6 +12,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { useCategorizedTipos } from '../../../hooks/useCategorizedTipos'
 import { showError, showSuccess } from '../../../utils/toast'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import '../../incidencias/IncidenciasModule.css'
 
 interface TelepaseInput {
@@ -354,7 +355,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
 
         <div className="modal-body">
           {loading ? (
-            <p style={{ padding: '24px' }}>Cargando catálogos...</p>
+            <Spinner size="sm" message="Cargando catálogos..." />
           ) : (
             <>
               <div className="form-section">

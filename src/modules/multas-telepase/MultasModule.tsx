@@ -21,6 +21,8 @@ import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMu
 import { withAudit, logMultaAudit } from './services/auditMulta'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { StatsGrid } from '../../components/ui/StatsGrid'
+import { EmptyState } from '../../components/ui/EstadosVista'
 import './MultasTelepase.css'
 
 interface Multa {
@@ -1790,7 +1792,7 @@ export default function MultasModule() {
       <LoadingOverlay show={loading} message="Cargando multas..." size="lg" />
       {/* Stats Cards */}
       <div className="multas-stats">
-        <div className="multas-stats-grid">
+        <StatsGrid className="multas-stats-grid" storageKey="MultasModule">
           <div className="stat-card">
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
@@ -1866,7 +1868,7 @@ export default function MultasModule() {
               <Eye size={13} /> Detalle
             </button>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* Banner cuando se está mirando desestimadas */}
@@ -2656,9 +2658,7 @@ export default function MultasModule() {
               </div>
               <div style={{ overflow: 'auto', padding: '8px 20px 20px' }}>
                 {detalle.length === 0 ? (
-                  <div style={{ padding: '24px 10px', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
-                    No hay multas en este estado con los filtros actuales.
-                  </div>
+                  <EmptyState size="sm" title="No hay multas en este estado con los filtros actuales." />
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, whiteSpace: 'nowrap' }}>
                     <thead>

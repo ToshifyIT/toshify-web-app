@@ -14,6 +14,7 @@ import { es } from 'date-fns/locale'
 import { useCobroTeoricoData, type Granularity } from '../../../hooks/useCobroTeoricoData'
 import { PeriodPicker } from './PeriodPicker'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './CobroComparativo.css'
 
 const formatCurrencyK = (value: number) => {
@@ -309,9 +310,7 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
       {/* Gráfico */}
       <div className="cobro-comparativo-chart-wrapper">
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            Cargando...
-          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Spinner size="sm" message="Cargando..." /></div>
         ) : (
           <ResponsiveContainer width="99%" height="100%">
             <LineChart

@@ -16,7 +16,6 @@ import {
   // Plus,
   DollarSign,
   Filter,
-  Edit3,
   UserPlus,
   Trash2,
   Receipt,
@@ -25,12 +24,13 @@ import {
   Scale,
   Download,
   HelpCircle,
+  Edit2,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
 import { DataTable } from '../../../components/ui/DataTable'
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
-import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { recalcGarantiasForSede } from '../../../services/garantiasService'
@@ -41,6 +41,8 @@ import { X as XIcon } from 'lucide-react'
 import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
 import { analizarRegimenToshipass, garantiaRetenida, referenciaDevolucionCambioTarifa, esDevolucionCambioTarifa, referenciaVisible } from '../utils/toshipass'
 import { cargarConceptosTarifa } from '../../onboarding/tarifaConceptos'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 
 interface ConductorBasico {
   id: string
@@ -2225,7 +2227,7 @@ export function GarantiasTab() {
             )}
             {MOSTRAR_BOTON_EDITAR && (isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
-                <Edit3 size={14} />
+                <Edit2 size={14} />
               </button>
             )}
             {isAdmin() && (
@@ -2328,7 +2330,7 @@ export function GarantiasTab() {
       cell: ({ row }) => (
         <div className="fact-table-actions">
           <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarMovimiento(row.original)} data-tooltip="Editar">
-            <Edit3 size={14} />
+            <Edit2 size={14} />
           </button>
         </div>
       )
@@ -2676,7 +2678,7 @@ export function GarantiasTab() {
         <>
           {/* Stats movimientos */}
           <div className="fact-stats">
-            <div className="fact-stats-grid">
+            <StatsGrid className="fact-stats-grid" storageKey="GarantiasTab">
               <div className="fact-stat-card">
                 <Receipt size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
@@ -2693,7 +2695,7 @@ export function GarantiasTab() {
                   <span className="fact-stat-label">Total Pagado</span>
                 </div>
               </div>
-            </div>
+            </StatsGrid>
           </div>
 
           {/* Tabla Movimientos */}
@@ -2939,7 +2941,7 @@ export function GarantiasTab() {
                         padding: '2px 8px', borderRadius: '4px',
                         background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
                       }}>
-                        ⚠ Deuda real ${deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                        <AlertTriangle size={12} className="ico-inline" />Deuda real ${deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
                       </span>
                     )}
                   </div>
@@ -3023,7 +3025,7 @@ export function GarantiasTab() {
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
                     <input
                       type="text"
-                      placeholder="🔍 Buscar por semana, referencia, monto..."
+                      placeholder="Buscar por semana, referencia, monto..."
                       value={kardexModal.search}
                       onChange={e => setKardexModal(prev => ({ ...prev, search: e.target.value }))}
                       style={{
@@ -3048,9 +3050,9 @@ export function GarantiasTab() {
 
                 {/* Tabla */}
                 {kardexModal.tab === 'movimientos' && (kardexModal.loading ? (
-                  <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Cargando...</div>
+                  <Spinner size="sm" message="Cargando..." />
                 ) : kardexModal.rows.length === 0 ? (
-                  <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Sin movimientos en el kardex</div>
+                  <EmptyState size="sm" title="Sin movimientos en el kardex" />
                 ) : (
                   <>
                     <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
@@ -3269,9 +3271,7 @@ export function GarantiasTab() {
                 {/* Historial de ediciones: mismos datos que mostraba el boton de la fila. */}
                 {kardexModal.tab === 'ediciones' && (
                   kardexModal.ediciones.length === 0 ? (
-                    <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                      Sin ediciones registradas
-                    </div>
+                    <EmptyState size="sm" title="Sin ediciones registradas" />
                   ) : (
                     <>
                       <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>

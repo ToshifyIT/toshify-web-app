@@ -41,6 +41,7 @@ import type {
 import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 import './CresiumModule.css'
 
 type FiltroEstado = 'todos' | EstadoAlegra
@@ -703,7 +704,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
   return (
     <div className="cr-module">
       <div className="cr-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="CresiumModule">
           {tarjetas.map((t) => {
             const Icono = t.icono
             const clickeable = t.id !== null
@@ -722,7 +723,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
               </div>
             )
           })}
-        </div>
+        </StatsGrid>
       </div>
 
       <div className="cr-filtros">

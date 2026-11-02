@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { StatsGrid } from '../../components/ui/StatsGrid'
 import './InventarioDashboard.css'
 
 interface StockProducto {
@@ -570,7 +571,7 @@ export function InventarioDashboardModule() {
             Ver todo
           </button>
         </div>
-        <div className="inv-stats-grid">
+        <StatsGrid className="inv-stats-grid" storageKey="InventarioDashboardModule">
           <button
             className={`stat-card${filterEstadoStock === 'disponible' ? ' active' : ''}`}
             onClick={() => setFilterEstadoStock(filterEstadoStock === 'disponible' ? 'all' : 'disponible')}
@@ -674,7 +675,7 @@ export function InventarioDashboardModule() {
               </span>
             </div>
           </button>
-        </div>
+        </StatsGrid>
       </div>
 
       <div className="inv-cockpit">

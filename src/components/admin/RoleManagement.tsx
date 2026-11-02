@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, Edit2, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { LoadingOverlay } from '../ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../ui/LoadingOverlay'
 import type { Role } from '../../types/database.types'
 import Swal from 'sweetalert2'
 import { showError, showSuccess } from '../../utils/toast'
@@ -184,7 +184,7 @@ export function RoleManagement() {
   }
 
   if (loading) {
-    return <div className="dt-loading">Cargando roles...</div>
+    return <Spinner size="sm" message="Cargando roles..." />
   }
 
   return (

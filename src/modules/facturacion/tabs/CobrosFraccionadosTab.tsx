@@ -19,6 +19,7 @@ import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { showError } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 import Swal from 'sweetalert2'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import '../CobrosFraccionados.css'
 
 interface Cuota {
@@ -412,11 +413,6 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
 
   return (
     <div className="cobros-fraccionados-tab">
-      <div className="tab-header">
-        <h3>Control de Cobros Fraccionados</h3>
-        <p>Seguimiento de cuotas aplicadas y pendientes</p>
-      </div>
-
       {!loading && cobros.length > 0 && (
         <div className="cf-filters-row" style={{
           display: 'flex',
@@ -444,33 +440,27 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             />
           </div>
 
-          {/* Tipo */}
-          <div className="cf-filter-group">
-            <label className="cf-filter-label">Tipo:</label>
-            <select
-              className="cf-filter-select"
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value as 'todos' | 'saldo' | 'multa')}
-            >
-              <option value="todos">Todos ({conteosTipo.todos})</option>
-              <option value="saldo">Saldos ({conteosTipo.saldo})</option>
-              <option value="multa">Incidencias ({conteosTipo.multa})</option>
-            </select>
+          {/* Tipo y estado: botones de alternar, como en las otras pestañas de Facturación */}
+          <div className="cf-toggle" role="group" aria-label="Tipo">
+            {([
+              { value: 'todos', label: `Todos (${conteosTipo.todos})` },
+              { value: 'saldo', label: `Saldos (${conteosTipo.saldo})` },
+              { value: 'multa', label: `Incidencias (${conteosTipo.multa})` },
+            ] as const).map(opt => (
+              <button key={opt.value} type="button" className={filtroTipo === opt.value ? 'activo' : ''}
+                onClick={() => setFiltroTipo(opt.value)}>{opt.label}</button>
+            ))}
           </div>
-
-          {/* Estado */}
-          <div className="cf-filter-group">
-            <label className="cf-filter-label">Estado:</label>
-            <select
-              className="cf-filter-select"
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value as FiltroEstado)}
-            >
-              <option value="activos">Activos ({conteos.activos})</option>
-              <option value="completados">Completados ({conteos.completados})</option>
-              <option value="cancelados">Cancelados por baja ({conteos.cancelados})</option>
-              <option value="todos">Todos ({conteos.todos})</option>
-            </select>
+          <div className="cf-toggle" role="group" aria-label="Estado">
+            {([
+              { value: 'activos', label: `Activos (${conteos.activos})` },
+              { value: 'completados', label: `Completados (${conteos.completados})` },
+              { value: 'cancelados', label: `Cancelados por baja (${conteos.cancelados})` },
+              { value: 'todos', label: `Todos (${conteos.todos})` },
+            ] as const).map(opt => (
+              <button key={opt.value} type="button" className={filtroEstado === opt.value ? 'activo' : ''}
+                onClick={() => setFiltroEstado(opt.value as FiltroEstado)}>{opt.label}</button>
+            ))}
           </div>
 
           {/* Limpiar filtros */}
@@ -478,12 +468,8 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             <button
               type="button"
               onClick={limpiarFiltros}
-              style={{
-                padding: '7px 12px', fontSize: '12px', fontWeight: 600,
-                border: '1px solid var(--border-color, #d1d5db)',
-                borderRadius: '6px', backgroundColor: 'transparent',
-                color: 'var(--text-secondary, #6B7280)', cursor: 'pointer',
-              }}
+              className="btn-secondary"
+              style={{ padding: '6px 12px', fontSize: '12px' }}
               title="Limpiar todos los filtros"
             >
               Limpiar
@@ -494,7 +480,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>
-          <p>Cargando cobros fraccionados...</p>
+          <Spinner size="sm" message="Cargando cobros fraccionados..." />
         </div>
       ) : cobrosFiltrados.length === 0 ? (
         <div style={{

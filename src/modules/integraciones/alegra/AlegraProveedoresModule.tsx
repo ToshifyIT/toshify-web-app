@@ -8,7 +8,7 @@
  * pago son datos propios de Toshibase.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, UserPlus, Pencil, Users, AlertTriangle, MapPinOff, MailX } from 'lucide-react'
+import { RefreshCw, UserPlus, Users, AlertTriangle, MapPinOff, MailX, Edit2 } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   obtenerProveedores,
@@ -21,6 +21,7 @@ import { formatFechaHoraART } from '../../../utils/fechaArgentina'
 import { showSuccess, showError } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import { abrirFormularioProveedor, datosIncompletos } from './proveedorForm'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 import '../cresium/CresiumModule.css'
 import './AlegraComprasModule.css'
 
@@ -178,7 +179,7 @@ export function AlegraProveedoresModule() {
       cell: ({ row }) => (puedeEditar ? (
         <div className="cr-acciones-fila">
           <button className="btn-secondary cr-btn-mini" onClick={() => void editar(row.original)} title="Editar (se guarda en Alegra)">
-            <Pencil size={14} />
+            <Edit2 size={14} />
           </button>
         </div>
       ) : null),
@@ -196,7 +197,7 @@ export function AlegraProveedoresModule() {
   return (
     <div className="cr-module">
       <div className="cr-stats ap-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="AlegraProveedoresModule">
           {tarjetas.map((t) => {
             const Icono = t.icono
             return (
@@ -214,7 +215,7 @@ export function AlegraProveedoresModule() {
               </div>
             )
           })}
-        </div>
+        </StatsGrid>
       </div>
 
       <div className="cr-filtros">

@@ -483,3 +483,11 @@ body.device-touch .show-touch-only {
     padding: 12px 16px;
   }
 }
+
+/* Ícono lucide dentro de un texto (reemplaza a los emojis ⚠ ✓ 👁 …) */
+.ico-inline {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}

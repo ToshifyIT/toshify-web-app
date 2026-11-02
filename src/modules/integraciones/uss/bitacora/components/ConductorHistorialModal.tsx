@@ -10,6 +10,8 @@
  */
 import { useEffect, useState, type CSSProperties } from 'react';
 import { supabase } from '../../../../../lib/supabase';
+import { Spinner } from '../../../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../../../components/ui/EstadosVista'
 
 interface ConductorHistorialModalProps {
   conductorId: string;
@@ -112,10 +114,6 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
     fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px',
     margin: '16px 0 10px',
   };
-  const emptyBox: CSSProperties = {
-    padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px',
-    background: 'var(--bg-secondary)', borderRadius: '8px',
-  };
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
@@ -136,9 +134,9 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
             )}
           </div>
           {loading ? (
-            <div style={emptyBox}>Cargando historial...</div>
+            <Spinner size="sm" message="Cargando historial..." />
           ) : vehiculos.length === 0 ? (
-            <div style={emptyBox}>Sin vehículos asignados</div>
+            <EmptyState size="sm" title="Sin vehículos asignados" />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {vehiculos.map((item) => {
@@ -194,9 +192,9 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
             )}
           </div>
           {loading ? (
-            <div style={emptyBox}>Cargando historial...</div>
+            <Spinner size="sm" message="Cargando historial..." />
           ) : bajas.length === 0 ? (
-            <div style={emptyBox}>Sin bajas ni reactivaciones registradas</div>
+            <EmptyState size="sm" title="Sin bajas ni reactivaciones registradas" />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {bajas.map((b) => {

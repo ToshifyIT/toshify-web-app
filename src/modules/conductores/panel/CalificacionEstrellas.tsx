@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { ChevronDown, Star } from 'lucide-react'
 import { cambiosEntreSemanas, calificacionDesdeGuardada, type CambioFactor, type Calificacion, type FactorCalificacion } from './calificacionConductor'
 import { cargarHistorial, type CalificacionSemana } from './calificacionesHistorial'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 function Estrella({ relleno }: { relleno: 0 | 0.5 | 1 }) {
   return (
@@ -154,7 +155,7 @@ export function CalificacionTab({ conductorId, enCurso }: { conductorId: string;
       )}
 
       {historial === null ? (
-        <div className="cdet-empty">Cargando…</div>
+        <Spinner size="sm" message="Cargando…" />
       ) : historial.length === 0 ? (
         <div className="cdet-empty">Todavía no hay semanas cerradas guardadas. Se guarda cada lunes.</div>
       ) : (

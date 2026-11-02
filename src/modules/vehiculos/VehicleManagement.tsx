@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive } from 'lucide-react'
+import { AlertTriangle, Eye, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -22,13 +22,15 @@ import type {
 } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
-import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { SearchableSelect } from '../../components/ui/SearchableSelect/SearchableSelect'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import { formatFechaART, formatHoraART, timestampART, toDateART } from '../../utils/fechaArgentina'
 import { VEHICULO_CATEGORIAS, VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import { useGruposFlota } from '../../hooks/useGruposFlota'
+import { StatsGrid } from '../../components/ui/StatsGrid'
+import { EmptyState } from '../../components/ui/EstadosVista'
 import './VehicleManagement.css'
 
 
@@ -2322,7 +2324,7 @@ export function VehicleManagement() {
                   onClick: () => loadVehiculoDetails(row.original.id)
                 },
                 {
-                  icon: <Edit size={15} />,
+                  icon: <Edit2 size={15} />,
                   label: 'Editar',
                   onClick: () => openEditModal(row.original),
                   disabled: !canUpdate,
@@ -2481,7 +2483,7 @@ export function VehicleManagement() {
 
       {/* Stats Cards - Fila 1: Estados de vehiculo */}
       <div className="veh-stats">
-        <div className="veh-stats-grid">
+        <StatsGrid className="veh-stats-grid" storageKey="VehicleManagement">
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('total')} title="Click para ver todos">
             <Car size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.totalVehiculos}</span><span className="stat-label">Total</span></div>
@@ -2542,9 +2544,7 @@ export function VehicleManagement() {
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosJubilados}</span><span className="stat-label">Jubilado</span></div>
             <ComparacionSemana actual={calculatedStats.vehiculosJubilados} anterior={fotoAnterior?.vehiculosJubilados} invertido etiqueta="" />
           </div>
-        </div>
-        {/* Fila 2: Categorias */}
-        <div className="veh-stats-grid" style={{ marginTop: '8px' }}>
+          {/* Categorías (detrás de «Ver más» junto con el resto de los estados) */}
           {Array.from(calculatedStats.categoriaCountMap.entries())
             .sort((a, b) => b[1] - a[1])
             .map(([catName, count]) => (
@@ -2555,7 +2555,7 @@ export function VehicleManagement() {
               </div>
             ))
           }
-        </div>
+        </StatsGrid>
       </div>
 
       {!canCreate && (
@@ -3424,9 +3424,9 @@ export function VehicleManagement() {
                   </button>
                 </div>
                 {loadingHistorial ? (
-                  <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '12px' }}>Cargando...</div>
+                  <Spinner size="sm" message="Cargando..." />
                 ) : historialCambios.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '12px' }}>Sin registros de cambios</div>
+                  <EmptyState size="sm" title="Sin registros de cambios" />
                 ) : (
                   <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
                     <thead>

@@ -93,6 +93,8 @@ _logoPreload.onload = () => {
 }
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
 import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
+import { EmptyState } from '../../../components/ui/EstadosVista'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
 function parseImporteMulta(val: string): number {
@@ -10713,7 +10715,7 @@ export function ReporteFacturacionTab() {
               <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Descuentos aplicados esta semana</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              ${itemsHtml || '<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:12px;">Sin descuentos aplicados</div>'}
+              ${itemsHtml || '<EmptyState size="sm" title="Sin descuentos aplicados" />'}
             </div>
             <div style="display:flex;gap:8px;align-items:flex-start;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#3b82f6;line-height:1.5;">
               ${iconInfo}<span>Los descuentos reducen el total a cobrar al conductor.</span>
@@ -10894,7 +10896,7 @@ export function ReporteFacturacionTab() {
 
           const placeholderHtml = `
             <div style="padding:32px 20px;text-align:center;background:var(--bg-secondary);border:2px dashed var(--border-primary);border-radius:10px;">
-              <div style="font-size:32px;opacity:0.4;margin-bottom:8px;">📋</div>
+              <div style="opacity:0.4;margin-bottom:8px;color:var(--text-secondary);"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></div>
               <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">
                 El indicador necesita el <strong>reporte Cabify</strong> de pagos cargado para esta semana cerrada.
               </div>
@@ -12887,10 +12889,7 @@ export function ReporteFacturacionTab() {
             </div>
             <div className="fact-modal-body">
               {loadingDias ? (
-                <div className="fact-loading-detalle">
-                  <Loader2 size={32} className="spinning" />
-                  <span>Cargando...</span>
-                </div>
+                <Spinner size="sm" message="Cargando..." />
               ) : diasModalData ? (
                 <div style={{ padding: '4px 0' }}>
                   {/* Info del conductor */}
@@ -13143,9 +13142,7 @@ export function ReporteFacturacionTab() {
                               Asignaciones ({asignacionesValidas.length})
                             </div>
                             {asignacionesValidas.length === 0 ? (
-                              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                                Sin asignaciones registradas
-                              </div>
+                              <EmptyState size="sm" title="Sin asignaciones registradas" />
                             ) : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '320px', overflowY: 'auto' }}>
                                 {asignacionesValidas.map((h, i) => {
@@ -13320,10 +13317,7 @@ export function ReporteFacturacionTab() {
             </div>
             <div className="fact-modal-body">
               {loadingHistorial ? (
-                <div className="fact-loading-detalle">
-                  <Loader2 size={32} className="spinning" />
-                  <span>Cargando historial...</span>
-                </div>
+                <Spinner size="sm" message="Cargando historial..." />
               ) : historialModalData ? (
                 <div style={{ padding: '4px 0' }}>
                   <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -13343,9 +13337,7 @@ export function ReporteFacturacionTab() {
                   </div>
 
                   {historialModalData.asignaciones.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                      Sin asignaciones registradas
-                    </div>
+                    <EmptyState size="sm" title="Sin asignaciones registradas" />
                   ) : (
                     <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -13455,10 +13447,7 @@ export function ReporteFacturacionTab() {
 
             <div className="fact-modal-body">
               {loadingDetalle ? (
-                <div className="fact-loading-detalle">
-                  <Loader2 size={32} className="spinning" />
-                  <span>Cargando detalle...</span>
-                </div>
+                <Spinner size="sm" message="Cargando detalle..." />
               ) : detalleFacturacion ? (
                 <div style={{ padding: '4px 0' }}>
                   {/* Header: Conductor + Semana */}

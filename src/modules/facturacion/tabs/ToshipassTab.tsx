@@ -40,6 +40,7 @@ import { formatCurrency } from '../../../types/facturacion.types'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { analizarRegimenToshipass, CODIGO_TOSHIPASS, TOSHIPASS_VIGENCIA_DESDE } from '../utils/toshipass'
 import { showError } from '../../../utils/toast'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 
 const LOTE_IDS = 200
 const PAGINA = 1000
@@ -578,7 +579,7 @@ export function ToshipassTab() {
 
       {/* Métricas: se recalculan con cada filtro (tipo, estado, columnas y búsqueda) */}
       <div className="fact-stats">
-        <div className="fact-stats-grid">
+        <StatsGrid className="fact-stats-grid" storageKey="ToshipassTab">
           <div className="fact-stat-card" style={{ cursor: 'pointer' }} onClick={limpiarFiltros} title="Ver todos (limpia los filtros)">
             <Users size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
@@ -628,7 +629,7 @@ export function ToshipassTab() {
               <span className="fact-stat-label">Facturado · prom. {formatCurrency(metricas.promedio)}</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       <DataTable

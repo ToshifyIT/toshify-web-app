@@ -1,6 +1,7 @@
 // src/modules/integraciones/uss/bitacora/components/BitacoraStats.tsx
 import { Car, Users, MapPin, TrendingUp, CheckCircle, Clock } from 'lucide-react'
 import type { BitacoraStats as BitacoraStatsType } from '../types/bitacora.types'
+import { StatsGrid } from '../../../../../components/ui/StatsGrid'
 
 interface BitacoraStatsProps {
   stats: BitacoraStatsType | null
@@ -11,13 +12,13 @@ export function BitacoraStats({ stats, isLoading }: BitacoraStatsProps) {
   if (isLoading) {
     return (
       <div className="bitacora-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="BitacoraStats">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="stat-card skeleton">
               <div className="skeleton-content"></div>
             </div>
           ))}
-        </div>
+        </StatsGrid>
       </div>
     )
   }
@@ -35,7 +36,7 @@ export function BitacoraStats({ stats, isLoading }: BitacoraStatsProps) {
 
   return (
     <div className="bitacora-stats">
-      <div className="stats-grid">
+      <StatsGrid className="stats-grid" storageKey="BitacoraStats-1">
         {statCards.map((card, index) => {
           const Icon = card.icon
           return (
@@ -48,7 +49,7 @@ export function BitacoraStats({ stats, isLoading }: BitacoraStatsProps) {
             </div>
           )
         })}
-      </div>
+      </StatsGrid>
     </div>
   )
 }

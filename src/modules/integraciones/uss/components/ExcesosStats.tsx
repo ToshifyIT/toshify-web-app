@@ -6,6 +6,7 @@
 import { AlertTriangle, Car, User, Gauge, Clock, TrendingUp } from 'lucide-react'
 import type { ExcesoStats } from '../types/uss.types'
 import { formatDuration, formatSpeed } from '../utils/uss.utils'
+import { StatsGrid } from '../../../../components/ui/StatsGrid'
 
 interface ExcesosStatsProps {
   readonly stats: ExcesoStats | null
@@ -23,7 +24,7 @@ export function ExcesosStats({ stats, isLoading }: ExcesosStatsProps) {
 
   return (
     <div className="uss-stats">
-      <div className="uss-stats-grid">
+      <StatsGrid className="uss-stats-grid" storageKey="ExcesosStats">
         <StatCard
           icon={<AlertTriangle size={22} />}
           label="Total Excesos"
@@ -60,7 +61,7 @@ export function ExcesosStats({ stats, isLoading }: ExcesosStatsProps) {
           value={formatDuration(Math.round(stats.duracionPromedio))}
           color="green"
         />
-      </div>
+      </StatsGrid>
     </div>
   )
 }
@@ -87,13 +88,13 @@ function StatCard({ icon, label, value, color }: StatCardProps) {
 function StatsLoading() {
   return (
     <div className="uss-stats">
-      <div className="uss-stats-grid">
+      <StatsGrid className="uss-stats-grid" storageKey="ExcesosStats-1">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="uss-stat-card uss-stat-loading">
             <div className="uss-stat-skeleton" />
           </div>
         ))}
-      </div>
+      </StatsGrid>
     </div>
   )
 }

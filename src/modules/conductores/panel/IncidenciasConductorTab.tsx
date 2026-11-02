@@ -5,6 +5,8 @@
 //  - Siniestros: vista v_siniestros_completos (la misma del módulo Siniestros).
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 import '../../../components/ui/DataTable/DataTable.css'
 
 type Tipo = 'logistica' | 'cobro' | 'siniestro'
@@ -111,9 +113,9 @@ export function IncidenciasConductorTab({ conductorId }: { conductorId: string }
 
   const visibles = useMemo(() => (filas || []).filter(f => tipo === 'todas' || f.tipo === tipo), [filas, tipo])
 
-  if (filas === null) return <div className="cdet-empty">Cargando…</div>
+  if (filas === null) return <Spinner size="sm" message="Cargando…" />
   if (error) return <div className="cdet-empty">{error}</div>
-  if (filas.length === 0) return <div className="cdet-empty">Sin incidencias ni siniestros registrados.</div>
+  if (filas.length === 0) return <EmptyState size="sm" title="Sin incidencias ni siniestros registrados." />
 
   return (
     <div className="inc-cond">

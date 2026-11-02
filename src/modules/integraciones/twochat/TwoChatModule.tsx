@@ -34,6 +34,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 import './TwoChatModule.css'
 
 type TabContactos = 'contactos' | 'registro'
@@ -329,7 +330,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
   return (
     <>
       <div className="tc-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="TwoChatModule">
           {tarjetas.map((t) => {
             const Icono = t.icono
             const activo = filtroSync === t.id || (t.id === 'error' && filtroSync === 'telefono_duplicado')
@@ -348,7 +349,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
               </div>
             )
           })}
-        </div>
+        </StatsGrid>
       </div>
 
       {pestanas}
@@ -613,7 +614,7 @@ function LlamadasTab() {
   return (
     <>
       <div className="tc-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="TwoChatModule-1">
           <div className="stat-card">
             <Phone size={20} className="stat-icon" />
             <div className="stat-content">
@@ -654,7 +655,7 @@ function LlamadasTab() {
               <span className="stat-label">Costo USD</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       <div className="tc-filtros">
@@ -971,7 +972,7 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
   return (
     <>
       <div className="tc-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="TwoChatModule-2">
           {metricas.map((m) => {
             const Icono = m.icono
             return (
@@ -996,7 +997,7 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
               <span className="stat-label">Entrantes sin responder</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {pestanas}

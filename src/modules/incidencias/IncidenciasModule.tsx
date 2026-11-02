@@ -39,7 +39,7 @@ import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
-import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import type {
   IncidenciaCompleta,
   IncidenciaEstado,
@@ -57,6 +57,7 @@ import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
 import type { DateRange } from '../../components/ui/DateRangeSelector'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
+import { StatsGrid } from '../../components/ui/StatsGrid'
 
 type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas' | 'rechazados'
 
@@ -3241,7 +3242,7 @@ export function IncidenciasModule() {
 
       {/* Stats rápidos - Semana actual, filtrado por pestaña */}
       <div className="incidencias-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="IncidenciasModule">
           <div className="stat-card">
             <FileText size={20} className="stat-icon" />
             <div className="stat-content">
@@ -3263,7 +3264,7 @@ export function IncidenciasModule() {
               <span className="stat-label">Conductores · Sem {semanaActual}</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* Tabs + Action Button (igual que Siniestros) */}
@@ -3512,7 +3513,7 @@ export function IncidenciasModule() {
               return key === 'sin' ? !cat : cat === key
             }).length
             return (
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '0 0 12px 0', alignItems: 'center' }}>
+              <div className="filtro-rapido" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '0 0 12px 0', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '4px' }}>
                   Filtro rápido:
                 </span>
@@ -3729,7 +3730,7 @@ export function IncidenciasModule() {
         <>
           {/* Stats + botón selección masiva */}
           <div className="incidencias-stats">
-            <div className="stats-grid">
+            <StatsGrid className="stats-grid" storageKey="IncidenciasModule-1">
               <div className="stat-card active">
                 <Clock size={20} className="stat-icon" />
                 <div className="stat-content">
@@ -3744,7 +3745,7 @@ export function IncidenciasModule() {
                   <span className="stat-label">$ Pendiente</span>
                 </div>
               </div>
-            </div>
+            </StatsGrid>
             {canEdit && penalidadesSeleccionadas.size > 0 && (
               <button
                 className="btn-secondary"
@@ -3891,7 +3892,7 @@ export function IncidenciasModule() {
         <>
           {/* Stats - aplicados */}
           <div className="incidencias-stats">
-            <div className="stats-grid">
+            <StatsGrid className="stats-grid" storageKey="IncidenciasModule-2">
               <div className="stat-card">
                 <CheckCircle size={20} className="stat-icon" />
                 <div className="stat-content">
@@ -3906,7 +3907,7 @@ export function IncidenciasModule() {
                   <span className="stat-label">$ Aplicado</span>
                 </div>
               </div>
-            </div>
+            </StatsGrid>
           </div>
 
           {/* Barra de filtros activos con estilo de chips */}
@@ -4010,7 +4011,7 @@ export function IncidenciasModule() {
       {activeTab === 'rechazados' && (
         <>
           <div className="incidencias-stats">
-            <div className="stats-grid">
+            <StatsGrid className="stats-grid" storageKey="IncidenciasModule-3">
               <div className="stat-card">
                 <XCircle size={20} className="stat-icon" />
                 <div className="stat-content">
@@ -4025,7 +4026,7 @@ export function IncidenciasModule() {
                   <span className="stat-label">$ Rechazado</span>
                 </div>
               </div>
-            </div>
+            </StatsGrid>
           </div>
 
           <DataTable
@@ -5651,9 +5652,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
         <div className="detail-description" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
           <div className="detail-description-title" style={{ color: '#dc2626' }}>Historial de Rechazos</div>
           {loadingHistorial ? (
-            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-              Cargando historial...
-            </div>
+            <Spinner size="sm" message="Cargando historial..." />
           ) : historialRechazos.map((rechazo, idx) => (
             <div key={rechazo.id} style={{ 
               padding: '12px', 

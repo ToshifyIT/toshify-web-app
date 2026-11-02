@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { FileText, Eye, Edit, Trash2, Download, CheckCircle } from 'lucide-react'
+import { FileText, Eye, Trash2, Download, CheckCircle, Edit2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -357,7 +357,7 @@ export function OfertaLocacionListModule() {
             onClick: () => { setSelectedOferta(row.original); setShowDetailModal(true) },
           },
           {
-            icon: <Edit size={15} />,
+            icon: <Edit2 size={15} />,
             label: 'Editar',
             onClick: () => { setSelectedOferta(row.original); setShowEditModal(true) },
           },
@@ -413,7 +413,7 @@ export function OfertaLocacionListModule() {
             </div>
           </div>
           <div className={`stat-card ${activeStatCard === 'borradores' ? 'stat-card-active' : activeStatCard ? 'stat-card-inactive' : ''}`} onClick={() => handleStatCardClick('borradores')} style={{ cursor: 'pointer' }}>
-            <Edit size={18} className="stat-icon" />
+            <Edit2 size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.borradores}</span>
               <span className="stat-label">Borradores</span>

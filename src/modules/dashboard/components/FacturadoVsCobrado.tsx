@@ -20,6 +20,7 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import { FacturadoComparativo } from './FacturadoComparativo'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './FacturadoVsCobrado.css'
 
 type ActiveTab = 'datos' | 'comparativo'
@@ -189,9 +190,7 @@ export function FacturadoVsCobrado() {
 
           <div className="fact-cob-chart-wrapper">
             {loading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                Cargando...
-              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Spinner size="sm" message="Cargando..." /></div>
             ) : chartData.length === 0 ? (
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#9ca3af', fontSize: 14 }}>
                 No hay semanas cerradas disponibles

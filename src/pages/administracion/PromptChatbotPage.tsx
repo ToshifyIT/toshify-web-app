@@ -9,6 +9,8 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { History, Save, RotateCcw, Eye, EyeOff, ShieldAlert, RefreshCw, GitCompare } from 'lucide-react'
+import { Spinner } from '../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../components/ui/EstadosVista'
 
 // Diff por palabras (LCS): marca tokens iguales, quitados y agregados. Resalta solo
 // lo que cambió (el prompt suele venir como una sola línea larga, por eso no sirve por línea).
@@ -209,7 +211,7 @@ export function PromptChatbotPage() {
       {okMsg && <div style={{ background: '#dcfce7', color: '#15803d', padding: '10px 12px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{okMsg}</div>}
 
       {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>Cargando…</div>
+        <Spinner size="sm" message="Cargando…" />
       ) : (
         <>
           <textarea
@@ -245,9 +247,7 @@ export function PromptChatbotPage() {
               <span style={{ fontSize: 12, color: '#9ca3af' }}>({historial.length})</span>
             </div>
             {historial.length === 0 ? (
-              <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 13, background: 'var(--bg-secondary, #f9fafb)', borderRadius: 8 }}>
-                Sin cambios registrados todavía.
-              </div>
+              <EmptyState size="sm" title="Sin cambios registrados todavía." />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {historial.map((h) => {
@@ -287,9 +287,7 @@ export function PromptChatbotPage() {
 
                       {comparar && (
                         h.prompt_anterior == null ? (
-                          <div style={{ marginTop: 8, fontSize: 12, color: '#9ca3af', padding: '8px 12px', background: 'var(--bg-secondary, #f9fafb)', borderRadius: 8 }}>
-                            No hay versión anterior para comparar.
-                          </div>
+                          <EmptyState size="sm" title="No hay versión anterior para comparar." />
                         ) : (() => {
                           const partes = diffWords(h.prompt_anterior, h.prompt_nuevo)
                           return (

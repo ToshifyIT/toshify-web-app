@@ -553,9 +553,7 @@ export function HomePage() {
         justifyContent: 'center',
         height: '100vh',
         fontFamily: 'system-ui'
-      }}>
-        Cargando...
-      </div>
+      }}><Spinner size="sm" message="Cargando..." /></div>
     )
   }
 
