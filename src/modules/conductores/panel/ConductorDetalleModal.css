@@ -13,7 +13,9 @@
   position: relative;
   width: 100%;
   max-width: 1200px;
-  max-height: 88vh;
+  /* Alto fijo: el modal no cambia de tamaño al pasar de una pestaña a otra;
+     lo que no entra se scrollea dentro de .cdet-body. */
+  height: 88vh;
   display: flex;
   flex-direction: column;
   background: var(--card-bg, #fff);
@@ -156,22 +158,19 @@
 .cdet-tabs {
   flex-shrink: 0;
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 2px;
   padding: 0 22px;
   border-bottom: 1px solid var(--border-primary, #eef0f2);
-  /* Con 7 pestañas puede no entrar todo en pantallas angostas: se scrollea en
-     horizontal en vez de comprimir o cortar las etiquetas. */
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
-.cdet-tabs::-webkit-scrollbar { height: 4px; }
-.cdet-tabs::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+/* Las pestañas se reparten el ancho y entran todas en una fila (sin scroll
+   horizontal); en pantallas angostas pasan a una segunda fila. */
 .cdet-tabs button {
   border: none;
   background: transparent;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   white-space: nowrap;
-  padding: 10px 14px;
+  padding: 10px 8px;
   font-size: 13px;
   font-weight: 600;
   color: #6b7280;
@@ -179,6 +178,7 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
+.cdet-tabs button:hover:not(.active) { color: #374151; }
 .cdet-tabs button.active { color: #dc2626; border-bottom-color: #dc2626; }
 
 .cdet-body {

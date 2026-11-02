@@ -130,11 +130,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.zona])
 
-  // Al abrir el wizard, el WhatsApp queda igual al teléfono principal (son el mismo número)
+  // whatsapp_number ya no se usa: el teléfono principal ES el WhatsApp (sql/leads_whatsapp_a_phone.sql)
   useEffect(() => {
-    if (formData.phone && formData.whatsapp_number !== formData.phone) {
-      setFormData(prev => ({ ...prev, whatsapp_number: prev.phone }))
-    }
     // Auto-mapear licencia texto a categorías si hay licencia pero no categorías
     if (formData.licencia && (!formData.categorias_licencia || formData.categorias_licencia.length === 0) && categoriasLicencia.length > 0) {
       const partes = formData.licencia.split(/[.,\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean)
@@ -233,19 +230,12 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
 
   // Al salir del campo, el celular se lleva al formato +549 + area + numero.
   // Si no se puede interpretar se deja como esta y se marca el error.
-  const [telefonosTocados, setTelefonosTocados] = useState<Set<'phone' | 'whatsapp_number' | 'telefono_secundario'>>(new Set())
-  function normalizarTelefonoAlSalir(field: 'phone' | 'whatsapp_number' | 'telefono_secundario') {
+  const [telefonosTocados, setTelefonosTocados] = useState<Set<'phone' | 'telefono_secundario'>>(new Set())
+  function normalizarTelefonoAlSalir(field: 'phone' | 'telefono_secundario') {
     setTelefonosTocados(prev => new Set(prev).add(field))
     const normalizado = normalizarCelularAR(formData[field])
     if (!normalizado || normalizado === formData[field]) return
-    setFormData(prev => {
-      const next = { ...prev, [field]: normalizado }
-      // El WhatsApp es siempre el mismo número que el principal
-      if (field === 'phone') {
-        next.whatsapp_number = normalizado
-      }
-      return next
-    })
+    setFormData(prev => ({ ...prev, [field]: normalizado }))
   }
   const errorTelefono = errors.phone || (telefonosTocados.has('phone') ? validarCelularAR(formData.phone) : null)
   const errorSecundario = errors.telefono_secundario || (telefonosTocados.has('telefono_secundario') && formData.telefono_secundario ? validarCelularAR(formData.telefono_secundario) : null)
@@ -465,12 +455,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   type="text"
                   className={errorTelefono ? 'field-error' : ''}
                   value={formData.phone || ''}
-                  onChange={e => {
-                    const val = e.target.value
-                    updateField('phone', val)
-                    // El WhatsApp es siempre el mismo número que el principal
-                    updateField('whatsapp_number', val)
-                  }}
+                  onChange={e => updateField('phone', e.target.value)}
                   onBlur={() => normalizarTelefonoAlSalir('phone')}
                   placeholder="Ej: 11 1234-5678 o +54 9 11 1234-5678"
                 />

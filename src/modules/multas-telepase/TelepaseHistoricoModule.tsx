@@ -83,16 +83,12 @@ export default function TelepaseHistoricoModule() {
   const { user, profile } = useAuth()
 
   // Permisos God Mode (mismo criterio que MultasModule)
+  // Borrar y reactivar todo: admin, o un rol con permiso de ELIMINAR en el submenú
+  // telepase-historico (Configuración > Roles). Antes había una lista de correos.
   const userRole = (profile?.roles?.name || '').toLowerCase()
-  const userEmail = (profile?.email || '').toLowerCase()
-  const GOD_MODE_EMAILS = new Set<string>([
-    'archspec@toshify.com.ar',
-    'fullstack@toshify.com.ar',
-  ])
-  const isGodMode = userRole === 'admin' || userRole === 'fullstack.senior' || GOD_MODE_EMAILS.has(userEmail)
-  // Reactivar: god mode o cualquier rol con permiso de edición en el submenú 'telepase-historico'.
-  // Borrar sigue restringido a god mode.
-  const { canEditInSubmenu } = usePermissions()
+  const { canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+  const isGodMode = userRole === 'admin' || canDeleteInSubmenu('telepase-historico')
+  // Reactivar: además, cualquier rol con permiso de edición en el submenú.
   const canReactivar = isGodMode || canEditInSubmenu('telepase-historico')
   const canBorrar = isGodMode
   const [loading, setLoading] = useState(true)

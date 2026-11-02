@@ -1,11 +1,13 @@
 // src/components/admin/ZonasManagement.tsx
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { AlertTriangle, Edit2, Trash2, Plus, MapPin, Shield, Ban, Eye, Settings } from 'lucide-react'
+import { AlertTriangle, Edit2, Trash2, Plus, MapPin, Shield, Ban, CheckCircle, Settings } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, Polygon, Polyline, Autocomplete, Marker } from '@react-google-maps/api'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay, Spinner } from '../ui/LoadingOverlay'
 import { DataTable } from '../ui/DataTable/DataTable'
+import { ExcelColumnFilter, useExcelFilters } from '../ui/DataTable/ExcelColumnFilter'
+import { ActionsMenu } from '../ui/ActionsMenu'
 import type { ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
@@ -101,8 +103,12 @@ export function ZonasManagement() {
   const [formData, setFormData] = useState<FormData>(initialFormData)
 
   // Filters
-  const [filterTipo, setFilterTipo] = useState<string>('')
-  const [filterEstado, setFilterEstado] = useState<string>('')
+  // Filtros por columna (mismo filtro tipo Excel que el resto de los módulos)
+  const [filterTipo, setFilterTipo] = useState<string[]>([])
+  const [filterBloquea, setFilterBloquea] = useState<string[]>([])
+  const [filterAdvertencia, setFilterAdvertencia] = useState<string[]>([])
+  const [filterEstado, setFilterEstado] = useState<string[]>([])
+  const { openFilterId, setOpenFilterId } = useExcelFilters()
 
   // Map search
   const [searchMarker, setSearchMarker] = useState<{ lat: number; lng: number } | null>(null)
@@ -169,12 +175,30 @@ export function ZonasManagement() {
   // Filtered zones for display
   const filteredZonas = useMemo(() => {
     return zonas.filter(zona => {
-      if (filterTipo && zona.tipo_id !== filterTipo) return false
-      if (filterEstado === 'activo' && !zona.activo) return false
-      if (filterEstado === 'inactivo' && zona.activo) return false
+      if (filterTipo.length && !filterTipo.includes(zona.zonas_tipos?.nombre || 'Sin tipo')) return false
+      if (filterBloquea.length && !filterBloquea.includes(zona.bloquear_asignaciones ? 'Si' : 'No')) return false
+      if (filterAdvertencia.length && !filterAdvertencia.includes(zona.mostrar_advertencia ? 'Si' : 'No')) return false
+      if (filterEstado.length && !filterEstado.includes(zona.activo ? 'Activa' : 'Inactiva')) return false
       return true
     })
-  }, [zonas, filterTipo, filterEstado])
+  }, [zonas, filterTipo, filterBloquea, filterAdvertencia, filterEstado])
+
+  const tiposUnicos = useMemo(
+    () => [...new Set(zonas.map(z => z.zonas_tipos?.nombre || 'Sin tipo'))].sort(),
+    [zonas]
+  )
+
+  const limpiarFiltrosZonas = () => {
+    setFilterTipo([]); setFilterBloquea([]); setFilterAdvertencia([]); setFilterEstado([])
+  }
+  const filtrosZonasActivos = useMemo(() => {
+    const f: { id: string; label: string; onClear: () => void }[] = []
+    if (filterTipo.length) f.push({ id: 'tipo', label: `Tipo: ${filterTipo.join(', ')}`, onClear: () => setFilterTipo([]) })
+    if (filterBloquea.length) f.push({ id: 'bloquea', label: `Bloquea: ${filterBloquea.join(', ')}`, onClear: () => setFilterBloquea([]) })
+    if (filterAdvertencia.length) f.push({ id: 'advertencia', label: `Advertencia: ${filterAdvertencia.join(', ')}`, onClear: () => setFilterAdvertencia([]) })
+    if (filterEstado.length) f.push({ id: 'estado', label: `Estado: ${filterEstado.join(', ')}`, onClear: () => setFilterEstado([]) })
+    return f
+  }, [filterTipo, filterBloquea, filterAdvertencia, filterEstado])
 
   // Calculate map center from all zones
   const mapCenter = useMemo(() => {
@@ -420,7 +444,18 @@ export function ZonasManagement() {
     },
     {
       accessorKey: 'tipo',
-      header: 'Tipo',
+      header: () => (
+        <ExcelColumnFilter
+          label="Tipo"
+          options={tiposUnicos}
+          selectedValues={filterTipo}
+          onSelectionChange={setFilterTipo}
+          filterId="zona_tipo"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      enableColumnFilter: false,
       accessorFn: (row) => row.zonas_tipos?.nombre || 'Sin tipo',
       cell: ({ row }) => (
         <span
@@ -437,7 +472,18 @@ export function ZonasManagement() {
     {
       id: 'bloquear_asignaciones',
       accessorFn: (row: any) => row.bloquear_asignaciones ? 'Si' : 'No',
-      header: 'Bloquea',
+      header: () => (
+        <ExcelColumnFilter
+          label="Bloquea"
+          options={['Si', 'No']}
+          selectedValues={filterBloquea}
+          onSelectionChange={setFilterBloquea}
+          filterId="zona_bloquea"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      enableColumnFilter: false,
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.bloquear_asignaciones ? 'dt-badge-red' : 'dt-badge-gray'}`}>
           {row.original.bloquear_asignaciones ? 'Si' : 'No'}
@@ -447,7 +493,18 @@ export function ZonasManagement() {
     {
       id: 'mostrar_advertencia',
       accessorFn: (row: any) => row.mostrar_advertencia ? 'Si' : 'No',
-      header: 'Advertencia',
+      header: () => (
+        <ExcelColumnFilter
+          label="Advertencia"
+          options={['Si', 'No']}
+          selectedValues={filterAdvertencia}
+          onSelectionChange={setFilterAdvertencia}
+          filterId="zona_advertencia"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      enableColumnFilter: false,
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.mostrar_advertencia ? 'dt-badge-yellow' : 'dt-badge-gray'}`}>
           {row.original.mostrar_advertencia ? 'Si' : 'No'}
@@ -457,7 +514,18 @@ export function ZonasManagement() {
     {
       id: 'activo',
       accessorFn: (row: any) => row.activo ? 'Activa' : 'Inactiva',
-      header: 'Estado',
+      header: () => (
+        <ExcelColumnFilter
+          label="Estado"
+          options={['Activa', 'Inactiva']}
+          selectedValues={filterEstado}
+          onSelectionChange={setFilterEstado}
+          filterId="zona_estado"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      enableColumnFilter: false,
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.activo ? 'dt-badge-green' : 'dt-badge-gray'}`}>
           {row.original.activo ? 'Activa' : 'Inactiva'}
@@ -468,36 +536,21 @@ export function ZonasManagement() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
-        <div className="zona-actions">
-          <button
-            className="btn-icon btn-edit"
-            onClick={() => openEditModal(row.original)}
-            title="Editar zona"
-          >
-            <Edit2 size={14} />
-          </button>
-          <button
-            className="btn-icon"
-            onClick={() => handleToggleActivo(row.original)}
-            title={row.original.activo ? 'Desactivar' : 'Activar'}
-            style={{
-              borderColor: row.original.activo ? 'var(--color-warning)' : 'var(--color-success)',
-              color: row.original.activo ? 'var(--color-warning)' : 'var(--color-success)'
-            }}
-          >
-            {row.original.activo ? <Ban size={14} /> : <Eye size={14} />}
-          </button>
-          <button
-            className="btn-icon btn-delete"
-            onClick={() => openDeleteModal(row.original)}
-            title="Eliminar zona"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+        <ActionsMenu
+          actions={[
+            { icon: <Edit2 size={15} />, label: 'Editar', onClick: () => openEditModal(row.original) },
+            {
+              icon: row.original.activo ? <Ban size={15} /> : <CheckCircle size={15} />,
+              label: row.original.activo ? 'Desactivar' : 'Activar',
+              onClick: () => handleToggleActivo(row.original),
+              variant: row.original.activo ? 'warning' : 'success',
+            },
+            { icon: <Trash2 size={15} />, label: 'Eliminar', onClick: () => openDeleteModal(row.original), variant: 'danger' },
+          ]}
+        />
       )
     }
-  ], [])
+  ], [tiposUnicos, filterTipo, filterBloquea, filterAdvertencia, filterEstado, openFilterId])
 
   // Handle place selected from autocomplete
   const onPlaceSelected = useCallback(() => {
@@ -516,13 +569,28 @@ export function ZonasManagement() {
   }, [autocompleteRef, generalMapRef])
 
   // Render map with all zones
+  // Tipos y Nueva Zona van en la misma línea que el buscador de direcciones
+  const accionesZonas = (
+    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+      <button className="btn-secondary" onClick={() => setShowTiposModal(true)}>
+        <Settings size={16} /> Tipos
+      </button>
+      <button className="btn-primary" onClick={openCreateModal}>
+        <Plus size={16} /> Nueva Zona
+      </button>
+    </div>
+  )
+
   const renderGeneralMap = () => {
     if (!isLoaded) {
       return (
-        <div className="zona-map-loading">
-          <Spinner size="md" />
-          <span>Cargando mapa...</span>
-        </div>
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>{accionesZonas}</div>
+          <div className="zona-map-loading">
+            <Spinner size="md" />
+            <span>Cargando mapa...</span>
+          </div>
+        </>
       )
     }
 
@@ -530,18 +598,21 @@ export function ZonasManagement() {
 
     return (
       <>
-        <div className="zona-map-search">
-          <MapPin size={16} />
-          <Autocomplete
-            onLoad={setAutocompleteRef}
-            onPlaceChanged={onPlaceSelected}
-          >
-            <input
-              type="text"
-              placeholder="Buscar direccion para ver en el mapa..."
-              className="zona-map-search-input"
-            />
-          </Autocomplete>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+          <div className="zona-map-search" style={{ flex: '1 1 280px', marginBottom: 0 }}>
+            <MapPin size={16} />
+            <Autocomplete
+              onLoad={setAutocompleteRef}
+              onPlaceChanged={onPlaceSelected}
+            >
+              <input
+                type="text"
+                placeholder="Buscar direccion para ver en el mapa..."
+                className="zona-map-search-input"
+              />
+            </Autocomplete>
+          </div>
+          {accionesZonas}
         </div>
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
@@ -673,24 +744,6 @@ export function ZonasManagement() {
 
   return (
     <div className="admin-module">
-      {/* Header */}
-      <div className="admin-header">
-        <div className="admin-header-title">
-          <h1>Gestion de Zonas Restringidas</h1>
-          <span className="admin-header-subtitle">Administra areas geograficas con restricciones o advertencias</span>
-        </div>
-      </div>
-
-      {/* Action Bar */}
-      <div className="rm-action-bar" style={{ justifyContent: 'space-between' }}>
-        <button className="btn-secondary" onClick={() => setShowTiposModal(true)}>
-          <Settings size={16} /> Tipos
-        </button>
-        <button className="btn-primary" onClick={openCreateModal}>
-          <Plus size={16} /> Nueva Zona
-        </button>
-      </div>
-
       {/* Statistics */}
       <div className="admin-stats">
         <div className="admin-stats-grid">
@@ -725,45 +778,11 @@ export function ZonasManagement() {
         </div>
       </div>
 
+
       {/* General Map */}
       <div className="zona-general-map">
         <h3 className="zona-section-title">Mapa General</h3>
         {renderGeneralMap()}
-      </div>
-
-      {/* Filters */}
-      <div className="zona-filters">
-        <div className="zona-filter-group">
-          <label>Tipo</label>
-          <select
-            value={filterTipo}
-            onChange={(e) => setFilterTipo(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {tipos.map(tipo => (
-              <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div className="zona-filter-group">
-          <label>Estado</label>
-          <select
-            value={filterEstado}
-            onChange={(e) => setFilterEstado(e.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="activo">Activas</option>
-            <option value="inactivo">Inactivas</option>
-          </select>
-        </div>
-        {(filterTipo || filterEstado) && (
-          <button
-            className="btn-secondary btn-sm"
-            onClick={() => { setFilterTipo(''); setFilterEstado('') }}
-          >
-            Limpiar filtros
-          </button>
-        )}
       </div>
 
       {/* Table */}
@@ -772,6 +791,8 @@ export function ZonasManagement() {
           data={filteredZonas}
           columns={columns}
           searchPlaceholder="Buscar zonas..."
+          externalFilters={filtrosZonasActivos}
+          onClearAllFilters={filtrosZonasActivos.length ? limpiarFiltrosZonas : undefined}
           emptyTitle="No hay zonas"
           emptyDescription="No se encontraron zonas restringidas registradas"
 />

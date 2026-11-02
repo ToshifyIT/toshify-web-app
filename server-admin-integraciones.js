@@ -143,6 +143,12 @@ adminIntegracionesRouter.get('/tokens', async (req, res) => {
         password: env.CABIFY_BARI_PASSWORD || null,
         company_ids: env.CABIFY_BARI_COMPANY_IDS || null,
       },
+      // Cuenta de Cabify de 44 Dreams (la de Grupo CG es cabify_ba)
+      cabify_44: {
+        username: env.CABIFY_44_USERNAME || null,
+        password: env.CABIFY_44_PASSWORD || null,
+        company_id: env.CABIFY_44_COMPANY_ID || null,
+      },
       google_maps: {
         api_key: env.VITE_GOOGLE_MAPS_API_KEY || null,
       },
@@ -203,7 +209,23 @@ adminIntegracionesRouter.get('/function-health', async (req, res) => {
     if (!configRes.ok) return res.status(500).json({ error: 'Error leyendo configuración' })
     const functions = await configRes.json()
 
-    // Ping de cada función en paralelo (10 s máximo cada una)
+    // ?ping=0: solo la lista con el último estado guardado (respuesta inmediata).
+    // La pestaña Monitor la muestra primero y después pide el chequeo real.
+    if (req.query.ping === '0') {
+      return res.json({
+        success: true,
+        functions: functions.map((fn) => ({
+          ...fn,
+          health_status: fn.last_health_status || 'unknown',
+          response_time_ms: null,
+          health_error: null,
+          checked_at: fn.last_health_check,
+        })),
+      })
+    }
+
+    // Ping de cada función en paralelo (6 s máximo cada una). Se usa OPTIONS (preflight
+    // CORS): alcanza para saber si la función responde y no ejecuta su lógica.
     const results = await Promise.all(
       functions.map(async (fn) => {
         const start = Date.now()
@@ -212,11 +234,10 @@ adminIntegracionesRouter.get('/function-health', async (req, res) => {
         let errorMsg = null
         try {
           const controller = new AbortController()
-          const timeout = setTimeout(() => controller.abort(), 10000)
+          const timeout = setTimeout(() => controller.abort(), 6000)
           await fetch(`${cfg.url}/functions/v1/${fn.function_name}`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ healthCheck: true }),
+            method: 'OPTIONS',
+            headers: { Authorization: `Bearer ${cfg.key}`, Origin: 'https://toshify.com.ar', 'Access-Control-Request-Method': 'POST' },
             signal: controller.signal,
           })
           clearTimeout(timeout)
@@ -227,7 +248,7 @@ adminIntegracionesRouter.get('/function-health', async (req, res) => {
           responseTime = Date.now() - start
           if (err.name === 'AbortError') {
             status = 'timeout'
-            errorMsg = 'Timeout (>10s)'
+            errorMsg = 'Timeout (>6s)'
           } else {
             status = 'offline'
             errorMsg = err.message || 'Connection failed'
