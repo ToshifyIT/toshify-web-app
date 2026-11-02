@@ -109,13 +109,13 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
 
   // Auto-sincronización: cuando cambia formData.zona, ajustar sede/sede_id
   // si corresponde a una sede distinta a la actual del lead.
-  // Solo dispara en cambios de zona después de montar (no en el primer render).
-  const zonaInicializadaRef = useRef(false)
+  // Solo dispara si el usuario cambió la zona con la que se abrió el lead. Antes se
+  // salteaba "el primer render" con una marca, pero en StrictMode (dev) el efecto
+  // corre dos veces al montar: la segunda ya pasaba y movía el lead de sede solo
+  // por abrirlo (ej. leads de Pruebas con zona CABA quedaban en Buenos Aires).
+  const zonaInicialRef = useRef(formData.zona)
   useEffect(() => {
-    if (!zonaInicializadaRef.current) {
-      zonaInicializadaRef.current = true
-      return
-    }
+    if (formData.zona === zonaInicialRef.current) return
     if (!formData.zona) return
     const zonaKey = formData.zona.toLowerCase().trim()
     const nombreSedeDeseada = ZONA_TO_SEDE_NOMBRE[zonaKey]

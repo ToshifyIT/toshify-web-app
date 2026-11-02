@@ -20,14 +20,9 @@ const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires'
 // del vehículo y el horario. DESACTIVADO 2026-10-26: los km tienen que coincidir con el
 // "Reporte avanzado de viajes" de Geotab, donde esos viajes figuran sin conductor. Con
 // la estimación se le sumaban a un conductor viajes que no eran suyos (ej. AI513UD
-// 26/10 16:06-18:37: Llanos ya había sacado la llave y se le contaban 39 km). Ahora
-// esos km van a la fila informativa "Sin conductor · <patente>" y no cuentan para el
-// exceso de nadie.
+// 26/10 16:06-18:37: Llanos ya había sacado la llave y se le contaban 39 km). Esos
+// viajes no se muestran (ver paso 4) y no cuentan para el exceso de nadie.
 const ESTIMAR_CONDUCTOR_SIN_LLAVE = false
-
-// Conductor sentinela para trips GEOTAB sin conductor (histórico pre-NFC).
-// Se muestra tal cual en la columna Conductor y agrupa por patente.
-const SIN_CONDUCTOR_PREFIX = 'Sin conductor'
 
 function toArgentinaDateString(date: Date): string {
   return date.toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
@@ -461,16 +456,11 @@ export function useExcesoKmData(sedeId?: string | null) {
       })
       for (const t of ordenados) {
         const tSemanaKey = semanaKeyDe(t)
-        // GEOTAB sin conductor: en el histórico viejo (pre-NFC) no hay a quién
-        // atribuir el turno. En vez de descartarlo, lo agrupamos POR PATENTE bajo un
-        // conductor sentinela "— Sin conductor · <patente>" para que el vehículo
-        // igual aparezca (informativo). USS conserva su lógica: sin conductor se omite
-        // (ya heredó del vecino vía conductor_raw en el paso 2).
-        let cond = t.condEf || ''
-        if (!cond) {
-          if (t.gpsOrigen !== 'GEOTAB') continue
-          cond = `${SIN_CONDUCTOR_PREFIX} · ${t.patente || t.patenteNorm}`
-        }
+        // Sin conductor (nadie pasó el iButton): no se muestra. La tabla es por
+        // conductor y esos km no son de nadie (2026-11-02; antes iban a una fila
+        // "Sin conductor · <patente>"). USS ya heredó del vecino en el paso 2.
+        const cond = t.condEf || ''
+        if (!cond) continue
         const estimado = t.estimado === true
         if (!actual || actual.gpsOrigen !== t.gpsOrigen || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond || actual.semanaKey !== tSemanaKey || actual.estimado !== estimado) {
           if (actual) turnos.push(actual)
@@ -767,15 +757,6 @@ export function useExcesoKmData(sedeId?: string | null) {
         sumKmPorConductor.set(key, prev)
       }
       for (const m of marcs) {
-        // Filas "Sin conductor" (GEOTAB pre-NFC): informativas. Muestran sus km pero
-        // NO generan exceso cobrable — no hay conductor al que crear la incidencia.
-        const esSinConductor = !m.conductorId && m.conductor.startsWith(SIN_CONDUCTOR_PREFIX)
-        if (esSinConductor) {
-          m.kmSemanaConductor = m.kmTotal
-          m.limiteSemanal = limiteTurno
-          m.excedeLimite = false
-          continue
-        }
         const conductorKey = m.conductorId || m.conductor || ''
         const key = `${m.excesoKmSemanaKey || 'sin-semana'}|${conductorKey}`
         const acc = sumKmPorConductor.get(key)

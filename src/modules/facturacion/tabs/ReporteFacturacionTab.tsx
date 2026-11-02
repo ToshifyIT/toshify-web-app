@@ -8,6 +8,7 @@ import { showSuccess } from '../../../utils/toast'
 import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
 import { evaluarCierre, timestampCierre, descuentoCierre, CIERRE_DEFAULTS, type ParamsCierre } from '../utils/cierreAsignacion'
 import { construirSaldosAnteriores } from '../utils/saldoAnterior'
+import { acumularCuentaCabify, elegirCuentaCabify, type CuentasCabifyPorConductor } from '../utils/cuentaCabify'
 import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
 import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
@@ -1779,7 +1780,7 @@ export function ReporteFacturacionTab() {
         { data: cabifyHistoricoReciente },
       ] = await Promise.all([
         supabase.from(cabifyTable)
-          .select('dni, licencia, nombre, apellido, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo')
+          .select('dni, licencia, nombre, apellido, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio, viajes_finalizados, horas_conectadas')
           .gte('fecha_inicio', periodoInicio + 'T00:00:00')
           .lte('fecha_inicio', periodoFin + 'T23:59:59'),
         supabase.from(cabifyTable)
@@ -1795,7 +1796,7 @@ export function ReporteFacturacionTab() {
         // Identidad Cabify reciente (30 días previos al período): fallback para el botón
         // de efectivo (rayito) cuando el conductor no tiene registros esta semana
         supabase.from(cabifyTable)
-          .select('dni, licencia, nombre, apellido, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio')
+          .select('dni, licencia, nombre, apellido, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio, viajes_finalizados, horas_conectadas')
           .gte('fecha_inicio', format(subWeeks(parseISO(periodoInicio), 4), 'yyyy-MM-dd') + 'T00:00:00')
           .lt('fecha_inicio', periodoInicio + 'T00:00:00')
           .order('fecha_inicio', { ascending: false })
@@ -1873,7 +1874,13 @@ export function ReporteFacturacionTab() {
       // Agrupar cobro_app por DNI (semana actual) - lo que Cabify cobra al conductor
       const cobroAppPorDni = new Map<string, number>()
       const dnisConRegistroCabify = new Set<string>()
-      const cabifyEfectivoMapPeriodo = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
+      // Cuentas Cabify de cada conductor (período + 4 semanas previas). Si tiene más de
+      // una, el botón de efectivo usa la que está funcionando (utils/cuentaCabify).
+      const cuentasCabify: CuentasCabifyPorConductor = new Map()
+      const acumularCuenta = (dniNorm: string, c: any) => {
+        const dniReal = resolverDniCabify(c.dni)
+        acumularCuentaCabify(cuentasCabify, dniNorm, c, !!dniReal && normalizeDni(dniReal) === dniNorm)
+      }
       ;(cabifyGanancias || []).forEach((c: any) => {
         // Match con la regla completa: DNI → CUIT → licencia → nombre (resolverConductorCabify)
         const dniNorm = resolverConductorCabify(c)
@@ -1881,14 +1888,7 @@ export function ReporteFacturacionTab() {
 
         dnisConRegistroCabify.add(dniNorm)
         cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
-        // Guardar permiso_efectivo y IDs Cabify (último registro gana)
-        if (c.cabify_driver_id) {
-          cabifyEfectivoMapPeriodo.set(dniNorm, {
-            permiso_efectivo: c.permiso_efectivo || null,
-            cabify_driver_id: c.cabify_driver_id || null,
-            cabify_company_id: c.cabify_company_id || null,
-          })
-        }
+        acumularCuenta(dniNorm, c)
       })
 
       // Agrupar peajes por DNI (semana anterior) - incluir todos los días del rango
@@ -1907,19 +1907,12 @@ export function ReporteFacturacionTab() {
         peajesDetalleMap.get(dniNorm)!.push({ fecha, monto })
       })
 
-      // Identidad Cabify histórica (30 días previos, más reciente primero): fallback para
-      // que el botón de efectivo (rayito) aparezca aunque el conductor no tenga registros
-      // esta semana. Solo aporta driver_id/company/permiso — no toca montos ni cobertura.
-      const cabifyEfectivoMapHistorico = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
+      // Identidad Cabify histórica (4 semanas previas): para que el botón de efectivo (rayito)
+      // aparezca aunque el conductor no tenga registros esta semana, y para saber qué cuenta
+      // tuvo actividad. Solo aporta driver_id/company/permiso — no toca montos ni cobertura.
       ;(cabifyHistoricoReciente || []).forEach((c: any) => {
-        if (!c.cabify_driver_id) return
         const dniNorm = resolverConductorCabify(c)
-        if (!dniNorm || cabifyEfectivoMapHistorico.has(dniNorm)) return // viene ordenado desc: el primero es el más reciente
-        cabifyEfectivoMapHistorico.set(dniNorm, {
-          permiso_efectivo: c.permiso_efectivo || null,
-          cabify_driver_id: c.cabify_driver_id || null,
-          cabify_company_id: c.cabify_company_id || null,
-        })
+        if (dniNorm) acumularCuenta(dniNorm, c)
       })
 
       // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
@@ -1932,10 +1925,8 @@ export function ReporteFacturacionTab() {
           || (cuitNorm && cobroAppPorDni.get(cuitNorm))
           || 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
-        const efectivoInfo = (dniNorm && cabifyEfectivoMapPeriodo.get(dniNorm))
-          || (cuitNorm && cabifyEfectivoMapPeriodo.get(cuitNorm))
-          || (dniNorm && cabifyEfectivoMapHistorico.get(dniNorm))
-          || (cuitNorm && cabifyEfectivoMapHistorico.get(cuitNorm))
+        const efectivoInfo = (dniNorm && elegirCuentaCabify(cuentasCabify.get(dniNorm)))
+          || (cuitNorm && elegirCuentaCabify(cuentasCabify.get(cuitNorm)))
           || null
         return {
           ...f,
@@ -2924,7 +2915,7 @@ export function ReporteFacturacionTab() {
           .in('conductor_id', conductorIds),
         Promise.all([
           supabase.from(getCabifyTable(sedeParaVP))
-            .select('dni, cobro_app, cobro_efectivo, permiso_efectivo, cabify_driver_id, cabify_company_id')
+            .select('dni, cobro_app, cobro_efectivo, permiso_efectivo, cabify_driver_id, cabify_company_id, fecha_inicio, viajes_finalizados, horas_conectadas')
             .gte('fecha_inicio', fechaInicio + 'T00:00:00')
             .lte('fecha_inicio', fechaFin + 'T23:59:59'),
           supabase.from(getCabifyTable(sedeParaVP))
@@ -2994,8 +2985,8 @@ export function ReporteFacturacionTab() {
       // Crear mapa de cobro_app Cabify por DNI + trackear raw para discrepancias
       const cabifyMap = new Map<string, number>()
       const cabifyRawDniMap = new Map<string, string>() // normalized -> raw cabify DNI
-      // Mapa de permiso_efectivo + IDs Cabify por DNI (último registro más reciente)
-      const cabifyEfectivoMap = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
+      // Cuentas Cabify por DNI: si hay más de una, se usa la que está funcionando (utils/cuentaCabify)
+      const cuentasCabifyVP: CuentasCabifyPorConductor = new Map()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
           let dniKey = String(record.dni)
@@ -3009,15 +3000,13 @@ export function ReporteFacturacionTab() {
           const cobroApp = parseFloat(String(record.cobro_app)) || 0
           cabifyMap.set(dniNorm, actual + cobroApp)
           if (!cabifyRawDniMap.has(dniNorm)) cabifyRawDniMap.set(dniNorm, String(record.dni))
-          // Guardar permiso_efectivo y IDs Cabify (último registro gana)
-          if (record.cabify_driver_id) {
-            cabifyEfectivoMap.set(dniNorm, {
-              permiso_efectivo: record.permiso_efectivo || null,
-              cabify_driver_id: record.cabify_driver_id || null,
-              cabify_company_id: record.cabify_company_id || null,
-            })
-          }
+          acumularCuentaCabify(cuentasCabifyVP, dniNorm, record, !String(record.dni).startsWith('CABIFY_'))
         }
+      })
+      const cabifyEfectivoMap = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
+      cuentasCabifyVP.forEach((cuentas, dniNorm) => {
+        const cuenta = elegirCuentaCabify(cuentas)
+        if (cuenta) cabifyEfectivoMap.set(dniNorm, cuenta)
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
       const peajesMap = new Map<string, number>()
