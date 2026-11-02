@@ -1,5 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
  
+import { GUIAS_ACTIVOS } from '../leads/guias'
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown, Download, MapPin } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -306,8 +307,8 @@ async function cancelarFraccionamientosPorBaja(
 
 
 
-/** Guías que se ofrecen al editar (se puede escribir otro nombre, p. ej. quien convirtió el lead). */
-const GUIAS_CONDUCTOR = ['Ali Verenzuela', 'Carla Noguera', "Eunice D'Urso", 'Manuel', 'Marina']
+/** Guías que se ofrecen al editar: los activos (Manuel y Marina ya no están). */
+const GUIAS_CONDUCTOR: readonly string[] = GUIAS_ACTIVOS
 
 /**
  * Guía de cada conductor (conductores.guia, sql/conductores_guia.sql). Consulta aparte y
@@ -455,6 +456,7 @@ export function ConductoresModule() {
     licencia_tipo_id: "",
     telefono_contacto: "",
     telefono_secundario: undefined as string | undefined,
+    correo_personal: undefined as string | undefined,
     guia: undefined as string | undefined,
     email: "",
     direccion: "",
@@ -1306,6 +1308,7 @@ export function ConductoresModule() {
             telefono_contacto: formData.telefono_contacto || null,
             // Opcional (sql/telefono_secundario.sql): solo se manda si se cargó
             ...(formData.telefono_secundario?.trim() ? { telefono_secundario: formData.telefono_secundario.trim() } : {}),
+            ...(formData.correo_personal?.trim() ? { correo_personal: formData.correo_personal.trim() } : {}),
             email: formData.email || null,
             direccion: formData.direccion || null,
             direccion_lat: formData.direccion_lat,
@@ -1440,7 +1443,7 @@ export function ConductoresModule() {
     }
     if (!formData.licencia_vencimiento) newErrors.licencia_vencimiento = 'Requerido';
     if (!formData.telefono_contacto?.trim()) newErrors.telefono_contacto = 'Requerido';
-    if (!formData.email?.trim()) newErrors.email = 'Requerido (usado en contratos)';
+    if (!formData.email?.trim()) newErrors.email = 'Requerido (el de la app de Cabify; usado en contratos)';
     if (!formData.direccion?.trim()) newErrors.direccion = 'Requerido (usado en contratos)';
     if (!formData.estado_id) newErrors.estado_id = 'Debe seleccionar un estado';
     // Guía obligatorio (solo si la columna existe, ver sql/conductores_guia.sql)
@@ -1906,6 +1909,8 @@ export function ConductoresModule() {
         telefono_contacto: formData.telefono_contacto || null,
         // Solo si la columna existe (se cargó al abrir la edición): vacío = se borra
         ...(formData.telefono_secundario !== undefined ? { telefono_secundario: formData.telefono_secundario.trim() || null } : {}),
+        // Mail personal / respaldo (sql/conductores_correo_personal.sql): solo si la columna existe
+        ...(formData.correo_personal !== undefined ? { correo_personal: formData.correo_personal.trim() || null } : {}),
         // Guía (sql/conductores_guia.sql): solo si la columna existe; vacío = se borra
         ...(formData.guia !== undefined ? { guia: formData.guia.replace(/\s+/g, ' ').trim() || null } : {}),
         email: formData.email || null,
@@ -2569,6 +2574,7 @@ export function ConductoresModule() {
       licencia_tipo_id: fc.licencia_tipo_id || "",
       telefono_contacto: fc.telefono_contacto || "",
       telefono_secundario: "telefono_secundario" in fc ? ((fc as any).telefono_secundario || "") : undefined,
+      correo_personal: "correo_personal" in fc ? ((fc as any).correo_personal || "") : undefined,
       guia: "guia" in fc ? ((fc as any).guia || "") : undefined,
       email: fc.email || "",
       direccion: fc.direccion || "",
@@ -2818,6 +2824,7 @@ export function ConductoresModule() {
       licencia_tipo_id: "",
       telefono_contacto: "",
       telefono_secundario: undefined,
+      correo_personal: undefined,
       guia: undefined,
       email: "",
       direccion: "",
@@ -3902,7 +3909,7 @@ export function ConductoresModule() {
               }
             >
               {exportando ? <Loader2 size={15} className="spin-animation" /> : <Download size={15} />}
-              {exportando ? 'Generando...' : `Descargar${filasAExportar.length > 0 ? ` (${filasAExportar.length})` : ''}`}
+              {exportando ? 'Generando...' : 'Exportar'}
             </button>
             {/* "Ver Logs" y "Sincronizar" solo visibles para admin */}
             {isAdmin() && (
@@ -4454,6 +4461,27 @@ function ModalCrear({
 }
 
 
+type PestanaEdicion = 'personal' | 'licencia' | 'contacto' | 'operativo' | 'documentacion'
+
+const PESTANAS_EDICION: { id: PestanaEdicion; label: string }[] = [
+  { id: 'personal', label: 'Personal' },
+  { id: 'licencia', label: 'Licencia' },
+  { id: 'contacto', label: 'Contacto' },
+  { id: 'operativo', label: 'Operativo' },
+  { id: 'documentacion', label: 'Documentación' },
+]
+
+/** En qué pestaña está cada campo validado (los demás caen en Personal). */
+const PESTANA_DE_CAMPO: Record<string, PestanaEdicion> = {
+  numero_licencia: 'licencia', licencia_categorias_ids: 'licencia', licencia_vencimiento: 'licencia',
+  licencia_estado_id: 'licencia', licencia_tipo_id: 'licencia',
+  telefono_contacto: 'contacto', telefono_secundario: 'contacto', email: 'contacto', correo_personal: 'contacto',
+  direccion: 'contacto', zona: 'contacto', guia: 'contacto', contacto_emergencia: 'contacto', telefono_emergencia: 'contacto',
+  experiencia_previa: 'operativo', estado_id: 'operativo', fecha_terminacion: 'operativo', motivo_baja: 'operativo',
+  preferencia_turno: 'operativo', fecha_contratacion: 'operativo',
+  url_documentacion: 'documentacion', ibutton: 'documentacion',
+}
+
 function ModalEditar({
   formData,
   setFormData,
@@ -4476,6 +4504,21 @@ function ModalEditar({
   loadingImpacto,
   onVerImpactoDetalle,
 }: any) {
+  const [pestana, setPestana] = useState<PestanaEdicion>('personal')
+  // Errores de validación por pestaña (para marcarlas y abrir la que tenga errores)
+  const erroresPorPestana = useMemo(() => {
+    const out: Partial<Record<PestanaEdicion, number>> = {}
+    for (const k of Object.keys(editErrors || {})) {
+      const t = PESTANA_DE_CAMPO[k] ?? 'personal'
+      out[t] = (out[t] || 0) + 1
+    }
+    return out
+  }, [editErrors])
+  useEffect(() => {
+    const conError = PESTANAS_EDICION.find(t => erroresPorPestana[t.id])
+    if (conError && !erroresPorPestana[pestana]) setPestana(conError.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [erroresPorPestana])
   const [syncingEmail, setSyncingEmail] = useState(false);
 
   const syncEmailFromCabify = async () => {
@@ -4543,7 +4586,7 @@ function ModalEditar({
       className="modal-overlay"
       onClick={() => !saving && setShowEditModal(false)}
     >
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content cond-edit-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Editar Conductor</h2>
           <button
@@ -4554,7 +4597,27 @@ function ModalEditar({
             ×
           </button>
         </div>
+        {/* Pestañas por categoría (como el lead): se edita una parte a la vez */}
+        <div className="cond-edit-tabs" role="tablist" aria-label="Datos del conductor">
+          {PESTANAS_EDICION.map(t => {
+            const n = erroresPorPestana[t.id] || 0
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={pestana === t.id}
+                className={`cond-edit-tab${pestana === t.id ? ' is-activa' : ''}${n ? ' tiene-error' : ''}`}
+                onClick={() => setPestana(t.id)}
+              >
+                {t.label}
+                {n ? <span className="cond-edit-tab-error" title={`${n} campo(s) para revisar`}>{n}</span> : null}
+              </button>
+            )
+          })}
+        </div>
         <div className="modal-body">
+        {pestana === 'personal' && (<>
         <div className="section-title">Información Personal</div>
 
         <div className="form-row">
@@ -4592,7 +4655,7 @@ function ModalEditar({
               className={`form-input ${editErrors.numero_dni ? 'input-error' : ''}`}
               value={formData.numero_dni}
               onChange={(e) => {
-                setFormData({ ...formData, numero_dni: e.target.value });
+                setFormData({ ...formData, numero_dni: e.target.value.replace(/\D/g, '') });
                 if (editErrors.numero_dni) setEditErrors((prev: Record<string, string>) => { const { numero_dni: _r, ...rest } = prev; void _r; return rest });
               }}
               disabled={saving}
@@ -4754,6 +4817,8 @@ function ModalEditar({
           </div>
         </div>
 
+        </>)}
+        {pestana === 'licencia' && (<>
         <div className="section-title">Licencia de Conducir</div>
 
         <div className="form-row-3">
@@ -4851,11 +4916,13 @@ function ModalEditar({
           </div>
         </div>
 
+        </>)}
+        {pestana === 'contacto' && (<>
         <div className="section-title">Información de Contacto</div>
 
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Teléfono *</label>
+            <label className="form-label">Teléfono (WhatsApp) *</label>
             <input
               type="tel"
               className={`form-input ${editErrors.telefono_contacto ? 'input-error' : ''}`}
@@ -4870,36 +4937,19 @@ function ModalEditar({
           </div>
           {formData.telefono_secundario !== undefined && (
             <div className="form-group">
-              <label className="form-label">Teléfono secundario <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+              <label className="form-label">Teléfono secundario (personal / otra app) <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
               <input
                 type="tel"
                 className="form-input"
                 value={formData.telefono_secundario}
                 onChange={(e) => setFormData({ ...formData, telefono_secundario: e.target.value })}
-                placeholder="Otro número que use (ej. el de DiDi)"
+                placeholder="Su número personal u otro que use (ej. el de DiDi)"
                 disabled={saving}
               />
-            </div>
-          )}
-          {formData.guia !== undefined && (
-            <div className="form-group">
-              <label className="form-label">Guía *</label>
-              <input
-                type="text"
-                className={`form-input ${editErrors.guia ? 'input-error' : ''}`}
-                list="conductor-guias"
-                value={formData.guia}
-                onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
-                placeholder="Guía del lead o quien lo convirtió"
-                disabled={saving}
-              />
-              <datalist id="conductor-guias">
-                {GUIAS_CONDUCTOR.map(g => <option key={g} value={g} />)}
-              </datalist>
             </div>
           )}
           <div className="form-group">
-            <label className="form-label">Email *</label>
+            <label className="form-label">Email app móvil (Cabify) *</label>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input
                 type="email"
@@ -4925,6 +4975,36 @@ function ModalEditar({
             </div>
             {editErrors.email && <span className="error-message">{editErrors.email}</span>}
           </div>
+          {/* Siempre visible. Si la columna todavía no existe en la base
+              (falta sql/conductores_correo_personal.sql) queda deshabilitado y lo avisa. */}
+          <div className="form-group">
+            <label className="form-label">Mail personal / respaldo <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+            <input
+              type="email"
+              className="form-input"
+              value={formData.correo_personal ?? ''}
+              onChange={(e) => setFormData({ ...formData, correo_personal: e.target.value })}
+              placeholder={formData.correo_personal === undefined ? 'Se activa al correr sql/conductores_correo_personal.sql' : 'Otro correo que use'}
+              disabled={saving || formData.correo_personal === undefined}
+              title={formData.correo_personal === undefined ? 'Falta crear el campo en la base de datos' : undefined}
+            />
+          </div>
+          {formData.guia !== undefined && (
+            <div className="form-group">
+              <label className="form-label">Guía *</label>
+              <select
+                className={`form-input ${editErrors.guia ? 'input-error' : ''}`}
+                value={formData.guia}
+                onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
+                disabled={saving}
+              >
+                <option value="">Elegí el guía</option>
+                {GUIAS_CONDUCTOR.map(g => <option key={g} value={g}>{g}</option>)}
+                {/* Si tenía otro valor (p. ej. quien convirtió el lead) se conserva como opción */}
+                {formData.guia && !GUIAS_CONDUCTOR.includes(formData.guia) && <option value={formData.guia}>{formData.guia}</option>}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="form-group" style={{ width: '100%' }}>
@@ -5023,6 +5103,8 @@ function ModalEditar({
           </div>
         </div>
 
+        </>)}
+        {pestana === 'operativo' && (<>
         <div className="section-title">Experiencia</div>
         <div className="form-row">
           <div className="form-group">
@@ -5265,7 +5347,9 @@ function ModalEditar({
           </>
         )}
 
-        <div className="form-section-title" style={{ marginTop: '20px' }}>Documentación e iButton</div>
+        </>)}
+        {pestana === 'documentacion' && (<>
+        <div className="section-title">Documentación e iButton</div>
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">Link de Documentación (Drive)</label>
@@ -5337,6 +5421,7 @@ function ModalEditar({
             />
           </div>
         </div>
+        </>)}
 
         </div>
         <div className="modal-footer">
@@ -5805,7 +5890,7 @@ function ModalDetalles({
         <div className="section-title">Contacto</div>
         <div className="details-grid">
           <div>
-            <label className="detail-label">Teléfono</label>
+            <label className="detail-label">Teléfono (WhatsApp)</label>
             <div className="detail-value">
               {selectedConductor.telefono_contacto || "N/A"}
             </div>
@@ -5818,12 +5903,18 @@ function ModalDetalles({
           ) : null}
           {(selectedConductor as any).telefono_secundario ? (
             <div>
-              <label className="detail-label">Teléfono secundario</label>
+              <label className="detail-label">Teléfono secundario (personal / otra app)</label>
               <div className="detail-value">{(selectedConductor as any).telefono_secundario}</div>
             </div>
           ) : null}
+          {(selectedConductor as any).correo_personal ? (
+            <div>
+              <label className="detail-label">Mail personal / respaldo</label>
+              <div className="detail-value">{(selectedConductor as any).correo_personal}</div>
+            </div>
+          ) : null}
           <div>
-            <label className="detail-label">EMAIL</label>
+            <label className="detail-label">Email app móvil (Cabify)</label>
             <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               {editingEmail ? (
                 <>

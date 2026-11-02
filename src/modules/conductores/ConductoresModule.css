@@ -1093,3 +1093,63 @@
   font-weight: 500;
   color: var(--text-secondary);
 }
+
+/* Editar conductor: pestañas por categoría (como el wizard del lead) */
+.cond-edit-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 16px 20px 0;
+  border-radius: 8px;
+  background: var(--bg-secondary, #f3f4f6);
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Dentro del modal (flex en columna) no debe achicarse */
+  flex-shrink: 0;
+}
+
+/* Mismo tamaño en todas las pestañas: el modal tiene alto fijo y el contenido
+   de cada pestaña se desplaza adentro. */
+.modal-content.cond-edit-modal {
+  height: min(820px, 90vh);
+}
+.cond-edit-modal .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.cond-edit-tab {
+  flex: 1 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  margin: 0;
+  line-height: 1.2;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #4b5563);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cond-edit-tab:hover { color: var(--text-primary, #111827); }
+.cond-edit-tab.is-activa {
+  background: var(--bg-primary, #fff);
+  color: var(--color-primary, #ff0033);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.cond-edit-tab-error {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+}

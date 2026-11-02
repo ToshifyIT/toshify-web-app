@@ -4,7 +4,7 @@
  * Principio: Single Responsibility - Solo UI de encabezado
  */
 
-import { HelpCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
 import { formatDateTimeAR } from '../../../../utils/dateUtils'
 import { WeekCalendarSelector } from './WeekCalendarSelector'
@@ -57,15 +57,60 @@ export function CabifyHeader({
 }: CabifyHeaderProps) {
   const isDisabled = isLoading || availableWeeks.length === 0
 
+  // availableWeeks va de la más reciente (índice 0) a la más vieja
+  const indice = selectedWeek ? availableWeeks.findIndex(w => w.startDate === selectedWeek.startDate) : -1
+  const anterior = indice >= 0 ? availableWeeks[indice + 1] : undefined
+  const siguiente = indice > 0 ? availableWeeks[indice - 1] : undefined
+  const esActual = indice === 0
+  const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+
   return (
     <div className="cabify-header cabify-header-compact">
       <div className="cabify-controls">
-        <WeekCalendarSelector
-          selectedWeek={selectedWeek}
-          availableWeeks={availableWeeks}
-          isDisabled={isDisabled}
-          onWeekChange={onWeekChange}
-        />
+        <div className="cabify-semana-nav" role="group" aria-label="Cambiar de semana">
+          <button
+            type="button"
+            className="cabify-semana-flecha"
+            onClick={() => anterior && onWeekChange(anterior)}
+            disabled={isDisabled || !anterior}
+            aria-label="Semana anterior"
+            title={anterior ? `Semana anterior (${ddmm(anterior.startDate)} – ${ddmm(anterior.endDate)})` : 'No hay semanas anteriores'}
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <WeekCalendarSelector
+            selectedWeek={selectedWeek}
+            availableWeeks={availableWeeks}
+            isDisabled={isDisabled}
+            onWeekChange={onWeekChange}
+          />
+          <button
+            type="button"
+            className="cabify-semana-flecha"
+            onClick={() => siguiente && onWeekChange(siguiente)}
+            disabled={isDisabled || !siguiente}
+            aria-label="Semana siguiente"
+            title={siguiente ? `Semana siguiente (${ddmm(siguiente.startDate)} – ${ddmm(siguiente.endDate)})` : 'Es la semana más reciente'}
+          >
+            <ChevronRight size={18} />
+          </button>
+          {selectedWeek && (
+            <span className="cabify-semana-rango">
+              {ddmm(selectedWeek.startDate)} – {ddmm(selectedWeek.endDate)}
+              {esActual ? ' · en curso' : ''}
+            </span>
+          )}
+          {!esActual && availableWeeks.length > 0 && (
+            <button
+              type="button"
+              className="cabify-semana-hoy"
+              onClick={() => onWeekChange(availableWeeks[0])}
+              disabled={isDisabled}
+            >
+              Ir a la actual
+            </button>
+          )}
+        </div>
         <span
           className="cabify-help-icon"
           data-tooltip={AYUDA_EFECTIVO}

@@ -17,12 +17,15 @@
  *     2. Datos de vehículo con valor     → Auto del pueblo
  *     3. Document Status                 → Completa: Documentos enviados; otro: Documentos pendientes
  *     4. Estado de la postulación        → MAPA_ESTADOS (vacío o Inactivo: no se toca el estado)
- *   Al CREAR se aplica ese estado. En leads EXISTENTES solo si no tienen estado.
+ *   Al CREAR se aplica ese estado. En leads EXISTENTES, ver "ESTADO" más abajo.
  *   Los leads Conductor no se tocan.
  * - Dirección: "Calle, Ciudad, Provincia", solo si viene la calle.
  * - Casillas (0/1): 1 → Sí; 0 → no se toca (el CRM pone 0 también cuando no hay dato).
  * - Leads EXISTENTES (2026-09-30): solo se completan campos vacíos del lead; lo que ya
- *   tiene valor no se toca (estado, fuente y observaciones incluidos). Excepción:
+ *   tiene valor no se toca (nombre, fuente y observaciones incluidos).
+ * - ESTADO en leads existentes (2026-11-02): se actualiza al de Sellium si es distinto,
+ *   salvo que el lead esté en Documentos enviados, Convocatoria Inducción, Apto
+ *   Inducción, Listo Emparejar o Descartado (ESTADOS_PROTEGIDOS): esos no se pisan. Excepción:
  *   created_at y fecha_carga, que siempre toman la fecha de creación del Excel.
  * - Leads NUEVOS: fuente SELLIUM, created_at y fecha_carga = fecha de creación del Excel.
  * - Fecha de creación (2026-10-28): si viene "Llegó por pauta el" (fecha Y hora) se usa
@@ -53,6 +56,19 @@ export const FUENTE_SELLIUM = 'SELLIUM'
 export const FUENTE_SELLIUM_ANTERIOR = 'fuente_Sellium'
 
 type Fila = Record<string, unknown>
+
+/**
+ * Estados que la carga de Sellium NO pisa: los maneja el equipo en Toshify
+ * (pedido 2026-11-02). Cualquier otro estado se actualiza al que trae Sellium.
+ */
+export const ESTADOS_PROTEGIDOS = [
+  'Documentos enviados', 'Convocatoria Inducción', 'Apto Inducción', 'Listo Emparejar', 'Descartado',
+] as const
+
+function estadoProtegido(estado: unknown): boolean {
+  const e = normalizarTexto(String(estado ?? ''))
+  return ESTADOS_PROTEGIDOS.some(x => normalizarTexto(x) === e)
+}
 
 // ───────────────────────── Lectura del archivo ─────────────────────────
 
@@ -679,13 +695,14 @@ function payloadActualizacion(
     if (sede) { p.sede_id = sede.id; p.sede = sede.nombre }
   }
 
-  // Estado: solo si el lead no tiene. Si tiene otro, se informa como "no aplicado".
-  // En un recontacto se toma el de Sellium (el anterior queda en Observaciones).
+  // Estado (2026-11-02): se actualiza al de Sellium si es distinto, SALVO que el lead
+  // ya esté en un estado que se maneja en Toshify (ESTADOS_PROTEGIDOS): ese no se pisa
+  // y se informa como "no aplicado".
   let estadoBloqueado = false
   const nuevo = f.estado.estado
-  if (nuevo) {
-    if (vacio(l.estado_de_lead) || (esRecontacto && l.estado_de_lead !== nuevo)) p.estado_de_lead = nuevo
-    else if (l.estado_de_lead !== nuevo) estadoBloqueado = true
+  if (nuevo && l.estado_de_lead !== nuevo) {
+    if (estadoProtegido(l.estado_de_lead)) estadoBloqueado = true
+    else p.estado_de_lead = nuevo
   }
 
   if (esRecontacto) {

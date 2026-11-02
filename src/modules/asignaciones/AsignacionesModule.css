@@ -2825,3 +2825,36 @@ input[type="date"].asig-status-select {
 @media (max-width: 767px) {
   .asig-comp-sufijo { display: none; }
 }
+
+/* Detalle de asignación: contacto del conductor (solo lo que tiene cargado) */
+.asig-contacto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px 16px;
+  margin: 6px 0 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-primary, #e5e7eb);
+  font-size: 12px;
+  color: var(--text-primary, #111827);
+}
+.asig-contacto > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.asig-contacto-lbl {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-tertiary, #9ca3af);
+}
+.asig-contacto a {
+  color: #16a34a;
+  font-weight: 600;
+  text-decoration: none;
+}
+.asig-contacto a:hover { text-decoration: underline; }

@@ -46,10 +46,15 @@
 --   Conversión = conductores nuevos / leads del período.
 --   FUERA DE RANGO: recibieron su primer auto en el período pero su lead es anterior:
 --   se informan aparte porque no corresponden a la pauta del rango filtrado.
--- REINGRESOS (pedido 2026-10-29): leads creados en el período de personas que YA
---   habían sido conductores (primer auto ANTES del lead), confirmado SOLO por DNI,
---   y que volvieron a recibir auto después de entrar como lead. No son conductores
---   nuevos (no suman en la conversión): se informan aparte.
+-- REINGRESOS (pedido 2026-10-29, corregido 2026-11-02): personas que YA habían sido
+--   conductores y volvieron, contadas por la FECHA EN QUE VOLVIERON (no por la
+--   creación del lead: quien vuelve suele tener un lead viejo). Cuenta si:
+--     a) el lead quedó marcado «Reingreso» al convertirlo (conductor de baja que se
+--        reactivó), o
+--     b) por DNI, ya tenía un auto antes del lead y volvió a recibir auto después.
+--   Fecha del reingreso: primer auto recibido después del lead; si todavía no tiene,
+--   la fecha de conversión del lead. Una vez por persona (DNI) en cada período.
+--   No son conductores nuevos ni conversiones: se informan aparte.
 --
 -- PERFIL DEL LEAD (solo leads que llegaron a "Propuesta enviada" o más: antes de
 -- esa etapa el chatbot todavía no preguntó licencia, monotributo ni experiencia):
@@ -159,9 +164,15 @@ leads_base AS (
     (l.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS ingreso,
     regexp_replace(COALESCE(l.dni, ''), '\D', '', 'g') AS dni,
     translate(LOWER(btrim(COALESCE(l.estado_de_lead, ''))), 'áéíóú', 'aeiou') AS estado,
-    (LOWER(COALESCE(l.proceso, '')) IN ('convertido', 'conductor')
+    -- Un reingreso no es una conversión de marketing (así lo marca la app al convertir)
+    ((LOWER(COALESCE(l.proceso, '')) IN ('convertido', 'conductor')
       OR l.fecha_convertido IS NOT NULL
-      OR LOWER(btrim(COALESCE(l.estado_de_lead, ''))) = 'conductor') AS convertido,
+      OR LOWER(btrim(COALESCE(l.estado_de_lead, ''))) = 'conductor')
+      AND LOWER(COALESCE(l.proceso, '')) <> 'reingreso'
+      AND LOWER(btrim(COALESCE(l.estado_de_lead, ''))) <> 'reingreso') AS convertido,
+    (LOWER(COALESCE(l.proceso, '')) = 'reingreso'
+      OR LOWER(btrim(COALESCE(l.estado_de_lead, ''))) = 'reingreso') AS marcado_reingreso,
+    (l.fecha_convertido::timestamptz AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS fecha_conv,
     l.edad,
     btrim(COALESCE(l.d1, '')) AS d1,
     btrim(COALESCE(l.licencia, '')) AS licencia,
@@ -316,7 +327,7 @@ leads_v AS (
     (ln.convertido OR ln.nivel_estado = 8) AS convertido,
     -- Conductor nuevo: recibió su primer auto después de entrar como lead. Si la misma
     -- persona (DNI) tiene varios leads en el rango, cuenta solo en el último.
-    (ln.dni <> '' AND pad.primer_turno IS NOT NULL AND pad.primer_turno >= ln.ingreso
+    (ln.dni <> '' AND NOT ln.marcado_reingreso AND pad.primer_turno IS NOT NULL AND pad.primer_turno >= ln.ingreso
       AND ROW_NUMBER() OVER (PARTITION BY r.rango, ln.dni ORDER BY ln.created_at DESC) = 1) AS con_auto,
     pad.primer_turno, pad.horario AS horario_auto, pad.zona_ficha,
     -- Reingreso: ya era conductor (primer auto ANTES del lead, solo por DNI) y volvió a
@@ -360,6 +371,29 @@ leads_v AS (
 ),
 leads_act AS (
   SELECT * FROM leads_v WHERE rango = 'actual'
+),
+
+-- ───────────── Reingresos (por la fecha en que volvieron) ─────────────
+reing_base AS (
+  SELECT
+    ln.dni, ln.nombre, ln.segmento, ln.canal, ln.id_fuente, ln.ingreso, ln.created_at,
+    pad.primer_turno,
+    COALESCE(ra.fecha, CASE WHEN ln.marcado_reingreso THEN COALESCE(ln.fecha_conv, ln.ingreso) END) AS fecha_reingreso
+  FROM leads_n ln
+  LEFT JOIN primer_auto_dni pad ON pad.dni = ln.dni
+  LEFT JOIN turnos_dni td ON td.dni = ln.dni
+  LEFT JOIN LATERAL (
+    SELECT MIN(f) AS fecha FROM unnest(td.fechas) f WHERE f >= ln.ingreso
+  ) ra ON true
+  WHERE length(ln.dni) >= 7
+    AND (ln.marcado_reingreso
+         OR (pad.primer_turno IS NOT NULL AND pad.primer_turno < ln.ingreso AND ra.fecha IS NOT NULL))
+),
+reingresos_v AS (
+  SELECT DISTINCT ON (r.rango, rb.dni) r.rango, rb.*
+  FROM reing_base rb
+  JOIN rangos r ON rb.fecha_reingreso BETWEEN r.desde AND r.hasta
+  ORDER BY r.rango, rb.dni, rb.fecha_reingreso DESC, rb.created_at DESC
 ),
 
 -- Conductores nuevos FUERA DE RANGO: recibieron su primer auto en el período pero su
@@ -583,16 +617,16 @@ SELECT jsonb_build_object(
       SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'cantidad', cantidad) ORDER BY cantidad DESC, segmento), '[]'::jsonb)
       FROM (SELECT segmento, COUNT(*) AS cantidad FROM fuera_de_rango GROUP BY segmento) x
     ),
-    -- Ya fueron conductores (por DNI) y volvieron a recibir auto después del lead
+    -- Ya fueron conductores y volvieron en el período (ver REINGRESOS arriba)
     'reingresos', jsonb_build_object(
-      'total', (SELECT COUNT(*) FROM leads_act WHERE reingreso),
-      'total_anterior', (SELECT COUNT(*) FROM leads_v WHERE rango = 'anterior' AND reingreso),
+      'total', (SELECT COUNT(*) FROM reingresos_v WHERE rango = 'actual'),
+      'total_anterior', (SELECT COUNT(*) FROM reingresos_v WHERE rango = 'anterior'),
       'detalle', (
         SELECT COALESCE(jsonb_agg(jsonb_build_object(
           'segmento', segmento, 'canal', canal, 'anuncio', id_fuente, 'nombre', nombre,
           'dni', dni, 'ingreso', ingreso, 'primer_auto', primer_turno, 'reingreso', fecha_reingreso)
           ORDER BY fecha_reingreso DESC, nombre), '[]'::jsonb)
-        FROM leads_act WHERE reingreso
+        FROM reingresos_v WHERE rango = 'actual'
       )
     )
   )

@@ -45,7 +45,17 @@ interface LogRow {
 
 const PAGE_SIZE = 50
 
-export function VerLogsButton({ tablas, label }: VerLogsButtonProps) {
+/**
+ * "Ver Logs" está oculto en todos los módulos. Para volver a mostrarlo,
+ * poner MOSTRAR_VER_LOGS en true (el componente sigue entero abajo).
+ */
+const MOSTRAR_VER_LOGS = false
+
+export function VerLogsButton(props: VerLogsButtonProps) {
+  return MOSTRAR_VER_LOGS ? <VerLogsButtonVisible {...props} /> : null
+}
+
+function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
   const { isAdmin } = usePermissions()
   const [open, setOpen] = useState(false)
   const [logs, setLogs] = useState<LogRow[]>([])

@@ -278,7 +278,7 @@
 
   /* Wizard */
   .lead-wizard-content {
-    max-height: 60vh;
+    height: 60vh;
   }
 
   .lead-convert-preview {
@@ -840,7 +840,9 @@
 }
 
 .lead-wizard-content {
-  max-height: 55vh;
+  /* Alto fijo: el modal no cambia de tamaño entre pasos; si un paso tiene más
+     campos, se desplaza por dentro. */
+  height: min(50vh, 460px);
   overflow-y: auto;
   padding: 4px;
 }
@@ -908,7 +910,10 @@
 .lead-wizard-footer {
   display: flex;
   justify-content: space-between;
-  padding-top: 16px;
+  align-items: center;
+  /* mismo aire arriba y abajo de los botones */
+  padding: 16px 0 8px;
+  margin-top: -8px;
   border-top: 1px solid var(--border-primary);
 }
 
@@ -1177,4 +1182,20 @@
 .lead-wizard-footer .lead-wizard-guardar:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Observaciones como bitácora (wizard del lead) */
+.lead-obs-bitacora { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
+.lead-obs-bitacora li { padding: 8px 10px; border-radius: 8px; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-primary, #e5e7eb); display: flex; flex-direction: column; gap: 2px; }
+.lead-obs-cab { font-size: 11px; font-weight: 600; color: var(--text-tertiary, #9ca3af); }
+.lead-obs-texto { font-size: 13px; color: var(--text-primary, #111827); white-space: pre-wrap; }
+
+/* Paso con obligatorios sin completar (ya visitado): amarillo. Verde solo si está completo. */
+.lead-wizard-step.incompleto .lead-wizard-step-number {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+.lead-wizard-step.incompleto .lead-wizard-step-label {
+  color: #b45309;
 }

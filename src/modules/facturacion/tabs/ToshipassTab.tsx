@@ -579,7 +579,7 @@ export function ToshipassTab() {
         <div className="fact-header-left" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="fact-btn fact-btn-secondary" onClick={exportarVisibles}
             title="Exportar a Excel los conductores visibles, respetando todos los filtros">
-            <Download size={14} /> Exportar Registros
+            <Download size={14} /> Exportar
           </button>
         </div>
         <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>

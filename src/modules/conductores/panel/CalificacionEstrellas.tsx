@@ -1,8 +1,8 @@
 // src/modules/conductores/panel/CalificacionEstrellas.tsx
-// Estrellas (1 a 5, con medias) y la ventana que explica la calificación.
-import { useEffect, useState } from 'react'
-import { Star, X } from 'lucide-react'
-import type { Calificacion } from './calificacionConductor'
+// Estrellas (1 a 5, con medias) y la pestaña Calificación del detalle del conductor.
+import { Fragment, useEffect, useState } from 'react'
+import { ChevronDown, Star } from 'lucide-react'
+import { cambiosEntreSemanas, calificacionDesdeGuardada, type CambioFactor, type Calificacion, type FactorCalificacion } from './calificacionConductor'
 import { cargarHistorial, type CalificacionSemana } from './calificacionesHistorial'
 
 function Estrella({ relleno }: { relleno: 0 | 0.5 | 1 }) {
@@ -46,13 +46,87 @@ function fechaSemana(iso: string): string {
   return `${d}/${m}`
 }
 
-export function CalificacionModal({ conductorId, nombre, calificacion, onClose }: {
-  conductorId: string
-  nombre: string
-  calificacion: Calificacion
-  onClose: () => void
-}) {
+const fmtEstrellas = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+
+function tonoDe(p: number | null): string {
+  if (p === null) return 'nulo'
+  return p >= 0.7 ? 'bueno' : p >= 0.4 ? 'medio' : 'malo'
+}
+
+/** "Bajó por Ingresos (−0,8★) y Multas (−0,3★)" */
+function resumenCambio(cambios: CambioFactor[], dif: number): string {
+  const relevantes = cambios
+    .filter(c => Math.abs(c.efecto) >= 0.15 && (dif === 0 || Math.sign(c.efecto) === Math.sign(dif)))
+    .sort((a, b) => Math.abs(b.efecto) - Math.abs(a.efecto))
+    .slice(0, 2)
+  if (!relevantes.length) return dif === 0 ? 'Sin cambios importantes' : 'Cambios chicos en varios factores'
+  const lista = relevantes.map(c => `${c.nombre.replace(' (Cabify)', '').replace(' de la semana', '')} (${c.efecto > 0 ? '+' : '−'}${fmtEstrellas(Math.abs(c.efecto))}★)`)
+  const verbo = dif > 0 ? 'Subió por' : dif < 0 ? 'Bajó por' : 'Movieron'
+  return `${verbo} ${lista.join(' y ')}`
+}
+
+function Factores({ factores }: { factores: FactorCalificacion[] }) {
+  const conDato = factores.filter(f => f.puntaje !== null)
+  const pesoTotal = conDato.reduce((t, f) => t + f.peso, 0) || 1
+  return (
+    <div className="cal-factores cal-factores--grid">
+      {factores.map(f => {
+        const pct = f.puntaje === null ? null : Math.round(f.puntaje * 100)
+        const pesoReal = f.puntaje === null ? 0 : Math.round((f.peso / pesoTotal) * 100)
+        return (
+          <div key={f.clave} className="cal-factor">
+            <div className="cal-factor-cab">
+              <span className="cal-factor-nombre">{f.nombre}</span>
+              <span className="cal-factor-peso">{f.puntaje === null ? 'no cuenta' : `pesa ${pesoReal}%`}</span>
+            </div>
+            <div className="cal-factor-valor">{f.valor}</div>
+            <div className="cal-barra">
+              <span className={`cal-barra-relleno cal-${tonoDe(f.puntaje)}`} style={{ width: `${pct ?? 0}%` }} />
+            </div>
+            <div className="cal-factor-expl">{f.explicacion}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Tabla factor por factor: esta semana contra la anterior y cuánto movió cada uno. */
+function DetalleCambios({ cambios }: { cambios: CambioFactor[] }) {
+  return (
+    <table className="cdet-table cal-cambios">
+      <thead><tr>
+        <th>Factor</th><th>Semana anterior</th><th>Esta semana</th><th style={{ textAlign: 'right' }}>Efecto</th>
+      </tr></thead>
+      <tbody>
+        {cambios.map(c => (
+          <tr key={c.clave}>
+            <td>{c.nombre}</td>
+            <td className="cal-cambio-valor">{c.antes ? c.antes.valor : '—'}</td>
+            <td className="cal-cambio-valor">
+              {c.ahora ? c.ahora.valor : '—'}
+              {c.ahora?.explicacion ? <div className="cal-cambio-expl">{c.ahora.explicacion}</div> : null}
+            </td>
+            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+              {Math.abs(c.efecto) < 0.05
+                ? <span className="cal-igual">=</span>
+                : <span className={c.efecto > 0 ? 'cal-sube' : 'cal-baja'}>{c.efecto > 0 ? '▲' : '▼'} {fmtEstrellas(Math.abs(c.efecto))}★</span>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+/**
+ * Pestaña "Calificación" del detalle del conductor: historial por semana cerrada
+ * (con qué factores la hicieron subir o bajar) y la semana en curso como avance.
+ */
+export function CalificacionTab({ conductorId, enCurso }: { conductorId: string; enCurso?: Calificacion | null }) {
   const [historial, setHistorial] = useState<CalificacionSemana[] | null>(null)
+  const [abierta, setAbierta] = useState<string | null>(null)
+  const [verEnCurso, setVerEnCurso] = useState(false)
   useEffect(() => {
     let activo = true
     cargarHistorial(conductorId)
@@ -61,88 +135,84 @@ export function CalificacionModal({ conductorId, nombre, calificacion, onClose }
     return () => { activo = false }
   }, [conductorId])
 
-  useEffect(() => {
-    const cerrar = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', cerrar)
-    return () => window.removeEventListener('keydown', cerrar)
-  }, [onClose])
-
-  const conDato = calificacion.factores.filter(f => f.puntaje !== null)
-  const pesoTotal = conDato.reduce((t, f) => t + f.peso, 0) || 1
-
   return (
-    <div className="cal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="cal-modal" role="dialog" aria-modal="true" aria-labelledby="cal-titulo">
-        <header className="cal-header">
-          <div>
-            <h2 id="cal-titulo">{nombre}</h2>
-            {calificacion.estrellas !== null ? (
-              <div className="cal-resumen">
-                <Estrellas valor={calificacion.estrellas} />
-                <strong>{calificacion.estrellas.toLocaleString('es-AR')} de 5</strong>
-              </div>
-            ) : (
-              <div className="cal-resumen">Sin datos suficientes para calificar</div>
-            )}
-          </div>
-          <button type="button" className="cal-cerrar" onClick={onClose} aria-label="Cerrar">
-            <X size={18} />
+    <div className="cal-tab">
+      {enCurso && (
+        <div className="cal-encurso">
+          <button type="button" className="cal-encurso-cab" onClick={() => setVerEnCurso(v => !v)} aria-expanded={verEnCurso}>
+            <span>
+              <strong>Semana en curso</strong>
+              <span className="cal-encurso-nota"> · avance parcial, se cierra el domingo</span>
+            </span>
+            <span className="cal-encurso-valor">
+              {enCurso.estrellas !== null ? <><Estrellas valor={enCurso.estrellas} /> <span className="cal-numero">{fmtEstrellas(enCurso.estrellas)}</span></> : 'Sin datos todavía'}
+              <ChevronDown size={16} style={{ transform: verEnCurso ? 'rotate(180deg)' : undefined }} />
+            </span>
           </button>
-        </header>
-
-        <div className="cal-factores">
-          {calificacion.factores.map(f => {
-            const pct = f.puntaje === null ? null : Math.round(f.puntaje * 100)
-            const pesoReal = f.puntaje === null ? 0 : Math.round((f.peso / pesoTotal) * 100)
-            const tono = pct === null ? 'nulo' : pct >= 70 ? 'bueno' : pct >= 40 ? 'medio' : 'malo'
-            return (
-              <div key={f.clave} className="cal-factor">
-                <div className="cal-factor-cab">
-                  <span className="cal-factor-nombre">{f.nombre}</span>
-                  <span className="cal-factor-peso">{f.puntaje === null ? 'no cuenta' : `pesa ${pesoReal}%`}</span>
-                </div>
-                <div className="cal-factor-valor">{f.valor}</div>
-                <div className="cal-barra">
-                  <span className={`cal-barra-relleno cal-${tono}`} style={{ width: `${pct ?? 0}%` }} />
-                </div>
-                <div className="cal-factor-expl">{f.explicacion}</div>
-              </div>
-            )
-          })}
+          {verEnCurso && <Factores factores={enCurso.factores} />}
         </div>
+      )}
 
-        <div className="cal-historial">
-          <div className="cal-historial-titulo">Historial por semana cerrada</div>
-          {historial === null ? (
-            <div className="cal-historial-vacio">Cargando…</div>
-          ) : historial.length === 0 ? (
-            <div className="cal-historial-vacio">Todavía no hay semanas cerradas guardadas. Se guarda cada lunes.</div>
-          ) : (
-            <ul className="cal-historial-lista">
-              {historial.map((h, i) => {
-                const previa = historial[i + 1]
-                const dif = previa ? h.estrellas - previa.estrellas : 0
-                return (
-                  <li key={h.semana_inicio}>
-                    <span className="cal-historial-sem">Sem. del {fechaSemana(h.semana_inicio)}</span>
-                    <Estrellas valor={h.estrellas} />
-                    <span className="cal-numero">{h.estrellas.toLocaleString('es-AR')}</span>
-                    {previa && dif !== 0 ? (
-                      <span className={dif > 0 ? 'cal-sube' : 'cal-baja'}>{dif > 0 ? '▲' : '▼'} {Math.abs(dif).toLocaleString('es-AR')}</span>
-                    ) : <span />}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
+      {historial === null ? (
+        <div className="cdet-empty">Cargando…</div>
+      ) : historial.length === 0 ? (
+        <div className="cdet-empty">Todavía no hay semanas cerradas guardadas. Se guarda cada lunes.</div>
+      ) : (
+        <table className="cdet-table cal-semanas">
+          <thead><tr>
+            <th>Semana</th><th>Calificación</th><th>Cambio</th><th>Por qué</th><th />
+          </tr></thead>
+          <tbody>
+            {historial.map((h, i) => {
+              const previa = historial[i + 1]
+              const dif = previa ? h.estrellas - previa.estrellas : 0
+              const cambios = previa ? cambiosEntreSemanas(h.factores, previa.factores) : []
+              const abiertaEsta = abierta === h.semana_inicio
+              return (
+                <Fragment key={h.semana_inicio}>
+                  <tr className={`cal-fila${abiertaEsta ? ' is-abierta' : ''}`} onClick={() => setAbierta(abiertaEsta ? null : h.semana_inicio)}>
+                    <td style={{ whiteSpace: 'nowrap' }}>Sem. del {fechaSemana(h.semana_inicio)}{i === 0 ? <span className="cal-ultima">última cerrada</span> : null}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}><Estrellas valor={h.estrellas} /> <span className="cal-numero">{fmtEstrellas(h.estrellas)}</span></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {!previa ? <span className="cal-igual">—</span>
+                        : dif === 0 ? <span className="cal-igual">= igual</span>
+                          : <span className={dif > 0 ? 'cal-sube' : 'cal-baja'}>{dif > 0 ? '▲' : '▼'} {fmtEstrellas(Math.abs(dif))}</span>}
+                    </td>
+                    <td className="cal-porque">
+                      {!previa ? 'Primera semana guardada'
+                        : !h.factores || !previa.factores ? 'Sin detalle guardado'
+                          : resumenCambio(cambios, dif)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button type="button" className="cal-expandir" aria-expanded={abiertaEsta} aria-label="Ver detalle de la semana">
+                        <ChevronDown size={16} style={{ transform: abiertaEsta ? 'rotate(180deg)' : undefined }} />
+                      </button>
+                    </td>
+                  </tr>
+                  {abiertaEsta && (
+                    <tr className="cal-detalle-fila">
+                      <td colSpan={5}>
+                        {previa && h.factores && previa.factores
+                          ? <DetalleCambios cambios={cambios} />
+                          : h.factores
+                            ? <Factores factores={calificacionDesdeGuardada(h).factores} />
+                            : <div className="cdet-empty">Esta semana se guardó sin el detalle de factores.</div>}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
 
-        <p className="cal-nota">
-          La calificación combina seis factores según su peso: viajes 20%, aprovechamiento 20%, deuda 20%,
-          ingresos 15%, límite de km 15% y multas 10%. Arriba: semana en curso. El historial guarda cada semana cerrada.
-          {calificacion.parcial ? ' Si falta un dato, ese factor no cuenta y los demás se reparten su peso.' : ''}
-        </p>
-      </div>
+      <p className="cal-nota">
+        Cada lunes se guarda la calificación de la semana que cerró. Pesos: pagos 30%, ingresos contra lo que
+        tenía que cubrir 25%, cuidado del auto 20% (siniestros con culpa y excesos de km), multas 10%,
+        aprovechamiento 10% y antigüedad 5%. Si falta un dato, ese factor no cuenta y los demás se reparten su
+        peso. Las semanas anteriores al 02/11 se calcularon con la fórmula vieja. El efecto de cada factor es aproximado.
+      </p>
     </div>
   )
 }

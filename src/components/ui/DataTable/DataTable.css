@@ -47,6 +47,9 @@
 
 .dt-empty-icon {
   margin-bottom: 12px;
+  /* centrado (el svg es de bloque y quedaba a la izquierda) */
+  display: flex;
+  justify-content: center;
 }
 
 .dt-empty-icon svg {

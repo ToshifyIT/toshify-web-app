@@ -11,7 +11,8 @@
 // Este modal cruza leads y conductores POR DOCUMENTO, replicando la misma
 // normalizacion que usa handleConvertir, y clasifica en dos grupos:
 //   - convertido:  estado_de_lead === 'Conductor'
-//   - huerfano:    estado_de_lead !== 'Conductor' pero hay un conductor que matchea
+//   - huerfano:    el conductor se creó a mano (no por conversión, después de
+//                  que entró el lead) y el lead nunca se convirtió
 //
 // La deteccion de huerfanos es HEURISTICA: depende de que el lead tenga DNI o
 // CUIT cargado. Un lead sin documento no puede vincularse aunque su conductor exista.
@@ -42,6 +43,8 @@ interface ConductorFila {
   numero_dni: string | null
   numero_cuit: string | null
   sede_id: string | null
+  lead_origen_id?: string | null
+  created_at?: string | null
 }
 
 type Situacion = 'convertido' | 'huerfano'
@@ -60,6 +63,18 @@ interface FilaConciliacion {
 
 /** Misma normalizacion que handleConvertir: sin espacios ni guiones. */
 const normalizarDoc = (val: string) => (val || '').replace(/[\s-]/g, '')
+
+/** Conductores / leads internos o de prueba: no se muestran. */
+const ES_PRUEBA = /\b(interno|prueba|pruebita|test|tuki)\b/i
+
+/** El lead ya pasó a conductor (convertido, reingreso o ya era conductor). */
+function leadYaPasoAConductor(l: LeadFila): boolean {
+  if (l.fecha_convertido) return true
+  const proceso = (l.proceso || '').toLowerCase()
+  const estado = (l.estado_de_lead || '').toLowerCase()
+  return ['convertido', 'reingreso', 'ya era conductor'].includes(proceso)
+    || estado === 'conductor' || estado === 'reingreso'
+}
 
 function fmtFecha(v: string | null): string {
   if (!v) return '-'
@@ -88,7 +103,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
             .select('id, nombre_completo, dni, cuit, estado_de_lead, proceso, fecha_convertido, created_at')
             .limit(20000),
           (supabase.from('conductores') as any)
-            .select('id, nombres, apellidos, numero_dni, numero_cuit, sede_id')
+            .select('id, nombres, apellidos, numero_dni, numero_cuit, sede_id, lead_origen_id, created_at')
             .limit(20000),
         ])
         if (leadsRes.error) throw leadsRes.error
@@ -100,8 +115,21 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
         // se cruzan con leads reales: solo cuentan si se está viendo esa sede.
         // Se arma por lista positiva porque a los no-admin esa sede ni les llega.
         const sedesValidas = new Set(sedes.filter(s => !s.solo_admin || s.id === sedeActualId).map(s => s.id))
+        // Internos y de prueba (EQUIPO TOSHIFY INTERNO, "pruebita"…) no salen en ningún lado
         const conductores = ((condRes.data || []) as ConductorFila[])
           .filter(c => !c.sede_id || sedesValidas.has(c.sede_id))
+          .filter(c => !ES_PRUEBA.test(`${c.nombres || ''} ${c.apellidos || ''}`))
+
+        // Documentos con algún lead ya convertido (o reingreso): esa persona ya
+        // pasó de lead a conductor, sus otros leads no son "sin convertir".
+        const docsConvertidos = new Set<string>()
+        for (const l of leads) {
+          if (!leadYaPasoAConductor(l)) continue
+          for (const d of [l.dni, l.cuit]) {
+            const k = normalizarDoc(String(d || ''))
+            if (k) docsConvertidos.add(k)
+          }
+        }
 
         // Indice de conductores por documento normalizado (DNI y CUIT).
         const porDoc = new Map<string, ConductorFila>()
@@ -130,12 +158,25 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
           const dni = normalizarDoc(String(l.dni || ''))
           const cuit = normalizarDoc(String(l.cuit || ''))
           const esConvertido = l.estado_de_lead === 'Conductor'
+          if (ES_PRUEBA.test(l.nombre_completo || '')) continue
           const cond = (dni || cuit) ? buscarConductor(dni, cuit) : null
 
           // Ambas pestañas exigen que exista el conductor en la tabla: un lead
           // marcado como convertido pero sin conductor real no pertenece a
           // ninguno de los dos grupos (seria otra inconsistencia distinta).
           if (!cond) continue
+
+          // "Sin convertir" = el conductor se creó DIRECTO (a mano) después de que
+          // la persona entró como lead, y ese lead nunca se convirtió. No entra si:
+          //  - el lead (u otro lead de la misma persona) ya pasó a conductor o es reingreso
+          //  - el conductor vino de una conversión de lead (tiene lead_origen_id)
+          //  - el conductor ya existía antes de que entrara el lead
+          if (!esConvertido) {
+            if (leadYaPasoAConductor(l)) continue
+            if ((dni && docsConvertidos.has(dni)) || (cuit && docsConvertidos.has(cuit))) continue
+            if (cond.lead_origen_id) continue
+            if (cond.created_at && l.created_at && cond.created_at < l.created_at) continue
+          }
 
           resultado.push({
             leadId: l.id,

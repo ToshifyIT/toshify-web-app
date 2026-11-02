@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, type ReactNode } from 'react'
-import { Eye, User, Car, Clock, ClipboardList, TrendingUp, X, Filter } from 'lucide-react'
+import { Eye, User, Car, Clock, ClipboardList, TrendingUp, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -107,6 +107,14 @@ function Comparacion({ actual, anterior, puntos = false, invertido = false }: {
       <span className="asig-comp-sufijo"> vs sem. ant.</span>
     </span>
   )
+}
+
+/** Texto del chip de filtro de cada tarjeta. */
+const ETIQUETA_FILTRO: Record<string, string> = {
+  vacantes: 'Turnos Disponibles',
+  totalFlota: 'Total Flota',
+  vehiculosActivos: 'Vehículos Activos',
+  disponibles: 'Vehículos Disponibles (PKG ON)',
 }
 
 export function AsignacionesActivasModule() {
@@ -691,6 +699,21 @@ export function AsignacionesActivasModule() {
     []
   )
 
+  // Mensaje cuando la tabla queda vacía, según la tarjeta elegida
+  const vacio = (() => {
+    switch (activeStatFilter) {
+      case 'disponibles':
+        return { titulo: 'No hay vehículos disponibles', descripcion: 'Hoy no hay autos en PKG ON sin asignar.' }
+      case 'vacantes':
+        return { titulo: 'No hay turnos disponibles', descripcion: 'Todos los autos en turno tienen sus dos conductores.' }
+      case 'vehiculosActivos':
+      case 'totalFlota':
+        return { titulo: 'Sin vehículos para mostrar', descripcion: 'No hay vehículos que coincidan con la tarjeta elegida.' }
+      default:
+        return { titulo: 'No hay asignaciones activas', descripcion: 'Actualmente no hay asignaciones en estado activo.' }
+    }
+  })()
+
   return (
     <div className="asig-module">
       {/* Loading Overlay - bloquea toda la pantalla */}
@@ -959,55 +982,19 @@ export function AsignacionesActivasModule() {
         </div>
       </div>
 
-      {/* Barra de Filtros Activos (solo para stat cards) */}
-      {hasActiveFilters && (
-        <div className="asig-active-filters">
-          <div className="asig-filters-label">
-            <Filter size={14} />
-            <span>Filtros activos:</span>
-          </div>
-          <div className="asig-filters-chips">
-            {activeStatFilter && (
-              <span className="asig-filter-chip">
-                {activeStatFilter === 'vacantes' ? 'Turnos Disponibles' :
-                 activeStatFilter === 'totalFlota' ? 'Total Flota' :
-                 activeStatFilter === 'vehiculosActivos' ? 'Vehículos Activos' :
-                 activeStatFilter === 'disponibles' ? 'Vehículos Disponibles (PKG_ON)' : activeStatFilter}
-                <button onClick={() => setActiveStatFilter(null)} className="asig-filter-chip-remove">
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-          </div>
-          <button className="asig-clear-filters-btn" onClick={clearAllFilters}>
-            Limpiar todos
-          </button>
-        </div>
-      )}
-
-      {/* Mensaje cuando filtros no tienen resultados */}
-      {hasActiveFilters && processedAsignaciones.length === 0 && !loading && (
-        <div className="asig-no-filter-results">
-          <Filter size={32} />
-          <h3>Sin resultados para los filtros aplicados</h3>
-          <p>No se encontraron asignaciones que coincidan con los filtros seleccionados.</p>
-          <button className="asig-clear-filters-btn" onClick={clearAllFilters}>
-            Limpiar filtros
-          </button>
-        </div>
-      )}
-
       {/* DataTable */}
       <DataTable
         data={processedAsignaciones}
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por vehiculo, conductor, numero de asignacion..."
-        emptyIcon={<ClipboardList size={64}
-      />}
-        emptyTitle="No hay asignaciones activas"
-        emptyDescription="Actualmente no hay asignaciones en estado activo"
+        emptyIcon={<ClipboardList size={40} />}
+        emptyTitle={vacio.titulo}
+        emptyDescription={vacio.descripcion}
         resetFiltersKey={resetFiltersKey}
+        // El filtro de la tarjeta se muestra como chip dentro de la tabla, igual que en los demás módulos
+        externalFilters={activeStatFilter ? [{ id: 'tarjeta', label: ETIQUETA_FILTRO[activeStatFilter] ?? activeStatFilter, onClear: () => setActiveStatFilter(null) }] : []}
+        onClearAllFilters={hasActiveFilters ? clearAllFilters : undefined}
       />
 
       {/* Modal de Detalles */}

@@ -54,13 +54,11 @@
   color: var(--text-secondary);
 }
 
-/* Selector de semana */
+/* Selector de semana (al lado del buscador de la tabla) */
 .combustible-toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 8px;
 }
 
 .combustible-toolbar-nota {

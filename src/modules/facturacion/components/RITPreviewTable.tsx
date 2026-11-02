@@ -4,16 +4,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react'
-import {
-  ArrowLeft,
-  FileSpreadsheet,
-  Loader2,
-  Search,
-  RotateCcw,
-  Filter,
-  X,
-  RefreshCw
-} from 'lucide-react'
+import { ArrowLeft, Loader2, Search, RotateCcw, Filter, X, RefreshCw, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
@@ -557,8 +548,8 @@ export function RITPreviewTable({
             onClick={exportarExcel}
             disabled={exporting}
           >
-            {exporting ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
-            {exporting ? 'Exportando...' : 'Exportar Excel'}
+            {exporting ? <Loader2 size={14} className="spinning" /> : <Download size={14} />}
+            {exporting ? 'Exportando...' : 'Exportar'}
           </button>
         </div>
       </div>

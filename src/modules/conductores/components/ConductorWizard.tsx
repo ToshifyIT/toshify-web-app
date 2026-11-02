@@ -19,6 +19,8 @@ interface ConductorFormData {
   licencia_tipo_id: string
   telefono_contacto: string
   telefono_secundario?: string
+  /** Mail personal / respaldo (conductores.correo_personal). Opcional. */
+  correo_personal?: string
   email: string
   direccion: string
   direccion_lat: number | null
@@ -113,7 +115,7 @@ export function ConductorWizard({
 
     if (step === 4) {
       if (!formData.telefono_contacto.trim()) newErrors.telefono_contacto = 'El teléfono es requerido'
-      if (!formData.email.trim()) newErrors.email = 'El email es requerido'
+      if (!formData.email.trim()) newErrors.email = 'El email de Cabify es requerido'
       if (!formData.direccion.trim()) newErrors.direccion = 'La dirección es requerida'
       if (!formData.experiencia_previa.trim()) newErrors.experiencia_previa = 'Requerido'
     }
@@ -173,18 +175,17 @@ export function ConductorWizard({
 
             <div className="form-group">
               <label className="form-label">Guía *</label>
-              <input
-                type="text"
+              <select
                 className={`form-input ${errors.guia ? 'input-error' : ''}`}
-                list="wizard-conductor-guias"
                 value={formData.guia || ''}
                 onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
-                placeholder="Elegí el guía o escribí quién lo convirtió"
                 disabled={saving}
-              />
-              <datalist id="wizard-conductor-guias">
-                {GUIAS_ACTIVOS.map(g => <option key={g} value={g} />)}
-              </datalist>
+              >
+                <option value="">Elegí el guía</option>
+                {GUIAS_ACTIVOS.map(g => <option key={g} value={g}>{g}</option>)}
+                {/* Un valor que no está en la lista (p. ej. quien convirtió el lead) no se pierde */}
+                {formData.guia && !GUIAS_ACTIVOS.includes(formData.guia) && <option value={formData.guia}>{formData.guia}</option>}
+              </select>
               {errors.guia && <span className="error-message">{errors.guia}</span>}
             </div>
 
@@ -220,7 +221,7 @@ export function ConductorWizard({
                   type="text"
                   className={`form-input ${errors.numero_dni ? 'input-error' : ''}`}
                   value={formData.numero_dni}
-                  onChange={(e) => setFormData({ ...formData, numero_dni: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, numero_dni: e.target.value.replace(/\D/g, '') })}
                   disabled={saving}
                 />
                 {errors.numero_dni && <span className="error-message">{errors.numero_dni}</span>}
@@ -364,7 +365,7 @@ export function ConductorWizard({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Teléfono *</label>
+                <label className="form-label">Teléfono (WhatsApp) *</label>
                 <input
                   type="tel"
                   className={`form-input ${errors.telefono_contacto ? 'input-error' : ''}`}
@@ -375,26 +376,38 @@ export function ConductorWizard({
                 {errors.telefono_contacto && <span className="error-message">{errors.telefono_contacto}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">Teléfono secundario <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+                <label className="form-label">Teléfono secundario (personal / otra app) <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
                 <input
                   type="tel"
                   className="form-input"
                   value={formData.telefono_secundario || ''}
                   onChange={(e) => setFormData({ ...formData, telefono_secundario: e.target.value })}
-                  placeholder="Otro número que use (ej. el de DiDi)"
+                  placeholder="Su número personal u otro que use (ej. el de DiDi)"
                   disabled={saving}
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Email *</label>
+                <label className="form-label">Email app móvil (Cabify) *</label>
                 <input
                   type="email"
                   className={`form-input ${errors.email ? 'input-error' : ''}`}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="El mismo con el que entra a Cabify"
                   disabled={saving}
                 />
                 {errors.email && <span className="error-message">{errors.email}</span>}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mail personal / respaldo <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={formData.correo_personal || ''}
+                  onChange={(e) => setFormData({ ...formData, correo_personal: e.target.value })}
+                  placeholder="Otro correo que use"
+                  disabled={saving}
+                />
               </div>
             </div>
 

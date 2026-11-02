@@ -463,7 +463,7 @@ function htmlResumen(plan: PlanCarga, totalFilas: number, secciones: Secciones):
         ${plan.conductores.length ? fila('Omitidos: ya son Conductor', plan.conductores.length, '#6B7280', 'conductores') : ''}
         ${plan.conflictos.length ? fila('Conflictos (no se tocan)', plan.conflictos.length, '#DC2626', 'conflictos') : ''}
         ${plan.invalidas.length ? fila('Inválidos (sin teléfono ni correo)', plan.invalidas.length, '#DC2626', 'invalidas') : ''}
-        ${secciones.bloqueados.filas.length ? fila('Estado no aplicado (el lead ya tiene estado)', secciones.bloqueados.filas.length, '#D97706', 'bloqueados') : ''}
+        ${secciones.bloqueados.filas.length ? fila('Estado no aplicado (el lead está en Documentos enviados, Inducción, Listo Emparejar o Descartado)', secciones.bloqueados.filas.length, '#D97706', 'bloqueados') : ''}
       </table>
       <div id="sellium-detalle" style="margin-bottom:12px;"></div>
       <p style="font-weight:600;margin:0 0 4px;">Estado resultante (nuevos + actualizados)</p>
