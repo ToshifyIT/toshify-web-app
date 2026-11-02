@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Eye, Edit2, Trash2, FileText, AlertTriangle, Plus, Shield, Download } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { supabase } from '../../lib/supabase'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -10,6 +10,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type { ColumnDef } from '@tanstack/react-table'
 import { normalizePatente } from '../../utils/normalizeDocuments'
 import { StatsGrid } from '../../components/ui/StatsGrid'
+import { hoyART } from '../../utils/fechaArgentina'
 import './VencimientosModule.css'
 
 // Paleta semántica para el badge de estado del vehículo. Mapea por el texto de la
@@ -478,7 +479,7 @@ export function VencimientosModule() {
   }
 
   async function handleDelete(item: Vencimiento) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar registro',
       text: '¿Estás seguro de que deseas eliminar este vencimiento?',
       icon: 'warning',
@@ -527,7 +528,7 @@ export function VencimientosModule() {
 
   async function handleSubmit() {
     if (!formData.titular.trim() || !formData.patente.trim() || !formData.fecha_vencimiento || !formData.documento?.trim()) {
-      Swal.fire('Campos incompletos', 'Completa los campos obligatorios', 'warning')
+      Alerta.fire('Campos incompletos', 'Completa los campos obligatorios', 'warning')
       return
     }
 
@@ -656,7 +657,7 @@ export function VencimientosModule() {
           <span style={{
             display: 'inline-block',
             padding: '3px 10px',
-            borderRadius: '999px',
+            borderRadius: 'var(--radius-full)',
             fontSize: '11px',
             fontWeight: 600,
             whiteSpace: 'nowrap',
@@ -789,7 +790,7 @@ export function VencimientosModule() {
       const ws = XLSX.utils.json_to_sheet(rows)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Vencimientos')
-      const fecha = new Date().toISOString().split('T')[0]
+      const fecha = hoyART()
       XLSX.writeFile(wb, `Vencimientos_${fecha}.xlsx`)
     } catch (error) {
       console.error('Error exportando a Excel:', error)
@@ -930,7 +931,7 @@ export function VencimientosModule() {
                 <div className="venc-detail-row">
                   <div>
                     <span className="venc-detail-label">Patente</span>
-                    <p className="venc-detail-value" style={{ fontWeight: 700, fontFamily: 'monospace' }}>{selectedItem.patente || '-'}</p>
+                    <p className="venc-detail-value" style={{ fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{selectedItem.patente || '-'}</p>
                   </div>
                   <div>
                     <span className="venc-detail-label">Titular</span>
@@ -982,7 +983,7 @@ export function VencimientosModule() {
                     <div style={{ borderTop: '1px solid var(--border-primary)', margin: '4px 0' }} />
                     <div>
                       <span className="venc-detail-label">Observaciones</span>
-                      <p className="venc-detail-value" style={{ whiteSpace: 'pre-wrap', background: 'var(--bg-secondary)', padding: '10px', borderRadius: '6px', borderLeft: '3px solid var(--color-primary)' }}>
+                      <p className="venc-detail-value" style={{ whiteSpace: 'pre-wrap', background: 'var(--bg-secondary)', padding: '10px', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--color-primary)' }}>
                         {selectedItem.observacion}
                       </p>
                     </div>

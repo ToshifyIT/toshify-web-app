@@ -21,6 +21,7 @@ import { calificacionDesdeGuardada, calificarConductor, referenciaIngresos, type
 import { CalificacionCelda } from './CalificacionEstrellas'
 import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes, cargarExtrasCalificacion, cargarSemanaCerradaGuardada, lunesSemanaCerrada, type CalificacionSemana } from './calificacionesHistorial'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
+import { hoyART } from '../../../utils/fechaArgentina'
 import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
 
@@ -308,7 +309,7 @@ export function ConductoresPanelModule() {
 
     // El nombre del archivo deja constancia del filtro de stat-card usado.
     const sufijoFiltro = activeCard ? `_${CARD_LABELS[activeCard].replace(/\s+/g, '')}` : ''
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = hoyART()
     XLSX.writeFile(wb, `Panel_Conductores${sufijoFiltro}_${fecha}.xlsx`)
   }
 

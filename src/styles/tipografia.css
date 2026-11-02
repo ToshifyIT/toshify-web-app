@@ -10,13 +10,7 @@
    cabecera y el mismo tamaño de celda; #root les da prioridad sobre el CSS de
    cada módulo.
    ===================================================== */
-:root {
-  --fs-xs: 11px;
-  --fs-sm: 12px;
-  --fs-md: 13px;
-  --fs-lg: 16px;
-  --fs-xl: 20px;
-}
+/* Las variables --fs-* están en styles/tokens.css */
 
 /* Cabeceras de tabla: antes iban de 8 a 14 px según el módulo */
 #root table thead th {
@@ -53,13 +47,6 @@
 }
 #root .sidebar .nav-flyout-header,
 #root .sidebar .nav-flyout-items { font-size: 10px; }
-
-/* Buscador de las tablas */
-#root .dt-search-input {
-  font-size: 12px;
-  padding-top: 9px;
-  padding-bottom: 9px;
-}
 
 /* Paginación y contador de registros */
 #root .dt-pagination,
@@ -190,21 +177,12 @@
   font-size: 12px !important;
   font-weight: 600;
   padding: 0 12px !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
 }
 #root .date-range-btn svg.lucide { width: 14px !important; height: 14px !important; }
 #root .modal-content .modal-footer :is(.btn-primary, .btn-secondary) { height: 34px !important; padding: 0 16px !important; }
 
-/* Buscador del mismo alto que los botones de al lado */
-#root .dt-search-input {
-  height: 32px !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  padding-left: 36px !important;
-  border-radius: 8px !important;
-  box-sizing: border-box;
-}
-#root .dt-search-icon { width: 16px !important; height: 16px !important; left: 12px !important; }
+/* El buscador se define una sola vez en DataTable.css */
 
 /* Filtros que van al lado del buscador (selects, fechas, casillas): mismo alto
    y letra que los botones de la barra */
@@ -214,7 +192,7 @@
   padding: 0 10px !important;
   font-size: 12px !important;
   border: 1px solid var(--border-primary);
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   background: var(--bg-primary);
   color: var(--text-primary);
 }
@@ -228,7 +206,7 @@
   height: 32px;
   padding: 0 12px;
   font-size: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 /* =====================================================

@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Check, Loader2, Users, Clock, Tag } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast';
 import { useSede } from '../../../contexts/SedeContext';
 import { DataTable } from '../../../components/ui/DataTable';
@@ -102,7 +102,7 @@ export function AtendedoresSubTab() {
   }
 
   async function handleDelete(item: VisitaAtendedor) {
-    const res = await Swal.fire({
+    const res = await Alerta.fire({
       title: 'Desactivar anfitrión',
       text: `¿Desactivar a "${item.nombre}"? Dejará de aparecer en el sistema pero sus citas históricas se conservan.`,
       icon: 'warning',

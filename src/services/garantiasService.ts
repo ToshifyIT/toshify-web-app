@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from '../lib/supabase'
 
+import { hoyART } from '../utils/fechaArgentina'
 export interface GarantiaSyncResult {
   conductor_id: string
   conductor_nombre: string
@@ -169,7 +170,7 @@ export async function recalcGarantiasForConductors(
     if (cambio) {
       const fechaCompletada =
         estadoNuevo === 'completada' && g.estado !== 'completada'
-          ? new Date().toISOString().slice(0, 10)
+          ? hoyART()
           : g.fecha_completada
       updates.push(
         (supabase.from('garantias_conductores') as any)

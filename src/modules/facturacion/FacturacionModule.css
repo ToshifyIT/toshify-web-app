@@ -43,7 +43,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.15s;
   flex: 1;
 }
@@ -74,7 +74,7 @@
   align-items: center;
   background: var(--bg-primary);
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
 }
 
@@ -93,7 +93,7 @@
   border: 1px solid var(--border-primary);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -133,7 +133,7 @@
 
 .fact-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -152,7 +152,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .fact-stats .stat-card .stat-icon {
@@ -301,7 +301,7 @@
    ===================================================== */
 
 .fact-monto {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 500;
   font-size: 13px;
 }
@@ -315,11 +315,11 @@
 }
 
 .fact-saldo {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 13px;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .fact-saldo.debe {
@@ -343,7 +343,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .fact-alerta.penalidad {
@@ -366,7 +366,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 18px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -421,7 +421,7 @@
   gap: 16px;
   background: var(--bg-primary);
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   flex-wrap: wrap;
 }
@@ -443,7 +443,7 @@
 .fact-filtro-select {
   padding: 8px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -461,7 +461,7 @@
   border: none;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s;
@@ -482,7 +482,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -514,13 +514,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   padding: 20px;
 }
 
 .fact-modal-content {
   background: var(--bg-primary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   width: 100%;
   max-width: 800px;
   max-height: 90vh;
@@ -537,7 +537,7 @@
   position: relative;
   background: var(--bg-primary);
   flex-shrink: 0;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .fact-modal-header h2 {
@@ -561,7 +561,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .fact-modal-close:hover {
@@ -583,7 +583,7 @@
   padding: 20px;
   background: var(--bg-primary);
   flex-shrink: 0;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 /* Loading state */
@@ -720,7 +720,7 @@
   gap: 16px;
   background: var(--bg-primary);
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   flex-wrap: wrap;
 }
@@ -758,7 +758,7 @@
 .fact-select {
   padding: 8px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -780,7 +780,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -807,7 +807,7 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -849,7 +849,7 @@
    ===================================================== */
 
 .fact-precio {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 13px;
   color: var(--text-primary);
@@ -876,7 +876,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   transition: all 0.15s;
   position: relative;
@@ -895,11 +895,11 @@
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   opacity: 0;
   visibility: hidden;
   transition: all 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   pointer-events: none;
 }
 
@@ -914,7 +914,7 @@
   opacity: 0;
   visibility: hidden;
   transition: all 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
 }
 
 .fact-table-btn[data-tooltip]:hover::after,
@@ -969,7 +969,7 @@
   gap: 8px;
   padding: 8px 10px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .fact-stat-icon {
@@ -1126,12 +1126,12 @@
   line-height: 1.4;
   text-align: left;
   white-space: normal;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   pointer-events: none;
 }
 
@@ -1146,7 +1146,7 @@
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
 }
 
 .fact-stats-grid-garantias .fact-stat-help:hover::after,
@@ -1169,14 +1169,14 @@
 .fact-progress-bar {
   height: 6px;
   background: var(--bg-tertiary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .fact-progress-fill {
   height: 100%;
   background: #059669;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   transition: width 0.3s ease;
 }
 
@@ -1190,59 +1190,12 @@
    SWEETALERT COMPACT STYLES
    ===================================================== */
 
-.swal-compact {
-  padding: 20px !important;
-}
-
-.swal-compact .swal2-icon {
-  width: 50px !important;
-  height: 50px !important;
-  margin: 0 auto 12px !important;
-  border-width: 3px !important;
-}
-
-.swal-compact .swal2-icon .swal2-icon-content {
-  font-size: 28px !important;
-}
-
-.swal-title-compact {
-  padding: 0 0 8px 0 !important;
-  font-size: 18px !important;
-}
-
-.swal-html-compact {
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-.swal-compact .swal2-actions {
-  margin-top: 16px !important;
-  gap: 8px !important;
-}
-
-.swal-compact .swal2-confirm,
-.swal-compact .swal2-cancel {
-  padding: 8px 20px !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  border-radius: 6px !important;
-}
-
-.swal-compact .swal2-cancel {
-  background: var(--bg-tertiary) !important;
-  color: var(--text-primary) !important;
-}
-
-.swal-compact .swal2-cancel:hover {
-  background: var(--bg-secondary) !important;
-}
-
 /* =====================================================
    MODAL FORMS - Diseño minimalista
    ===================================================== */
 
 .fact-modal {
-  border-radius: 12px !important;
+  border-radius: var(--radius-lg) !important;
   padding: 24px !important;
 }
 
@@ -1284,7 +1237,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   color: var(--text-primary);
   background: var(--input-bg);
@@ -1320,7 +1273,7 @@
   margin-bottom: 16px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
 }
 
@@ -1343,7 +1296,7 @@
   padding: 10px 12px;
   background: var(--badge-yellow-bg);
   color: var(--badge-yellow-text);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
 }
 
@@ -1352,7 +1305,7 @@
   padding: 10px 12px;
   background: var(--badge-red-bg);
   color: var(--badge-red-text);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
 }
 
@@ -1400,7 +1353,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
 }
 
@@ -1423,22 +1376,21 @@
   height: 18px;
   cursor: pointer;
   accent-color: var(--color-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
-/* SweetAlert buttons para modals de formulario */
 .fact-btn-confirm {
   padding: 10px 24px !important;
   font-size: 14px !important;
   font-weight: 500 !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
 }
 
 .fact-btn-cancel {
   padding: 10px 24px !important;
   font-size: 14px !important;
   font-weight: 500 !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   background: var(--bg-tertiary) !important;
   color: var(--text-primary) !important;
 }
@@ -1459,7 +1411,7 @@
   padding: 12px 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .fact-search-icon {
@@ -1471,7 +1423,7 @@
   flex: 1;
   padding: 8px 12px;
   border: 1px solid var(--input-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -1493,7 +1445,7 @@
   border: none;
   cursor: pointer;
   color: var(--text-tertiary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1515,7 +1467,7 @@
   flex-direction: column;
   height: 100%;
   background: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -1541,7 +1493,7 @@
   padding: 8px 12px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #64748b;
   font-size: 13px;
   cursor: pointer;
@@ -1578,7 +1530,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1627,7 +1579,7 @@
   padding: 6px 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   flex: 1;
   max-width: 300px;
 }
@@ -1673,7 +1625,7 @@
   padding: 6px 10px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   color: #334155;
   cursor: pointer;
@@ -1692,7 +1644,7 @@
   padding: 2px 8px;
   background: #fef3c7;
   color: #92400e;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-weight: 500;
 }
 
@@ -1833,7 +1785,7 @@
 .rit-preview-cell {
   display: inline-block;
   padding: 2px 4px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .rit-preview-cell.editable {
@@ -1849,7 +1801,7 @@
   width: 80px;
   padding: 4px 6px;
   border: 1px solid #3b82f6;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   text-align: right;
   outline: none;
@@ -1863,7 +1815,7 @@
 .rit-preview-table .badge {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 500;
 }
@@ -1913,7 +1865,7 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -2079,9 +2031,9 @@
   font-size: 11px;
   font-weight: 500;
   padding: 5px 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
-  z-index: 50;
+  z-index: var(--z-tooltip);
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
@@ -2175,7 +2127,7 @@
   gap: 8px;
   min-width: 0;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .fact-module .fact-semana-info:hover {
@@ -2257,7 +2209,7 @@
   gap: 6px;
   margin-left: 8px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   white-space: nowrap;
 }
 
@@ -2273,18 +2225,6 @@
 .fact-module .fact-periodo-estado--abierto { background: var(--badge-green-bg); }
 .fact-module .fact-periodo-estado--cerrado { background: var(--badge-red-bg); }
 .fact-module .fact-periodo-estado--otro { background: var(--badge-yellow-bg); }
-
-/* Buscador de la tabla más bajo */
-.fact-module .dt-search-input {
-  padding: 8px 12px 8px 36px;
-  border-radius: 8px;
-  font-size: 13px;
-}
-
-.fact-module .dt-search-icon {
-  width: 16px;
-  height: 16px;
-}
 
 /* Prev. Fact. / Prev. Cabify / Pagos Cabify: botones neutros con ícono */
 .fact-module .fact-btn-export.fact-btn--preview {
@@ -2359,17 +2299,6 @@
   font-size: 12px;
 }
 
-.fact-module .cobros-fraccionados-tab .dt-search-input {
-  padding: 8px 12px 8px 36px;
-  border-radius: 8px;
-  font-size: 13px;
-}
-
-.fact-module .cobros-fraccionados-tab .dt-search-icon {
-  width: 16px;
-  height: 16px;
-}
-
 .fact-module .cobros-fraccionados-tab .cf-filter-select {
   padding: 6px 10px;
   font-size: 12px;
@@ -2393,7 +2322,6 @@
   font-size: 10px;
   line-height: 1.3;
 }
-
 
 /* Ícono (i) de las tarjetas de indicadores del Reporte */
 .fact-stat-info {

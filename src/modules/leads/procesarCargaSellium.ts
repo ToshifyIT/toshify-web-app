@@ -8,7 +8,7 @@
  * (qué se crea, qué campo cambia de qué valor a cuál, conflictos, etc.) y todo
  * el detalle se puede descargar en Excel antes de confirmar.
  */
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { supabase } from '../../lib/supabase'
 import type { SedeRef } from '../../utils/sedeMatch'
 import {
@@ -22,6 +22,7 @@ import {
   type PlanCarga,
 } from './cargaMasivaSellium'
 
+import { hoyART } from '../../utils/fechaArgentina'
 interface OpcionesCargaSellium {
   filas: Record<string, unknown>[]
   headers: string[]
@@ -34,11 +35,11 @@ const CONCURRENCIA_UPDATE = 8
 
 /** Devuelve true si se escribió algo en la base (para recargar la grilla). */
 export async function procesarCargaSellium({ filas, headers, sedes }: OpcionesCargaSellium): Promise<boolean> {
-  Swal.fire({
+  Alerta.fire({
     title: 'Analizando archivo Sellium...',
     html: '<p>Cruzando teléfonos y correos con los leads existentes</p>',
     allowOutsideClick: false,
-    didOpen: () => Swal.showLoading(),
+    didOpen: () => Alerta.showLoading(),
   })
 
   const filasSellium = mapearFilasSellium(filas, headers)
@@ -60,10 +61,10 @@ export async function procesarCargaSellium({ filas, headers, sedes }: OpcionesCa
   const plan = planificarCarga(filasSellium, construirIndice(existentes), sedes)
   const secciones = armarSecciones(plan)
   const ctx: ContextoDetalle = { secciones, headers }
-  Swal.close()
+  Alerta.close()
 
   if (plan.crear.length + plan.actualizar.length === 0) {
-    await Swal.fire({
+    await Alerta.fire({
       title: 'Nada para cargar',
       html: htmlResumen(plan, filasSellium.length, secciones),
       icon: 'info',
@@ -73,7 +74,7 @@ export async function procesarCargaSellium({ filas, headers, sedes }: OpcionesCa
     return false
   }
 
-  const confirmacion = await Swal.fire({
+  const confirmacion = await Alerta.fire({
     title: 'Formato Sellium — revisar antes de subir',
     html: htmlResumen(plan, filasSellium.length, secciones),
     icon: 'question',
@@ -91,13 +92,13 @@ export async function procesarCargaSellium({ filas, headers, sedes }: OpcionesCa
   let creados = 0
   let actualizados = 0
   const errores: string[] = []
-  const progreso = () => Swal.update({ html: `<p>Procesando ${creados + actualizados + errores.length} de ${total} registros</p>` })
+  const progreso = () => Alerta.update({ html: `<p>Procesando ${creados + actualizados + errores.length} de ${total} registros</p>` })
 
-  Swal.fire({
+  Alerta.fire({
     title: 'Cargando datos...',
     html: `<p>Procesando 0 de ${total} registros</p>`,
     allowOutsideClick: false,
-    didOpen: () => Swal.showLoading(),
+    didOpen: () => Alerta.showLoading(),
   })
 
   for (let i = 0; i < plan.crear.length; i += LOTE_INSERT) {
@@ -129,10 +130,10 @@ export async function procesarCargaSellium({ filas, headers, sedes }: OpcionesCa
     progreso()
   }
 
-  Swal.close()
+  Alerta.close()
 
   const noProcesados = plan.conflictos.length + plan.conductores.length + plan.invalidas.length
-  await Swal.fire({
+  await Alerta.fire({
     title: errores.length ? (creados + actualizados ? 'Carga parcial' : 'Error en la carga') : 'Carga exitosa',
     icon: errores.length ? 'warning' : 'success',
     width: 600,
@@ -389,7 +390,7 @@ async function descargarFormatoOriginal(clave: ClaveSeccion, secciones: Seccione
   const aoa = [headers, ...filas.map(f => headers.map(h => f.original[h] ?? ''))]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Todos los leads')
-  XLSX.writeFile(wb, `sellium_${REEXPORTABLES[clave] ?? clave}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  XLSX.writeFile(wb, `sellium_${REEXPORTABLES[clave] ?? clave}_${hoyART()}.xlsx`)
 }
 
 async function descargarDetalle(secciones: Secciones) {
@@ -405,7 +406,7 @@ async function descargarDetalle(secciones: Secciones) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([s.columnas, ...s.filas]), nombre)
   }
   if (!wb.SheetNames.length) return
-  XLSX.writeFile(wb, `preview_carga_sellium_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  XLSX.writeFile(wb, `preview_carga_sellium_${hoyART()}.xlsx`)
 }
 
 // ───────────────────────── HTML del resumen ─────────────────────────

@@ -29,7 +29,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { type ColumnDef } from '@tanstack/react-table'
 import type { ConductorWithRelations } from '../../types/database.types'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { DriverDetailModal } from './components/DriverDetailModal'
 import { DriverHistoryModal } from './components/DriverHistoryModal'
 import { AnotacionesEditorModal, type Nota } from './components/AnotacionesEditorModal'
@@ -48,6 +48,7 @@ import { normalizeDni } from '../../utils/normalizeDocuments'
 import { showError } from '../../utils/toast'
 import { Spinner } from '../../components/ui/LoadingOverlay'
 
+import { fechaLocalISO } from '../../utils/fechaArgentina'
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
 };
@@ -423,7 +424,7 @@ export function GuiasModule() {
   // Función para abrir el modal de EDICIÓN (Semana Actual) - Se mantiene por compatibilidad si se usa desde otros lados
   // const handleOpenAnotacionesEditor = (row: any) => {
   //   if (!row.original.historial_id) {
-  //     Swal.fire('Error', 'Este registro no tiene historial asociado aún.', 'warning');
+  //     Alerta.fire('Error', 'Este registro no tiene historial asociado aún.', 'warning');
   //     return;
   //   }
   //
@@ -526,7 +527,7 @@ export function GuiasModule() {
         if (errorHistorial) throw errorHistorial;
       }
 
-      Swal.mixin({
+      Alerta.mixin({
         toast: true,
         position: 'top',
         showConfirmButton: false,
@@ -985,8 +986,8 @@ export function GuiasModule() {
         };
 
         // Rango de la semana en formato YYYY-MM-DD
-        const weekStartStr = mondayDate.toISOString().split('T')[0];
-        const weekEndStr = sundayDate.toISOString().split('T')[0];
+        const weekStartStr = fechaLocalISO(mondayDate);
+        const weekEndStr = fechaLocalISO(sundayDate);
 
         // Tope de días: MIN(hoy, domingo) — igual que Vista Previa (no proyecta días futuros)
         // Usar timezone Argentina para "hoy" (consistente sin importar desde dónde se conecte el usuario)
@@ -2281,7 +2282,7 @@ export function GuiasModule() {
                 fontSize: '12px',
                 lineHeight: 1,
                 padding: '2px 6px',
-                borderRadius: 9999,
+                borderRadius: 'var(--radius-full)',
                 backgroundColor: bg,
                 color,
                 display: 'inline-block',
@@ -2681,7 +2682,7 @@ export function GuiasModule() {
                 width: '100%',
                 height: '8px',
                 backgroundColor: '#e5e7eb',
-                borderRadius: '4px',
+                borderRadius: 'var(--radius-xs)',
                 overflow: 'hidden',
                 border: '1px solid #d1d5db'
               }}>
@@ -2689,7 +2690,7 @@ export function GuiasModule() {
                   width: `${Math.max(porcentaje, 0)}%`,
                   height: '100%',
                   backgroundColor: completo ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
-                  borderRadius: '3px',
+                  borderRadius: 'var(--radius-xs)',
                   transition: 'width 0.3s ease',
                   minWidth: porcentaje > 0 ? '4px' : '0'
                 }} />
@@ -2738,7 +2739,7 @@ export function GuiasModule() {
                     color: '#111827',
                     backgroundColor: '#e5e7eb',
                     padding: '2px 8px',
-                    borderRadius: 9999,
+                    borderRadius: 'var(--radius-full)',
                     display: 'inline-block',
                   }}
                 >
@@ -3146,7 +3147,7 @@ export function GuiasModule() {
                   gap: '8px',
                   background: 'var(--bg-secondary)',
                   padding: '12px',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--shadow-sm)',
                 }}>
                   {/* Quick filters row */}
@@ -3169,7 +3170,7 @@ export function GuiasModule() {
                               alignItems: 'center',
                               gap: '5px',
                               padding: '4px 10px',
-                              borderRadius: '14px',
+                              borderRadius: 'var(--radius-lg)',
                               fontSize: '11px',
                               fontWeight: 600,
                               border: sinGncFilter ? '2px solid #d97706' : '1px solid var(--border-primary)',
@@ -3191,7 +3192,7 @@ export function GuiasModule() {
                               alignItems: 'center',
                               gap: '5px',
                               padding: '4px 10px',
-                              borderRadius: '14px',
+                              borderRadius: 'var(--radius-lg)',
                               fontSize: '11px',
                               fontWeight: 600,
                               border: conSaldoFilter ? '2px solid #dc2626' : '1px solid var(--border-primary)',
@@ -3212,7 +3213,7 @@ export function GuiasModule() {
                             alignItems: 'center',
                             gap: '5px',
                             padding: '4px 10px',
-                            borderRadius: '14px',
+                            borderRadius: 'var(--radius-lg)',
                             fontSize: '11px',
                             fontWeight: 600,
                             border: showAllDrivers ? '2px solid #6366f1' : '1px solid var(--border-primary)',
@@ -3236,8 +3237,8 @@ export function GuiasModule() {
                     flexWrap: 'wrap',
                   }}>
                   {/* Search Input */}
-                  <div className="dt-search-wrapper" style={{ flex: 1, minWidth: '200px' }}>
-                    <Search className="dt-search-icon" size={20} />
+                  <div className="dt-search-wrapper">
+                    <Search className="dt-search-icon" size={16} />
                     <input
                       type="text"
                       className="dt-search-input"
@@ -3265,7 +3266,7 @@ export function GuiasModule() {
                       background: 'var(--bg-primary)',
                       color: 'var(--text-primary)',
                       border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: '13px',
                       fontWeight: 600,
                       cursor: 'pointer',

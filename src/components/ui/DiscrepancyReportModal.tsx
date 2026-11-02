@@ -366,8 +366,8 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
   const thStyle: CSSProperties = { textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 };
 
   return (
-    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-      <div style={{ background: 'var(--bg-primary)', borderRadius: 8, width: '90%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-modal-nested)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+      <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', width: '90%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
         {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -419,7 +419,7 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
                 style={{
                   padding: '4px 8px 4px 28px',
                   border: '1px solid var(--border-primary)',
-                  borderRadius: 4,
+                  borderRadius: 'var(--radius-xs)',
                   fontSize: 11,
                   background: 'var(--bg-secondary)',
                   color: 'var(--text-primary)',
@@ -448,7 +448,7 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
           ) : (
             <>
               {hashesSinMapear > 0 && (
-                <div style={{ margin: '10px 0 0', padding: '8px 10px', fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', borderRadius: 6 }}>
+                <div style={{ margin: '10px 0 0', padding: '8px 10px', fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
                   Hay {hashesSinMapear} DNI hasheados de Cabify (CABIFY_...) sin traducción en cabify_dni_mapeo.
                   Esos registros solo pueden cruzar por licencia o nombre.
                 </div>
@@ -486,9 +486,9 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
                             <tr style={{ borderTop: '2px solid var(--border-primary)' }}>
                               <td style={{ padding: '6px', color: 'var(--color-info-dark)', fontWeight: 600, whiteSpace: 'nowrap' }}>Conductores</td>
                               <td style={{ padding: '6px', fontWeight: 500 }}>{r.conductor}</td>
-                              <td style={{ padding: '6px', fontFamily: 'monospace' }}>{r.dni}</td>
-                              <td style={{ padding: '6px', fontFamily: 'monospace' }}>{r.cuit}</td>
-                              <td style={{ padding: '6px', fontFamily: 'monospace' }}>{r.licencia}</td>
+                              <td style={{ padding: '6px', fontFamily: 'var(--font-mono)' }}>{r.dni}</td>
+                              <td style={{ padding: '6px', fontFamily: 'var(--font-mono)' }}>{r.cuit}</td>
+                              <td style={{ padding: '6px', fontFamily: 'var(--font-mono)' }}>{r.licencia}</td>
                               <td style={{ padding: '6px' }}>-</td>
                             </tr>
                             <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
@@ -496,9 +496,9 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
                               {r.ultimoCabify ? (
                                 <>
                                   <td style={{ padding: '6px' }}>{r.ultimoCabify.nombre || '-'}</td>
-                                  <td style={{ padding: '6px', fontFamily: 'monospace' }}>{r.ultimoCabify.dni}</td>
-                                  <td style={{ padding: '6px', fontFamily: 'monospace' }}>-</td>
-                                  <td style={{ padding: '6px', fontFamily: 'monospace' }}>{r.ultimoCabify.licencia || '-'}</td>
+                                  <td style={{ padding: '6px', fontFamily: 'var(--font-mono)' }}>{r.ultimoCabify.dni}</td>
+                                  <td style={{ padding: '6px', fontFamily: 'var(--font-mono)' }}>-</td>
+                                  <td style={{ padding: '6px', fontFamily: 'var(--font-mono)' }}>{r.ultimoCabify.licencia || '-'}</td>
                                   <td style={{ padding: '6px', whiteSpace: 'nowrap' }}>
                                     {r.ultimoCabify.fecha}
                                     {mismoDni && (
@@ -547,9 +547,9 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
                             </span>
                           </td>
                           <td style={{ padding: '6px', fontWeight: 500 }}>{d.conductor}</td>
-                          <td style={{ padding: '6px', fontFamily: 'monospace', color: 'var(--color-info-dark)' }}>{d.rawA} <span style={{ color: 'var(--text-tertiary)', fontFamily: 'inherit' }}>({d.sourceA})</span></td>
-                          <td style={{ padding: '6px', fontFamily: 'monospace', color: 'var(--color-warning-dark)' }}>{d.rawB} <span style={{ color: 'var(--text-tertiary)', fontFamily: 'inherit' }}>({d.sourceB})</span></td>
-                          <td style={{ padding: '6px', fontFamily: 'monospace', fontWeight: 600 }}>{d.normalized}</td>
+                          <td style={{ padding: '6px', fontFamily: 'var(--font-mono)', color: 'var(--color-info-dark)' }}>{d.rawA} <span style={{ color: 'var(--text-tertiary)', fontFamily: 'inherit' }}>({d.sourceA})</span></td>
+                          <td style={{ padding: '6px', fontFamily: 'var(--font-mono)', color: 'var(--color-warning-dark)' }}>{d.rawB} <span style={{ color: 'var(--text-tertiary)', fontFamily: 'inherit' }}>({d.sourceB})</span></td>
+                          <td style={{ padding: '6px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{d.normalized}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -5,6 +5,7 @@
 
 import { supabase } from '../../../lib/supabase'
 
+import { numeroSemana } from '../../../utils/semanaISO'
 export interface MultaInput {
   id: number
   patente: string
@@ -63,17 +64,6 @@ function getLocalDateString(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function getWeekNumber(dateStr: string): number {
-  if (!dateStr) return 0
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day, 12, 0, 0)
-  const thursday = new Date(date)
-  thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3)
-  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-  return Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-}
-
 function parseImporteToNumber(s: string | number | null | undefined): number {
   if (s == null || s === '') return 0
   if (typeof s === 'number') return s
@@ -117,7 +107,7 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
     .order('fecha_inicio', { ascending: false })
     .limit(1)
   const fecha: string = (periodos && periodos[0]?.fecha_inicio) || getLocalDateString()
-  const semana = getWeekNumber(fecha)
+  const semana = numeroSemana(fecha)
 
   // 2. Tipo de cobro "Multa de tránsito"
   const { data: tipos } = await (supabase.from('tipos_cobro_descuento' as any) as any)

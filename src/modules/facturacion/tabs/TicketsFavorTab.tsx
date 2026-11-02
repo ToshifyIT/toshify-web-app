@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import {
   Ticket,
@@ -114,7 +114,7 @@ export function TicketsFavorTab() {
       `<option value="${t.codigo}">${t.nombre}</option>`
     ).join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Nuevo Ticket a Favor',
       html: `
         <div style="text-align: left; padding: 0 8px;">
@@ -245,9 +245,9 @@ export function TicketsFavorTab() {
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
         const descripcion = (document.getElementById('swal-desc') as HTMLTextAreaElement).value
 
-        if (!conductorId) { Swal.showValidationMessage('Seleccione un conductor'); return false }
-        if (!tipo) { Swal.showValidationMessage('Seleccione un tipo'); return false }
-        if (!monto || parseFloat(monto) <= 0) { Swal.showValidationMessage('Ingrese un monto válido'); return false }
+        if (!conductorId) { Alerta.showValidationMessage('Seleccione un conductor'); return false }
+        if (!tipo) { Alerta.showValidationMessage('Seleccione un tipo'); return false }
+        if (!monto || parseFloat(monto) <= 0) { Alerta.showValidationMessage('Ingrese un monto válido'); return false }
 
         // Limpiar variable global
         delete (window as any).__ticketConductores
@@ -281,7 +281,7 @@ export function TicketsFavorTab() {
   }
 
   async function aprobarTicket(ticket: TicketFavor) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Aprobar Ticket',
       html: `<p>¿Aprobar el ticket de <strong>${ticket.conductor_nombre}</strong>?</p><p>Monto: <strong>${formatCurrency(ticket.monto)}</strong></p>`,
       icon: 'question',
@@ -308,7 +308,7 @@ export function TicketsFavorTab() {
   }
 
   async function rechazarTicket(ticket: TicketFavor) {
-    const { value: motivo } = await Swal.fire({
+    const { value: motivo } = await Alerta.fire({
       title: 'Rechazar Ticket',
       input: 'textarea',
       inputLabel: 'Motivo del rechazo',
@@ -349,7 +349,7 @@ export function TicketsFavorTab() {
         ).join('')
       : '<option value="">No hay períodos abiertos</option>'
 
-    const { value: periodoId } = await Swal.fire({
+    const { value: periodoId } = await Alerta.fire({
       title: 'Aplicar Ticket',
       html: `<p>Seleccione el período:</p><select id="swal-periodo" class="swal2-select">${periodosOptions}</select>`,
       showCancelButton: true,
@@ -357,7 +357,7 @@ export function TicketsFavorTab() {
       cancelButtonText: 'Cancelar',
       preConfirm: () => {
         const periodo = (document.getElementById('swal-periodo') as HTMLSelectElement).value
-        if (!periodo) { Swal.showValidationMessage('Seleccione un período'); return false }
+        if (!periodo) { Alerta.showValidationMessage('Seleccione un período'); return false }
         return periodo
       }
     })

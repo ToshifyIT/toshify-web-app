@@ -21,11 +21,11 @@
 /* Código de ruta */
 .mhm-route-code {
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary, #6B7280);
   background: var(--bg-secondary, #F3F4F6);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 /* Botones de acción en header */
@@ -40,7 +40,7 @@
   font-size: 12px;
   font-weight: 500;
   border: 1px solid var(--border-primary, #E5E7EB);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary, #fff);
   color: var(--text-secondary, #6B7280);
   cursor: pointer;
@@ -74,7 +74,7 @@
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-secondary, #6B7280);
   display: inline-flex;
@@ -103,13 +103,13 @@
   font-weight: 600;
   color: var(--text-tertiary, #9CA3AF);
   background: var(--bg-secondary, #F3F4F6);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 1px 7px;
 }
 
 .mhm-id {
   font-size: 11px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--text-tertiary, #9CA3AF);
 }
 
@@ -124,13 +124,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .mhm-modal-content {
   background: var(--bg-primary, white);
   padding: 24px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
@@ -165,7 +165,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border-primary, #E5E7EB);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-family: inherit;
   box-sizing: border-box;

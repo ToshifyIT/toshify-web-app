@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts'
-import { startOfWeek, endOfWeek, addDays, format, setWeek, startOfMonth, endOfMonth, parseISO, parse, isValid, getWeek, eachDayOfInterval } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, format, startOfMonth, endOfMonth, parseISO, parse, isValid, eachDayOfInterval, getISOWeek, setISOWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
@@ -18,6 +18,7 @@ import { getCache, setCache } from '../../../hooks/useSessionCache'
 import { PeriodPicker } from './PeriodPicker'
 import { CobroComparativo } from './CobroComparativo'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { fechaLocalISO } from '../../../utils/fechaArgentina'
 import './CobroTeoricoVsReal.css'
 
 // Cache para evitar consultas repetidas a la BD
@@ -186,7 +187,7 @@ async function calcularPipelineMesIndependiente(
     hPorCod.set(h.codigo, arr)
   }
   const getPrecio = (codigo: string, fecha: Date): number => {
-    const fs = fecha.toISOString().split('T')[0]
+    const fs = fechaLocalISO(fecha)
     const regs = hPorCod.get(codigo)
     if (regs) { for (const h of regs) { if (h.fecha_vigencia_desde <= fs && h.fecha_vigencia_hasta >= fs) return h.precio_final ?? h.precio_base } }
     return pMap.get(codigo) || 0
@@ -391,7 +392,7 @@ export function CobroTeoricoVsReal() {
   const [granularity, setGranularity] = useState<Granularity>('semana')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
     const now = new Date()
-    const week = getWeek(now, { weekStartsOn: 1 })
+    const week = getISOWeek(now)
     return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
   })
   const [chartData, setChartData] = useState(INITIAL_DATA)
@@ -427,7 +428,7 @@ export function CobroTeoricoVsReal() {
             anioNum = parseInt(match[2])
             
             // Calcular fecha inicio de la semana (Lunes)
-            const dateWithWeek = setWeek(new Date(anioNum, 0, 4), semanaNum, { weekStartsOn: 1, firstWeekContainsDate: 4 })
+            const dateWithWeek = setISOWeek(new Date(anioNum, 0, 4), semanaNum)
             startDate = startOfWeek(dateWithWeek, { weekStartsOn: 1 })
             endDate = endOfWeek(dateWithWeek, { weekStartsOn: 1 })
           } else {
@@ -522,7 +523,7 @@ export function CobroTeoricoVsReal() {
 
         // Helper: obtener precio vigente en una fecha específica (réplica de getPrecioEnFechaVP)
         const getPrecioEnFecha = (codigo: string, fecha: Date): number => {
-          const fechaStr = fecha.toISOString().split('T')[0]
+          const fechaStr = fechaLocalISO(fecha)
           const registros = historialPorCodigo.get(codigo)
           if (registros) {
             for (const h of registros) {
@@ -1111,7 +1112,7 @@ export function CobroTeoricoVsReal() {
             const grouped = new Map<string, { label: string, teorico: number, real: number, count: number, garantia: number, alquiler: number }>()
 
             dailyData.forEach(d => {
-                const weekNum = getWeek(d.fecha, { weekStartsOn: 1 })
+                const weekNum = getISOWeek(d.fecha)
                 const key = `Sem ${weekNum.toString().padStart(2, '0')}`
 
                 if (!grouped.has(key)) {
@@ -1164,7 +1165,7 @@ export function CobroTeoricoVsReal() {
 
               // Sumar datos del mes ANTERIOR (pipeline independiente) a la primera semana
               if (hasBefore && prevMonthResult) {
-                const weekNum = getWeek(compDaysBefore[0], { weekStartsOn: 1 })
+                const weekNum = getISOWeek(compDaysBefore[0])
                 const weekKey = `Sem ${weekNum.toString().padStart(2, '0')}`
                 const g = grouped.get(weekKey)
                 if (g) {
@@ -1189,7 +1190,7 @@ export function CobroTeoricoVsReal() {
 
               // Sumar datos del mes SIGUIENTE (pipeline independiente) a la última semana
               if (hasAfter && nextMonthResult) {
-                const weekNum = getWeek(compDaysAfter[0], { weekStartsOn: 1 })
+                const weekNum = getISOWeek(compDaysAfter[0])
                 const weekKey = `Sem ${weekNum.toString().padStart(2, '0')}`
                 const g = grouped.get(weekKey)
                 if (g) {
@@ -1268,7 +1269,7 @@ export function CobroTeoricoVsReal() {
     const now = new Date()
     // Reset to current period for that granularity
     if (val === 'semana') {
-      const week = getWeek(now, { weekStartsOn: 1 })
+      const week = getISOWeek(now)
       setSelectedPeriod(`Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`)
     } else if (val === 'mes') {
       const monthName = format(now, 'MMM', { locale: es })

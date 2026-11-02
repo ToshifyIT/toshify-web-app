@@ -3,11 +3,12 @@ import { X, User, Sun, Moon, Briefcase, Calendar, CheckCircle2, AlertTriangle, S
 import { supabase } from '../../../lib/supabase';
 import type { ConductorWithRelations } from '../../../types/database.types';
 import './DriverDetailModal.css';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../../components/ui/alertas'
 import { IncidentsHistory } from './IncidentsHistory';
 import { AnotacionesEditorModal, type Nota } from './AnotacionesEditorModal';
 import { showError } from '../../../utils/toast'
 
+import { fechaISOART } from '../../../utils/fechaArgentina'
 interface DriverDetailModalProps {
   driver: ConductorWithRelations & {
     id_guia?: string;
@@ -73,9 +74,8 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
 
   const formatDateForDateInput = (dateString: string | null | undefined) => {
     if (!dateString) return "";
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "";
-    return date.toISOString().split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
+    return fechaISOART(dateString) ?? "";
   };
 
   const getInitialSeguimiento = () => {
@@ -246,7 +246,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       if (error) throw error;
 
       // Toast de éxito (no bloquea la UI)
-      Swal.mixin({
+      Alerta.mixin({
         toast: true,
         position: 'top',
         showConfirmButton: false,
@@ -301,7 +301,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
   };
 
   const handleDeleteNote = async (index: number) => {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Estás seguro?',
       text: "No podrás revertir esta acción",
       icon: 'warning',
@@ -311,7 +311,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar',
       didOpen: () => {
-        const container = Swal.getContainer();
+        const container = Alerta.getContainer();
         if (container) {
           container.style.zIndex = '99999';
         }
@@ -325,12 +325,12 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       // Reutilizamos la lógica de guardado
       await handleSaveAnotaciones(nuevasAnotaciones);
       
-      Swal.fire({
+      Alerta.fire({
         title: 'Eliminado',
         text: 'La nota ha sido eliminada.',
         icon: 'success',
         didOpen: () => {
-          const container = Swal.getContainer();
+          const container = Alerta.getContainer();
           if (container) {
             container.style.zIndex = '99999';
           }

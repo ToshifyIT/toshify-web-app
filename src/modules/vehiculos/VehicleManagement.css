@@ -18,7 +18,7 @@
 
 .veh-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
@@ -55,7 +55,7 @@
 
 .veh-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -72,7 +72,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .veh-stats .stat-card .stat-icon {
@@ -381,7 +381,7 @@
   margin: 0 0 8px 0;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border-left: 3px solid var(--color-primary);
 }
 
@@ -400,7 +400,7 @@
   text-align: center;
   padding: 16px 12px;
   border: 2px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s;
   background: var(--bg-primary);
@@ -449,7 +449,7 @@
   border-top: 1px solid var(--border-primary);
   margin-top: 20px;
   background: var(--bg-secondary);
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .vehiculo-wizard .wizard-nav-buttons {
@@ -462,7 +462,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -582,7 +582,7 @@
   }
 }
 
-@media (min-width: 601px) and (max-width: 750px) {
+@media (min-width: 601px) and (max-width: 768px) {
   .ol-grid-3 {
     grid-template-columns: 1fr 1fr !important;
   }
@@ -600,9 +600,9 @@
   font-weight: 500;
   line-height: 1.4;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   width: 220px;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }

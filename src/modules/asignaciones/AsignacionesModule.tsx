@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showError, showSuccess } from '../../utils/toast'
 import { getTodayDateString } from '../../utils/dateUtils'
@@ -100,7 +100,7 @@ interface ExpandedAsignacion extends Asignacion {
  */
 async function mostrarAvisosConfirmacion(textoOk: string, avisos: string[]): Promise<void> {
   const esc = (t: string) => t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
-  await Swal.fire({
+  await Alerta.fire({
     icon: 'warning',
     title: 'Activada, con avisos',
     html: `
@@ -618,7 +618,7 @@ export function AsignacionesModule() {
     const conductoresAsig = todosLosConductores.filter(c => c.documento !== 'N/A' && c.documento !== 'NA' && c.documento !== '')
 
     if (conductoresAsig.length === 0) {
-      Swal.fire('Sin conductores procesables', 'Todos los conductores de esta asignación tienen documento marcado como N/A. No hay nada que generar.', 'info')
+      Alerta.fire('Sin conductores procesables', 'Todos los conductores de esta asignación tienen documento marcado como N/A. No hay nada que generar.', 'info')
       return
     }
 
@@ -630,7 +630,7 @@ export function AsignacionesModule() {
     const camposDevuelto = controlDevueltoPatente !== null ? [controlForm.km_change] : []
     const todosLosCampos = [...camposBase, ...camposBariloche, ...camposDevuelto]
     if (todosLosCampos.some(c => !c.trim())) {
-      Swal.fire('Campos requeridos', 'Todos los campos son obligatorios. En caso de no tener el dato, ingresa N/A o Sin observación.', 'warning')
+      Alerta.fire('Campos requeridos', 'Todos los campos son obligatorios. En caso de no tener el dato, ingresa N/A o Sin observación.', 'warning')
       return
     }
 
@@ -654,7 +654,7 @@ export function AsignacionesModule() {
         </ul>`
     }
 
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       icon: 'warning',
       title: 'Confirmar generación',
       html: `
@@ -708,7 +708,7 @@ export function AsignacionesModule() {
 
       setShowControlModal(false)
       if (sinObservaciones.length > 0) {
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'warning',
           title: 'Control completado con observaciones pendientes',
           html: `
@@ -1268,8 +1268,8 @@ export function AsignacionesModule() {
   useEffect(() => {
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      // Si hay un SweetAlert2 abierto, es el que esta al frente: lo maneja Swal.
-      if (document.querySelector('.swal2-container')) return
+      // Si hay un SweetAlert2 abierto, es el que esta al frente: lo maneja Alerta.
+      if (document.querySelector('.tsh-alerta-overlay')) return
 
       const pila: Array<[boolean, () => void]> = [
         [showHistorialCond, () => setShowHistorialCond(false)],
@@ -1323,7 +1323,7 @@ export function AsignacionesModule() {
       .limit(1)
       .maybeSingle()
     if (progError || !prog) {
-      Swal.fire('Sin programación', 'No se encontró la programación de esta asignación, no se puede generar el documento desde acá.', 'warning')
+      Alerta.fire('Sin programación', 'No se encontró la programación de esta asignación, no se puede generar el documento desde acá.', 'warning')
       return
     }
 
@@ -1334,12 +1334,12 @@ export function AsignacionesModule() {
             : null
     const documento = slot === 'cargo' ? prog.tipo_documento : slot === 'diurno' ? prog.documento_diurno : slot === 'nocturno' ? prog.documento_nocturno : null
     if (!slot || !documento || documento === 'na') {
-      Swal.fire('No corresponde', 'Según la programación, este conductor no lleva documento o ya no forma parte de ella.', 'warning')
+      Alerta.fire('No corresponde', 'Según la programación, este conductor no lleva documento o ya no forma parte de ella.', 'warning')
       return
     }
 
     if (esBarilocheTurno(prog.sede_id || asig.sede_id, prog.modalidad)) {
-      Swal.fire('No corresponde', 'En Bariloche no se generan documentos para la modalidad turno.', 'info')
+      Alerta.fire('No corresponde', 'En Bariloche no se generan documentos para la modalidad turno.', 'info')
       return
     }
 
@@ -1351,12 +1351,12 @@ export function AsignacionesModule() {
     const etiquetaSlot = slot === 'cargo' ? 'Conductor' : slot === 'diurno' ? 'Conductor Diurno' : 'Conductor Nocturno'
     const vehiculoDocumentoId = prog.vehiculo_entregar_id || asig.vehiculo_id
 
-    Swal.fire({
+    Alerta.fire({
       title: 'Validando datos',
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
-      didOpen: () => { Swal.showLoading() },
+      didOpen: () => { Alerta.showLoading() },
     })
     const validacion = await validarDatosDocumento({
       vehiculoId: vehiculoDocumentoId,
@@ -1411,13 +1411,13 @@ export function AsignacionesModule() {
     // Cerrar o recargar a mitad de camino deja el documento a medio armar en Drive.
     const avisarAntesDeSalir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
     window.addEventListener('beforeunload', avisarAntesDeSalir)
-    Swal.fire({
+    Alerta.fire({
       title: 'Generando documento',
       html: '<b>No cierre la ventana</b>, se está generando el documento.<br><span style="font-size:13px;color:#6B7280">Puede tardar hasta un minuto.</span>',
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
-      didOpen: () => { Swal.showLoading() },
+      didOpen: () => { Alerta.showLoading() },
     })
 
     let resultado: Awaited<ReturnType<typeof generateContracts>>
@@ -1441,7 +1441,7 @@ export function AsignacionesModule() {
     } as any : prev)
     loadAsignaciones()
 
-    Swal.fire({
+    Alerta.fire({
       icon: 'success',
       title: 'Documento generado',
       html: `<a href="${doc.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a>`,
@@ -1863,7 +1863,7 @@ export function AsignacionesModule() {
   const handleCambiarTarifaConductor = async (acId: string, nombre: string, actualRaw?: string | null, fallback?: string | null) => {
     const actual = (actualRaw || fallback || 'antigua') as 'antigua' | 'nueva'
     const nueva = actual === 'antigua' ? 'nueva' : 'antigua'
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       title: 'Cambiar tarifa de cobro',
       html: `<b>${nombre}</b> esta en <b>Tarifa ${actual === 'antigua' ? 'Antigua' : 'Nueva'}</b>.<br/>` +
         `Se cambiara a <b>Tarifa ${nueva === 'antigua' ? 'Antigua' : 'Nueva'}</b> solo para este conductor.<br/><br/>` +
@@ -1951,7 +1951,7 @@ export function AsignacionesModule() {
             }).join('') +
           '</tbody></table>'
 
-      Swal.fire({
+      Alerta.fire({
         title: '<span style="font-size:16px;font-weight:600;">Historial de tarifa</span>',
         html: `<div style="text-align:left;"><div style="font-weight:600;margin-bottom:10px;">${nombre}</div>${cuerpo}</div>`,
         width: 540,
@@ -2039,7 +2039,7 @@ export function AsignacionesModule() {
       conductoresHtml = `<p><strong>Conductor:</strong> ${conductores[0].nombre}</p>`
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Confirmar Devolución',
       html: `
         <div style="text-align: left; font-size: 14px;">
@@ -2157,7 +2157,7 @@ export function AsignacionesModule() {
   const handleDelete = async (id: string) => {
     if (isSubmitting || !canDelete) return
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar asignación?',
       text: 'Esta acción eliminará la asignación permanentemente. Si fue creada desde Programaciones, podrás enviarla nuevamente.',
       icon: 'warning',
@@ -2346,7 +2346,7 @@ export function AsignacionesModule() {
     try {
       const ahora = new Date().toISOString()
       const fechaProgramada = selectedAsignacion.fecha_programada
-        ? new Date(selectedAsignacion.fecha_programada).toISOString().split('T')[0]
+        ? fechaISOART(selectedAsignacion.fecha_programada)
         : null
 
       // Detectar si hay conductores marcados como "companero" en las notas
@@ -3287,7 +3287,7 @@ export function AsignacionesModule() {
 
       // Turnos ocupados del vehículo (igual que "Confirmar")
       if (selectedAsignacion.fecha_programada) {
-        const fechaProgramada = new Date(selectedAsignacion.fecha_programada).toISOString().split('T')[0]
+        const fechaProgramada = fechaISOART(selectedAsignacion.fecha_programada) ?? String(selectedAsignacion.fecha_programada).slice(0, 10)
         const avisoTurnos = await registrarTurnosOcupados(
           selectedAsignacion.vehiculo_id,
           fechaProgramada,
@@ -3374,7 +3374,7 @@ export function AsignacionesModule() {
 
   // Handle unconfirm conductor from view modal
   const handleUnconfirmFromViewModal = (acId: string) => {
-    Swal.fire({
+    Alerta.fire({
       title: '¿Desconfirmar conductor?',
       icon: 'warning',
       showCancelButton: true,
@@ -3391,7 +3391,7 @@ export function AsignacionesModule() {
 
   // Handle cancel devolucion from actions menu
   const handleCancelDevolucion = async (devolucionId: string) => {
-    const res = await Swal.fire({
+    const res = await Alerta.fire({
       title: '¿Eliminar devolución?',
       text: 'Esta acción eliminará la devolución permanentemente. Si fue creada desde Programaciones, podrás enviarla nuevamente.',
       icon: 'warning',
@@ -3426,7 +3426,7 @@ export function AsignacionesModule() {
       devolucion_vehiculo: 'Devolución',
       actualizacion_carta_oferta: 'Actualización carta oferta',
     }
-    Swal.fire({
+    Alerta.fire({
       title: labels[motivo] || motivo,
       html: `
         <div style="text-align: left; font-size: 14px;">
@@ -3821,7 +3821,7 @@ export function AsignacionesModule() {
                       !todosDocNA &&
                       !(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59'))
                     if (cartaOfertaPendiente && !tienePendientesEnActiva) {
-                      Swal.fire({
+                      Alerta.fire({
                         icon: 'warning',
                         title: 'Completá la Carta Oferta primero',
                         text: 'Antes de confirmar la asignación tenés que completar los datos de la Carta Oferta desde la opción "Completar Carta Oferta" del menú.',
@@ -4292,7 +4292,7 @@ export function AsignacionesModule() {
                         <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
                       </p>
                     </div>
-                    <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
+                    <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)' }}>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Devolución de vehículo</div>
                       {(viewAsignacion as any)._programadoPor && (
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>por {(viewAsignacion as any)._programadoPor}</div>
@@ -4306,7 +4306,7 @@ export function AsignacionesModule() {
                       <p className="asig-conductor-card-name">
                         {(viewAsignacion as any)._conductorNombre || (viewAsignacion.asignaciones_conductores?.[0]?.conductores ? `${viewAsignacion.asignaciones_conductores[0].conductores?.nombres || ''} ${viewAsignacion.asignaciones_conductores[0].conductores?.apellidos || ''}`.trim() : '-')}
                         {(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
-                          <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px', verticalAlign: 'middle' }}>De baja</span>
+                          <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: 'var(--radius-lg)', verticalAlign: 'middle' }}>De baja</span>
                         )}
                       </p>
                       <p className="asig-conductor-card-info">Turno: <strong>{viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : (viewAsignacion.asignaciones_conductores?.[0]?.horario === 'nocturno' ? 'Nocturno' : viewAsignacion.asignaciones_conductores?.[0]?.horario === 'diurno' ? 'Diurno' : viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'Diurno')}</strong></p>
@@ -4398,7 +4398,7 @@ export function AsignacionesModule() {
                       <p className="asig-detail-value code">{viewAsignacion.codigo}</p>
                     </div>
                     {viewAsignacion.motivo && (
-                      <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
+                      <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)' }}>
                         <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Programación</div>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{viewAsignacion.motivo === 'entrega_auto' ? 'Entrega de auto' : viewAsignacion.motivo === 'cambio_auto' ? 'Cambio de auto' : viewAsignacion.motivo === 'cambio_turno' ? 'Cambio de turno' : viewAsignacion.motivo === 'entrega_cargo' ? 'Entrega a cargo' : viewAsignacion.motivo === 'devolucion' ? 'Devolución' : viewAsignacion.motivo}</div>
                         {viewAsignacion.motivoDetalle?.programadoPor && (
@@ -4416,13 +4416,13 @@ export function AsignacionesModule() {
                     <div>
                       <label className="asig-detail-label">Cambio de Vehículo</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
-                        <div style={{ flex: 1, padding: '10px 14px', background: '#FEF3C7', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                        <div style={{ flex: 1, padding: '10px 14px', background: '#FEF3C7', borderRadius: 'var(--radius-md)', border: '1px solid #FDE68A' }}>
                           <div style={{ fontSize: '10px', color: '#92400E', fontWeight: 600, marginBottom: '2px' }}>VEHÍCULO A CAMBIAR</div>
                           <div style={{ fontWeight: 700, fontSize: '14px' }}>{viewAsignacion?.motivoDetalle?.vehiculoCambioPatente}</div>
                           <div style={{ fontSize: '11px', color: '#6B7280' }}>{viewAsignacion?.motivoDetalle?.vehiculoCambioModelo}</div>
                         </div>
                         <ArrowLeftRight size={20} style={{ color: '#9CA3AF', flexShrink: 0 }} />
-                        <div style={{ flex: 1, padding: '10px 14px', background: '#D1FAE5', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
+                        <div style={{ flex: 1, padding: '10px 14px', background: '#D1FAE5', borderRadius: 'var(--radius-md)', border: '1px solid #A7F3D0' }}>
                           <div style={{ fontSize: '10px', color: '#065F46', fontWeight: 600, marginBottom: '2px' }}>VEHÍCULO NUEVO</div>
                           <div style={{ fontWeight: 700, fontSize: '14px' }}>{viewAsignacion.vehiculos?.patente}</div>
                           <div style={{ fontSize: '11px', color: '#6B7280' }}>{viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}</div>
@@ -4498,7 +4498,7 @@ export function AsignacionesModule() {
                               <p className="asig-conductor-card-name">
                                 {ac.conductores?.nombres || '-'} {ac.conductores?.apellidos || ''}
                                 {(ac.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
-                                  <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px', verticalAlign: 'middle' }}>De baja</span>
+                                  <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: 'var(--radius-lg)', verticalAlign: 'middle' }}>De baja</span>
                                 )}
                               </p>
                               <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
@@ -4544,7 +4544,7 @@ export function AsignacionesModule() {
                                     <span
                                       title={tarifaTitulo}
                                       style={{
-                                        padding: '1px 9px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
+                                        padding: '1px 9px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600,
                                         background: tarifaAc === 'nueva' ? '#DCFCE7' : '#EEF2F7',
                                         color: tarifaAc === 'nueva' ? '#15803D' : '#475569'
                                       }}
@@ -4591,7 +4591,7 @@ export function AsignacionesModule() {
                             </div>
                             {/* Documentos en Drive */}
                             {showDrive && (
-                              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '130px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '130px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
                                 {sinDocumento ? (
                                   <>
                                     <FolderOpen size={22} style={{ color: '#DC2626', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
@@ -4613,7 +4613,7 @@ export function AsignacionesModule() {
                                       <button
                                         type="button"
                                         onClick={() => regenerarDocumento(viewAsignacion, ac.conductor_id)}
-                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
                                       >
                                         Generar documento
                                       </button>
@@ -4655,7 +4655,7 @@ export function AsignacionesModule() {
                                       <button
                                         type="button"
                                         onClick={() => regenerarDocumento(viewAsignacion, ac.conductor_id)}
-                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                        style={{ marginTop: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#DC2626', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
                                       >
                                         Generar documento
                                       </button>
@@ -5088,7 +5088,7 @@ export function AsignacionesModule() {
         })).filter(c => c.id && c.nombre) || []
 
         const inputStyle: React.CSSProperties = {
-          padding: '10px 12px', border: '1px solid var(--border-primary)', borderRadius: '8px',
+          padding: '10px 12px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)',
           background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px',
           width: '100%', outline: 'none', transition: 'border-color 0.2s',
         }
@@ -5108,7 +5108,7 @@ export function AsignacionesModule() {
               {/* Header */}
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--color-primary-light, #ffe5ea)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-lg)', background: 'var(--color-primary-light, #ffe5ea)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <ClipboardCheck size={18} style={{ color: 'var(--color-primary)' }} />
                   </div>
                   <div>
@@ -5118,7 +5118,7 @@ export function AsignacionesModule() {
                 </div>
                 <button
                   onClick={() => !controlSaving && setShowControlModal(false)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '4px', borderRadius: '6px', display: 'flex' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '4px', borderRadius: 'var(--radius-sm)', display: 'flex' }}
                 >
                   <XCircle size={20} />
                 </button>
@@ -5132,11 +5132,11 @@ export function AsignacionesModule() {
                   <Car size={14} /> Asignación
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-                  <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                  <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
                     <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Vehículo</span>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{vehiculoLabel}</div>
                   </div>
-                  <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                  <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
                     <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Modalidad</span>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{isAutoCargo ? 'A Cargo' : 'Turno'}</div>
                   </div>
@@ -5146,14 +5146,14 @@ export function AsignacionesModule() {
                 {conductoresAsig.length > 1 ? (
                   <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
                     {conductoresAsig.map(c => (
-                      <div key={c.id} style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                      <div key={c.id} style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
                         <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>{c.horario === 'diurno' ? 'Conductor Diurno' : 'Conductor Nocturno'}</span>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{c.nombre}</div>
                       </div>
                     ))}
                   </div>
                 ) : conductoresAsig.length === 1 ? (
-                  <div style={{ marginBottom: '20px', padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                  <div style={{ marginBottom: '20px', padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
                     <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Conductor</span>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{conductoresAsig[0].nombre}</div>
                   </div>
@@ -5264,7 +5264,7 @@ export function AsignacionesModule() {
                   className="btn-secondary"
                   onClick={() => setShowControlModal(false)}
                   disabled={controlSaving}
-                  style={{ padding: '9px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 600 }}
                 >
                   Cancelar
                 </button>
@@ -5273,7 +5273,7 @@ export function AsignacionesModule() {
                   disabled={controlSaving || conductoresAsig.length === 0}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    padding: '9px 22px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                    padding: '9px 22px', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 600,
                     cursor: (controlSaving || conductoresAsig.length === 0) ? 'not-allowed' : 'pointer',
                     border: 'none', background: 'var(--color-primary)', color: 'white',
                     opacity: (controlSaving || conductoresAsig.length === 0) ? 0.5 : 1,

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../components/ui/alertas'
 
 // Tipo de enlace del correo: 'invite' (bienvenida de un usuario nuevo) o 'recovery'
 // (restablecer contraseña). Se lee al cargar el modulo porque supabase-js procesa el
@@ -113,7 +113,7 @@ export function ResetPasswordPage() {
           console.error('No se pudo marcar el cambio de contraseña:', rpcError)
         }
 
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'success',
           title: ES_INVITACION ? '¡Cuenta activada!' : 'Contraseña actualizada',
           text: ES_INVITACION

@@ -359,7 +359,7 @@ export function DistribucionMapaModule() {
             gap: 12,
             padding: '6px 12px',
             background: 'var(--bg-secondary)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             flexWrap: 'wrap',
           }}
         >
@@ -397,7 +397,7 @@ export function DistribucionMapaModule() {
                 width: '100%',
                 padding: '8px 10px',
                 border: '1px solid var(--border-primary)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 fontSize: 13,
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -586,7 +586,7 @@ export function DistribucionMapaModule() {
                 flexDirection: 'column',
                 background: 'var(--bg-primary)',
                 border: '1px solid var(--border-primary)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 boxShadow: '0 6px 20px rgba(0,0,0,0.12)',
                 overflow: 'hidden',
               }}
@@ -659,7 +659,7 @@ export function DistribucionMapaModule() {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 12000,
+            zIndex: 'var(--z-modal-nested)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -670,7 +670,7 @@ export function DistribucionMapaModule() {
             style={{
               background: 'var(--bg-primary)',
               padding: '14px 20px',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -712,7 +712,7 @@ function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () => void }
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 12000,
+        zIndex: 'var(--z-modal-nested)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
@@ -725,7 +725,7 @@ function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () => void }
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--bg-primary)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: 1000,
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
@@ -743,7 +743,7 @@ function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () => void }
             zIndex: 1,
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-primary)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
             padding: '6px 10px',
             display: 'flex',
@@ -788,7 +788,7 @@ function EstadoDot({ color }: { color: string }) {
       style={{
         width: 9,
         height: 9,
-        borderRadius: 2,
+        borderRadius: 'var(--radius-xs)',
         transform: 'rotate(45deg)',
         background: color,
         display: 'inline-block',
@@ -853,7 +853,7 @@ function InfoContent({ entidad: e, onVerFicha }: { entidad: EntidadMapa; onVerFi
             fontSize: 10,
             fontWeight: 700,
             padding: '1px 6px',
-            borderRadius: 4,
+            borderRadius: 'var(--radius-xs)',
             background: badge.bg,
             color: badge.color,
           }}
@@ -885,7 +885,7 @@ function InfoContent({ entidad: e, onVerFicha }: { entidad: EntidadMapa; onVerFi
           marginTop: 8,
           padding: '5px 12px',
           border: 'none',
-          borderRadius: 6,
+          borderRadius: 'var(--radius-sm)',
           background: '#ff0033',
           color: '#fff',
           fontSize: 11,
@@ -925,7 +925,7 @@ function RetryButton({ onClick, label }: { onClick: () => void; label: string })
         background: '#ff0033',
         color: '#fff',
         border: 'none',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         cursor: 'pointer',
         fontSize: 13,
         fontWeight: 600,

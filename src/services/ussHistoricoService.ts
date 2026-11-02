@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 // OPT-05: cache de patentes por sede COMPARTIDO con wialonBitacoraService (evita doble fetch).
 import { getPatentesPorSede } from './patentesSedeCache';
 
+import { fechaLocalISO } from '../utils/fechaArgentina'
 export type GpsOrigen = 'USS' | 'GEOTAB';
 
 export interface USSHistoricoRegistro {
@@ -149,7 +150,7 @@ async function getRegistrosFallback(
 ): Promise<{ data: USSHistoricoRegistro[]; count: number }> {
   const endDatePlusOne = new Date(endDate + 'T00:00:00');
   endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
-  const endStr = endDatePlusOne.toISOString().slice(0, 10);
+  const endStr = fechaLocalISO(endDatePlusOne);
 
   const [ussRes, geotabRes] = await Promise.all([
     buildHistoricoQuery('uss_historico', startDate, endStr, sedePatentes, options).range(0, 9999),

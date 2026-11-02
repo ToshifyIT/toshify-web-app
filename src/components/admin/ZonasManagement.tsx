@@ -31,14 +31,14 @@ const DEFAULT_CENTER = {
 const mapContainerStyle = {
   width: '100%',
   height: '300px',
-  borderRadius: '8px',
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-primary)'
 }
 
 const modalMapContainerStyle = {
   width: '100%',
   height: '350px',
-  borderRadius: '8px',
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-primary)'
 }
 
@@ -599,7 +599,7 @@ export function ZonasManagement() {
     return (
       <>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
-          <div className="zona-map-search" style={{ flex: '1 1 280px', marginBottom: 0 }}>
+          <div className="zona-map-search" style={{ marginBottom: 0 }}>
             <MapPin size={16} />
             <Autocomplete
               onLoad={setAutocompleteRef}
@@ -612,7 +612,7 @@ export function ZonasManagement() {
               />
             </Autocomplete>
           </div>
-          {accionesZonas}
+          <div style={{ marginLeft: 'auto' }}>{accionesZonas}</div>
         </div>
         <GoogleMap
           mapContainerStyle={mapContainerStyle}

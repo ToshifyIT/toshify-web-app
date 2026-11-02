@@ -6,7 +6,7 @@ import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilt
 import ExcelDateRangeFilter from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
 import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign, SendHorizonal, Archive, RotateCcw, Trash2 } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -16,6 +16,8 @@ import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import { CrearCobroTelepaseModal } from './components/CrearCobroTelepaseModal'
 import { crearCobroDesdeTelepase } from './services/crearCobroDesdeTelepase'
+import { hoyART } from '../../utils/fechaArgentina'
+import { numeroSemana } from '../../utils/semanaISO'
 import './MultasTelepase.css'
 
 interface TelepaseRegistro {
@@ -66,16 +68,6 @@ function formatDateTime(dateStr: string | null): string {
   } catch {
     return dateStr
   }
-}
-
-function getWeekNumber(dateStr: string): number {
-  const date = new Date(dateStr)
-  const thursday = new Date(date)
-  thursday.setDate(thursday.getDate() - ((thursday.getDay() + 6) % 7) + 3)
-  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-  const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-  return weekNumber
 }
 
 export default function TelepaseHistoricoModule() {
@@ -359,10 +351,10 @@ export default function TelepaseHistoricoModule() {
   // Crea incidencia + penalidad con datos auto-resueltos (P005-Peaje, tarifa, conductor, turno, R2D2).
   async function handleEnviarACobro(registro: TelepaseRegistro) {
     if (!registro.conductor || !registro.conductor.trim()) {
-      Swal.fire('No se puede enviar', 'El peaje no tiene conductor asignado.', 'warning')
+      Alerta.fire('No se puede enviar', 'El peaje no tiene conductor asignado.', 'warning')
       return
     }
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: '¿Enviar a cobro este peaje?',
       html: `
         <div style="text-align:left; font-size:13px; line-height:1.7;">
@@ -401,10 +393,10 @@ export default function TelepaseHistoricoModule() {
       showSuccess('Incidencia creada', 'El cobro de peaje fue registrado correctamente')
       cargarDatos()
     } else if ('alreadyExists' in result) {
-      Swal.fire({ icon: 'info', title: 'Ya enviado', text: result.reason, timer: 1800, showConfirmButton: false })
+      Alerta.fire({ icon: 'info', title: 'Ya enviado', text: result.reason, timer: 1800, showConfirmButton: false })
       cargarDatos()
     } else if ('needsManualInput' in result) {
-      Swal.fire('No se pudo enviar automáticamente', result.reason, 'warning')
+      Alerta.fire('No se pudo enviar automáticamente', result.reason, 'warning')
     } else {
       showError('Error', result.error || 'No se pudo crear la incidencia')
     }
@@ -418,7 +410,7 @@ export default function TelepaseHistoricoModule() {
 
   // Desestimar: oculta del listado (con motivo opcional)
   async function handleDesestimar(registro: TelepaseRegistro) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Desestimar este peaje?',
       html: `
         <div style="text-align: left; font-size: 13px; line-height: 1.6;">
@@ -458,7 +450,7 @@ export default function TelepaseHistoricoModule() {
 
   // Reactivar: vuelve al listado principal
   async function handleReactivar(registro: TelepaseRegistro) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Reactivar este peaje?',
       text: 'Volverá a aparecer en el listado principal.',
       icon: 'question',
@@ -479,7 +471,7 @@ export default function TelepaseHistoricoModule() {
 
   // Eliminar (soft-delete con confirmación)
   async function handleEliminar(registro: TelepaseRegistro) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar este peaje?',
       text: `${registro.patente} - ${formatMoney(registro.tarifa)}`,
       icon: 'warning',
@@ -842,7 +834,7 @@ export default function TelepaseHistoricoModule() {
   function handleExportar() {
     const dataExport = registrosFiltrados.map(r => ({
       'Fecha Carga': formatDateTime(r.created_at),
-      'Sem. Facturación': r.created_at ? getWeekNumber(r.created_at) : '',
+      'Sem. Facturación': r.created_at ? numeroSemana(r.created_at) : '',
       'Fecha Peaje': r.fecha,
       'Hora Peaje': r.hora,
       'Concesionario': r.concesionario,
@@ -860,7 +852,7 @@ export default function TelepaseHistoricoModule() {
     const ws = XLSX.utils.json_to_sheet(dataExport)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Telepase')
-    XLSX.writeFile(wb, `telepase_historico_${new Date().toISOString().split('T')[0]}.xlsx`)
+    XLSX.writeFile(wb, `telepase_historico_${hoyART()}.xlsx`)
   }
 
   return (
@@ -921,7 +913,7 @@ export default function TelepaseHistoricoModule() {
             <div style={{
               display: 'inline-flex',
               border: '1px solid var(--border-primary)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               overflow: 'hidden',
             }}>
               {vistaOptions.map((option, index) => {
@@ -951,7 +943,7 @@ export default function TelepaseHistoricoModule() {
                       background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
                       color: isActive ? '#fff' : 'var(--text-tertiary)',
                       padding: '1px 6px',
-                      borderRadius: 10,
+                      borderRadius: 'var(--radius-lg)',
                       fontSize: 10,
                       fontWeight: 600,
                     }}>
@@ -988,7 +980,7 @@ export default function TelepaseHistoricoModule() {
                   </tr>
                   <tr>
                     <td className="multas-detail-label">Semana</td>
-                    <td className="multas-detail-value">{selectedRegistro.created_at ? getWeekNumber(selectedRegistro.created_at) : '-'}</td>
+                    <td className="multas-detail-value">{selectedRegistro.created_at ? numeroSemana(selectedRegistro.created_at) : '-'}</td>
                   </tr>
                   <tr>
                     <td className="multas-detail-label">Fecha Peaje</td>
@@ -1048,7 +1040,7 @@ export default function TelepaseHistoricoModule() {
                       <td className="multas-detail-value" style={{ 
                         padding: '12px', 
                         background: 'rgba(245, 158, 11, 0.1)', 
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         border: '1px solid rgba(245, 158, 11, 0.3)'
                       }}>
                         {selectedRegistro.observaciones}
@@ -1079,7 +1071,7 @@ export default function TelepaseHistoricoModule() {
             </div>
             <div className="multas-modal-body">
               {/* Info no editable */}
-              <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+              <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
                   <div><strong>Patente:</strong> <span className="patente-badge" style={{ marginLeft: '4px' }}>{editingRegistro.patente}</span></div>
                   <div><strong>Fecha:</strong> {editingRegistro.fecha} {editingRegistro.hora}</div>
@@ -1117,7 +1109,7 @@ export default function TelepaseHistoricoModule() {
                           bottom: 0,
                           backgroundColor: showOnlyActiveConductores ? '#2563EB' : '#E5E7EB',
                           transition: '.4s',
-                          borderRadius: '34px'
+                          borderRadius: 'var(--radius-full)'
                         }}></span>
                         <span style={{
                           position: 'absolute',
@@ -1232,7 +1224,7 @@ export default function TelepaseHistoricoModule() {
                           padding: '8px 12px',
                           background: '#ECFDF5',
                           border: '1px solid #A7F3D0',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           color: '#047857',
                           fontSize: '13px',
                           display: 'flex',
@@ -1251,7 +1243,7 @@ export default function TelepaseHistoricoModule() {
                           padding: '8px 12px',
                           background: '#FEF2F2',
                           border: '1px solid #FECACA',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           color: '#e6002e',
                           fontSize: '13px',
                           display: 'flex',
@@ -1277,7 +1269,7 @@ export default function TelepaseHistoricoModule() {
                           padding: '8px 12px',
                           background: '#F3F4F6',
                           border: '1px solid #D1D5DB',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           color: '#4B5563',
                           fontSize: '13px',
                           display: 'flex',

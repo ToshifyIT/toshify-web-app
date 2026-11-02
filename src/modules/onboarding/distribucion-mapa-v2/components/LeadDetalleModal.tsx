@@ -24,7 +24,7 @@ export function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () =>
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 12000,
+        zIndex: 'var(--z-modal-nested)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -49,7 +49,7 @@ export function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () =>
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--bg-primary)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: 1000,
           maxHeight: '94vh',
@@ -70,7 +70,7 @@ export function LeadDetalleModal({ lead, onClose }: { lead: Lead; onClose: () =>
             zIndex: 3,
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-primary)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
             padding: '6px 10px',
             display: 'flex',

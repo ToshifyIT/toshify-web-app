@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import {
   ChevronLeft,
   ChevronRight,
@@ -961,7 +961,7 @@ export function DistribucionMapaV2Module() {
   const confirmarCosto = useCallback(async (tramosNuevos: number): Promise<boolean> => {
     if (tramosNuevos < TRAMOS_PARA_CONFIRMAR) return true
 
-    const { isConfirmed } = await Swal.fire({
+    const { isConfirmed } = await Alerta.fire({
       icon: 'question',
       title: 'Calcular sugerencias',
       html:
@@ -1322,7 +1322,7 @@ export function DistribucionMapaV2Module() {
                 gap: 6,
                 padding: '4px 10px',
                 border: '1px dashed var(--border-primary)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-secondary)',
                 color: 'var(--text-secondary)',
                 fontSize: 11.5,
@@ -1361,7 +1361,7 @@ export function DistribucionMapaV2Module() {
               gap: 6,
               padding: '5px 12px',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--color-primary, #ff0033)',
               color: '#fff',
               fontSize: 12,
@@ -1518,7 +1518,7 @@ export function DistribucionMapaV2Module() {
                     gap: 7,
                     background: 'var(--bg-primary)',
                     border: '1px solid var(--border-primary)',
-                    borderRadius: 9,
+                    borderRadius: 'var(--radius-md)',
                     padding: '7px 13px',
                     boxShadow: '0 4px 14px rgba(0,0,0,.16)',
                     fontSize: 12,
@@ -1612,11 +1612,11 @@ export function DistribucionMapaV2Module() {
             bottom: 22,
             left: '50%',
             transform: 'translateX(-50%)',
-            zIndex: 12100,
+            zIndex: 'var(--z-toast)',
             background: 'var(--text-primary)',
             color: 'var(--bg-primary)',
             padding: '9px 16px',
-            borderRadius: 9,
+            borderRadius: 'var(--radius-md)',
             fontSize: 12.5,
             fontWeight: 600,
             boxShadow: '0 8px 24px rgba(0,0,0,.25)',
@@ -1632,7 +1632,7 @@ export function DistribucionMapaV2Module() {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 12000,
+            zIndex: 'var(--z-modal-nested)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1643,7 +1643,7 @@ export function DistribucionMapaV2Module() {
             style={{
               background: 'var(--bg-primary)',
               padding: '14px 20px',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -1915,7 +1915,7 @@ function ManijaPanel({
         alignItems: 'center',
         justifyContent: 'center',
         border: '1.5px solid var(--color-primary, #ff0033)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)',
         color: 'var(--color-primary, #ff0033)',
         boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
@@ -1934,7 +1934,7 @@ function ManijaPanel({
             minWidth: 16,
             height: 16,
             padding: '0 4px',
-            borderRadius: 999,
+            borderRadius: 'var(--radius-full)',
             background: 'var(--color-primary, #ff0033)',
             color: '#fff',
             fontSize: 9.5,
@@ -2005,7 +2005,7 @@ function FilaLista({
               color: esBase ? '#ff0033' : '#fff',
               background: esBase ? 'rgba(255,0,51,.12)' : '#ff0033',
               border: esBase ? '1px solid #ff0033' : 'none',
-              borderRadius: 999,
+              borderRadius: 'var(--radius-full)',
               padding: '2px 7px',
               flexShrink: 0,
             }}
@@ -2024,7 +2024,7 @@ function FilaLista({
               fontWeight: 700,
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-primary)',
-              borderRadius: 4,
+              borderRadius: 'var(--radius-xs)',
               padding: '0 4px',
               letterSpacing: '.3px',
             }}
@@ -2095,7 +2095,7 @@ function RetryButton({ onClick, label }: { onClick: () => void; label: string })
         background: 'var(--color-primary, #ff0033)',
         color: '#fff',
         border: 'none',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         cursor: 'pointer',
         fontSize: 13,
         fontWeight: 600,

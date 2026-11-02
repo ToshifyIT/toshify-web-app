@@ -6,7 +6,7 @@ import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import {
   RotateCcw,
@@ -272,7 +272,7 @@ export function MovimientosModule() {
       )
 
       if (!tieneRespuestaParaRecibir && !recibidoAlgo) {
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'warning',
           title: 'Primero registra la respuesta del proveedor',
           text: 'La recepción se habilita cuando el proveedor confirma qué productos entregará.'
@@ -533,7 +533,7 @@ export function MovimientosModule() {
   // VALIDACIONES
   // =====================================================
   const showIncompleteWarning = (text: string) => {
-    Swal.fire({ icon: 'warning', title: 'Datos incompletos', text })
+    Alerta.fire({ icon: 'warning', title: 'Datos incompletos', text })
   }
 
   const getEntradaManualObservaciones = () => {
@@ -741,7 +741,7 @@ export function MovimientosModule() {
       }
 
       if (errores.length > 0) {
-        Swal.fire({ icon: ok > 0 ? 'warning' : 'error', title: ok > 0 ? 'Recepción parcial' : 'No se pudo confirmar la recepción', html: `${ok} producto(s) ingresados.<br>${errores.join('<br>')}` })
+        Alerta.fire({ icon: ok > 0 ? 'warning' : 'error', title: ok > 0 ? 'Recepción parcial' : 'No se pudo confirmar la recepción', html: `${ok} producto(s) ingresados.<br>${errores.join('<br>')}` })
       } else {
         showSuccess('Recepción confirmada', `${ok} producto(s) ingresados al stock.`)
       }
@@ -1007,7 +1007,7 @@ export function MovimientosModule() {
     )
 
     if (!inventarioConStock) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Stock insuficiente',
         text: `Stock disponible: ${prod.stock_disponible || 0}`
@@ -1472,7 +1472,7 @@ export function MovimientosModule() {
           padding: '8px 12px',
           background: 'var(--badge-yellow-bg)',
           border: '1px solid var(--color-warning)',
-          borderRadius: '6px',
+          borderRadius: 'var(--radius-sm)',
           fontSize: '13px',
           color: 'var(--badge-yellow-text)',
           display: 'flex',
@@ -1501,7 +1501,7 @@ export function MovimientosModule() {
                 background: tipoMovimiento === tipo ? 'var(--color-primary)' : 'var(--card-bg)',
                 color: tipoMovimiento === tipo ? 'white' : 'var(--text-secondary)',
                 border: `2px solid ${tipoMovimiento === tipo ? 'var(--color-primary)' : 'var(--border-primary)'}`,
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
                 fontWeight: 600,
                 fontSize: '14px',
@@ -1524,7 +1524,7 @@ export function MovimientosModule() {
         className="mov-form-card"
         style={{
         background: 'var(--card-bg)',
-        borderRadius: '12px',
+        borderRadius: 'var(--radius-lg)',
         padding: '24px',
         boxShadow: 'var(--shadow-sm)',
         border: '1px solid var(--border-primary)'
@@ -1541,7 +1541,7 @@ export function MovimientosModule() {
                 style={{
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border-primary)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 padding: '12px 16px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1576,7 +1576,7 @@ export function MovimientosModule() {
                     background: modoLote ? 'var(--color-primary)' : 'var(--text-secondary)',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     cursor: entradaDesdePedido ? 'not-allowed' : 'pointer',
                     fontSize: '13px',
                     fontWeight: 600,
@@ -1607,7 +1607,7 @@ export function MovimientosModule() {
               <div style={{
                 background: entradaDesdePedido ? 'var(--badge-green-bg)' : 'var(--badge-yellow-bg)',
                 border: `1px solid ${entradaDesdePedido ? 'var(--color-success)' : 'var(--color-warning)'}`,
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 padding: '12px',
                 fontSize: '13px',
                 color: entradaDesdePedido ? 'var(--badge-green-text)' : 'var(--badge-yellow-text)',
@@ -1644,7 +1644,7 @@ export function MovimientosModule() {
                       width: '100%',
                       padding: '10px',
                       border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: '14px',
                       background: 'var(--input-bg)',
                       color: 'var(--text-primary)'
@@ -1663,7 +1663,7 @@ export function MovimientosModule() {
                       width: '100%',
                       padding: '10px',
                       border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: '14px',
                       background: 'var(--input-bg)',
                       color: 'var(--text-primary)'
@@ -1683,7 +1683,7 @@ export function MovimientosModule() {
                 style={{
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border-primary)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 padding: '12px 16px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1709,7 +1709,7 @@ export function MovimientosModule() {
                     background: modoLoteSalida ? 'var(--color-primary)' : 'var(--text-secondary)',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
                     fontSize: '13px',
                     fontWeight: 600
@@ -1738,7 +1738,7 @@ export function MovimientosModule() {
                         background: motivoSalida === motivo ? 'var(--color-primary)' : 'var(--card-bg)',
                         color: motivoSalida === motivo ? 'white' : 'var(--text-secondary)',
                         border: `1px solid ${motivoSalida === motivo ? 'var(--color-primary)' : 'var(--border-primary)'}`,
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         fontSize: '13px',
                         fontWeight: 600,
@@ -1762,7 +1762,7 @@ export function MovimientosModule() {
                   padding: '10px 12px',
                   background: 'var(--badge-red-bg)',
                   border: '1px solid var(--color-danger)',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   color: 'var(--badge-red-text)',
                   display: 'flex',
                   alignItems: 'flex-start',
@@ -1791,7 +1791,7 @@ export function MovimientosModule() {
                       width: '100%',
                       padding: '10px',
                       border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: '14px',
                       background: 'var(--input-bg)',
                       color: 'var(--text-primary)'
@@ -1830,7 +1830,7 @@ export function MovimientosModule() {
                 <div style={{
                   background: 'var(--bg-secondary)',
                   border: '2px dashed var(--border-primary)',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   padding: '16px'
                 }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
@@ -1872,7 +1872,7 @@ export function MovimientosModule() {
                         width: '80px',
                         padding: '8px 12px',
                         border: '1px solid var(--border-primary)',
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         fontSize: '13px',
                         background: 'var(--input-bg)',
                         color: 'var(--text-primary)'
@@ -1887,7 +1887,7 @@ export function MovimientosModule() {
                         background: 'var(--color-primary)',
                         color: 'white',
                         border: 'none',
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         fontSize: '13px',
                         fontWeight: 600
@@ -1906,7 +1906,7 @@ export function MovimientosModule() {
                           style={{
                             background: 'var(--card-bg)',
                             padding: '12px',
-                            borderRadius: '6px',
+                            borderRadius: 'var(--radius-sm)',
                             border: '1px solid var(--border-primary)',
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -1923,7 +1923,7 @@ export function MovimientosModule() {
                                 padding: '2px 8px', 
                                 background: item.vehiculo ? 'var(--badge-blue-bg)' : 'var(--badge-gray-bg)',
                                 color: item.vehiculo ? 'var(--badge-blue-text)' : 'var(--text-secondary)',
-                                borderRadius: '4px',
+                                borderRadius: 'var(--radius-xs)',
                                 fontSize: '11px'
                               }}>
                                 {item.vehiculo ? `${item.vehiculo.patente}` : 'Sin vehículo'}
@@ -1937,7 +1937,7 @@ export function MovimientosModule() {
                               background: 'var(--badge-red-bg)',
                               color: 'var(--color-danger)',
                               border: 'none',
-                              borderRadius: '4px',
+                              borderRadius: 'var(--radius-xs)',
                               cursor: 'pointer',
                               fontSize: '12px',
                               fontWeight: 600
@@ -1962,7 +1962,7 @@ export function MovimientosModule() {
               <div style={{
                 background: 'var(--badge-blue-bg)',
                 border: '1px solid var(--color-info)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 padding: '12px',
                 fontSize: '13px',
                 color: 'var(--badge-blue-text)'
@@ -1998,7 +1998,7 @@ export function MovimientosModule() {
                     width: '100%',
                     padding: '10px',
                     border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     fontSize: '14px',
                     background: 'var(--input-bg)',
                     color: 'var(--text-primary)'
@@ -2072,7 +2072,7 @@ export function MovimientosModule() {
                       width: '100%',
                       padding: '10px',
                       border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: '14px',
                       background: 'var(--input-bg)',
                       color: 'var(--text-primary)'
@@ -2102,7 +2102,7 @@ export function MovimientosModule() {
                         border: `2px solid ${estadoRetorno === estado
                           ? (estado === 'operativa' ? 'var(--color-success)' : 'var(--color-danger)')
                           : 'var(--border-primary)'}`,
-                        borderRadius: '8px',
+                        borderRadius: 'var(--radius-md)',
                         cursor: 'pointer',
                         background: estadoRetorno === estado
                           ? (estado === 'operativa' ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)')
@@ -2156,7 +2156,7 @@ export function MovimientosModule() {
                       background: tipoProductoFiltro === tipo ? 'var(--color-primary)' : 'var(--card-bg)',
                       color: tipoProductoFiltro === tipo ? 'white' : 'var(--text-secondary)',
                       border: `1px solid ${tipoProductoFiltro === tipo ? 'var(--color-primary)' : 'var(--border-primary)'}`,
-                      borderRadius: '6px',
+                      borderRadius: 'var(--radius-sm)',
                       cursor: 'pointer',
                       fontSize: '13px',
                       fontWeight: 600
@@ -2204,7 +2204,7 @@ export function MovimientosModule() {
             <div style={{
               background: 'var(--bg-secondary)',
               border: '2px dashed var(--border-primary)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               padding: '16px'
             }}>
               <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
@@ -2231,7 +2231,7 @@ export function MovimientosModule() {
                     width: '100px',
                     padding: '8px 12px',
                     border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     fontSize: '13px',
                     background: 'var(--input-bg)',
                     color: 'var(--text-primary)'
@@ -2244,7 +2244,7 @@ export function MovimientosModule() {
                     background: 'var(--color-primary)',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
                     fontSize: '13px',
                     fontWeight: 600
@@ -2262,7 +2262,7 @@ export function MovimientosModule() {
                       style={{
                         background: 'var(--card-bg)',
                         padding: '12px',
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         border: '1px solid var(--border-primary)',
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -2284,7 +2284,7 @@ export function MovimientosModule() {
                           background: 'var(--badge-red-bg)',
                           color: 'var(--color-danger)',
                           border: 'none',
-                          borderRadius: '4px',
+                          borderRadius: 'var(--radius-xs)',
                           cursor: 'pointer',
                           fontSize: '12px',
                           fontWeight: 600
@@ -2339,7 +2339,7 @@ export function MovimientosModule() {
                   width: '100%',
                   padding: '10px',
                   border: '1px solid var(--border-primary)',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   fontSize: '14px',
                   background: 'var(--input-bg)',
                   color: 'var(--text-primary)'
@@ -2367,7 +2367,7 @@ export function MovimientosModule() {
                 width: '100%',
                 padding: '10px',
                 border: '1px solid var(--border-primary)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 fontSize: '14px',
                 fontFamily: 'inherit',
                 background: 'var(--input-bg)',
@@ -2385,7 +2385,7 @@ export function MovimientosModule() {
                 background: 'var(--bg-tertiary)',
                 color: 'var(--text-primary)',
                 border: 'none',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
                 fontSize: '14px',
                 fontWeight: 600
@@ -2400,7 +2400,7 @@ export function MovimientosModule() {
                 background: 'var(--color-primary)',
                 color: 'white',
                 border: 'none',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
                 fontSize: '14px',
                 fontWeight: 600,

@@ -23,7 +23,7 @@
   width: auto;
   min-width: 0;
   flex: 0 1 auto;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border-primary, #e2e8f0);
   height: 34px;
@@ -111,7 +111,7 @@
 .fact-comp-picker .period-picker__select {
   height: 34px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-primary, #e0e4ea);
   font-size: 12.5px;
   background-color: var(--card-bg, #ffffff);
@@ -180,7 +180,7 @@
 .fact-comp-tooltip {
   background-color: var(--card-bg, #ffffff);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   min-width: 200px;
@@ -203,7 +203,7 @@
 .fact-comp-card {
   background: var(--bg-secondary, #f8fafc);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
   display: flex;
   flex-direction: column;

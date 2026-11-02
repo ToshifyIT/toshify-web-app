@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -84,7 +84,7 @@ export function ParametrosUssPage() {
       `<option value="${t.value}">${t.label}</option>`
     ).join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Nuevo Parametro',
       html: `
         <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
@@ -125,9 +125,9 @@ export function ParametrosUssPage() {
         const modulo = (document.getElementById('swal-modulo') as HTMLInputElement).value.trim()
         const valor = (document.getElementById('swal-valor') as HTMLInputElement).value.trim()
 
-        if (!clave) { Swal.showValidationMessage('La clave es obligatoria'); return false }
-        if (!valor) { Swal.showValidationMessage('El valor es obligatorio'); return false }
-        if (!modulo) { Swal.showValidationMessage('El modulo es obligatorio'); return false }
+        if (!clave) { Alerta.showValidationMessage('La clave es obligatoria'); return false }
+        if (!valor) { Alerta.showValidationMessage('El valor es obligatorio'); return false }
+        if (!modulo) { Alerta.showValidationMessage('El modulo es obligatorio'); return false }
 
         return { clave, descripcion, tipo, modulo, valor }
       },
@@ -153,7 +153,7 @@ export function ParametrosUssPage() {
       `<option value="${t.value}" ${t.value === param.tipo ? 'selected' : ''}>${t.label}</option>`
     ).join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Editar Parametro',
       html: `
         <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
@@ -193,7 +193,7 @@ export function ParametrosUssPage() {
         const modulo = (document.getElementById('swal-modulo') as HTMLInputElement).value.trim()
         const valor = (document.getElementById('swal-valor') as HTMLInputElement).value.trim()
 
-        if (!valor) { Swal.showValidationMessage('El valor es obligatorio'); return false }
+        if (!valor) { Alerta.showValidationMessage('El valor es obligatorio'); return false }
 
         return { descripcion, tipo, modulo, valor, updated_at: new Date().toISOString() }
       },
@@ -216,7 +216,7 @@ export function ParametrosUssPage() {
   }
 
   async function eliminarParametro(param: ParametroUss) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar parametro?',
       text: `Se eliminara "${param.clave}"`,
       icon: 'warning',
@@ -320,7 +320,7 @@ export function ParametrosUssPage() {
               background: '#ef4444',
               color: 'white',
               border: 'none',
-              borderRadius: '10px',
+              borderRadius: 'var(--radius-lg)',
               fontSize: '14px',
               fontWeight: 600,
               cursor: 'pointer',

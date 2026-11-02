@@ -45,7 +45,7 @@ export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10001,
+        zIndex: 'calc(var(--z-modal-nested) + 1)',
         background: 'rgba(0,0,0,0.6)',
         display: 'flex',
         alignItems: 'center',
@@ -56,7 +56,7 @@ export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props
       <div
         style={{
           background: 'var(--modal-bg, #fff)',
-          borderRadius: '16px',
+          borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: '520px',
           overflow: 'hidden',
@@ -118,7 +118,7 @@ export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props
                 justifyContent: 'space-between',
                 gap: '12px',
                 padding: '12px 14px',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-primary)',
                 background: 'var(--bg-secondary)',
               }}
@@ -135,7 +135,7 @@ export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props
                       fontSize: '9px',
                       fontWeight: 700,
                       padding: '2px 6px',
-                      borderRadius: '4px',
+                      borderRadius: 'var(--radius-xs)',
                       background: 'rgba(139, 92, 246, 0.18)',
                       color: '#7C3AED',
                     }}
@@ -152,7 +152,7 @@ export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props
                     alignItems: 'center',
                     gap: '6px',
                     padding: '7px 13px',
-                    borderRadius: '7px',
+                    borderRadius: 'var(--radius-md)',
                     border: 'none',
                     background: '#16a34a',
                     color: 'white',
@@ -181,7 +181,7 @@ export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props
             onClick={onCancelar}
             style={{
               padding: '10px 20px',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)',
               background: 'var(--modal-bg)',
               color: 'var(--text-primary)',
@@ -197,7 +197,7 @@ export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props
               onClick={() => onElegir(pendientes[0])}
               style={{
                 padding: '10px 22px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
                 background: '#16a34a',
                 color: 'white',

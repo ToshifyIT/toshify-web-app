@@ -2,7 +2,7 @@
   position: fixed; inset: 0;
   background: rgba(17, 24, 39, 0.55);
   display: flex; align-items: center; justify-content: center;
-  z-index: 1100;
+  z-index: var(--z-modal);
   padding: 24px;
 }
 .csem-modal {
@@ -10,7 +10,7 @@
   width: 100%; max-width: 720px; max-height: 88vh;
   display: flex; flex-direction: column;
   background: var(--card-bg, #fff);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-primary, #e5e7eb);
   overflow: hidden;
 }
@@ -18,7 +18,7 @@
   position: absolute; top: 16px; right: 16px;
   border: 1px solid var(--border-primary, #e5e7eb);
   background: #fff; color: #6b7280; cursor: pointer;
-  border-radius: 8px; padding: 5px;
+  border-radius: var(--radius-md); padding: 5px;
 }
 .csem-close:hover { background: #f3f4f6; }
 
@@ -41,7 +41,7 @@
 }
 .csem-info b { color: var(--text-primary, #111827); font-weight: 700; }
 .csem-info b.gnc { color: #059669; }
-.csem-flota { background: #dbeafe; color: #1d4ed8; padding: 1px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+.csem-flota { background: #dbeafe; color: #1d4ed8; padding: 1px 8px; border-radius: var(--radius-full); font-weight: 700; font-size: 12px; }
 
 .csem-body { overflow-y: auto; padding: 16px 22px 22px; }
 .csem-empty { text-align: center; color: #9ca3af; padding: 30px; }
@@ -56,7 +56,7 @@
 .csem-row {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 6px 12px;   /* la separacion entre filas la da el gap de .csem-items */
-  background: transparent; border-radius: 6px;
+  background: transparent; border-radius: var(--radius-sm);
   font-size: 13px; color: var(--text-primary, #374151);
 }
 /* Contenedor de filas: el rayado alterno cuenta solo las filas, igual que
@@ -74,7 +74,7 @@
 .csem-ref { color: #9ca3af; font-size: 11px; font-weight: 400; }
 .csem-amt {
   margin-left: auto; font-weight: 600; white-space: nowrap;
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary, #111827);
 }
 .csem-amt.credit { color: #059669; }
@@ -92,7 +92,7 @@
 
 .csem-total-box {
   margin-top: 12px; padding: 14px;
-  background: #f9fafb; border-radius: 12px;
+  background: #f9fafb; border-radius: var(--radius-lg);
 }
 .csem-total-ref { padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
 .csem-ref-row { display: flex; justify-content: space-between; font-size: 13px; color: #9ca3af; padding: 2px 0; }

@@ -6,7 +6,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import { TimeInput24h } from '../../components/ui/TimeInput24h'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import {
   Plus,
@@ -50,6 +50,7 @@ import { SiniestroWizard } from './components/SiniestroWizard'
 import { ReparacionTicket } from './components/ReparacionTicket'
 import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
 
+import { hoyART } from '../../utils/fechaArgentina'
 function toISODateLocal(date: Date) {
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -124,7 +125,7 @@ export function SiniestrosModule() {
   const [formData, setFormData] = useState<SiniestroFormData>({
     categoria_id: '',
     estado_id: '',
-    fecha_siniestro: new Date().toISOString().split('T')[0],
+    fecha_siniestro: hoyART(),
     responsable: 'sin_info',
     hay_lesionados: false,
     enviado_abogada: false,
@@ -579,7 +580,7 @@ export function SiniestrosModule() {
     setFormData({
       categoria_id: '',
       estado_id: estadoRegistrado?.id || '',
-      fecha_siniestro: new Date().toISOString().split('T')[0],
+      fecha_siniestro: hoyART(),
       responsable: 'sin_info',
       hay_lesionados: false,
       enviado_abogada: false,
@@ -900,7 +901,7 @@ export function SiniestrosModule() {
       return
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Habilitar Vehículo',
       text: `¿Desea habilitar el vehículo ${siniestro.vehiculo_patente} para circular?`,
       icon: 'question',
@@ -994,7 +995,7 @@ export function SiniestrosModule() {
 
   function handleExportarExcel() {
     if (siniestrosFiltrados.length === 0) {
-      Swal.fire('Sin datos', 'No hay siniestros para exportar', 'info')
+      Alerta.fire('Sin datos', 'No hay siniestros para exportar', 'info')
       return
     }
 
@@ -1051,7 +1052,7 @@ export function SiniestrosModule() {
     ws['!cols'] = colWidths
 
     const tabName = 'Listado'
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = hoyART()
     XLSX.writeFile(wb, `Siniestros_${tabName}_${fecha}.xlsx`)
   }
 

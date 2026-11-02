@@ -5,7 +5,7 @@
 // generar un documento que fallo), para que el documento no salga con datos en
 // blanco ni con un importe que no se puede expresar.
 
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { supabase } from '../../lib/supabase'
 import { validarPreciosSemanales, type TarifaRequerida } from './tarifaConceptos'
 
@@ -116,7 +116,7 @@ function listaFaltantes(items: string[]): string {
  * `accion`: qué no se puede hacer, ej. "enviar la programación".
  */
 export async function avisarDatosIncompletos(camposFaltantes: string[], accion: string, cierre: string): Promise<void> {
-  await Swal.fire({
+  await Alerta.fire({
     title: 'Datos obligatorios incompletos',
     html: `
       <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
@@ -140,7 +140,7 @@ export async function avisarDatosIncompletos(camposFaltantes: string[], accion: 
 
 /** Aviso de tarifa sin precio cargado. `accion` como en avisarDatosIncompletos. */
 export async function avisarTarifasFaltantes(tarifasFaltantes: string[], accion: string, cierre: string): Promise<void> {
-  await Swal.fire({
+  await Alerta.fire({
     title: 'Tarifa sin precio cargado',
     html: `
       <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">

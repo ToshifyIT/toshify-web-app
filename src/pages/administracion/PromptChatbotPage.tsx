@@ -187,9 +187,9 @@ export function PromptChatbotPage() {
 
   const hayCambios = texto !== original
   const panelDiff: CSSProperties = {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, lineHeight: 1.6,
+    fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6,
     whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: 'var(--bg-secondary, #f9fafb)',
-    borderRadius: 8, padding: 12, maxHeight: 360, overflow: 'auto', color: '#374151',
+    borderRadius: 'var(--radius-md)', padding: 12, maxHeight: 360, overflow: 'auto', color: '#374151',
   }
 
   return (
@@ -202,13 +202,13 @@ export function PromptChatbotPage() {
           </p>
         </div>
         <button onClick={cargar} disabled={loading || saving}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 'var(--radius-md)', padding: '7px 12px', fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
           <RefreshCw size={14} /> Recargar
         </button>
       </div>
 
-      {error && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '10px 12px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{error}</div>}
-      {okMsg && <div style={{ background: '#dcfce7', color: '#15803d', padding: '10px 12px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{okMsg}</div>}
+      {error && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '10px 12px', borderRadius: 'var(--radius-md)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {okMsg && <div style={{ background: '#dcfce7', color: '#15803d', padding: '10px 12px', borderRadius: 'var(--radius-md)', fontSize: 13, marginBottom: 12 }}>{okMsg}</div>}
 
       {loading ? (
         <Spinner size="sm" message="Cargando…" />
@@ -220,8 +220,8 @@ export function PromptChatbotPage() {
             spellCheck={false}
             style={{
               width: '100%', minHeight: 380, resize: 'vertical', padding: '14px 16px',
-              border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 13, lineHeight: 1.6,
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'var(--text-primary, #111827)',
+              border: '1px solid #e5e7eb', borderRadius: 'var(--radius-lg)', fontSize: 13, lineHeight: 1.6,
+              fontFamily: 'var(--font-mono)', color: 'var(--text-primary, #111827)',
               background: 'var(--card-bg, #fff)', outline: 'none',
             }}
           />
@@ -229,11 +229,11 @@ export function PromptChatbotPage() {
             <span style={{ fontSize: 12, color: '#9ca3af' }}>{texto.length.toLocaleString('es-AR')} caracteres{hayCambios && ' · cambios sin guardar'}</span>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setTexto(original)} disabled={!hayCambios || saving}
-                style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, color: '#374151', cursor: hayCambios ? 'pointer' : 'not-allowed', opacity: hayCambios ? 1 : .5 }}>
+                style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 'var(--radius-md)', padding: '8px 14px', fontSize: 13, fontWeight: 600, color: '#374151', cursor: hayCambios ? 'pointer' : 'not-allowed', opacity: hayCambios ? 1 : .5 }}>
                 Descartar
               </button>
               <button onClick={guardar} disabled={!hayCambios || saving}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: hayCambios ? '#dc2626' : '#f3f4f6', color: hayCambios ? '#fff' : '#9ca3af', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: hayCambios && !saving ? 'pointer' : 'not-allowed' }}>
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: hayCambios ? '#dc2626' : '#f3f4f6', color: hayCambios ? '#fff' : '#9ca3af', borderRadius: 'var(--radius-md)', padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: hayCambios && !saving ? 'pointer' : 'not-allowed' }}>
                 <Save size={14} /> {saving ? 'Guardando…' : 'Guardar cambios'}
               </button>
             </div>
@@ -255,9 +255,9 @@ export function PromptChatbotPage() {
                   const abierto = expandidos.has(h.id)
                   const comparar = comparando.has(h.id)
                   return (
-                    <div key={h.id} style={{ border: '1px solid #eef0f2', borderRadius: 10, padding: '10px 12px', background: 'var(--card-bg, #fff)' }}>
+                    <div key={h.id} style={{ border: '1px solid #eef0f2', borderRadius: 'var(--radius-lg)', padding: '10px 12px', background: 'var(--card-bg, #fff)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: esRestauracion ? '#7c3aed' : '#2563eb', padding: '2px 8px', borderRadius: 999 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: esRestauracion ? '#7c3aed' : '#2563eb', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
                           {esRestauracion ? 'Restauración' : 'Edición'}
                         </span>
                         <span style={{ fontSize: 13, color: '#374151', fontWeight: 600 }}>{h.usuario_nombre || 'Usuario'}</span>
@@ -265,22 +265,22 @@ export function PromptChatbotPage() {
                         {esRestauracion && h.restaurado_de_id && <span style={{ fontSize: 12, color: '#9ca3af' }}>· desde versión #{h.restaurado_de_id}</span>}
                         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                           <button onClick={() => toggleExpand(h.id)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600, color: '#6b7280', cursor: 'pointer' }}>
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 'var(--radius-sm)', padding: '3px 8px', fontSize: 11, fontWeight: 600, color: '#6b7280', cursor: 'pointer' }}>
                             {abierto ? <EyeOff size={12} /> : <Eye size={12} />} {abierto ? 'Ocultar' : 'Ver'}
                           </button>
                           <button onClick={() => toggleComparar(h.id)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #e5e7eb', background: comparar ? '#eff6ff' : '#fff', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}>
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #e5e7eb', background: comparar ? '#eff6ff' : '#fff', borderRadius: 'var(--radius-sm)', padding: '3px 8px', fontSize: 11, fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}>
                             <GitCompare size={12} /> Comparar
                           </button>
                           <button onClick={() => restaurar(h)} disabled={saving}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #ddd6fe', background: '#f5f3ff', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600, color: '#6d28d9', cursor: 'pointer' }}>
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #ddd6fe', background: '#f5f3ff', borderRadius: 'var(--radius-sm)', padding: '3px 8px', fontSize: 11, fontWeight: 600, color: '#6d28d9', cursor: 'pointer' }}>
                             <RotateCcw size={12} /> Restaurar
                           </button>
                         </div>
                       </div>
 
                       {abierto && (
-                        <pre style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.55, color: '#374151', background: 'var(--bg-secondary, #f9fafb)', padding: 12, borderRadius: 8, maxHeight: 320, overflow: 'auto' }}>
+                        <pre style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.55, color: '#374151', background: 'var(--bg-secondary, #f9fafb)', padding: 12, borderRadius: 'var(--radius-md)', maxHeight: 320, overflow: 'auto' }}>
                           {h.prompt_nuevo}
                         </pre>
                       )}

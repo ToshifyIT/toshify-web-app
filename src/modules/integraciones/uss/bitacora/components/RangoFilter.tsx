@@ -149,7 +149,7 @@ function RangoFilterInner({ label, placeholder = '0,00', ayuda, describir, rango
             </div>
             {ayuda && (
               <div style={{
-                marginTop: '10px', padding: '8px 10px', borderRadius: '6px', maxWidth: '300px',
+                marginTop: '10px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', maxWidth: '300px',
                 background: 'var(--bg-secondary)', fontSize: '11px', lineHeight: 1.5,
                 color: 'var(--text-secondary)',
               }}>

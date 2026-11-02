@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { Edit2, Trash2 } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -71,7 +71,7 @@ export function ParametrosAsignacionesPage() {
   }
 
   async function editarParametro(param: ParametroAsignacion) {
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Editar Parametro',
       html: `
         <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
@@ -96,7 +96,7 @@ export function ParametrosAsignacionesPage() {
       preConfirm: () => {
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value.trim()
         const valor = (document.getElementById('swal-valor') as HTMLInputElement).value.trim()
-        if (!valor) { Swal.showValidationMessage('El valor es obligatorio'); return false }
+        if (!valor) { Alerta.showValidationMessage('El valor es obligatorio'); return false }
         return { descripcion, valor, updated_at: new Date().toISOString() }
       },
     })
@@ -123,11 +123,11 @@ export function ParametrosAsignacionesPage() {
 
   async function eliminarParametro(param: ParametroAsignacion) {
     if (param.id.startsWith('new_')) {
-      Swal.fire('Info', 'Este parametro aun no existe en la base de datos', 'info')
+      Alerta.fire('Info', 'Este parametro aun no existe en la base de datos', 'info')
       return
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar parametro',
       html: `<p>Se eliminara <strong>${param.descripcion}</strong></p><p style="color:#dc2626;font-size:13px;">Esta accion no se puede deshacer. Si el parametro se usa en calculos, se usara el valor por defecto.</p>`,
       icon: 'warning',

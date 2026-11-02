@@ -5,8 +5,9 @@ import { LoadingOverlay } from '../ui/LoadingOverlay'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { History, Eye, Monitor, Calendar, Users, ChevronLeft, ChevronRight } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../ui/alertas'
 import { detalleLegible } from './auditoriaDetalle'
+import { haceDiasART } from '../../utils/fechaArgentina'
 import './UserManagement.css'
 import './AdminStyles.css'
 
@@ -117,9 +118,7 @@ interface ResumenUsuario {
 
 // Helper: fecha hace N días en formato yyyy-MM-dd
 function daysAgo(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().split('T')[0]
+  return haceDiasART(n)
 }
 
 export function AuditModule() {
@@ -336,7 +335,7 @@ export function AuditModule() {
       campos: log.campos_modificados,
     })
 
-    Swal.fire({
+    Alerta.fire({
       title: `${ACCION_LABELS[log.accion]?.label || log.accion} · ${TABLA_LABELS[log.tabla] || log.tabla}`,
       html,
       width: '640px',
@@ -600,7 +599,7 @@ export function AuditModule() {
             onClick={() => setPage(p => p - 1)}
             disabled={!canPrev}
             style={{
-              padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+              padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)',
               background: canPrev ? 'var(--bg-primary)' : 'var(--bg-secondary)',
               cursor: canPrev ? 'pointer' : 'not-allowed', color: 'var(--text-primary)',
               display: 'flex', alignItems: 'center', gap: '4px', opacity: canPrev ? 1 : 0.4,
@@ -616,7 +615,7 @@ export function AuditModule() {
             onClick={() => setPage(p => p + 1)}
             disabled={!canNext}
             style={{
-              padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+              padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)',
               background: canNext ? 'var(--bg-primary)' : 'var(--bg-secondary)',
               cursor: canNext ? 'pointer' : 'not-allowed', color: 'var(--text-primary)',
               display: 'flex', alignItems: 'center', gap: '4px', opacity: canNext ? 1 : 0.4,

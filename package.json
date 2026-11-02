@@ -57,7 +57,6 @@
     "react-router-dom": "^7.9.4",
     "recharts": "^3.5.1",
     "swagger-ui-express": "^5.0.1",
-    "sweetalert2": "^11.26.3",
     "tsx": "^4.21.0",
     "xlsx": "file:vendor/xlsx-0.20.3.tgz",
     "zod": "^4.1.13"

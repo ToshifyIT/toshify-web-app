@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts'
-import { format, getWeek } from 'date-fns'
+import { format, getISOWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useCobroTeoricoData, type Granularity } from '../../../hooks/useCobroTeoricoData'
 import { PeriodPicker } from './PeriodPicker'
@@ -131,7 +131,7 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
   // Período A: semana/mes/año actual
   const [periodA, setPeriodA] = useState<string>(() => {
     if (granularity === 'semana') {
-      const week = getWeek(now, { weekStartsOn: 1 })
+      const week = getISOWeek(now)
       return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
     }
     if (granularity === 'mes') {
@@ -144,7 +144,7 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
   // Período B: semana/mes/año anterior
   const [periodB, setPeriodB] = useState<string>(() => {
     if (granularity === 'semana') {
-      const week = getWeek(now, { weekStartsOn: 1 })
+      const week = getISOWeek(now)
       const prevWeek = week - 1 > 0 ? week - 1 : 52
       const prevYear = week - 1 > 0 ? now.getFullYear() : now.getFullYear() - 1
       return `Sem ${prevWeek.toString().padStart(2, '0')} ${prevYear}`
@@ -199,7 +199,7 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
     onGranularityChange(val)
     const n = new Date()
     if (val === 'semana') {
-      const week = getWeek(n, { weekStartsOn: 1 })
+      const week = getISOWeek(n)
       setPeriodA(`Sem ${week.toString().padStart(2, '0')} ${n.getFullYear()}`)
       const prevWeek = week - 1 > 0 ? week - 1 : 52
       const prevYear = week - 1 > 0 ? n.getFullYear() : n.getFullYear() - 1

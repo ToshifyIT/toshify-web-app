@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { startOfWeek, endOfWeek, addDays, format, setWeek, startOfMonth, endOfMonth, parseISO, parse, isValid, getWeek, eachDayOfInterval } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, format, startOfMonth, endOfMonth, parseISO, parse, isValid, eachDayOfInterval, getISOWeek, setISOWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useSede } from '../contexts/SedeContext'
 import { normalizeDni } from '../utils/normalizeDocuments'
 import { getCache, setCache } from './useSessionCache'
 
+import { fechaLocalISO } from '../utils/fechaArgentina'
 export type Granularity = 'semana' | 'mes' | 'ano'
 
 export interface ChartDataPoint {
@@ -121,7 +122,7 @@ export async function fetchCobroData(
   }
 
   const getPrecioEnFecha = (codigo: string, fecha: Date): number => {
-    const fechaStr = fecha.toISOString().split('T')[0]
+    const fechaStr = fechaLocalISO(fecha)
     const registros = historialPorCodigo.get(codigo)
     if (registros) {
       for (const h of registros) {
@@ -546,7 +547,7 @@ export async function fetchCobroData(
   } else if (granularity === 'mes') {
     const grouped = new Map<string, { label: string, teorico: number, real: number, garantia: number, alquiler: number }>()
     dailyData.forEach(d => {
-      const weekNum = getWeek(d.fecha, { weekStartsOn: 1 })
+      const weekNum = getISOWeek(d.fecha)
       const key = `Sem ${weekNum.toString().padStart(2, '0')}`
       if (!grouped.has(key)) {
         grouped.set(key, { label: key, teorico: 0, real: 0, garantia: 0, alquiler: 0 })
@@ -596,7 +597,7 @@ export function parsePeriodToRange(selectedPeriod: string, granularity: Granular
     if (match) {
       const semanaNum = parseInt(match[1])
       const anioNum = parseInt(match[2])
-      const dateWithWeek = setWeek(new Date(anioNum, 0, 4), semanaNum, { weekStartsOn: 1, firstWeekContainsDate: 4 })
+      const dateWithWeek = setISOWeek(new Date(anioNum, 0, 4), semanaNum)
       startDate = startOfWeek(dateWithWeek, { weekStartsOn: 1 })
       endDate = endOfWeek(dateWithWeek, { weekStartsOn: 1 })
     } else {

@@ -44,7 +44,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         const modelo = v ? `${v.marca || ''} ${v.modelo || ''}`.trim() : ''
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, maxWidth: 150 }}>
-            <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, fontWeight: 600 }}>{p}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>{p}</span>
             {modelo && (
               <span
                 style={{
@@ -97,7 +97,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         const v = Number(getValue()) || 0
         if (v <= 0) return guion
         return (
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>
             {v.toLocaleString('es-AR')} km
           </span>
         )
@@ -115,7 +115,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         if (v === null) return guion
         return (
           <span
-            style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600 }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}
             title="Combustible usado en los tramos entre cargas de la semana (aproximado)"
           >
             {v.toFixed(2)} L
@@ -133,11 +133,11 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         const color = pct < 20 ? '#dc2626' : pct < 40 ? '#ea580c' : '#16a34a'
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-            <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 700, color }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color }}>
               {pct.toFixed(1)}%
             </span>
-            <div style={{ width: '100%', height: 5, background: 'var(--bg-secondary)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: color, borderRadius: 3 }} />
+            <div style={{ width: '100%', height: 5, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: color, borderRadius: 'var(--radius-xs)' }} />
             </div>
           </div>
         )
@@ -156,7 +156,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         const color = pct > 20 ? '#dc2626' : pct > 10 ? '#ea580c' : '#16a34a'
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.2 }}>
-            <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600, color }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color }}>
               {litros.toFixed(2)} L
             </span>
             <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{pct.toFixed(0)}%</span>
@@ -175,7 +175,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         }
         const color = v >= 10 ? '#16a34a' : v >= 7 ? '#ea580c' : '#dc2626'
         return (
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 700, color }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color }}>
             {v.toFixed(2)} km/L
           </span>
         )

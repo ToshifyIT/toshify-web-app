@@ -4,7 +4,7 @@ import { AlertTriangle, Edit2, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay, Spinner } from '../ui/LoadingOverlay'
 import type { Role } from '../../types/database.types'
-import Swal from 'sweetalert2'
+import { Alerta } from '../ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import './AdminStyles.css'
 
@@ -130,7 +130,7 @@ export function RoleManagement() {
       if (usersError) throw usersError
 
       if (users && users.length > 0) {
-        Swal.fire({
+        Alerta.fire({
           icon: 'warning',
           title: 'No se puede eliminar',
           text: 'Este rol tiene usuarios asignados'

@@ -2,7 +2,7 @@
 // Al pasar un lead a "Descartado" el motivo es obligatorio (pedido 2026-11-02).
 // Se guarda en leads.causal_de_cierre (la misma columna que usa la carga de Sellium
 // y el Excel) y además queda como nota en la bitácora de Observaciones.
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 
 export const ESTADO_DESCARTADO = 'Descartado'
 
@@ -23,7 +23,7 @@ const MOTIVOS = [
  */
 export async function pedirMotivoDescarte(nombre?: string | null): Promise<string | null> {
   const opciones = MOTIVOS.map(m => `<option value="${m}">`).join('')
-  const res = await Swal.fire({
+  const res = await Alerta.fire({
     title: 'Motivo de descarte',
     html: `
       <div style="text-align:left;font-size:13px;">
@@ -42,7 +42,7 @@ export async function pedirMotivoDescarte(nombre?: string | null): Promise<strin
     preConfirm: () => {
       const v = ((document.getElementById('motivo-descarte') as HTMLInputElement | null)?.value || '').trim()
       if (v.length < 3) {
-        Swal.showValidationMessage('El motivo es obligatorio')
+        Alerta.showValidationMessage('El motivo es obligatorio')
         return false
       }
       return v

@@ -12,6 +12,7 @@ import { parseImporte } from './conductoresPanelService'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 
+import { hoyART } from '../../../utils/fechaArgentina'
 export interface MultaDetalle {
   id: string
   fecha: string | null
@@ -140,7 +141,7 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
     }
   }
 
-  const hoyStr = new Date().toISOString().slice(0, 10)
+  const hoyStr = hoyART()
 
   const filtradas = ((multasRaw || []) as Array<any>).filter(m => {
     const cr = m.conductor_responsable || ''

@@ -4,7 +4,7 @@
 // Facturación (ARS, facturado neto de la semana) y Cobranza %.
 import { useRef, useState } from 'react'
 import { Download, FileSpreadsheet, Upload, X } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import type { ForecastParse } from './kpisV2Types'
 import { useAuth } from '../../../contexts/AuthContext'
 import {
@@ -107,7 +107,7 @@ export function ForecastModal({ sedeId, sedeNombre, hoy, onClose, onSaved }: For
         resultado.columnas,
         profile?.full_name ?? profile?.email ?? null,
       )
-      await Swal.fire({
+      await Alerta.fire({
         icon: 'success',
         title: 'Forecast guardado',
         text: `${n} ${n === 1 ? 'semana actualizada' : 'semanas actualizadas'} para ${sedeNombre}.`,

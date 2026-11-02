@@ -139,10 +139,10 @@ export function ConductorAutocomplete({
         ...(pos.arriba ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
         maxHeight: ALTO_LISTA,
         overflowY: 'auto',
-        zIndex: 10000,
+        zIndex: 'var(--z-dropdown)',
         background: 'var(--bg-primary, #fff)',
         border: '1px solid var(--border-primary, #e5e7eb)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
         padding: 4,
       }}
@@ -161,7 +161,7 @@ export function ConductorAutocomplete({
           onMouseEnter={() => setFoco(idx)}
           style={{
             padding: '8px 12px',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-sm)',
             cursor: 'pointer',
             background: idx === foco ? 'var(--bg-secondary, #f3f4f6)' : 'transparent',
           }}

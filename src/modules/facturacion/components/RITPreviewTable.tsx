@@ -6,7 +6,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { ArrowLeft, Loader2, Search, RotateCcw, Filter, X, RefreshCw, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 
@@ -207,7 +207,7 @@ export function RITPreviewTable({
 
   // Restaurar datos originales
   const resetData = useCallback(() => {
-    Swal.fire({
+    Alerta.fire({
       title: 'Restaurar datos',
       text: 'Se perderán todos los cambios realizados',
       icon: 'warning',
@@ -226,7 +226,7 @@ export function RITPreviewTable({
   const syncData = useCallback(async () => {
     if (!onSync || !hasChanges) return
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Sincronizar cambios',
       html: `
         <p>Se guardarán los cambios en la base de datos.</p>

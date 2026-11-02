@@ -297,13 +297,13 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
     <>
       <div
         onClick={onClose}
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', zIndex: 999 }}
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', zIndex: 'var(--z-modal)' }}
       />
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(100vw, 820px)',
         background: 'var(--bg-primary, #fff)',
-        zIndex: 1000,
+        zIndex: 'var(--z-modal)',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.25)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
@@ -317,8 +317,8 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{
-                fontFamily: 'monospace', fontSize: 13, background: 'var(--text-primary, #111827)',
-                color: '#fff', padding: '3px 8px', borderRadius: 4,
+                fontFamily: 'var(--font-mono)', fontSize: 13, background: 'var(--text-primary, #111827)',
+                color: '#fff', padding: '3px 8px', borderRadius: 'var(--radius-xs)',
               }}>{patente}</span>
               <span style={{ color: 'var(--text-secondary)' }}>
                 Detalle de trips · {semanaInicio} a {semanaFin}
@@ -343,7 +343,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
             style={{
               background: '#fff',
               border: '1px solid var(--border-primary, #e5e7eb)',
-              width: 28, height: 28, borderRadius: 6, cursor: 'pointer',
+              width: 28, height: 28, borderRadius: 'var(--radius-sm)', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'var(--text-secondary)',
             }}
@@ -361,11 +361,11 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
           display: 'flex', gap: 16, alignItems: 'center', fontSize: 11,
         }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}>
-            <span style={{ width: 12, height: 12, borderRadius: 2, display: 'inline-block', background: '#f0fdf4', border: '1px solid #86efac' }} />
+            <span style={{ width: 12, height: 12, borderRadius: 'var(--radius-xs)', display: 'inline-block', background: '#f0fdf4', border: '1px solid #86efac' }} />
             En el agrupamiento
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}>
-            <span style={{ width: 12, height: 12, borderRadius: 2, display: 'inline-block', background: '#fff', border: '1px solid var(--border-primary, #e5e7eb)' }} />
+            <span style={{ width: 12, height: 12, borderRadius: 'var(--radius-xs)', display: 'inline-block', background: '#fff', border: '1px solid var(--border-primary, #e5e7eb)' }} />
             Otros conductores
           </span>
           <span style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }}>
@@ -421,15 +421,15 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
           <div style={{ display: 'flex', gap: 16 }}>
             <span>
               <span style={{ color: 'var(--text-tertiary)', marginRight: 4 }}>Trips en agrupamiento:</span>
-              <strong style={{ fontFamily: 'monospace' }}>{tripsEnAgrupamiento}</strong>
+              <strong style={{ fontFamily: 'var(--font-mono)' }}>{tripsEnAgrupamiento}</strong>
             </span>
             <span>
               <span style={{ color: 'var(--text-tertiary)', marginRight: 4 }}>Km totales:</span>
-              <strong style={{ fontFamily: 'monospace' }}>{totalKm.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              <strong style={{ fontFamily: 'var(--font-mono)' }}>{totalKm.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
             </span>
             <span>
               <span style={{ color: 'var(--text-tertiary)', marginRight: 4 }}>Tiempo Conducido:</span>
-              <strong style={{ fontFamily: 'monospace' }}>{totalDuracion}</strong>
+              <strong style={{ fontFamily: 'var(--font-mono)' }}>{totalDuracion}</strong>
             </span>
           </div>
           <div style={{ color: 'var(--text-tertiary)', fontSize: 10 }}>
@@ -486,10 +486,10 @@ function FragmentDia({ diaKey, tripsDelDia, conductorRef, highlightStartRef }: F
               opacity: !inGroup && otroConductor ? 0.85 : 1,
             }}
           >
-            <td style={{ padding: '7px 12px', borderLeft, fontFamily: 'monospace', fontWeight: 600, color: '#16a34a' }}>
+            <td style={{ padding: '7px 12px', borderLeft, fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#16a34a' }}>
               {fmtHora(t.fecha_hora_inicio_gmt3)}
             </td>
-            <td style={{ padding: '7px 12px', fontFamily: 'monospace', fontWeight: 600, color: '#dc2626' }}>
+            <td style={{ padding: '7px 12px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#dc2626' }}>
               {fmtHora(t.fecha_hora_fin_gmt3)}
             </td>
             <td style={{ padding: '7px 12px' }}>
@@ -507,10 +507,10 @@ function FragmentDia({ diaKey, tripsDelDia, conductorRef, highlightStartRef }: F
                 )}
               </div>
             </td>
-            <td style={{ padding: '7px 12px', fontFamily: 'monospace', fontSize: 10, color: 'var(--text-tertiary)' }}>
+            <td style={{ padding: '7px 12px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-tertiary)' }}>
               {t.ibutton || '-'}
             </td>
-            <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
+            <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
               {parseFloat(t.kilometraje || '0').toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
             <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>

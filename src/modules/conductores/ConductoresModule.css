@@ -18,7 +18,7 @@
 
 .cond-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
@@ -48,7 +48,7 @@
 
 .cond-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -81,7 +81,7 @@
 .cond-date-filter-select {
   padding: 6px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 13px;
@@ -103,7 +103,7 @@
 .cond-date-input {
   padding: 6px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 13px;
@@ -133,7 +133,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .cond-stats .stat-card .stat-icon {
@@ -261,7 +261,7 @@
   background: var(--badge-blue-bg);
   color: var(--badge-blue-text);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
 }
@@ -269,7 +269,7 @@
 .estado-badge {
   display: inline-block;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-inverse);
@@ -326,7 +326,7 @@
   padding: 16px;
   background: rgba(245, 158, 11, 0.1);
   border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .baja-modal-warning svg {
@@ -367,12 +367,12 @@
 
 .affected-assignments-list::-webkit-scrollbar-track {
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .affected-assignments-list::-webkit-scrollbar-thumb {
   background: var(--border-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .affected-assignments-list::-webkit-scrollbar-thumb:hover {
@@ -382,7 +382,7 @@
 /* Grupo de asignaciones por tipo */
 .assignment-group {
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -397,7 +397,7 @@
 
 .assignment-group-badge {
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -425,7 +425,7 @@
   color: var(--text-tertiary);
   background: var(--bg-primary);
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 /* Info text del grupo */
@@ -466,7 +466,7 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--color-primary);
-  font-family: monospace;
+  font-family: var(--font-mono);
   min-width: 90px;
 }
 
@@ -482,7 +482,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 500;
 }
@@ -500,7 +500,7 @@
 .assignment-item-estado {
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-weight: 500;
 }
 
@@ -533,7 +533,7 @@
   padding: 10px 20px;
   background: transparent;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -555,7 +555,7 @@
   padding: 10px 20px;
   background: var(--color-primary);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 600;
   color: white;
@@ -630,12 +630,12 @@
 
 .vehiculos-historial-list::-webkit-scrollbar-track {
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .vehiculos-historial-list::-webkit-scrollbar-thumb {
   background: var(--border-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .vehiculos-historial-list::-webkit-scrollbar-thumb:hover {
@@ -648,7 +648,7 @@
   gap: 12px;
   padding: 10px 12px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   transition: all 0.2s;
 }
@@ -674,7 +674,7 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--color-primary);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .vehiculo-detalle {
@@ -690,7 +690,7 @@
   color: var(--text-primary);
   background: var(--bg-tertiary);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .vehiculo-modelo {
@@ -708,7 +708,7 @@
 .turno-badge,
 .estado-asig-badge {
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -867,7 +867,7 @@
   padding: 2px 8px;
   background: var(--bg-tertiary);
   color: var(--text-tertiary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .conductor-wizard .wizard-step-content {
@@ -882,7 +882,7 @@
   margin: 0 0 8px 0;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border-left: 3px solid var(--color-primary);
 }
 
@@ -942,7 +942,7 @@
   border-top: 1px solid var(--border-primary);
   margin-top: 20px;
   background: var(--bg-secondary);
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .conductor-wizard .wizard-nav-buttons {
@@ -955,7 +955,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1100,7 +1100,7 @@
   gap: 4px;
   padding: 4px;
   margin: 16px 20px 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary, #f3f4f6);
   overflow-x: auto;
   scrollbar-width: none;
@@ -1129,7 +1129,7 @@
   margin: 0;
   line-height: 1.2;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary, #4b5563);
   font-size: 13px;
@@ -1147,7 +1147,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: #dc2626;
   color: #fff;
   font-size: 11px;

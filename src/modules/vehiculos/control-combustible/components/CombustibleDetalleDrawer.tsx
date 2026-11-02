@@ -34,12 +34,12 @@ const fechaCorta = (iso: string) => {
 
 function MetricaSemana({ icono, titulo, valor, nota }: { icono: React.ReactNode; titulo: string; valor: string; nota?: string }) {
   return (
-    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         {icono}
         <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{titulo}</span>
       </div>
-      <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{valor}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{valor}</div>
       {nota && <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{nota}</div>}
     </div>
   )
@@ -66,14 +66,14 @@ function MapaLlenadoModal({ fillup, onClose }: MapaModalProps) {
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)', zIndex: 1100,
+        position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)', zIndex: 'var(--z-modal)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--bg-primary)', borderRadius: 12, width: '100%', maxWidth: 900,
+          background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 900,
           maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 24px 64px rgba(0, 0, 0, 0.3)',
         }}
@@ -96,7 +96,7 @@ function MapaLlenadoModal({ fillup, onClose }: MapaModalProps) {
             onClick={onClose}
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer', padding: 4,
-              color: 'var(--text-secondary)', borderRadius: 6, display: 'inline-flex',
+              color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)', display: 'inline-flex',
             }}
             aria-label="Cerrar"
           >
@@ -210,7 +210,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
         {/* HEADER */}
         <div className="alerta-drawer-header">
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
-            <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
               {vehiculo.patente}
             </span>
             {modelo && (
@@ -265,24 +265,24 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {/* Distancia */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Gauge size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Distancia</span>
                 </div>
-                <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {Number(vehiculo.distancia_km).toLocaleString('es-AR')} km
                 </div>
               </div>
 
               {/* Combustible */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Fuel size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Combustible</span>
                 </div>
                 {vehiculo.tiene_telemetria ? (
-                  <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
                     {Number(vehiculo.combustible_litros).toFixed(2)} L
                   </div>
                 ) : (
@@ -291,13 +291,13 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
               </div>
 
               {/* Rendimiento */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <TrendingUp size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Rendimiento</span>
                 </div>
                 {rendimiento > 0 && rendimiento <= 100 ? (
-                  <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 18, fontWeight: 700, color: rendimientoColor }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: rendimientoColor }}>
                     {rendimiento.toFixed(2)} km/L
                   </div>
                 ) : (
@@ -306,14 +306,14 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
               </div>
 
               {/* Ralentí */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Clock size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Ralentí</span>
                 </div>
                 {vehiculo.tiene_telemetria && Number(vehiculo.ralenti_litros) > 0 ? (
                   <>
-                    <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 16, fontWeight: 700, color: ralentiColor }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: ralentiColor }}>
                       {Number(vehiculo.ralenti_litros).toFixed(2)} L
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
@@ -336,7 +336,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                   marginTop: 10,
                   background: 'var(--bg-secondary)',
                   border: '1px solid var(--border-secondary)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   padding: 14,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -351,11 +351,11 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 24, fontWeight: 700, color: nivelColor }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: nivelColor }}>
                       {pct.toFixed(1)}%
                     </span>
-                    <div style={{ flex: 1, height: 10, background: 'var(--bg-primary)', borderRadius: 5, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: nivelColor, borderRadius: 5 }} />
+                    <div style={{ flex: 1, height: 10, background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: nivelColor, borderRadius: 'var(--radius-sm)' }} />
                     </div>
                   </div>
                 </div>
@@ -373,7 +373,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
             ) : fillups.length === 0 ? (
               <div style={{
                 padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12,
-                background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8,
+                background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)',
               }}>
                 No se detectaron llenados en esta semana.
               </div>
@@ -389,7 +389,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                       style={{
                         background: 'var(--bg-secondary)',
                         border: '1px solid var(--border-secondary)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         padding: 12,
                       }}
                     >
@@ -398,7 +398,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                           {formatFechaLarga(f.fecha_evento)}
                         </div>
                         {subida != null && (
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', fontFamily: 'ui-monospace, monospace' }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', fontFamily: 'var(--font-mono)' }}>
                             +{subida.toFixed(1)}%
                           </span>
                         )}

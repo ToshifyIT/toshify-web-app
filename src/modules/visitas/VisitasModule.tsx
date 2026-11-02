@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Download, Calendar as CalendarIcon, List, Eye, Settings } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths } from 'date-fns';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../contexts/PermissionsContext';
@@ -227,7 +227,7 @@ export function VisitasModule() {
 
     if (estado === 'cancelada') {
       // Cancelar requiere motivo obligatorio
-      const result = await Swal.fire({
+      const result = await Alerta.fire({
         title: 'Cancelar cita',
         text: 'Ingresá el motivo de la cancelación:',
         input: 'text',
@@ -254,7 +254,7 @@ export function VisitasModule() {
         showError('Error', 'No se pudo cancelar la cita');
       }
     } else {
-      const result = await Swal.fire({
+      const result = await Alerta.fire({
         title: `Cambiar a "${info.label}"`,
         text: `¿Confirma cambiar el estado de esta cita a "${info.label}"?`,
         icon: 'question',
@@ -279,7 +279,7 @@ export function VisitasModule() {
     const target = visita || selectedVisita;
     if (!target) return;
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Completar cita',
       text: `¿Confirmás que la cita de ${target.nombre_visitante} fue completada?`,
       icon: 'question',
@@ -303,7 +303,7 @@ export function VisitasModule() {
 
   async function handleDeleteVisita() {
     if (!selectedVisita) return;
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar cita',
       text: `¿Eliminar la cita de ${selectedVisita.nombre_visitante}?`,
       icon: 'warning',
@@ -343,7 +343,7 @@ export function VisitasModule() {
   // === EXPORT EXCEL ===
   async function handleExportarExcel() {
     if (visitas.length === 0) {
-      Swal.fire('Sin datos', 'No hay citas para exportar', 'info');
+      Alerta.fire('Sin datos', 'No hay citas para exportar', 'info');
       return;
     }
     const XLSX = await import('xlsx');

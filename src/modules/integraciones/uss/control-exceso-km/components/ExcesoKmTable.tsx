@@ -11,6 +11,7 @@ import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 import * as XLSX from 'xlsx'
 import { cargarConceptosTarifa } from '../../../../onboarding/tarifaConceptos'
 
+import { hoyART } from '../../../../../utils/fechaArgentina'
 // Defaults (override desde parametros_sistema en el módulo, pasados via props si hace falta)
 const ALQUILER_TURNO_DEFAULT = 245000
 const ALQUILER_A_CARGO_DEFAULT = 360000
@@ -305,7 +306,7 @@ export function ExcesoKmTable({
         return (
           <span style={{
             fontSize: 10, fontWeight: 600, color: '#fff',
-            background: bg, padding: '2px 8px', borderRadius: 3, whiteSpace: 'nowrap', letterSpacing: '0.5px',
+            background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)', whiteSpace: 'nowrap', letterSpacing: '0.5px',
           }}>{o}</span>
         )
       },
@@ -331,7 +332,7 @@ export function ExcesoKmTable({
       header: 'Patente',
       size: 110,
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 'var(--radius-xs)', whiteSpace: 'nowrap' }}>
           {row.original.patente.replace(/\s/g, '')}
         </span>
       ),
@@ -357,7 +358,7 @@ export function ExcesoKmTable({
               {r.tipoTarifa && (
                 <span
                   title={`Tarifa de su asignación esa semana: ${r.tipoTarifa === 'nueva' ? 'nueva' : 'antigua'}`}
-                  style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}
+                  style={{ fontSize: 9, padding: '1px 5px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}
                 >
                   {r.tipoTarifa === 'nueva' ? etiquetasTarifa.nueva : etiquetasTarifa.antigua}
                 </span>
@@ -386,7 +387,7 @@ export function ExcesoKmTable({
         const r = row.original
         const excede = r.excedido > 0
         return (
-          <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: excede ? '#dc2626' : 'var(--text-primary)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: excede ? '#dc2626' : 'var(--text-primary)' }}>
             {/* Total semanal en entero, igual que el portal del conductor. El valor
                 sigue guardado con 2 decimales: esto es solo formato, los calculos de
                 excedido, porcentaje y monto usan r.kmRecorridos sin redondear. */}
@@ -402,7 +403,7 @@ export function ExcesoKmTable({
       header: 'Límite',
       size: 90,
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-tertiary)' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-tertiary)' }}>
           {row.original.limite.toLocaleString('es-AR')} km
         </span>
       ),
@@ -426,17 +427,17 @@ export function ExcesoKmTable({
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingRight: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: barColor }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: barColor }}>
                 {pctConsumo.toFixed(0)}%
               </span>
               {excede && (
-                <span style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 600, color: '#dc2626' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: '#dc2626' }}>
                   +{r.excedido.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km
                 </span>
               )}
             </div>
-            <div style={{ width: '100%', height: 6, background: 'var(--bg-secondary)', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
-              <div style={{ height: '100%', width: `${pctBar}%`, background: barColor, borderRadius: 3 }} />
+            <div style={{ width: '100%', height: 6, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden', position: 'relative' }}>
+              <div style={{ height: '100%', width: `${pctBar}%`, background: barColor, borderRadius: 'var(--radius-xs)' }} />
               {/* Marca del 100% si la barra está saturada */}
               {pctConsumo > 100 && (
                 <div style={{ position: 'absolute', top: 0, bottom: 0, left: '100%', width: 2, background: '#dc2626', opacity: 0 }} />
@@ -462,7 +463,7 @@ export function ExcesoKmTable({
         }
         const color = mod === 'a_cargo' ? '#0891b2' : '#7c3aed'
         return (
-          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, color: '#fff', background: color, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: color, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
             {mod === 'a_cargo' ? 'A Cargo' : 'Turno'}
           </span>
         )
@@ -521,7 +522,7 @@ export function ExcesoKmTable({
           || (r.modalidad === 'a_cargo' ? alquilerACargo : alquilerTurno)
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <strong style={{ fontFamily: 'monospace', fontSize: 12 }}>${r.monto.toLocaleString('es-AR')}</strong>
+            <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>${r.monto.toLocaleString('es-AR')}</strong>
             <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
               {r.porcentaje}% × ${(valor / 1000).toFixed(0)}k × IVA
             </span>
@@ -548,14 +549,14 @@ export function ExcesoKmTable({
         const r = row.original
         if (r.yaTieneIncidencia) {
           return (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, color: '#fff', background: '#16a34a' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: '#16a34a' }}>
               <CheckCircle size={11} /> Por aplicar
             </span>
           )
         }
         if (r.excedido > 0) {
           return (
-            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, color: '#fff', background: '#dc2626' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: '#dc2626' }}>
               Excedido
             </span>
           )
@@ -563,13 +564,13 @@ export function ExcesoKmTable({
         const pct = (r.kmRecorridos / r.limite) * 100
         if (pct >= 80) {
           return (
-            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, color: '#fff', background: '#ea580c' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: '#ea580c' }}>
               Próximo
             </span>
           )
         }
         return (
-          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, color: '#fff', background: '#16a34a' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: '#16a34a' }}>
             Al día
           </span>
         )
@@ -670,7 +671,7 @@ export function ExcesoKmTable({
     ws['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Exceso KM')
-    XLSX.writeFile(wb, `Exceso_KM_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `Exceso_KM_${hoyART()}.xlsx`)
     setShowExportMenu(false)
   }
   function exportarCSV() {
@@ -682,7 +683,7 @@ export function ExcesoKmTable({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `Exceso_KM_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `Exceso_KM_${hoyART()}.csv`
     a.click()
     URL.revokeObjectURL(url)
     setShowExportMenu(false)
@@ -708,7 +709,7 @@ export function ExcesoKmTable({
             <button onClick={clearAllFilters} style={{
               display: 'flex', alignItems: 'center', gap: 4,
               padding: '6px 10px', fontSize: 13, fontWeight: 500,
-              border: '1px solid var(--color-danger)', borderRadius: 6,
+              border: '1px solid var(--color-danger)', borderRadius: 'var(--radius-sm)',
               background: 'var(--bg-primary)', color: 'var(--color-danger)',
               cursor: 'pointer', whiteSpace: 'nowrap',
             }}>
@@ -719,7 +720,7 @@ export function ExcesoKmTable({
             <button onClick={() => setShowExportMenu(!showExportMenu)} disabled={filtered.length === 0} style={{
               display: 'flex', alignItems: 'center', gap: 4,
               padding: '6px 10px', fontSize: 13, fontWeight: 500,
-              border: '1px solid var(--border-color)', borderRadius: 6,
+              border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)',
               background: 'var(--bg-primary)', color: 'var(--text-secondary)',
               cursor: 'pointer', whiteSpace: 'nowrap',
             }}>
@@ -729,7 +730,7 @@ export function ExcesoKmTable({
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 4,
                 background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
-                borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                borderRadius: 'var(--radius-sm)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 zIndex: 50, minWidth: 140, overflow: 'hidden',
               }}>
                 {[{ fn: exportarExcel, label: 'Excel (.xlsx)' }, { fn: exportarCSV, label: 'CSV (.csv)' }].map(({ fn, label }) => (
@@ -765,7 +766,7 @@ export function ExcesoKmTable({
               key={opt.label}
               onClick={() => setGpsFilter(opt.key)}
               style={{
-                padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                padding: '6px 12px', borderRadius: 'var(--radius-full)', fontSize: 12, fontWeight: 600,
                 border: `1px solid ${active ? opt.color : 'var(--border-primary)'}`,
                 background: active ? opt.color : 'transparent',
                 color: active ? '#fff' : 'var(--text-secondary)',

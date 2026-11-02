@@ -19,7 +19,7 @@
   padding: 0 12px;
   background: var(--bg-primary, #fff);
   border: 1px solid var(--border-primary, #E5E7EB);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary, #1F2937);
   font-size: 14px;
   font-family: inherit;
@@ -93,10 +93,10 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 1500;
+  z-index: var(--z-dropdown);
   background: var(--bg-primary, #fff);
   border: 1px solid var(--border-primary, #E5E7EB);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg, 0 20px 25px -5px rgba(0, 0, 0, 0.1));
   overflow: hidden;
   display: flex;
@@ -131,7 +131,7 @@
   width: 100%;
   padding: 7px 28px 7px 32px;
   border: 1px solid var(--border-primary, #E5E7EB);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary, #f8f5f6);
   color: var(--text-primary, #1F2937);
   font-size: 14px; /* 14px en desktop, en mobile sube a 16px via media query */
@@ -173,7 +173,7 @@
 }
 .ss-list::-webkit-scrollbar { width: 6px; }
 .ss-list::-webkit-scrollbar-track { background: transparent; }
-.ss-list::-webkit-scrollbar-thumb { background: var(--text-tertiary, #9CA3AF); border-radius: 3px; }
+.ss-list::-webkit-scrollbar-thumb { background: var(--text-tertiary, #9CA3AF); border-radius: var(--radius-xs); }
 
 .ss-option {
   display: flex;
@@ -181,7 +181,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
   color: var(--text-primary, #1F2937);

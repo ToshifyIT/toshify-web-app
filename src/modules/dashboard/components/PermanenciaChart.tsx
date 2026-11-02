@@ -8,16 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts'
-import { 
-  startOfMonth, 
-  endOfMonth, 
-  eachWeekOfInterval, 
-  endOfWeek, 
-  format, 
-  parse,
-  getWeek,
-  startOfWeek
-} from 'date-fns'
+import { startOfMonth, endOfMonth, eachWeekOfInterval, endOfWeek, format, parse, startOfWeek, getISOWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
@@ -123,7 +114,7 @@ export function PermanenciaChart() {
         // 3. Group conductors by week and compute averages (pure in-memory, no queries)
         const chartData = weeks.map((weekStart) => {
           const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
-          const weekNumber = getWeek(weekStart, { weekStartsOn: 1 })
+          const weekNumber = getISOWeek(weekStart)
 
           const weekStartStr = formatDateOnly(weekStart)
           const weekEndStr = formatDateOnly(weekEnd)

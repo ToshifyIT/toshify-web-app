@@ -136,14 +136,14 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
+        position: 'fixed', inset: 0, zIndex: 'var(--z-modal-nested)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'rgba(0,0,0,0.5)',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
-        background: '#fff', borderRadius: 12, width: '95%', maxWidth: 600,
+        background: '#fff', borderRadius: 'var(--radius-lg)', width: '95%', maxWidth: 600,
         maxHeight: '85vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
       }}>
@@ -162,7 +162,7 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
             onClick={onClose}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              padding: 4, borderRadius: 6, color: '#6B7280',
+              padding: 4, borderRadius: 'var(--radius-sm)', color: '#6B7280',
             }}
           >
             <X size={20} />
@@ -206,14 +206,14 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
 
                     {/* Card */}
                     <div style={{
-                      background: '#F9FAFB', borderRadius: 8,
+                      background: '#F9FAFB', borderRadius: 'var(--radius-md)',
                       padding: '10px 14px', border: '1px solid #E5E7EB',
                     }}>
                       {/* Tipo + fecha */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                         <span style={{
                           fontSize: 12, fontWeight: 600, color,
-                          background: `${color}15`, padding: '2px 8px', borderRadius: 4,
+                          background: `${color}15`, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
                         }}>
                           {EVENTO_LABELS[entry.tipo_evento] || entry.tipo_evento}
                         </span>
@@ -231,7 +231,7 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
                         }}>
                           {entry.estado_anterior && (
                             <span style={{
-                              padding: '1px 6px', borderRadius: 4,
+                              padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                               background: '#FEE2E2', color: '#991B1B', fontSize: 12,
                             }}>
                               {entry.estado_anterior}
@@ -242,7 +242,7 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
                           )}
                           {entry.estado_nuevo && (
                             <span style={{
-                              padding: '1px 6px', borderRadius: 4,
+                              padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                               background: '#D1FAE5', color: '#065F46', fontSize: 12,
                             }}>
                               {entry.estado_nuevo}
@@ -274,7 +274,7 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
                         )}
                         {entry.modulo && (
                           <span style={{
-                            background: '#F3F4F6', padding: '1px 6px', borderRadius: 3,
+                            background: '#F3F4F6', padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                           }}>
                             {MODULO_LABELS[entry.modulo] || entry.modulo}
                           </span>

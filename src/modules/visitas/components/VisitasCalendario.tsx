@@ -101,7 +101,7 @@ export function VisitasCalendario({
         style: {
           backgroundColor: '#d1d5db',
           opacity: 0.85,
-          borderRadius: '6px',
+          borderRadius: 'var(--radius-sm)',
           border: 'none',
           borderLeft: '3px solid #9ca3af',
           color: '#6b7280',
@@ -131,7 +131,7 @@ export function VisitasCalendario({
       style: {
         backgroundColor: baseColor,
         opacity: isDone ? 0.45 : 0.95,
-        borderRadius: '6px',
+        borderRadius: 'var(--radius-sm)',
         border: 'none',
         borderLeft: `3px solid ${baseColor}`,
         color: '#fff',
@@ -251,7 +251,7 @@ export function VisitasCalendario({
       return {
         style: {
           backgroundColor: '#f1f5f9',
-          borderRadius: '6px',
+          borderRadius: 'var(--radius-sm)',
           border: '1.5px dashed #94a3b8',
           color: '#475569',
           fontSize: '12px',
@@ -456,7 +456,7 @@ export function VisitasCalendario({
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                       width: '100%', background: '#10b981', color: '#fff', border: 'none',
-                      padding: '8px 12px', borderRadius: '6px',
+                      padding: '8px 12px', borderRadius: 'var(--radius-sm)',
                       fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px',
                     }}
                   >

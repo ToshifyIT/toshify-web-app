@@ -3,7 +3,7 @@
   padding: 16px;
   background: var(--bg-primary, #fff);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .tab-header {
@@ -31,7 +31,7 @@
 
 .cobro-card {
   border: 1px solid #ddd;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: white;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -67,8 +67,8 @@
   font-size: 12px;
   background: #e0e0e0;
   padding: 4px 8px;
-  border-radius: 4px;
-  font-family: monospace;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
@@ -102,7 +102,7 @@
   width: 140px;
   height: 8px;
   background: #eee;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
@@ -123,7 +123,7 @@
   padding: 8px 12px;
   background: white;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
 }
 
@@ -207,7 +207,7 @@
   background: #16a34a;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 600;
@@ -299,44 +299,7 @@
    Search bar — estilos propios para no depender
    de que DataTable.css esté cargado
    =========================================== */
-.cobros-fraccionados-tab .dt-search-wrapper {
-  position: relative;
-  flex: 1;
-  min-width: 200px;
-}
-
-.cobros-fraccionados-tab .dt-search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-tertiary, #9ca3af);
-  pointer-events: none;
-}
-
-.cobros-fraccionados-tab .dt-search-input {
-  width: 100%;
-  padding: 12px 16px 12px 44px;
-  font-size: 14px;
-  border: 1px solid var(--border-color, #d1d5db);
-  border-radius: 10px;
-  background: var(--bg-secondary, #f9fafb);
-  color: var(--text-primary, #111827);
-  transition: all 0.2s;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-
-.cobros-fraccionados-tab .dt-search-input:focus {
-  outline: none;
-  border-color: var(--color-primary, #16a34a);
-  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
-  background: var(--bg-primary, white);
-}
-
-.cobros-fraccionados-tab .dt-search-input::placeholder {
-  color: var(--text-tertiary, #9ca3af);
-}
+/* El buscador usa el estilo único de DataTable.css */
 
 /* ===========================================
    Filtros (Tipo, Estado) — desktop horizontal
@@ -359,7 +322,7 @@
   padding: 7px 10px;
   font-size: 13px;
   border: 1px solid var(--border-color, #d1d5db);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background-color: var(--bg-primary, white);
   color: var(--text-primary, #111827);
   cursor: pointer;
@@ -455,7 +418,7 @@
 .cobros-fraccionados-tab .cobro-titulo .patente {
   margin-left: 0 !important;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-tertiary);
   color: var(--text-secondary) !important;
   font-family: inherit;
@@ -518,7 +481,7 @@
   font-size: 11px;
   background: var(--card-bg, var(--bg-primary));
   border-color: var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .cobros-fraccionados-tab .proxima-cuota .label {
@@ -549,7 +512,7 @@
   padding: 14px 16px;
   background: var(--bg-primary, #fff);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 #root .cobros-fraccionados-tab .cf-filters-row { align-items: center; }
 #root .cf-toggle {
@@ -558,7 +521,7 @@
   gap: 2px;
   height: 34px;
   padding: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   box-sizing: border-box;
 }
@@ -567,7 +530,7 @@
   min-height: 0;
   padding: 0 10px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   box-shadow: none;
   color: var(--text-secondary);
@@ -582,10 +545,3 @@
   background: var(--color-primary, #ff0033);
   color: #fff;
 }
-#root .cobros-fraccionados-tab .dt-search-input {
-  height: 34px;
-  padding: 0 12px 0 36px;
-  font-size: 12px;
-  box-sizing: border-box;
-}
-#root .cobros-fraccionados-tab .dt-search-icon { width: 16px; height: 16px; left: 11px; }

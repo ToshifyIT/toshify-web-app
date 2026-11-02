@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Check, Loader2, Tag } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -88,7 +88,7 @@ export function CategoriasSubTab() {
   }
 
   async function handleDelete(item: VisitaCategoria) {
-    const res = await Swal.fire({
+    const res = await Alerta.fire({
       title: 'Eliminar categoría',
       text: `¿Eliminar "${item.nombre}"? Si tiene motivos o citas asociadas, la eliminación fallará.`,
       icon: 'warning',

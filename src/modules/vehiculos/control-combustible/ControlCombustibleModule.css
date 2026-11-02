@@ -48,8 +48,8 @@
 .combustible-empty code {
   background: var(--bg-secondary);
   padding: 1px 6px;
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-secondary);
 }

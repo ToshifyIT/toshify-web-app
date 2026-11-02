@@ -28,7 +28,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.15s;
   flex: 1;
 }
@@ -54,7 +54,7 @@
 
 .bitacora-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
   border: 1px solid var(--border-primary);
 }
@@ -84,7 +84,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -154,7 +154,7 @@
   border: 1px solid var(--border-primary);
   background: var(--bg-primary);
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s;
@@ -180,7 +180,7 @@
 .date-input {
   padding: 6px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -201,7 +201,7 @@
   background: var(--color-primary);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   cursor: pointer;
 }
@@ -234,7 +234,7 @@
   padding: 6px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-secondary);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
@@ -255,7 +255,7 @@
 
 .bitacora-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -272,7 +272,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -316,7 +316,7 @@
   background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 @keyframes shimmer {
@@ -330,7 +330,7 @@
 
 .bitacora-table-container {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   overflow: hidden;
 }
@@ -360,7 +360,7 @@
   width: 100%;
   padding: 8px 10px 8px 32px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -424,7 +424,7 @@
 }
 
 .patente {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 12px;
   color: var(--text-primary);
@@ -442,7 +442,7 @@
 .estado {
   display: inline-block;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 500;
 }
@@ -471,7 +471,7 @@
 .tipo-badge {
   display: inline-block;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -497,7 +497,7 @@
 .turno-badge {
   display: inline-block;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -543,7 +543,7 @@
   background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 /* =====================================================
@@ -572,7 +572,7 @@
 .page-size select {
   padding: 6px 8px;
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -593,7 +593,7 @@
   border: 1px solid var(--border-primary);
   background: var(--bg-primary);
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -621,7 +621,7 @@
 .bitacora-error {
   background: #FEE2E2;
   border: 1px solid #FECACA;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 12px 16px;
   color: #991B1B;
   font-size: 13px;

@@ -182,7 +182,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
       fontSize: isTotal ? '14px' : '12px',
     }}>
       <span>{lbl}</span>
-      <span style={{ fontFamily: 'monospace' }}>{formatCurrency(val)}</span>
+      <span style={{ fontFamily: 'var(--font-mono)' }}>{formatCurrency(val)}</span>
     </div>
   )
 
@@ -204,7 +204,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
             {formatCurrency(saldoReal)}
           </div>
           <span style={{
-            display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '4px',
+            display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: 'var(--radius-xs)',
             fontSize: '10px', fontWeight: 600,
             background: saldoReal >= 0 ? '#DCFCE7' : '#FEE2E2', color: sColor,
           }}>
@@ -225,7 +225,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
               onChange={e => setSearch(e.target.value)}
               style={{
                 width: '100%', padding: '5px 8px 5px 26px', fontSize: '11px',
-                border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '4px',
+                border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-xs)',
                 background: 'var(--bg-secondary, #f9fafb)', color: 'var(--text-primary, #111827)',
               }}
             />
@@ -235,7 +235,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
             onChange={e => setSemanaFilter(e.target.value)}
             style={{
               padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary, #e5e7eb)',
-              borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary, #6b7280)',
+              borderRadius: 'var(--radius-xs)', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary, #6b7280)',
             }}
           >
             <option value="">Todas las semanas</option>
@@ -249,7 +249,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
             onChange={e => setTipoFilter(e.target.value)}
             style={{
               padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary, #e5e7eb)',
-              borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary, #6b7280)',
+              borderRadius: 'var(--radius-xs)', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary, #6b7280)',
             }}
           >
             <option value="">Todos los tipos</option>
@@ -262,7 +262,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
             title="Exportar a PDF"
             style={{
               background: 'var(--card-bg, #fff)', border: '1px solid var(--border-primary, #e5e7eb)',
-              borderRadius: '4px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer',
+              borderRadius: 'var(--radius-xs)', padding: '5px 10px', fontSize: '11px', cursor: 'pointer',
               color: 'var(--text-secondary, #6b7280)', display: 'inline-flex', alignItems: 'center', gap: '4px',
             }}
           >
@@ -277,7 +277,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
         <EmptyState size="sm" title="Sin movimientos de saldo registrados." />
       ) : (
         <>
-          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px' }}>
+          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)' }}>
             <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--bg-secondary, #f9fafb)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -324,7 +324,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                       </td>
                       <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', fontSize: '10px' }}>
                         <span style={{
-                          display: 'inline-block', padding: '1px 6px', borderRadius: '3px',
+                          display: 'inline-block', padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                           background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px',
                         }}>{TIPO_LABEL[tipo] || tipo}</span>
                       </td>
@@ -333,7 +333,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                         {i === 0 && (
                           <span style={{
                             marginLeft: '6px', padding: '1px 5px', background: '#f59e0b',
-                            color: '#fff', borderRadius: '3px', fontSize: '9px', fontWeight: 700,
+                            color: '#fff', borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 700,
                             textTransform: 'uppercase', letterSpacing: '0.4px',
                           }}>actual</span>
                         )}
@@ -341,10 +341,10 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                       <td style={{ padding: '5px 8px', color: 'var(--text-secondary, #6b7280)', fontSize: '10px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={refDetalle || ''}>
                         {refDetalle || '-'}
                       </td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, whiteSpace: 'nowrap' }}>
                         {monto > 0 ? `${montoSigno}${formatCurrency(Math.round(monto))}` : '-'}
                       </td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                         {(() => {
                           // Ajustes manuales, pagos manuales y cancelaciones por baja no
                           // tienen facturación asociada.
@@ -359,7 +359,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                               onClick={(e) => { e.stopPropagation(); setFactDetalle({ fact: fac, anio: r.anio, semana: r.semana }) }}
                               style={{
                                 background: 'none', border: 'none', cursor: 'pointer',
-                                fontFamily: 'monospace', color: '#2563eb',
+                                fontFamily: 'var(--font-mono)', color: '#2563eb',
                                 textDecoration: 'underline', textDecorationStyle: 'dotted',
                                 padding: 0, fontSize: '11px', fontWeight: 500,
                               }}
@@ -371,7 +371,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                         })()}
                       </td>
                       <td style={{
-                        padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700,
+                        padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700,
                         color: saldo < 0 ? '#dc2626' : saldo > 0 ? '#16a34a' : 'var(--text-secondary, #6b7280)',
                         whiteSpace: 'nowrap',
                       }}>
@@ -391,24 +391,24 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
             marginTop: '8px', background: 'var(--bg-secondary, #f9fafb)',
-            border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', overflow: 'hidden',
+            border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
           }}>
             <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'right' }}>
               <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Total cargos</div>
-              <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#dc2626', fontFamily: 'monospace' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#dc2626', fontFamily: 'var(--font-mono)' }}>
                 -{formatCurrency(totales.totalCargos)}
               </div>
             </div>
             <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'right' }}>
               <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Total abonos</div>
-              <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#16a34a', fontFamily: 'monospace' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#16a34a', fontFamily: 'var(--font-mono)' }}>
                 +{formatCurrency(totales.totalAbonos)}
               </div>
             </div>
             <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'right' }}>
               <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Neto del rango</div>
               <div style={{
-                fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace',
+                fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'var(--font-mono)',
                 color: totales.neto < 0 ? '#dc2626' : totales.neto > 0 ? '#16a34a' : 'var(--text-secondary, #6b7280)',
               }}>
                 {formatCurrency(totales.neto)}
@@ -417,7 +417,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
             <div style={{ padding: '8px 12px', textAlign: 'right' }}>
               <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Saldo final</div>
               <div style={{
-                fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace',
+                fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'var(--font-mono)',
                 color: totales.saldoFinal < 0 ? '#dc2626' : totales.saldoFinal > 0 ? '#16a34a' : 'var(--text-secondary, #6b7280)',
               }}>
                 {formatCurrency(totales.saldoFinal)}
