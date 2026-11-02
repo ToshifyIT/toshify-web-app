@@ -34,7 +34,7 @@ import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
-import { esGuiaActivo, homologarGuia } from './guias'
+import { esGuiaActivo, GUIAS_ACTIVOS, homologarGuia } from './guias'
 import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
 import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
@@ -1454,6 +1454,9 @@ export function LeadsModule() {
       const g = (l.entrevistador_asignado || '').trim()
       if (g && esGuiaActivo(g) && !porClave.has(g.toLowerCase())) porClave.set(g.toLowerCase(), g)
     }
+    // Sede sin ningún lead con guía (ej. Pruebas): la lista quedaba vacía y no se
+    // podía asignar. Se ofrecen los guías activos; las sedes con guías no cambian.
+    if (porClave.size === 0) return [...GUIAS_ACTIVOS]
     return [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'))
   }, [leads])
 
