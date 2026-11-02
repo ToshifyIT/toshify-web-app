@@ -28,6 +28,7 @@ import {
   IVA_EXCESO_KM,
   FACTURACION_CONFIG
 } from '../../../types/facturacion.types'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 
 interface ExcesoConRelaciones extends ExcesoKilometraje {
   conductor_nombre?: string
@@ -823,7 +824,7 @@ export function ExcesosKmTab() {
 
       {/* Stats */}
       <div className="fact-stats">
-        <div className="fact-stats-grid">
+        <StatsGrid className="fact-stats-grid" storageKey="ExcesosKmTab">
           <div className="fact-stat-card">
             <Gauge size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
@@ -866,7 +867,7 @@ export function ExcesosKmTab() {
               <span className="fact-stat-label">IVA Total</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* Tabla */}

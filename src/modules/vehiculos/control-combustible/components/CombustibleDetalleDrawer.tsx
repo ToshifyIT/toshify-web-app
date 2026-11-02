@@ -9,6 +9,7 @@ import {
   GOOGLE_MAPS_LANGUAGE,
   GOOGLE_MAPS_REGION,
 } from '../../../../lib/googleMaps'
+import { Spinner } from '../../../../components/ui/LoadingOverlay'
 
 interface Props {
   vehiculo: FuelRow | null
@@ -111,9 +112,7 @@ function MapaLlenadoModal({ fillup, onClose }: MapaModalProps) {
             </div>
           )}
           {!isLoaded && !loadError && (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>
-              Cargando mapa…
-            </div>
+            <Spinner size="sm" message="Cargando mapa…" />
           )}
           {isLoaded && (
             <GoogleMap
@@ -370,7 +369,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
               Llenados de la semana ({fillups.length})
             </div>
             {loading ? (
-              <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>Cargando...</div>
+              <Spinner size="sm" message="Cargando..." />
             ) : fillups.length === 0 ? (
               <div style={{
                 padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12,

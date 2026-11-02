@@ -50,6 +50,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import '../cresium/CresiumModule.css'
 import './AlegraComprasModule.css'
 import { abrirFormularioProveedor } from './proveedorForm'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 
 /** Estado que se ve en la tabla */
 type EstadoVista = 'esperando' | 'listo' | 'revisar' | 'cargado' | 'error' | 'ignorado'
@@ -768,7 +769,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
   return (
     <div className="cr-module">
       <div className="cr-stats">
-        <div className="stats-grid">
+        <StatsGrid className="stats-grid" storageKey="AlegraComprasModule">
           {tarjetas.map((t) => {
             const Icono = t.icono
             const clickeable = t.id !== null
@@ -788,7 +789,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
               </div>
             )
           })}
-        </div>
+        </StatsGrid>
       </div>
 
       <div className="cr-filtros">

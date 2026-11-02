@@ -10,6 +10,8 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import type { GarantiaKardex, GarantiaResumen, FilaGarantiaSemana } from './conductorDetalleService'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 
 interface Props {
   data: GarantiaKardex | null
@@ -35,7 +37,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
     })
   }, [resumen, search, semanaFilter])
 
-  if (loading) return <div className="cdet-empty">Cargando…</div>
+  if (loading) return <Spinner size="sm" message="Cargando…" />
 
   const g = data?.garantia || null
   if (!g || !resumen) return <div className="cdet-empty">Este conductor no tiene garantía registrada.</div>
@@ -55,7 +57,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
             fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
             background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
           }}>
-            ⚠ Deuda real ${resumen.deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+            <AlertTriangle size={12} className="ico-inline" />Deuda real ${resumen.deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
           </span>
         )}
       </div>
@@ -93,7 +95,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
         <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
           <input
             type="text"
-            placeholder="🔍 Buscar por semana, referencia, monto..."
+            placeholder="Buscar por semana, referencia, monto..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
@@ -120,7 +122,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
       )}
 
       {resumen.filas.length === 0 ? (
-        <div className="cdet-empty">Sin movimientos en el kardex de garantía.</div>
+        <EmptyState size="sm" title="Sin movimientos en el kardex de garantía." />
       ) : (
         <>
           <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px' }}>

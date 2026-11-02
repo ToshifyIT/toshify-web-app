@@ -10,6 +10,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showError, showSuccess } from '../../utils/toast'
+import { StatsGrid } from '../../components/ui/StatsGrid'
 import '../../components/admin/AdminStyles.css'
 
 interface Sede {
@@ -602,7 +603,7 @@ export function SedesModule() {
     <div className="admin-module">
       {/* Stats (mismo estilo que el resto de los módulos) */}
       <div className="admin-stats">
-        <div className="admin-stats-grid">
+        <StatsGrid className="admin-stats-grid" storageKey="SedesModule">
           {[
             { label: 'Total', value: stats.total, icon: Building2, filter: 'all' as const },
             { label: 'Activas', value: stats.activas, icon: Check, filter: 'active' as const },
@@ -629,7 +630,7 @@ export function SedesModule() {
               <span className="stat-label">Principal</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* Table */}

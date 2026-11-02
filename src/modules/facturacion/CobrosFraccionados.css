@@ -1,5 +1,9 @@
 .cobros-fraccionados-tab {
-  padding: 20px;
+  /* Mismo panel blanco que el resto de las pestañas (tabla/listado) */
+  padding: 16px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-primary, #e5e7eb);
+  border-radius: 8px;
 }
 
 .tab-header {
@@ -537,3 +541,51 @@
 .cobros-fraccionados-tab .cuotas-table {
   font-size: 11px;
 }
+
+
+/* Filtros como botones de alternar (mismo estilo que Toshipass / Saldos).
+   #root: más peso que los estilos globales de botones (botones.css). */
+#root .cobros-fraccionados-tab {
+  padding: 14px 16px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-primary, #e5e7eb);
+  border-radius: 8px;
+}
+#root .cobros-fraccionados-tab .cf-filters-row { align-items: center; }
+#root .cf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  box-sizing: border-box;
+}
+#root .cf-toggle button {
+  height: 100%;
+  min-height: 0;
+  padding: 0 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#root .cf-toggle button:hover:not(.activo) { color: var(--text-primary); }
+#root .cf-toggle button.activo {
+  background: var(--color-primary, #ff0033);
+  color: #fff;
+}
+#root .cobros-fraccionados-tab .dt-search-input {
+  height: 34px;
+  padding: 0 12px 0 36px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+#root .cobros-fraccionados-tab .dt-search-icon { width: 16px; height: 16px; left: 11px; }

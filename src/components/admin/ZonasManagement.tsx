@@ -18,6 +18,7 @@ import {
   GOOGLE_MAPS_LANGUAGE,
   GOOGLE_MAPS_REGION,
 } from '../../lib/googleMaps'
+import { StatsGrid } from '../ui/StatsGrid'
 import './AdminStyles.css'
 
 // Default center: Buenos Aires, Argentina
@@ -745,7 +746,7 @@ export function ZonasManagement() {
     <div className="admin-module">
       {/* Statistics */}
       <div className="admin-stats">
-        <div className="admin-stats-grid">
+        <StatsGrid className="admin-stats-grid" storageKey="ZonasManagement">
           <div className="stat-card">
             <div className="stat-icon"><MapPin size={20} /></div>
             <div className="stat-content">
@@ -774,7 +775,7 @@ export function ZonasManagement() {
               <span className="stat-label">Con Advertencia</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
 

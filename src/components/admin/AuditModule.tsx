@@ -479,74 +479,7 @@ export function AuditModule() {
         </button>
       </div>
 
-      {/* Filtros */}
       <div className="audit-filters">
-        <div className="audit-filters-row">
-          <div className="audit-filter-group">
-            <select value={filtroTabla} onChange={(e) => setFiltroTabla(e.target.value)}>
-              <option value="">Todos los módulos</option>
-              {tablasDisponibles.map(tabla => (
-                <option key={tabla} value={tabla}>{TABLA_LABELS[tabla] || tabla}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="audit-filter-group">
-            <select value={filtroAccion} onChange={(e) => setFiltroAccion(e.target.value)}>
-              <option value="">Todas las acciones</option>
-              <option value="INSERT">Creación</option>
-              <option value="UPDATE">Modificación</option>
-              <option value="DELETE">Eliminación</option>
-            </select>
-          </div>
-
-          <div className="audit-filter-group">
-            <input
-              type="text"
-              placeholder="Buscar usuario..."
-              value={filtroUsuario}
-              onChange={(e) => setFiltroUsuario(e.target.value)}
-            />
-          </div>
-
-          <div className="audit-filter-group">
-            <select value={periodo} onChange={(e) => elegirPeriodo(e.target.value as Periodo)}>
-              {(Object.keys(PERIODO_LABELS) as Periodo[]).map(p => (
-                <option key={p} value={p}>{PERIODO_LABELS[p]}</option>
-              ))}
-            </select>
-          </div>
-
-          {periodo === 'rango' && (<>
-          <div className="audit-filter-group">
-            <label><Calendar size={14} /> Desde</label>
-            <input
-              type="date"
-              value={filtroFechaInicio}
-              onChange={(e) => setFiltroFechaInicio(e.target.value)}
-            />
-          </div>
-
-          <div className="audit-filter-group">
-            <label><Calendar size={14} /> Hasta</label>
-            <input
-              type="date"
-              value={filtroFechaFin}
-              onChange={(e) => setFiltroFechaFin(e.target.value)}
-            />
-          </div>
-          </>)}
-
-          <label className="audit-importantes" title="Oculta sincronizaciones e históricos automáticos">
-            <input type="checkbox" checked={soloImportantes} onChange={(e) => setSoloImportantes(e.target.checked)} />
-            Solo lo importante
-          </label>
-
-          <button className="audit-filter-clear" onClick={limpiarFiltros}>
-            Limpiar
-          </button>
-        </div>
-
         {/* Resumen del período y actividad por usuario (una línea) */}
         <div className="audit-resumen-linea">
           <span className="audit-resumen-totales">
@@ -586,7 +519,69 @@ export function AuditModule() {
         columns={columns}
         loading={loading}
         error={error}
-        searchPlaceholder="Buscar en registros..."
+        searchPlaceholder="Buscar por usuario..."
+        globalFilter={filtroUsuario}
+        onGlobalFilterChange={setFiltroUsuario}
+        headerAction={
+          /* Módulo, acción, período y "solo lo importante" en la misma línea que el buscador */
+          <div className="audit-filters-row header-controls-inline">
+            <div className="audit-filter-group">
+              <select value={filtroTabla} onChange={(e) => setFiltroTabla(e.target.value)}>
+                <option value="">Todos los módulos</option>
+                {tablasDisponibles.map(tabla => (
+                  <option key={tabla} value={tabla}>{TABLA_LABELS[tabla] || tabla}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="audit-filter-group">
+              <select value={filtroAccion} onChange={(e) => setFiltroAccion(e.target.value)}>
+                <option value="">Todas las acciones</option>
+                <option value="INSERT">Creación</option>
+                <option value="UPDATE">Modificación</option>
+                <option value="DELETE">Eliminación</option>
+              </select>
+            </div>
+
+
+            <div className="audit-filter-group">
+              <select value={periodo} onChange={(e) => elegirPeriodo(e.target.value as Periodo)}>
+                {(Object.keys(PERIODO_LABELS) as Periodo[]).map(p => (
+                  <option key={p} value={p}>{PERIODO_LABELS[p]}</option>
+                ))}
+              </select>
+            </div>
+
+            {periodo === 'rango' && (<>
+            <div className="audit-filter-group">
+              <label><Calendar size={14} /> Desde</label>
+              <input
+                type="date"
+                value={filtroFechaInicio}
+                onChange={(e) => setFiltroFechaInicio(e.target.value)}
+              />
+            </div>
+
+            <div className="audit-filter-group">
+              <label><Calendar size={14} /> Hasta</label>
+              <input
+                type="date"
+                value={filtroFechaFin}
+                onChange={(e) => setFiltroFechaFin(e.target.value)}
+              />
+            </div>
+            </>)}
+
+            <label className="audit-importantes" title="Oculta sincronizaciones e históricos automáticos">
+              <input type="checkbox" checked={soloImportantes} onChange={(e) => setSoloImportantes(e.target.checked)} />
+              Solo lo importante
+            </label>
+
+            <button className="audit-filter-clear" onClick={limpiarFiltros}>
+              Limpiar
+            </button>
+          </div>
+        }
         emptyIcon={<History size={48}
       />}
         emptyTitle={activeTab === 'usuarios' ? 'No hay logs de usuarios' : 'No hay logs de sistema'}

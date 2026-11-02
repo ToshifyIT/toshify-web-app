@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon, Monitor, Check } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 
 type Theme = "light" | "dark" | "system";
@@ -72,7 +72,7 @@ export function ThemeToggle() {
               <span className="theme-option-icon">{option.icon}</span>
               <span className="theme-option-label">{option.label}</span>
               {theme === option.value && (
-                <span className="theme-option-check">✓</span>
+                <span className="theme-option-check"><Check size={14} /></span>
               )}
             </button>
           ))}

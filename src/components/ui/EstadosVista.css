@@ -1,0 +1,26 @@
+/* Estados de vista: vacío y error (el vacío usa las clases dt-empty de DataTable) */
+.estado-accion { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; }
+
+.estado-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text-secondary);
+}
+.estado-error-icono { color: var(--color-danger, #dc2626); margin-bottom: 12px; }
+.estado-error-titulo {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.estado-error-texto { margin: 0; font-size: 13px; max-width: 520px; }
+
+/* Vacío compacto (paneles, pestañas, listas dentro de ventanas) */
+.dt-empty.estado-vacio-sm { padding: 18px 12px; }
+.dt-empty.estado-vacio-sm .dt-empty-icon { margin-bottom: 6px; }
+.dt-empty.estado-vacio-sm .dt-empty-icon svg { width: 24px; height: 24px; }
+.dt-empty.estado-vacio-sm .dt-empty-title { font-size: 12px; font-weight: 500; margin: 0; }
+.dt-empty.estado-vacio-sm .dt-empty-description { font-size: 11px; }

@@ -7,6 +7,7 @@ import { X } from 'lucide-react'
 import { supabase } from '../../../../../lib/supabase'
 import { toDateART, formatHoraART, fechaISOART } from '../../../../../utils/fechaArgentina'
 import type { Marcacion } from '../hooks/useUSSHistoricoData'
+import { EmptyState } from '../../../../../components/ui/EstadosVista'
 
 interface Trip {
   id: number
@@ -378,9 +379,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
             <div style={{ padding: 16, color: '#dc2626', fontSize: 12 }}>{error}</div>
           )}
           {!loading && !error && tripsConMarca.length === 0 && (
-            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>
-              Sin trips en este rango
-            </div>
+            <EmptyState size="sm" title="Sin trips en este rango" />
           )}
           {tripsConMarca.length > 0 && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>

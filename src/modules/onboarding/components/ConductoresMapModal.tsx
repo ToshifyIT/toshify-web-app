@@ -2,7 +2,7 @@
 // Separado del wizard para que falle de forma aislada si Google Maps no carga
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF, PolylineF } from '@react-google-maps/api'
-import { X, Sun, Moon, Check, Loader2, Map as MapIcon } from 'lucide-react'
+import { X, Sun, Moon, Check, Map as MapIcon } from 'lucide-react'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia } from '../../../utils/conductorUtils'
 import {
@@ -10,6 +10,7 @@ import {
   GOOGLE_MAPS_LANGUAGE,
   GOOGLE_MAPS_REGION,
 } from '../../../lib/googleMaps'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
@@ -346,7 +347,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
               </div>
             ) : !isLoaded ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>
-                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} /> Cargando mapa...
+                <Spinner size="sm" message="Cargando mapa..." />
               </div>
             ) : (
               <GoogleMap

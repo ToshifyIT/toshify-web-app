@@ -5,6 +5,7 @@
 import { Search, User, Check, X, Drama, ClipboardList } from 'lucide-react'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useAuth } from '../contexts/AuthContext'
+import { Spinner } from '../components/ui/LoadingOverlay'
 
 export default function PermissionsDebugPage() {
   const { user, profile } = useAuth()
@@ -15,7 +16,7 @@ export default function PermissionsDebugPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando permisos...</p>
+          <Spinner size="sm" message="Cargando permisos..." />
         </div>
       </div>
     )
@@ -140,30 +141,30 @@ export default function PermissionsDebugPage() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {menu.permissions.can_view ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {menu.permissions.can_create ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {menu.permissions.can_edit ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {menu.permissions.can_delete ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
@@ -190,7 +191,7 @@ export default function PermissionsDebugPage() {
         {/* Permisos de Submenús */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            📑 Permisos de Submenús ({userPermissions?.submenus?.length || 0})
+            Permisos de Submenús ({userPermissions?.submenus?.length || 0})
           </h2>
           {!userPermissions?.submenus || userPermissions.submenus.length === 0 ? (
             <p className="text-gray-500 italic">No hay permisos de submenús asignados</p>
@@ -234,30 +235,30 @@ export default function PermissionsDebugPage() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {submenu.permissions.can_view ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {submenu.permissions.can_create ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {submenu.permissions.can_edit ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         {submenu.permissions.can_delete ? (
-                          <span className="text-green-600 font-bold">✓</span>
+                          <Check size={16} className="text-green-600" />
                         ) : (
-                          <span className="text-red-600 font-bold">✗</span>
+                          <X size={16} className="text-red-600" />
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
@@ -284,7 +285,7 @@ export default function PermissionsDebugPage() {
         {/* JSON Raw */}
         <div className="bg-white shadow rounded-lg p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            💾 JSON Completo
+            JSON Completo
           </h2>
           <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm">
             {JSON.stringify(userPermissions, null, 2)}

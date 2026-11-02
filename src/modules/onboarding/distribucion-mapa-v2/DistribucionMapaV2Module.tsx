@@ -96,6 +96,7 @@ import { MenuFiltro } from './components/MenuFiltro'
 import { SugerenciasDrawer } from './components/SugerenciasDrawer'
 import { IconoEntidad } from './components/iconos'
 import { Chip } from './components/ui'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 // Cache perezoso del panel de conductores (consulta pesada). Se reusa para las
 // fichas y se invalida al cambiar de sede. Mismo patrón que el v1.
@@ -1462,10 +1463,7 @@ export function DistribucionMapaV2Module() {
             </CenterMsg>
           ) : !isLoaded || loading ? (
             <CenterMsg>
-              <span style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
-                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} />
-                {!isLoaded ? 'Cargando mapa...' : 'Cargando datos...'}
-              </span>
+              <Spinner size="sm" message={!isLoaded ? 'Cargando mapa...' : 'Cargando datos...'} />
             </CenterMsg>
           ) : !API_MAPA ? (
             <CenterMsg>
@@ -1653,7 +1651,7 @@ export function DistribucionMapaV2Module() {
               fontSize: 13,
             }}
           >
-            <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Cargando ficha...
+            <Spinner size="sm" message="Cargando ficha..." />
           </div>
         </div>
       )}

@@ -6,6 +6,7 @@ import { showError, showSuccess } from '../../../../utils/toast'
 import type { Titular, VehiculoTitular } from '../types/titulares.types'
 import type { OfertaLocacion, OfertaLocacionFormData } from '../types/ofertaLocacion.types'
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
+import { Spinner } from '../../../../components/ui/LoadingOverlay'
 
 interface Props {
   vehiculoTitular: VehiculoTitular
@@ -348,9 +349,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
     return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '750px' }}>
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-            Cargando...
-          </div>
+          <Spinner size="sm" message="Cargando..." />
         </div>
       </div>
     )

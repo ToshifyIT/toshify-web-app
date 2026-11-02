@@ -21,6 +21,7 @@ import type { CabifyDriver, AccordionKey, WeekOption } from './types/cabify.type
 import { useCabifyData, useCabifyStats, useUltimaDesactivacion } from './hooks'
 
 // Componentes
+import { ErrorState as SharedErrorState } from '../../../components/ui/EstadosVista'
 import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from './components'
 
 // Utilidades y constantes
@@ -452,15 +453,7 @@ interface ErrorStateProps {
 function ErrorState({ isVisible, error, onRetry }: ErrorStateProps) {
   if (!isVisible) return null
 
-  return (
-    <div className="cabify-error">
-      <h3>{UI_TEXT.ERROR_TITLE}</h3>
-      <p>{error}</p>
-      <button onClick={onRetry} className="btn-secondary">
-        {UI_TEXT.RETRY}
-      </button>
-    </div>
-  )
+  return <SharedErrorState title={UI_TEXT.ERROR_TITLE} message={error} onRetry={onRetry} />
 }
 
 // =====================================================
@@ -686,14 +679,20 @@ function createConductorCompactColumn(
       // Mostrar DNI del sistema si hay asig (match limpio), sino el de Cabify (filtrando IDs técnicos)
       const dni = asig?.dni || getDniDisplay(driver.nationalIdNumber)
 
+      // Turno del conductor (no la modalidad del auto): Diurno, Nocturno o A cargo
+      const turnoConductor = (asig?.turnoEspecifico || '').toLowerCase()
       const modalidadClass = !asig
         ? 'dt-badge-gray'
-        : asig.horario === 'turno' ? 'dt-badge-blue' : 'dt-badge-yellow'
+        : asig.horario === 'todo_dia' || turnoConductor.includes('cargo') || turnoConductor === 'todo_dia' ? 'dt-badge-purple'
+        : turnoConductor.includes('noct') ? 'dt-badge-blue'
+        : turnoConductor.includes('diur') ? 'dt-badge-yellow'
+        : 'dt-badge-gray'
       const modalidadLabel = !asig
         ? 'S/A'
-        : asig.horario === 'todo_dia' ? 'A CARGO'
-        : asig.horario === 'turno' ? 'TURNO'
-        : (asig.horario || '?')
+        : asig.horario === 'todo_dia' || turnoConductor.includes('cargo') || turnoConductor === 'todo_dia' ? 'A CARGO'
+        : turnoConductor.includes('noct') ? 'NOCTURNO'
+        : turnoConductor.includes('diur') ? 'DIURNO'
+        : 'TURNO'
 
       const isActive = !driver.disabled
       const estadoClass = isActive ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'

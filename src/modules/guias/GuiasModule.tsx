@@ -4,16 +4,15 @@ import { supabase } from '../../lib/supabase'
 import { fetchGuias, getCabifyDatosPorSemanas } from './guiasService'
 import { format, startOfISOWeek, endOfISOWeek, setISOWeek, addHours, previousSunday, startOfDay, endOfDay, subWeeks, nextSunday, addWeeks } from 'date-fns'
 import { WeekSelector } from './components/WeekSelector'
-import { 
-  AlertTriangle, 
-  Users, 
-  DollarSign, 
-  Filter, 
-  Eye, 
+import {
+  AlertTriangle,
+  Users,
+  DollarSign,
+  Filter,
+  Eye,
   PhoneCall,
   Phone,
   CheckCircle,
-  Pencil,
   ArrowLeftRight,
   Search,
   History,
@@ -23,7 +22,8 @@ import {
   Target,
   GraduationCap,
   Triangle,
-  X
+  X,
+  Edit2,
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -46,6 +46,7 @@ import iconNotas from './Iconos/notas.png'
 import { getEstadoConductorDisplay } from '../../utils/conductorUtils'
 import { normalizeDni } from '../../utils/normalizeDocuments'
 import { showError } from '../../utils/toast'
+import { Spinner } from '../../components/ui/LoadingOverlay'
 
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
@@ -2800,7 +2801,7 @@ export function GuiasModule() {
             <ActionsMenu
               actions={[
                 {
-                  icon: isCurrent ? <Pencil size={15} /> : <Eye size={15} />,
+                  icon: isCurrent ? <Edit2 size={15} /> : <Eye size={15} />,
                   label: isCurrent ? 'Editar' : 'Ver detalles',
                   onClick: () => {
                     setSelectedConductor(row.original as any);
@@ -2885,9 +2886,7 @@ export function GuiasModule() {
       
 
       {loading ? (
-        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          Cargando guías...
-        </div>
+        <Spinner size="sm" message="Cargando guías..." />
       ) : (
         <>
           {/* Selected Guide Content */}

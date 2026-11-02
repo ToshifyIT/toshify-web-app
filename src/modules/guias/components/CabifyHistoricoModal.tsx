@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { X, TrendingUp, Clock, DollarSign, Car } from 'lucide-react'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 import './CabifyHistoricoModal.css'
 
 interface CabifyHistoricoModalProps {
@@ -258,13 +260,11 @@ export function CabifyHistoricoModal({
         {/* Content */}
         <div className="cabify-historico-body">
           {loading ? (
-            <div className="cabify-historico-loading">Cargando datos de Cabify...</div>
+            <Spinner size="sm" message="Cargando datos de Cabify..." />
           ) : error ? (
             <div className="cabify-historico-error">{error}</div>
           ) : records.length === 0 ? (
-            <div className="cabify-historico-empty">
-              No se encontraron registros en cabify_historico para este conductor en la semana seleccionada.
-            </div>
+            <EmptyState size="sm" title="No se encontraron registros en cabify_historico para este conductor en la semana seleccionada." />
           ) : (
             <>
               {/* Summary Cards */}

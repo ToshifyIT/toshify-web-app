@@ -14,6 +14,7 @@ import { ChevronDown } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import type { CabifySemanaRend } from './conductorDetalleService'
 import type { KmSemanaConductor } from '../../portal/kmRecorridos'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 interface Props {
   data: CabifySemanaRend[]
@@ -100,7 +101,7 @@ export function RendimientoCabifyTab({ data, loading, kmSemanas }: Props) {
     }
   }, [data])
 
-  if (loading) return <div className="cdet-empty">Cargando…</div>
+  if (loading) return <Spinner size="sm" message="Cargando…" />
   if (data.length === 0) {
     return (
       <div className="cdet-empty">

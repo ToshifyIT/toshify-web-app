@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { Spinner } from '../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../components/ui/EstadosVista'
 
 // =============================================
 // Tipos
@@ -837,9 +839,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
 
               {/* Server credential values */}
               {tokensLoading && (
-                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                  Cargando credenciales...
-                </div>
+                <Spinner size="sm" message="Cargando credenciales..." />
               )}
               {tokensError && (
                 <div style={{ fontSize: '12px', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
@@ -1404,14 +1404,7 @@ function EdgeFunctionsMonitor() {
 
         {/* Empty state */}
         {functions.length === 0 && !loading && !error && (
-          <div style={{
-            padding: '30px',
-            textAlign: 'center',
-            color: 'var(--text-tertiary)',
-            fontSize: '13px',
-          }}>
-            No se encontraron Edge Functions configuradas
-          </div>
+          <EmptyState size="sm" title="No se encontraron Edge Functions configuradas" />
         )}
       </div>
 
@@ -1459,14 +1452,7 @@ function CredencialesTab({ serverTokens, tokensLoading, tokensError }: {
       </div>
 
       {tokensLoading && (
-        <div style={{
-          padding: '40px',
-          textAlign: 'center',
-          color: 'var(--text-tertiary)',
-          fontSize: '13px',
-        }}>
-          Cargando credenciales...
-        </div>
+        <Spinner size="sm" message="Cargando credenciales..." />
       )}
 
       {tokensError && (
@@ -1868,9 +1854,7 @@ function McpTab() {
 
       {/* API Keys list */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-          Cargando API keys...
-        </div>
+        <Spinner size="sm" message="Cargando API keys..." />
       ) : apiKeys.length === 0 ? (
         <div style={{
           textAlign: 'center',
@@ -1881,7 +1865,7 @@ function McpTab() {
           border: '1px solid var(--border-primary)',
         }}>
           <Bot size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
-          <p>No hay API keys creadas</p>
+          <EmptyState size="sm" title="No hay API keys creadas" />
           <p style={{ fontSize: '12px' }}>Crea una para conectar un chatbot al MCP Server</p>
         </div>
       ) : (

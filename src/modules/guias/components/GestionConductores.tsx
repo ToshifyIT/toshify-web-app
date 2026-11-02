@@ -3,9 +3,10 @@ import { supabase } from "../../../lib/supabase";
 import { format } from "date-fns";
 import Swal from "sweetalert2";
 import { useSede } from '../../../contexts/SedeContext';
-import { Search, FileEdit } from 'lucide-react';
+import { Search, FileEdit, X } from 'lucide-react';
 import { normalizeDni } from '../../../utils/normalizeDocuments';
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService';
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import "./GestionConductores.css";
 
 // Interfaces
@@ -500,7 +501,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
           </div>
           <div className="gc-header-actions">
             <button className="gc-btn-icon" onClick={handleRefresh}>↻</button>
-            <button className="gc-btn-icon" onClick={onClose}>✕</button>
+            <button className="gc-btn-icon" onClick={onClose} aria-label="Cerrar"><X size={16} /></button>
           </div>
         </div>
         
@@ -537,7 +538,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
                 onClick={clearSelection}
                 title="Limpiar selección"
               >
-                ✕
+                <X size={14} />
               </button>
             )}
             
@@ -563,7 +564,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
           {selectedDriver && loadingHistory ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '300px', color: 'var(--text-tertiary)' }}>
               <div style={{ width: '32px', height: '32px', border: '3px solid var(--border-primary)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginBottom: '16px' }} />
-              <p>Cargando historial...</p>
+              <Spinner size="sm" message="Cargando historial..." />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : selectedDriver ? (

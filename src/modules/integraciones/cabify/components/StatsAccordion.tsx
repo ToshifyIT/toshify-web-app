@@ -8,6 +8,7 @@ import { Users, DollarSign, TrendingUp, Car, BarChart3 } from 'lucide-react'
 import type { DriverStatistics } from '../types/cabify.types'
 import { formatCurrency } from '../utils/cabify.utils'
 import { STATS_LABELS } from '../constants/cabify.constants'
+import { StatsGrid } from '../../../../components/ui/StatsGrid'
 
 // =====================================================
 // TIPOS
@@ -24,7 +25,7 @@ interface StatsAccordionProps {
 export function StatsAccordion({ estadisticas }: StatsAccordionProps) {
   return (
     <div className="cabify-stats">
-      <div className="cabify-stats-grid">
+      <StatsGrid className="cabify-stats-grid" storageKey="StatsAccordion">
         <div className="stat-card">
           <Users size={18} className="stat-icon" />
           <div className="stat-content">
@@ -60,7 +61,7 @@ export function StatsAccordion({ estadisticas }: StatsAccordionProps) {
             <span className="stat-label">{STATS_LABELS.AVG_TRIPS}</span>
           </div>
         </div>
-      </div>
+      </StatsGrid>
     </div>
   )
 }

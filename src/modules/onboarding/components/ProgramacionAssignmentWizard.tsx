@@ -5,7 +5,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
-import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw, ArrowLeftRight } from 'lucide-react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw, ArrowLeftRight, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 // Lazy import para que un fallo de Google Maps no tumbe todo el wizard
@@ -3606,7 +3606,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     draggable
                                     onDragStart={(e) => handleConductorDragStart(e, par.diurno.id, par.nocturno.id, par.tiempoMinutos)}
                                     onDragEnd={handleConductorDragEnd}
-                                    title={zonaDiurno ? `⚠ Zona restringida: ${zonaDiurno}` : undefined}
+                                    title={zonaDiurno ? `Zona restringida: ${zonaDiurno}` : undefined}
                                     style={{ marginBottom: '6px', background: zonaDiurno ? 'rgba(255, 0, 51, 0.08)' : 'rgba(251, 191, 36, 0.1)', borderColor: zonaDiurno ? '#FF0033' : '#FCD34D' }}
                                   >
                                     <div className="conductor-avatar" style={{ background: zonaDiurno ? '#FF0033' : '#F59E0B' }}>
@@ -3620,7 +3620,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
                                       {zonaDiurno && (
                                         <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
-                                          ⚠ Zona restringida
+                                          <AlertTriangle size={12} className="ico-inline" />Zona restringida
                                         </span>
                                       )}
                                     </div>
@@ -3636,7 +3636,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     draggable
                                     onDragStart={(e) => handleConductorDragStart(e, par.nocturno.id, par.diurno.id, par.tiempoMinutos)}
                                     onDragEnd={handleConductorDragEnd}
-                                    title={zonanocturno ? `⚠ Zona restringida: ${zonanocturno}` : undefined}
+                                    title={zonanocturno ? `Zona restringida: ${zonanocturno}` : undefined}
                                     style={{ background: zonanocturno ? 'rgba(255, 0, 51, 0.08)' : 'rgba(59, 130, 246, 0.1)', borderColor: zonanocturno ? '#FF0033' : '#93C5FD' }}
                                   >
                                     <div className="conductor-avatar" style={{ background: zonanocturno ? '#FF0033' : '#3B82F6' }}>
@@ -3650,7 +3650,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
                                       {zonanocturno && (
                                         <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
-                                          ⚠ Zona restringida
+                                          <AlertTriangle size={12} className="ico-inline" />Zona restringida
                                         </span>
                                       )}
                                     </div>
@@ -3684,7 +3684,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               draggable
                               onDragStart={(e) => handleConductorDragStart(e, conductor.id)}
                               onDragEnd={handleConductorDragEnd}
-                              title={zonaRestringida ? `⚠ Zona restringida: ${zonaRestringida}` : undefined}
+                              title={zonaRestringida ? `Zona restringida: ${zonaRestringida}` : undefined}
                               style={{
                                 background: zonaRestringida ? 'rgba(255, 0, 51, 0.08)' : algunoOcupado ? 'rgba(251, 191, 36, 0.1)' : undefined,
                                 borderColor: zonaRestringida ? '#FF0033' : algunoOcupado ? '#FCD34D' : undefined
@@ -3721,7 +3721,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     background: 'rgba(255, 0, 51, 0.12)',
                                     color: '#FF4D6A'
                                   }}>
-                                    ⚠ Zona restringida
+                                    <AlertTriangle size={12} className="ico-inline" />Zona restringida
                                   </span>
                                 )}
                                 {infoMsg && (
