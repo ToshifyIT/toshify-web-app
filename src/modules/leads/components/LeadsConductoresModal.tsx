@@ -24,6 +24,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { showError, showSuccess } from '../../../utils/toast'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 interface LeadFila {
   id: string
@@ -379,9 +380,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
           {/* Tabla */}
           <div style={{ flex: 1, overflow: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
             {cargando ? (
-              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                Cargando conciliación...
-              </div>
+              <Spinner size="sm" message="Cargando conciliación..." />
             ) : error ? (
               <div style={{ padding: '40px 0', textAlign: 'center', color: '#dc2626', fontSize: '12px' }}>{error}</div>
             ) : filtradas.length === 0 ? (

@@ -19,6 +19,8 @@ import { GarantiaHistorialTab } from './GarantiaHistorialTab'
 import { RendimientoCabifyTab } from './RendimientoCabifyTab'
 import { ComparacionSemana } from '../../../components/ui/ComparacionSemana'
 import { analizarRegimenToshipass, CODIGO_TOSHIPASS, type RegimenToshipass } from '../../facturacion/utils/toshipass'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 import './ConductorDetalleModal.css'
 
 // Orden de las pestañas tal como se muestran en la barra (izq -> der).
@@ -513,9 +515,9 @@ export function ConductorDetalleModal({
                que Integraciones > Cabify y que la columna del panel). */
             <RendimientoCabifyTab data={cabifySemanas} loading={cabifyLoading} kmSemanas={km} />
           ) : loading ? (
-            <div className="cdet-empty">Cargando…</div>
+            <Spinner size="sm" message="Cargando…" />
           ) : tab === 'multas' ? (
-            multas.length === 0 ? <div className="cdet-empty">Sin multas atribuidas.</div> : (
+            multas.length === 0 ? <EmptyState size="sm" title="Sin multas atribuidas." /> : (
               <table className="cdet-table">
                 <thead><tr>
                   <th>Fecha</th><th>Infracción</th><th>Patente</th><th>Estado</th>
@@ -626,14 +628,14 @@ export function ConductorDetalleModal({
                   </div>
                 </div>
               </div>
-              {facturacion.length === 0 ? <div className="cdet-empty">Sin facturación registrada.</div> : (
+              {facturacion.length === 0 ? <EmptyState size="sm" title="Sin facturación registrada." /> : (
               <div className="cdet-fac-list">
                 {facturacion.map(f => {
                   const estadoTexto = f.estado === 'pendiente'
                     ? `Pendiente ${formatCurrency(f.saldo)}`
                     : f.estado === 'favor'
                       ? `A favor ${formatCurrency(Math.abs(f.saldo))}`
-                      : '✓ Cubierto'
+                      : 'Cubierto'
                   return (
                     <div key={f.id} className={`cdet-fac-card clickable ${f.estado === 'pendiente' ? 'pend' : ''}`} onClick={() => setSemanaSel(f)}>
                       <div className="cdet-fac-top">
@@ -655,7 +657,7 @@ export function ConductorDetalleModal({
               )}
             </>
           ) : tab === 'km' ? (
-            kmLoading ? <div className="cdet-empty">Cargando…</div> : km.length === 0 ? <div className="cdet-empty">Sin km registrados.</div> : (
+            kmLoading ? <Spinner size="sm" message="Cargando…" /> : km.length === 0 ? <EmptyState size="sm" title="Sin km registrados." /> : (
               <table className="cdet-table">
                 <thead><tr>
                   <th>Semana</th><th className="r">Km</th><th className="r">Límite</th><th className="r">Excedido</th>
@@ -760,7 +762,7 @@ export function ConductorDetalleModal({
               </table>
             )
           ) : tab === 'asignaciones' ? (
-            loadingHist ? <div className="cdet-empty">Cargando…</div> : asignaciones.length === 0 ? <div className="cdet-empty">Sin asignaciones registradas.</div> : (
+            loadingHist ? <Spinner size="sm" message="Cargando…" /> : asignaciones.length === 0 ? <EmptyState size="sm" title="Sin asignaciones registradas." /> : (
               <table className="cdet-table">
                 <thead><tr>
                   <th>Patente</th><th>Vehículo</th><th>Turno</th><th>Estado</th><th>Desde</th><th>Hasta</th><th>Compañero</th>
@@ -784,7 +786,7 @@ export function ConductorDetalleModal({
               </table>
             )
           ) : (
-            loadingHist ? <div className="cdet-empty">Cargando…</div> : bajas.length === 0 ? <div className="cdet-empty">Sin bajas ni reactivaciones registradas.</div> : (
+            loadingHist ? <Spinner size="sm" message="Cargando…" /> : bajas.length === 0 ? <EmptyState size="sm" title="Sin bajas ni reactivaciones registradas." /> : (
               <div className="cdet-bajas-list">
                 {bajas.map(b => {
                   const esBaja = b.tipoEvento === 'baja'

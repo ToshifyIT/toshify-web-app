@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Check, AlertTriangle, Shield, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { LoadingOverlay } from '../ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../ui/LoadingOverlay'
 import { useAuth } from '../../contexts/AuthContext'
 import './AdminStyles.css'
 import type { Role, Menu, Submenu } from '../../types/database.types'
@@ -1025,7 +1025,7 @@ export function RoleMenuPermissionsManager() {
   }, [roles, roleSearchTerm])
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
+    return <Spinner size="sm" message="Cargando..." />
   }
 
   // Mostrar error de autorización si no tiene permisos

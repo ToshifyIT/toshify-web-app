@@ -19,6 +19,7 @@ import {
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 
 interface ConductorConDeuda {
   id: string
@@ -614,7 +615,7 @@ export function BloqueosConductoresTab() {
 
       {/* Stats */}
       <div className="fact-stats">
-        <div className="fact-stats-grid">
+        <StatsGrid className="fact-stats-grid" storageKey="BloqueosConductoresTab">
           <div className="fact-stat-card">
             <AlertTriangle size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
@@ -643,7 +644,7 @@ export function BloqueosConductoresTab() {
               <span className="fact-stat-label">Deuda Bloqueados</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* Info */}

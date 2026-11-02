@@ -1,12 +1,14 @@
 import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
-import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { showError, showSuccess } from '../../utils/toast'
-import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Eye, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box, AlertTriangle, CheckCircle, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
+import { StatsGrid } from '../../components/ui/StatsGrid'
+import { EmptyState } from '../../components/ui/EstadosVista'
 import './ProductosModule.css'
 
 interface UnidadMedida {
@@ -862,7 +864,7 @@ export function ProductosModule() {
                 onClick={() => openEditModal(row.original)}
                 title="Editar"
               >
-                <Edit size={16} />
+                <Edit2 size={16} />
               </button>
             )}
             {canDelete && (
@@ -906,7 +908,7 @@ export function ProductosModule() {
       <LoadingOverlay show={loading} message="Cargando productos..." size="lg" />
       {/* Stats Cards - Estilo Bitacora (clickeables como filtros) */}
       <div className="prod-stats">
-        <div className="prod-stats-grid">
+        <StatsGrid className="prod-stats-grid" storageKey="ProductosModule">
           <button
             className={`stat-card${!activeStatCard ? ' active' : ''}`}
             onClick={() => setActiveStatCard(null)}
@@ -977,7 +979,7 @@ export function ProductosModule() {
               <span className="stat-label">Incompletos</span>
             </div>
           </button>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* DataTable with integrated action button */}
@@ -1168,7 +1170,7 @@ export function ProductosModule() {
         <div className="prod-modal-overlay">
           <div className="prod-modal-content">
             <div className="prod-modal-header">
-              <h2><Edit size={24} /> Editar Producto</h2>
+              <h2><Edit2 size={24} /> Editar Producto</h2>
             </div>
 
             <div className="prod-modal-body">
@@ -1449,9 +1451,9 @@ export function ProductosModule() {
                   <div style={{ marginTop: '16px' }}>
                     <span className="prod-info-label" style={{ marginBottom: '8px', display: 'block' }}>Stock por Proveedor</span>
                     {loadingStock ? (
-                      <div className="prod-stock-empty">Cargando stock...</div>
+                      <Spinner size="sm" message="Cargando stock..." />
                     ) : stockPorProveedor.length === 0 ? (
-                      <div className="prod-stock-empty">No hay stock registrado para este producto</div>
+                      <EmptyState size="sm" title="No hay stock registrado para este producto" />
                     ) : (
                       <table className="prod-stock-table">
                         <thead>

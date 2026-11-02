@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users, Building2, Plus, Edit, Trash2, X, CheckCircle, XCircle, Eye } from 'lucide-react'
+import { Users, Building2, Plus, Trash2, X, CheckCircle, XCircle, Eye, Edit2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { DataTable } from '../../components/ui/DataTable'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -8,6 +8,7 @@ import { showError, showSuccess } from '../../utils/toast'
 import '../../styles/modules.css'
 import './GruposFlotaModule.css'
 import { CuentasCabifySection } from './CuentasCabifySection'
+import { StatsGrid } from '../../components/ui/StatsGrid'
 
 interface GrupoFlota {
   id: string
@@ -251,7 +252,7 @@ export function GruposFlotaModule() {
             <Eye size={15} />
           </button>
           <button className="gf-action-btn" onClick={() => openEditModal(row.original)} title="Editar">
-            <Edit size={15} />
+            <Edit2 size={15} />
           </button>
           <button className="gf-action-btn gf-action-delete" onClick={() => handleDelete(row.original)} title="Eliminar">
             <Trash2 size={15} />
@@ -270,7 +271,7 @@ export function GruposFlotaModule() {
     <div className="module-container">
       {/* Stats */}
       <div className="gf-stats">
-        <div className="gf-stats-grid">
+        <StatsGrid className="gf-stats-grid" storageKey="GruposFlotaModule">
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('total')}
@@ -301,7 +302,7 @@ export function GruposFlotaModule() {
               <span className="stat-label">Inactivos</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* DataTable */}
@@ -508,7 +509,7 @@ export function GruposFlotaModule() {
                 Cerrar
               </button>
               <button className="btn-primary" onClick={() => { setShowDetail(false); openEditModal(detailGrupo) }}>
-                <Edit size={14} style={{ marginRight: '6px' }} />
+                <Edit2 size={14} style={{ marginRight: '6px' }} />
                 Editar
               </button>
             </div>

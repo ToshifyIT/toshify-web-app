@@ -15,7 +15,6 @@ import {
   // Plus,
   // DollarSign,
   Filter,
-  Edit3,
   // UserPlus,
   Trash2,
   // Receipt,
@@ -28,12 +27,13 @@ import {
   X,
   Search,
   FileDown,
+  Edit2,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getYear } from 'date-fns'
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
-import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
 import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
@@ -69,6 +69,8 @@ interface AbonoRow {
   conductor_nombre?: string
 }
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 
 /** Calcula días calendario entre una fecha y hoy (sin considerar hora) */
 function diasCalendario(desde: string | Date): number {
@@ -2301,7 +2303,7 @@ export function SaldosAbonosTab() {
             )}
             {(isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar saldo">
-                <Edit3 size={14} />
+                <Edit2 size={14} />
               </button>
             )}
             {isAdmin() && (
@@ -2378,7 +2380,7 @@ export function SaldosAbonosTab() {
     { accessorKey: 'monto', header: 'Monto' },
     { accessorKey: 'concepto', header: 'Concepto' },
     { accessorKey: 'referencia', header: 'Referencia' },
-    { id: 'acciones', header: 'Acciones', cell: ({ row }) => (<button onClick={() => editarMovimiento(row.original)}><Edit3 size={14} /></button>) }
+    { id: 'acciones', header: 'Acciones', cell: ({ row }) => (<button onClick={() => editarMovimiento(row.original)}><Edit2 size={14} /></button>) }
   ], []) */
 
   // Stats para sub-tab Abonos (comentado - simplificado a solo total)
@@ -2413,7 +2415,7 @@ export function SaldosAbonosTab() {
 
            {/* Stats */}
           <div className="fact-stats">
-            <div className="fact-stats-grid">
+            <StatsGrid className="fact-stats-grid" storageKey="SaldosAbonosTab">
               <div className="fact-stat-card">
                 <Users size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
@@ -2428,7 +2430,7 @@ export function SaldosAbonosTab() {
                   <span className="fact-stat-label">Total Deuda</span>
                 </div>
               </div>
-            </div>
+            </StatsGrid>
           </div>
 
           {/* Barra de filtros activos */}
@@ -2640,7 +2642,7 @@ export function SaldosAbonosTab() {
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
                         }}
                       >
-                        <Edit3 size={12} /> Editar saldo
+                        <Edit2 size={12} /> Editar saldo
                       </button>
                     )}
                   </div>
@@ -2718,9 +2720,9 @@ export function SaldosAbonosTab() {
 
                 {/* Tabla v2: saldo recalculado en runtime, fila top destacada */}
                 {kardexModal.loading ? (
-                  <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Cargando...</div>
+                  <Spinner size="sm" message="Cargando..." />
                 ) : kardexModal.rows.length === 0 ? (
-                  <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Sin registros</div>
+                  <EmptyState size="sm" title="Sin registros" />
                 ) : (() => {
                   // Helpers
                   const tipoLabel: Record<string, string> = {
@@ -2960,7 +2962,7 @@ export function SaldosAbonosTab() {
                                         color: 'var(--text-tertiary)', padding: '2px',
                                       }}
                                     >
-                                      <Edit3 size={13} />
+                                      <Edit2 size={13} />
                                     </button>
                                   </td>}
                                 </tr>

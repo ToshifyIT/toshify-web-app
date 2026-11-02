@@ -579,7 +579,7 @@ export function CabifyPreviewTable({
             <li><strong>Saldo anterior</strong>: saldo pendiente de semanas previas</li>
           </ul>
           <p style="margin-top: 12px; font-size: 11px; color: #888;">
-            Hacé click en el ícono <strong>👁</strong> de cada fila para ver el desglose individual.
+            Hacé click en el ícono <Eye size={14} className="ico-inline" /> de cada fila para ver el desglose individual.
           </p>
         </div>
       `,

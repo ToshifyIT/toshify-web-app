@@ -8,6 +8,8 @@ import { showError, showSuccess } from '../../../utils/toast'
 import { Plus, Clock, FileText, DollarSign, AlertTriangle, X, ExternalLink } from 'lucide-react'
 import type { SiniestroSeguimientoConEstados, SiniestroCompleto } from '../../../types/siniestros.types'
 import type { VehiculoSimple, ConductorSimple } from '../../../types/incidencias.types'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 
 interface SiniestroSeguimientoProps {
   siniestro: SiniestroCompleto
@@ -603,7 +605,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
       {/* Historial */}
       <div className="seguimiento-timeline ss-lista">
         {loading ? (
-          <div className="ss-vacio">Cargando...</div>
+          <Spinner size="sm" message="Cargando..." />
         ) : seguimientos.length === 0 ? (
           <div className="ss-vacio">
             <Clock size={22} />
@@ -670,9 +672,9 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
             </div>
             <div style={{ padding: 22 }}>
               {loadingDetalleInc ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 30 }}>Cargando…</div>
+                <Spinner size="sm" message="Cargando…" />
               ) : !incidenciaDetalle ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 30 }}>No se encontró la incidencia.</div>
+                <EmptyState size="sm" title="No se encontró la incidencia." />
               ) : (
                 <>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>

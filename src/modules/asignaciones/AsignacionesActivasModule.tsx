@@ -11,6 +11,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { cargarConceptosTarifa, getPeriodoTarifa } from '../onboarding/tarifaConceptos'
 import { useFlotaSemanaAnterior } from './useFlotaSemanaAnterior'
 import { showError } from '../../utils/toast'
+import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
 
 interface AsignacionActiva {
@@ -1230,7 +1231,7 @@ function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: Asignacio
                 )}
               </div>
             ) : (
-              <p className="efd-vacio">No hay información del vehículo</p>
+              <EmptyState size="sm" title="No hay información del vehículo" />
             )}
           </section>
 
@@ -1239,7 +1240,7 @@ function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: Asignacio
             <div className="efd-seccion-titulo">
               <User size={15} /> {conductores.length === 1 ? 'Conductor' : `Conductores (${conductores.length})`}
             </div>
-            {conductores.length === 0 && <p className="efd-vacio">No hay conductores asignados actualmente</p>}
+            {conductores.length === 0 && <EmptyState size="sm" title="No hay conductores asignados actualmente" />}
             {conductores.map(ac => {
               const det = conductoresDet.get(ac.conductor_id)
               const letra = ac.horario === 'diurno' ? 'D' : ac.horario === 'nocturno' ? 'N' : 'C'

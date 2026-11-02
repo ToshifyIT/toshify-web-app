@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Pencil, Trash2, MessageSquarePlus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, MessageSquarePlus, Edit2 } from 'lucide-react';
 import './IncidentsHistory.css';
 import type { Nota } from './AnotacionesEditorModal';
 
@@ -84,7 +84,7 @@ export const IncidentsHistory: React.FC<IncidentsHistoryProps> = ({ notas, loadi
                           style={{ color: 'var(--color-primary)' }}
                           title="Editar"
                         >
-                          <Pencil size={16} />
+                          <Edit2 size={16} />
                         </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); onDeleteNote?.(index); }}

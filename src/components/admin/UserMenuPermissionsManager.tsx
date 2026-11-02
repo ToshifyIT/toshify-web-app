@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Check, AlertTriangle, Shield, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { LoadingOverlay } from '../ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../ui/LoadingOverlay'
 import { useAuth } from '../../contexts/AuthContext'
 import './AdminStyles.css'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
@@ -986,7 +986,7 @@ export function UserMenuPermissionsManager() {
   }, [users, userSearchTerm])
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
+    return <Spinner size="sm" message="Cargando..." />
   }
 
   // Mostrar pantalla de acceso denegado si no tiene permisos

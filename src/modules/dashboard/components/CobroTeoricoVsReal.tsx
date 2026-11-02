@@ -17,6 +17,7 @@ import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { getCache, setCache } from '../../../hooks/useSessionCache'
 import { PeriodPicker } from './PeriodPicker'
 import { CobroComparativo } from './CobroComparativo'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './CobroTeoricoVsReal.css'
 
 // Cache para evitar consultas repetidas a la BD
@@ -1340,9 +1341,7 @@ export function CobroTeoricoVsReal() {
 
           <div className="cobro-teorico-chart-wrapper">
             {loading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                Cargando...
-              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Spinner size="sm" message="Cargando..." /></div>
             ) : (
               <ResponsiveContainer width="99%" height="100%">
                 <LineChart

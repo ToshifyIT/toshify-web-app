@@ -1,0 +1,33 @@
+/* Grilla de indicadores uniforme: mismo ancho y alto; entran tantas por fila como quepan */
+#root .stats-grid-uniforme {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+#root .stats-grid-uniforme > * { min-width: 0; height: 100%; box-sizing: border-box; }
+
+@media (max-width: 640px) {
+  #root .stats-grid-uniforme { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Contenido de la tarjeta siempre igual: valor y etiqueta lado a lado; la etiqueta
+   ocupa hasta 2 renglones y, si aun así no entra, se corta con «…». */
+#root .stats-grid-uniforme [class*="stat-content"] {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+#root .stats-grid-uniforme [class*="stat-value"] { flex-shrink: 0; }
+#root .stats-grid-uniforme [class*="stat-label"] {
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

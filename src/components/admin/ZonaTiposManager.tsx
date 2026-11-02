@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { Spinner } from '../ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { showError, showSuccess } from '../../utils/toast'
+import { EmptyState } from '../ui/EstadosVista'
 import './AdminStyles.css'
 
 interface ZonaTipo {
@@ -246,9 +247,7 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
 
             <div className="zona-tipos-list">
               {tipos.length === 0 ? (
-                <div className="zona-tipos-empty">
-                  No hay tipos de zona registrados
-                </div>
+                <EmptyState size="sm" title="No hay tipos de zona registrados" />
               ) : (
                 tipos.map(tipo => (
                   <div key={tipo.id} className={`zona-tipo-card ${!tipo.activo ? 'inactive' : ''}`}>

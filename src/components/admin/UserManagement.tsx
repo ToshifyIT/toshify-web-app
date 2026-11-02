@@ -6,10 +6,11 @@ import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Users, UserCheck, UserX, Shield, KeyRound, Mail, Pencil, ToggleLeft, ToggleRight, Building2, Trash2 } from 'lucide-react'
+import { Users, UserCheck, UserX, Shield, KeyRound, Mail, ToggleLeft, ToggleRight, Building2, Trash2, Edit2 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { showError, showSuccess } from '../../utils/toast'
 import { validarEmail } from '../../utils/validacionesCampos'
+import { StatsGrid } from '../ui/StatsGrid'
 import './UserManagement.css'
 import './AdminStyles.css'
 
@@ -613,7 +614,7 @@ export function UserManagement() {
                 onClick={() => abrirEdicion(row.original)}
                 data-tooltip="Editar usuario"
               >
-                <Pencil size={15} />
+                <Edit2 size={15} />
               </button>
               <button
                 className="dt-btn-action"
@@ -684,7 +685,7 @@ export function UserManagement() {
       <LoadingOverlay show={loading} message="Cargando usuarios..." size="lg" />
       {/* Stats Cards - Estilo Bitacora */}
       <div className="admin-stats">
-        <div className="admin-stats-grid">
+        <StatsGrid className="admin-stats-grid" storageKey="UserManagement">
           <div {...tarjeta('todos')}>
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
@@ -713,7 +714,7 @@ export function UserManagement() {
               <span className="stat-label">Roles</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* DataTable with integrated action button */}

@@ -2160,3 +2160,47 @@
     display: block;
   }
 }
+
+/* =====================================================
+   ACCIONES DE FILA HOMOLOGADAS
+   Los botones de ver, editar, eliminar y ⋮ dentro de una tabla tienen el mismo tamaño en todos
+   los módulos, y las acciones comunes el mismo color:
+     Ver (ojo) gris · Editar (lápiz) azul · Eliminar (tacho) rojo.
+   Se reconocen por el ícono lucide, así no hace falta tocar cada módulo.
+   ===================================================== */
+#root td button:has(> svg.lucide-eye:only-child),
+#root td button:has(> svg.lucide-pen:only-child),
+#root td button:has(> svg.lucide-trash-2:only-child),
+#root td button:has(> svg.lucide-ellipsis-vertical:only-child) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+#root td button:has(> svg.lucide:only-child) > svg.lucide-eye,
+#root td button > svg.lucide-pen:only-child,
+#root td button > svg.lucide-trash-2:only-child,
+#root td button > svg.lucide-ellipsis-vertical:only-child { width: 16px; height: 16px; }
+#root td button:has(> svg.lucide-pen:only-child):disabled,
+#root td button:has(> svg.lucide-trash-2:only-child):disabled,
+#root td button:has(> svg.lucide-eye:only-child):disabled { opacity: 0.4; cursor: not-allowed; }
+
+#root td button:has(> svg.lucide-eye:only-child) { color: var(--text-secondary); }
+#root td button:has(> svg.lucide-eye:only-child):hover:not(:disabled) { color: var(--color-purple, #7c3aed); background: var(--badge-purple-bg, #f3e8ff); }
+
+#root td button:has(> svg.lucide-pen:only-child) { color: var(--color-info, #2563eb); }
+#root td button:has(> svg.lucide-pen:only-child):hover:not(:disabled) { background: var(--badge-blue-bg, #dbeafe); }
+
+#root td button:has(> svg.lucide-trash-2:only-child) { color: var(--color-danger, #dc2626); }
+#root td button:has(> svg.lucide-trash-2:only-child):hover:not(:disabled) { background: var(--badge-red-bg, #fee2e2); }
+
+#root td button:has(> svg.lucide-ellipsis-vertical:only-child) { color: var(--text-secondary); }
+#root td button:has(> svg.lucide-ellipsis-vertical:only-child):hover:not(:disabled) { color: var(--text-primary); background: var(--bg-tertiary); }

@@ -17,6 +17,7 @@ import type { TicketFavor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, TIPOS_TICKET_FAVOR } from '../../../types/facturacion.types'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 
 export function TicketsFavorTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -575,7 +576,7 @@ export function TicketsFavorTab() {
 
       {/* Stats */}
       <div className="fact-stats">
-        <div className="fact-stats-grid">
+        <StatsGrid className="fact-stats-grid" storageKey="TicketsFavorTab">
           <div className="fact-stat-card">
             <Ticket size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
@@ -611,7 +612,7 @@ export function TicketsFavorTab() {
               <span className="fact-stat-label">Monto Aplicado</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* Tabla */}

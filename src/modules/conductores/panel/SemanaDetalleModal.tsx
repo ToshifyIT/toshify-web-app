@@ -7,6 +7,7 @@ import { X } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { cargarDetalleSemana, type SemanaDetalle, type FacturacionSemana } from './conductorDetalleService'
 import { etiquetaIvaLinea } from '../../../utils/facturacionIva'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './SemanaDetalleModal.css'
 
 function fmt(s: string | null): string {
@@ -113,7 +114,7 @@ export function SemanaDetalleModal({
 
         <div className="csem-body">
           {loading ? (
-            <div className="csem-empty">Cargando…</div>
+            <Spinner size="sm" message="Cargando…" />
           ) : (
             <>
               <div className="csem-sect-title">Conceptos</div>

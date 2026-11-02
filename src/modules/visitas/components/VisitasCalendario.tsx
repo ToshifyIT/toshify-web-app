@@ -10,6 +10,7 @@ import { es } from 'date-fns/locale/es';
 import { X, Clock, User, Tag, FileText, CheckCircle2 } from 'lucide-react';
 import type { VisitaCalendarEvent, VisitaCompleta, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
+import { EmptyState } from '../../../components/ui/EstadosVista'
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
@@ -489,7 +490,7 @@ export function VisitasCalendario({
             </div>
             <div className="visitas-day-modal-body">
               {slotModalEvents.length === 0 ? (
-                <p className="visitas-day-modal-empty">No hay citas este día</p>
+                <EmptyState size="sm" title="No hay citas este día" />
               ) : (
                 slotModalEvents.map((ev: VisitaCalendarEvent) => {
                   const v = ev.visita;

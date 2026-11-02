@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Users, Building2, UserCheck, Plus, Eye, Edit, Trash2, Car, FileText } from 'lucide-react'
+import { Users, Building2, UserCheck, Plus, Eye, Trash2, Car, FileText, Edit2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -11,6 +11,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
 import { showError, showSuccess } from '../../../utils/toast'
 import type { Titular, TitularFormData, TitularStats, VehiculoTitular } from './types/titulares.types'
+import { EmptyState } from '../../../components/ui/EstadosVista'
 import '../VehicleManagement.css'
 
 // Códigos de vehiculos_estados que consideran ACTIVO a un titular
@@ -749,7 +750,7 @@ export function TitularesModule() {
             onClick: () => openVehiculos(row.original),
           },
           {
-            icon: <Edit size={15} />,
+            icon: <Edit2 size={15} />,
             label: 'Editar',
             onClick: () => openEdit(row.original),
             hidden: !canEdit,
@@ -1147,9 +1148,7 @@ export function TitularesModule() {
             </div>
             <div className="modal-body" style={{ overflowX: 'auto' }}>
               {vehiculosTitular.length === 0 ? (
-                <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '20px' }}>
-                  No hay vehículos asociados a este titular.
-                </p>
+                <EmptyState size="sm" title="No hay vehículos asociados a este titular." />
               ) : (
                 <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
                   <caption style={{ captionSide: 'top', textAlign: 'left', padding: '0 8px 10px', fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)' }}>

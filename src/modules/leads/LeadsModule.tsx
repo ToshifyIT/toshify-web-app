@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Link2,
   CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
+  Check
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -42,6 +43,7 @@ import { LeadsConductoresModal } from './components/LeadsConductoresModal'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, MARCA_RECONTACTO_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
+import { StatsGrid } from '../../components/ui/StatsGrid'
 
 // =====================================================
 // GOOGLE MAPS GEOCODING
@@ -2851,7 +2853,7 @@ export function LeadsModule() {
                   }}
                   data-tooltip={direccion || undefined}
                 >
-                  ⚠ Zona Restringida: {zonaRestringida}
+                  <AlertTriangle size={12} className="ico-inline" />Zona Restringida: {zonaRestringida}
                 </span>
               )}
               {tieneCoordenadas && !enZonaRestringida && (
@@ -2872,7 +2874,7 @@ export function LeadsModule() {
                   }}
                   data-tooltip={direccion || undefined}
                 >
-                  ✓ Zona Aprobada
+                  <Check size={12} className="ico-inline" />Zona Aprobada
                 </span>
               )}
             </div>
@@ -3320,7 +3322,7 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <div className="leads-stats-grid">
+        <StatsGrid className="leads-stats-grid" storageKey="LeadsModule" max={9}>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'contactadoSellium' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('contactadoSellium')}
@@ -3422,7 +3424,7 @@ export function LeadsModule() {
               <span className="stat-label">Descartados</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* DataTable */}

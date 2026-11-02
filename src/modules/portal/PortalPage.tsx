@@ -17,6 +17,8 @@ import {
 import { calcularKmSemanasConductor } from './kmRecorridos'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
 import logoToshifyWordmarkUrl from '../../assets/logo-toshify-wordmark.png'
+import { Spinner } from '../../components/ui/LoadingOverlay'
+import { ClipboardList } from 'lucide-react'
 import './PortalPage.css'
 
 // =====================================================
@@ -2024,7 +2026,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
   // En modo embebido nunca se muestra el login: mientras carga el conductor, un spinner.
   if (embeddedConductorId && (view === 'login' || !conductor)) {
-    return <div className="portal portal-embedded"><div className="portal-loading">Cargando datos del conductor…</div></div>
+    return <div className="portal portal-embedded"><Spinner size="sm" message="Cargando datos del conductor…" /></div>
   }
 
   if (view === 'login') {
@@ -2420,7 +2422,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           >×</button>
 
           {loadingDetalle ? (
-            <div className="portal-loading">Cargando detalle...</div>
+            <Spinner size="sm" message="Cargando detalle..." />
           ) : (
             <div className="portal-detail-card" style={{ border: 'none', borderRadius: 0 }}>
               {/* Header */}
@@ -3058,10 +3060,10 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
       <div className="portal-content" data-active={activeSection}>
         {loadingFacturas ? (
-          <div className="portal-loading">Cargando facturación...</div>
+          <Spinner size="sm" message="Cargando facturación..." />
         ) : facturas.length === 0 ? (
           <div className="portal-empty">
-            <div className="portal-empty-icon">📋</div>
+            <div className="portal-empty-icon"><ClipboardList size={32} /></div>
             <p>No hay facturación registrada todavía</p>
           </div>
         ) : stats && (
@@ -3321,7 +3323,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                       ? `Pendiente ${formatCurrency(saldo)}`
                       : estado === 'favor'
                         ? `A favor ${formatCurrency(Math.abs(saldo))}`
-                        : '✓ Cubierto'
+                        : 'Cubierto'
                     return (
                       <div key={f.id} className="portal-week-card" onClick={() => openDetail(f)}>
                         <div className="portal-week-left" style={{ width: '100%' }}>

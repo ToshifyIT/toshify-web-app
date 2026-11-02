@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -21,6 +21,7 @@ import {
   Package,
   FileText
 } from 'lucide-react'
+import { EmptyState } from '../../components/ui/EstadosVista'
 
 // =====================================================
 // TIPOS E INTERFACES
@@ -1175,7 +1176,7 @@ export function MovimientosModule() {
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
-        <p>Cargando...</p>
+        <Spinner size="sm" message="Cargando..." />
       </div>
     )
   }
@@ -1948,9 +1949,7 @@ export function MovimientosModule() {
                       ))}
                     </div>
                   ) : (
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
-                      No hay productos agregados. Busca un producto, selecciona un vehículo si aplica y agrégalo.
-                    </p>
+                    <EmptyState size="sm" title="No hay productos agregados. Busca un producto, selecciona un vehículo si aplica y agrégalo." />
                   )}
                 </div>
               )}
@@ -2034,9 +2033,7 @@ export function MovimientosModule() {
                   size="lg"
                 />
                 {vehiculosConInventario.length === 0 && (
-                  <p style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '4px', fontStyle: 'italic' }}>
-                    No hay vehículos con herramientas asignadas
-                  </p>
+                  <EmptyState size="sm" title="No hay vehículos con herramientas asignadas" />
                 )}
               </div>
 
@@ -2299,9 +2296,7 @@ export function MovimientosModule() {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
-                  No hay productos agregados
-                </p>
+                <EmptyState size="sm" title="No hay productos agregados" />
               )}
             </div>
           )}

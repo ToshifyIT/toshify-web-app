@@ -4,10 +4,11 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { showError, showSuccess } from '../../utils/toast'
-import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package } from 'lucide-react'
+import { Eye, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
 import { formatDateTimeAR } from '../../utils/dateUtils'
+import { StatsGrid } from '../../components/ui/StatsGrid'
 import './ProveedoresModule.css'
 
 type CategoriaProveedor = 'maquinaria' | 'herramientas' | 'repuestos' | 'insumos' | 'otro'
@@ -703,7 +704,7 @@ export function ProveedoresModule() {
                 onClick={() => openEditModal(row.original)}
                 title="Editar"
               >
-                <Edit size={16} />
+                <Edit2 size={16} />
               </button>
             )}
             {canDelete && row.original.activo && (
@@ -747,7 +748,7 @@ export function ProveedoresModule() {
       <LoadingOverlay show={loading} message="Cargando proveedores..." size="lg" />
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
-        <div className="prov-stats-grid">
+        <StatsGrid className="prov-stats-grid" storageKey="ProveedoresModule">
           <button
             className={`stat-card${activeStatCard === 'total' ? ' active' : ''}`}
             onClick={() => handleStatCardClick('total')}
@@ -808,7 +809,7 @@ export function ProveedoresModule() {
               <span className="stat-label">Sin categoria</span>
             </div>
           </button>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* DataTable with integrated action button */}
@@ -1003,7 +1004,7 @@ export function ProveedoresModule() {
         <div className="prov-modal-overlay">
           <div className="prov-modal-content">
             <div className="prov-modal-header">
-              <h2><Edit size={24} /> Editar Proveedor</h2>
+              <h2><Edit2 size={24} /> Editar Proveedor</h2>
             </div>
 
             <div className="prov-modal-body">

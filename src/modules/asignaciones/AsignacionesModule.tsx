@@ -1,9 +1,9 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen, ClipboardCheck, Car, History, X } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, ArrowLeftRight, FolderOpen, ClipboardCheck, Car, History, X, Edit2 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
-import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -30,6 +30,8 @@ import {
   registrarTurnosOcupados,
   conductoresVigentesEnOtraAsignacion,
 } from './confirmacionAsignacion'
+import { StatsGrid } from '../../components/ui/StatsGrid'
+import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
 
 interface Asignacion {
@@ -3860,7 +3862,7 @@ export function AsignacionesModule() {
           // Regularizar: oculto por ahora (pedido de operaciones). Para volver a
           // mostrarlo, usar `hidden: !canCreateManualAssignment`.
           {
-            icon: <Pencil size={15} />,
+            icon: <Edit2 size={15} />,
             label: 'Regularizar',
             onClick: () => handleOpenRegularizar(row.original),
             hidden: true,
@@ -3902,7 +3904,7 @@ export function AsignacionesModule() {
 
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
-        <div className="asig-stats-grid">
+        <StatsGrid className="asig-stats-grid" storageKey="AsignacionesModule">
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'programadas' ? 'stat-card-active' : ''}`}
             title="Asignaciones en estado programado pendientes de confirmación"
@@ -3939,9 +3941,7 @@ export function AsignacionesModule() {
             </div>
             <ComparacionSemana actual={calculatedStats.entregasCanceladasSemana} anterior={asignaciones.length ? semanaAnteriorAsig.canceladas : fotoAnterior?.canceladas} invertido />
           </div>
-        </div>
-        {/* Segunda fila de stats - Métricas por tipo de documento */}
-        <div className="asig-stats-grid" style={{ marginTop: '12px' }}>
+                  {/* Métricas por tipo de documento (misma grilla, mismas medidas) */}
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'cartaOferta' ? 'stat-card-active' : ''}`}
             title={`Conductores nuevos que firmaron Carta Oferta (conteo por conductor único) - Diurnos: ${calculatedStats.cartaOfertaD} | Nocturnos: ${calculatedStats.cartaOfertaN} | A cargo: ${calculatedStats.cartaOfertaCargo}`}
@@ -4010,7 +4010,7 @@ export function AsignacionesModule() {
             </div>
             <ComparacionSemana actual={calculatedStats.entregasHoy} anterior={fotoAnterior?.entregas_hoy} etiqueta="vs mismo día sem. ant." />
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* DataTable */}
@@ -4128,7 +4128,7 @@ export function AsignacionesModule() {
                   ))}
                 </div>
               ) : (
-                <p style={{ color: '#9CA3AF', fontSize: '14px' }}>No hay conductores asignados</p>
+                <EmptyState size="sm" title="No hay conductores asignados" />
               )}
             </div>
 
@@ -4229,9 +4229,9 @@ export function AsignacionesModule() {
             </div>
             <div className="asig-hist-body">
               {loadingHistorialCond ? (
-                <div className="asig-hist-empty">Cargando…</div>
+                <Spinner size="sm" message="Cargando…" />
               ) : historialCond.length === 0 ? (
-                <div className="asig-hist-empty">Sin conductores anteriores.</div>
+                <EmptyState size="sm" title="Sin conductores anteriores." />
               ) : (
                 <div className="asig-hist-list">
                   {historialCond.map((c) => {
@@ -4669,7 +4669,7 @@ export function AsignacionesModule() {
                         })}
                       </div>
                     ) : (
-                      <p style={{ color: '#9CA3AF', fontSize: '14px' }}>Sin conductores asignados</p>
+                      <EmptyState size="sm" title="Sin conductores asignados" />
                     )}
                   </div>
 
@@ -4783,7 +4783,7 @@ export function AsignacionesModule() {
             </p>
 
             {loadingRegularizar ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}>Cargando...</div>
+              <Spinner size="sm" message="Cargando..." />
             ) : (
               <div className="asig-edit-form">
                 {/* Vehículo - full width, autocomplete searchable */}

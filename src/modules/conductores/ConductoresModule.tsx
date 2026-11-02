@@ -2,7 +2,7 @@
  
 import { GUIAS_ACTIVOS } from '../leads/guias'
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown, Download, MapPin } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown, Download, MapPin, Check, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
@@ -27,7 +27,7 @@ import type {
 } from "../../types/database.types";
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/ui/DataTable";
-import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
+import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay';
 import { ComparacionSemana, fechaHaceDias, useFotoSemanaAnterior } from "../../components/ui/ComparacionSemana";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
@@ -42,6 +42,8 @@ import { registrarHistorialConductor, registrarHistorialVehiculo, registrarHisto
 import { insertControlSaldo } from "../../services/controlSaldosService";
 import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle } from "../../utils/conductorUtils";
 import { normalizeDni } from "../../utils/normalizeDocuments";
+import { StatsGrid } from '../../components/ui/StatsGrid'
+import { EmptyState } from '../../components/ui/EstadosVista'
 
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
@@ -3813,7 +3815,7 @@ export function ConductoresModule() {
 
       {/* Stats Cards */}
       <div className="cond-stats">
-        <div className="cond-stats-grid">
+        <StatsGrid className="cond-stats-grid" storageKey="ConductoresModule">
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('asignados')}
@@ -3874,7 +3876,7 @@ export function ConductoresModule() {
             </div>
             <ComparacionSemana actual={calculatedStats.licenciasVencidas} anterior={fotoAnterior?.lic_vencidas} invertido />
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       {/* DataTable with integrated action button */}
@@ -4034,7 +4036,7 @@ export function ConductoresModule() {
                           }
                           const html = `
 <div style="text-align:left;font-size:13px">
-  <h3 style="margin:0 0 8px 0;font-size:15px;font-weight:700">📊 Resumen de la sincronización</h3>
+  <h3 style="margin:0 0 8px 0;font-size:15px;font-weight:700">Resumen de la sincronización</h3>
 
   <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
     <tr><td style="padding:4px 8px;font-weight:600">Versión</td><td>${data.version || '(sin version)'}</td></tr>
@@ -4047,7 +4049,7 @@ export function ConductoresModule() {
     <tr><td style="padding:4px 8px;font-weight:600;color:#dc2626">Errores</td><td style="color:#dc2626;font-weight:700">${data.errores || 0}</td></tr>
   </table>
 
-  <h4 style="margin:12px 0 4px 0;font-size:13px;font-weight:700">🕒 Tiempos por fase</h4>
+  <h4 style="margin:12px 0 4px 0;font-size:13px;font-weight:700">Tiempos por fase</h4>
   <ul style="margin:0 0 12px 18px;font-size:12px">
     <li>Listar Drive: <b>${fmtMs(fases.drive_list || 0)}</b></li>
     <li>Query conductores: <b>${fmtMs(fases.conductores_query || 0)}</b></li>
@@ -4056,29 +4058,29 @@ export function ConductoresModule() {
   </ul>
 
   ${dbg.ownersStats ? `
-  <h4 style="margin:12px 0 4px 0;font-size:13px;font-weight:700">👤 Carpetas por propietario (diagnóstico Drive API)</h4>
+  <h4 style="margin:12px 0 4px 0;font-size:13px;font-weight:700">Carpetas por propietario (diagnóstico Drive API)</h4>
   <pre style="font-size:11px;background:#eff6ff;padding:8px;border-radius:4px;max-height:160px;overflow:auto;margin:0 0 12px 0">${Object.entries(dbg.ownersStats as Record<string, number>).sort((a,b) => b[1] - a[1]).map(([email, count]) => `${count.toString().padStart(4)} carpetas — ${email}`).join('\n')}</pre>
   <p style="font-size:11px;color:#6b7280;margin:0 0 12px 0">Si solo aparece el service account, significa que sólo ve las carpetas que él mismo creó. Las creadas por humanos no son visibles para el SA aunque estén en el mismo folder padre.</p>
   ` : ''}
 
   <details style="margin-bottom:8px">
-    <summary style="cursor:pointer;font-weight:600;color:#16a34a">✅ Carpetas encontradas en Drive (${det.foldersInDrive?.length || 0})</summary>
+    <summary style="cursor:pointer;font-weight:600;color:#16a34a">Carpetas encontradas en Drive (${det.foldersInDrive?.length || 0})</summary>
     <pre style="font-size:11px;background:#f0fdf4;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${fmtList(det.foldersInDrive, 200)}</pre>
   </details>
 
   <details style="margin-bottom:8px">
-    <summary style="cursor:pointer;font-weight:600;color:#16a34a">✅ Conductores actualizados (${det.actualizadosLista?.length || 0})</summary>
+    <summary style="cursor:pointer;font-weight:600;color:#16a34a">Conductores actualizados (${det.actualizadosLista?.length || 0})</summary>
     <pre style="font-size:11px;background:#f0fdf4;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${fmtList(det.actualizadosLista, 200)}</pre>
   </details>
 
   <details style="margin-bottom:8px">
-    <summary style="cursor:pointer;font-weight:600;color:#f59e0b">⚠️ Sin coincidencia (${det.sinCoincidencia?.length || 0})</summary>
+    <summary style="cursor:pointer;font-weight:600;color:#f59e0b">Sin coincidencia (${det.sinCoincidencia?.length || 0})</summary>
     <pre style="font-size:11px;background:#fffbeb;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${fmtList(det.sinCoincidencia, 200)}</pre>
   </details>
 
   ${(det.erroresDetalle?.length || 0) > 0 ? `
   <details style="margin-bottom:8px">
-    <summary style="cursor:pointer;font-weight:600;color:#dc2626">❌ Errores (${det.erroresDetalle.length})</summary>
+    <summary style="cursor:pointer;font-weight:600;color:#dc2626">Errores (${det.erroresDetalle.length})</summary>
     <pre style="font-size:11px;background:#fef2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${det.erroresDetalle.map((e: { nombre: string; status?: number; error?: string }) => `${e.nombre} - ${e.status || e.error || 'unknown'}`).join('\n')}</pre>
   </details>` : ''}
 </div>
@@ -4097,7 +4099,7 @@ export function ConductoresModule() {
                           title: 'Sincronización completada',
                           html: `<b>${data.actualizados}</b> actualizados<br><b>${data.sin_coincidencia}</b> sin coincidencia<br><b>${data.errores || 0}</b> errores<br><br><span style="font-size:11px;color:#6b7280">Duración: ${data.duracion_ms ? (data.duracion_ms < 1000 ? data.duracion_ms + 'ms' : (data.duracion_ms/1000).toFixed(2) + 's') : '?'}</span>`,
                           showCancelButton: true,
-                          confirmButtonText: '📊 Ver Resumen',
+                          confirmButtonText: 'Ver resumen',
                           cancelButtonText: 'Cerrar',
                           confirmButtonColor: 'var(--color-primary)',
                           cancelButtonColor: '#6b7280',
@@ -4380,9 +4382,7 @@ export function ConductoresModule() {
                 </table>
               </div>
             ) : (
-              <p style={{ fontSize: '13px', color: '#6B7280', textAlign: 'center', padding: '20px' }}>
-                Sin cuotas pendientes.
-              </p>
+              <EmptyState size="sm" title="Sin cuotas pendientes." />
             )}
 
             <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
@@ -5309,17 +5309,7 @@ function ModalEditar({
                     </div>
                   </button>
                 ) : impactoBajaUI ? (
-                  <div style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: '#ECFDF5',
-                    border: '1px solid #10B981',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    color: '#065F46',
-                  }}>
-                    Sin fraccionamientos pendientes.
-                  </div>
+                  <EmptyState size="sm" title="Sin fraccionamientos pendientes." />
                 ) : null}
               </div>
             </div>
@@ -5925,7 +5915,7 @@ function ModalDetalles({
                     title="Guardar"
                     style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
                   >
-                    {savingEmail ? <Loader2 size={13} className="spin-animation" /> : '✓'}
+                    {savingEmail ? <Loader2 size={13} className="spin-animation" /> : <Check size={14} />}
                   </button>
                   <button
                     className="dt-btn-action"
@@ -5933,7 +5923,7 @@ function ModalDetalles({
                     title="Cancelar"
                     style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
                   >
-                    ✕
+                    <X size={14} />
                   </button>
                 </>
               ) : (
@@ -6120,25 +6110,9 @@ function ModalDetalles({
 
         <div className="vehiculos-historial-container">
           {loadingVehiculos ? (
-            <div style={{
-              padding: '20px',
-              textAlign: 'center',
-              color: 'var(--text-tertiary)',
-              fontSize: '13px'
-            }}>
-              Cargando historial...
-            </div>
+            <Spinner size="sm" message="Cargando historial..." />
           ) : vehiculosAsignados.length === 0 ? (
-            <div style={{
-              padding: '20px',
-              textAlign: 'center',
-              color: 'var(--text-tertiary)',
-              fontSize: '13px',
-              background: 'var(--bg-secondary)',
-              borderRadius: '8px'
-            }}>
-              Sin vehículos asignados
-            </div>
+            <EmptyState size="sm" title="Sin vehículos asignados" />
           ) : (
             <div className="vehiculos-historial-list">
               {vehiculosAsignados.map((item) => {
@@ -6212,13 +6186,9 @@ function ModalDetalles({
         </div>
         <div className="vehiculos-historial-container">
           {loadingBajas ? (
-            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-              Cargando historial...
-            </div>
+            <Spinner size="sm" message="Cargando historial..." />
           ) : historialBajas.length === 0 ? (
-            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
-              Sin bajas ni reactivaciones registradas
-            </div>
+            <EmptyState size="sm" title="Sin bajas ni reactivaciones registradas" />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {historialBajas.map((b) => {

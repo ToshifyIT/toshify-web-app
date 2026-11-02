@@ -20,6 +20,7 @@ import { ConductorDetalleModal } from './ConductorDetalleModal'
 import { calificacionDesdeGuardada, calificarConductor, referenciaIngresos, type Calificacion, type ExtrasCalificacion } from './calificacionConductor'
 import { CalificacionCelda } from './CalificacionEstrellas'
 import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes, cargarExtrasCalificacion, cargarSemanaCerradaGuardada, lunesSemanaCerrada, type CalificacionSemana } from './calificacionesHistorial'
+import { StatsGrid } from '../../../components/ui/StatsGrid'
 import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
 
@@ -701,7 +702,7 @@ export function ConductoresPanelModule() {
     <div className="cond-module">
       {/* Stats Cards */}
       <div className="cond-stats">
-        <div className="cond-stats-grid">
+        <StatsGrid className="cond-stats-grid" storageKey="ConductoresPanelModule">
           <div className={`stat-card stat-card-clickable ${activeCard === 'conAuto' ? 'stat-card-active' : ''}`}
             onClick={() => handleCard('conAuto')} title="Conductores con auto asignado ahora mismo">
             <Car size={18} className="stat-icon" />
@@ -743,7 +744,7 @@ export function ConductoresPanelModule() {
               <span className="stat-label">Alerta KM</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
       <DataTable

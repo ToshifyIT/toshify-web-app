@@ -13,6 +13,7 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { useSede } from '../../contexts/SedeContext';
 import { normalizeDni } from '../../utils/normalizeDocuments';
 import { DateFilterPill } from './DateFilterPill';
+import { StatsGrid } from '../../components/ui/StatsGrid'
 import './EscuelaModule.css';
 
 interface MetricData {
@@ -390,7 +391,7 @@ export function EscuelaModule() {
     <div className="escuela-module">
        {/* Stats */}
       <div className="escuela-stats">
-        <div className="escuela-stats-grid">
+        <StatsGrid className="escuela-stats-grid" storageKey="EscuelaModule">
           <div 
             className="stat-card cursor-pointer transition-all hover:bg-gray-50"
             onClick={() => setActiveStatFilter(null)}
@@ -445,7 +446,7 @@ export function EscuelaModule() {
               <span className="stat-label">BUENA CONEXIÓN ({'>'}5H)</span>
             </div>
           </div>
-        </div>
+        </StatsGrid>
       </div>
 
        {/* Filters */}

@@ -131,23 +131,19 @@ adminIntegracionesRouter.get('/tokens', async (req, res) => {
     if (!cfg) return
     const env = process.env
     const tokens = {
+      // Nombres nuevos (CABIFY_*) con respaldo de los viejos (VITE_CABIFY_*)
       cabify_ba: {
-        username: env.VITE_CABIFY_USERNAME || null,
-        password: env.VITE_CABIFY_PASSWORD || null,
-        client_id: env.VITE_CABIFY_CLIENT_ID || null,
-        client_secret: env.VITE_CABIFY_CLIENT_SECRET || null,
-        company_id: env.VITE_CABIFY_COMPANY_ID || null,
-      },
-      cabify_bari: {
-        username: env.CABIFY_BARI_USERNAME || null,
-        password: env.CABIFY_BARI_PASSWORD || null,
-        company_ids: env.CABIFY_BARI_COMPANY_IDS || null,
+        username: env.CABIFY_USERNAME || env.VITE_CABIFY_USERNAME || null,
+        password: env.CABIFY_PASSWORD || env.VITE_CABIFY_PASSWORD || null,
+        client_id: env.CABIFY_CLIENT_ID || env.VITE_CABIFY_CLIENT_ID || null,
+        client_secret: env.CABIFY_CLIENT_SECRET || env.VITE_CABIFY_CLIENT_SECRET || null,
+        company_id: env.CABIFY_COMPANY_ID || env.VITE_CABIFY_COMPANY_ID || null,
       },
       // Cuenta de Cabify de 44 Dreams (la de Grupo CG es cabify_ba)
       cabify_44: {
-        username: env.CABIFY_44_USERNAME || null,
-        password: env.CABIFY_44_PASSWORD || null,
-        company_id: env.CABIFY_44_COMPANY_ID || null,
+        username: env.CABIFY_USERNAME_44 || env.CABIFY_44_USERNAME || null,
+        password: env.CABIFY_PASSWORD_44 || env.CABIFY_44_PASSWORD || null,
+        company_id: env.CABIFY_COMPANY_ID_44 || env.CABIFY_44_COMPANY_ID || null,
       },
       google_maps: {
         api_key: env.VITE_GOOGLE_MAPS_API_KEY || null,

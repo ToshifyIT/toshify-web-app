@@ -43,6 +43,8 @@ import {
   CheckCircle2,
   HelpCircle,
 } from 'lucide-react'
+import { Spinner } from '../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../components/ui/EstadosVista'
 
 // ============= TIPOS =============
 // Tipos para Pedidos en Tránsito
@@ -4685,9 +4687,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
             </div>
 
             {loadingPedidos ? (
-              <div className="loading-spinner">
-                <div className="spinner"></div>
-              </div>
+              <Spinner size="sm" message="Cargando..." />
             ) : pedidosFiltrados.length === 0 ? (
               <div className="empty-state">
                 <Truck size={48} />
@@ -4828,9 +4828,9 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                           {timelinePedidoId === pedido.pedido_id && (
                             <div className="pedido-timeline">
                               {loadingTimeline ? (
-                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cargando seguimiento…</div>
+                                <Spinner size="sm" message="Cargando seguimiento…" />
                               ) : timelineEventos.length === 0 ? (
-                                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Sin eventos registrados.</div>
+                                <EmptyState size="sm" title="Sin eventos registrados." />
                               ) : (
                                 timelineEventos.map(ev => (
                                   <div key={ev.id} className="pedido-tl-item">
@@ -4970,7 +4970,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
               <div className="empty-state">
                 <CheckCircle size={48} />
                 <h3>Sin alertas operativas</h3>
-                <p>No hay pedidos con fecha vencida, sin fecha o con recepción parcial pendiente.</p>
+                <EmptyState size="sm" title="No hay pedidos con fecha vencida, sin fecha o con recepción parcial pendiente." />
               </div>
             ) : (
               <>
@@ -5291,9 +5291,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                 </div>
 
                 {loadingAprobaciones ? (
-                  <div className="loading-spinner">
-                    <div className="spinner"></div>
-                  </div>
+                  <Spinner size="sm" message="Cargando..." />
                 ) : movimientosFiltrados.length === 0 ? (
                   <div className="empty-state">
                     <Check size={48} />
@@ -5447,9 +5445,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                 </div>
 
                 {loadingHistorico ? (
-                  <div className="loading-spinner">
-                    <div className="spinner"></div>
-                  </div>
+                  <Spinner size="sm" message="Cargando..." />
                 ) : historico.length === 0 ? (
                   <div className="empty-state">
                     <History size={48} />
@@ -5728,7 +5724,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
             </div>
 
             {pedidos.length === 0 ? (
-              <div className="pedidos-data-empty">No hay pedidos en seguimiento.</div>
+              <EmptyState size="sm" title="No hay pedidos en seguimiento." />
             ) : (
               <div className="pedidos-data-list">
                 {pedidos.map((pedido) => {
