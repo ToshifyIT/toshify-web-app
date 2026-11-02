@@ -2,7 +2,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { AlertTriangle, Eye, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
 
@@ -2368,6 +2367,7 @@ export function VehicleManagement() {
   //   todas las palabras deben coincidir en algún campo del registro)
   // Hace un SELECT completo on-demand para incluir todos los campos, no solo los visibles.
   const handleExportarVehiculos = async () => {
+    const XLSX = await import('xlsx')
     // Aplicar la búsqueda global sobre los vehículos ya filtrados por columnas/stat cards.
     const search = globalSearch.trim().toLowerCase()
     const filtroBusqueda = (v: any): boolean => {

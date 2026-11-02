@@ -8,7 +8,6 @@ import { DataTable } from '../../../../../components/ui/DataTable/DataTable'
 import { Search, ClipboardList, Download, ChevronDown, X, Plus, CheckCircle, Eye, Sun, Moon, Clock, AlertTriangle } from 'lucide-react'
 import type { Marcacion } from '../../bitacora/hooks/useUSSHistoricoData'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
-import * as XLSX from 'xlsx'
 import { cargarConceptosTarifa } from '../../../../onboarding/tarifaConceptos'
 
 import { hoyART } from '../../../../../utils/fechaArgentina'
@@ -664,7 +663,8 @@ export function ExcesoKmTable({
       'Estado': r.yaTieneIncidencia ? 'Por aplicar' : 'Sin crear',
     }))
   }
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import('xlsx')
     const data = getExportData()
     if (data.length === 0) return
     const ws = XLSX.utils.json_to_sheet(data)
@@ -674,7 +674,8 @@ export function ExcesoKmTable({
     XLSX.writeFile(wb, `Exceso_KM_${hoyART()}.xlsx`)
     setShowExportMenu(false)
   }
-  function exportarCSV() {
+  async function exportarCSV() {
+    const XLSX = await import('xlsx')
     const data = getExportData()
     if (data.length === 0) return
     const ws = XLSX.utils.json_to_sheet(data)

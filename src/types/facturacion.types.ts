@@ -1,5 +1,6 @@
 import { rangoSemanaISOFechas, semanaISO } from '../utils/semanaISO'
 import { hoyART } from '../utils/fechaArgentina'
+import { formatFecha } from '../utils/format'
 // =====================================================
 // TIPOS PARA EL MÓDULO DE FACTURACIÓN
 // =====================================================
@@ -517,13 +518,7 @@ export function formatCurrency(value: number): string {
   return `$ ${formatted}`
 }
 
-export function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  })
-}
+export function formatDate(dateString: string): string { return formatFecha(dateString) }
 
 /** Lunes y domingo de una semana ISO (ver src/utils/semanaISO.ts). */
 export function getWeekDates(semana: number, anio: number): { inicio: Date; fin: Date } {

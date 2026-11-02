@@ -13,7 +13,6 @@ import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Clipboa
 import type { BitacoraRegistroTransformado } from '../../../../../services/wialonBitacoraService'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
-import * as XLSX from 'xlsx'
 
 import { hoyART } from '../../../../../utils/fechaArgentina'
 interface BitacoraTableProps {
@@ -570,7 +569,8 @@ export function BitacoraTable({
     }))
   }
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import('xlsx')
     const data = getExportData()
     if (data.length === 0) return
     const ws = XLSX.utils.json_to_sheet(data)
@@ -585,7 +585,8 @@ export function BitacoraTable({
     setShowExportMenu(false)
   }
 
-  function exportarCSV() {
+  async function exportarCSV() {
+    const XLSX = await import('xlsx')
     const data = getExportData()
     if (data.length === 0) return
     const ws = XLSX.utils.json_to_sheet(data)

@@ -9,7 +9,6 @@ import { DataTable } from '../../components/ui/DataTable'
 import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt, SendHorizonal, Archive, RotateCcw, Copy, History } from 'lucide-react'
 import { CrearCobroMultaModal } from './components/CrearCobroMultaModal'
 import { type ColumnDef } from '@tanstack/react-table'
-import * as XLSX from 'xlsx'
 import { Alerta } from '../../components/ui/alertas'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showError, showSuccess } from '../../utils/toast'
@@ -180,9 +179,8 @@ export default function MultasModule() {
   // El resto (incluido data entry) solo puede desestimar.
   // Borrar y reactivar todo: admin, o un rol con permiso de ELIMINAR en el submenú
   // Multas (Configuración > Roles). Antes había una lista de correos en el código.
-  const userRole = (profile?.roles?.name || '').toLowerCase()
-  const { canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
-  const isGodMode = userRole === 'admin' || canDeleteInSubmenu('multas')
+  const { canEditInSubmenu, canDeleteInSubmenu, isAdmin } = usePermissions()
+  const isGodMode = isAdmin() || canDeleteInSubmenu('multas')
   // Reactivar: además, cualquier rol con permiso de edición en el submenú 'multas'.
   const canReactivar = isGodMode || canEditInSubmenu('multas')
   const canBorrar = isGodMode
@@ -1761,7 +1759,8 @@ export default function MultasModule() {
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas, canReactivar, canBorrar, vista, multasEstadoPago, multasIncidencia, estadoPagoFilter, duplicadoFilter, multaEsEditable, multaCobroEstado, idsConCopias, estadoMultaLabel])
 
   // Exportar a Excel
-  function handleExportar() {
+  async function handleExportar() {
+    const XLSX = await import('xlsx')
     const dataExport = multasFiltradas.map(m => ({
       'Patente': m.patente,
       'Fecha Infraccion': formatFecha(m.fecha_infraccion),

@@ -1,0 +1,38 @@
+/* =====================================================
+   CONTROL SEGMENTADO (una sola definición para todo el sistema)
+   Para elegir una opción entre pocas: Semanal / Mensual, origen del lead,
+   indicador de un gráfico… Alto total 32 px, letra 12.
+   Uso: <div class="segmentado"><button class="segmentado-btn is-active">…</button></div>
+   (.dkv2-seg / .dkv2-seg-btn son el nombre viejo, mismo estilo)
+   ===================================================== */
+:is(.segmentado, .dkv2-seg) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+}
+:is(.segmentado-btn, .dkv2-seg-btn) {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+:is(.segmentado-btn, .dkv2-seg-btn):hover { color: var(--text-primary); }
+:is(.segmentado-btn, .dkv2-seg-btn).is-active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+:is(.segmentado-btn, .dkv2-seg-btn):disabled { opacity: 0.5; cursor: default; }

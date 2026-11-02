@@ -247,9 +247,7 @@ const ConductorDetallePage = lazy(() => import('./conductores/ConductorDetallePa
 const LeadsPage = lazy(() => import('./leads/LeadsPage').then(m => ({ default: m.LeadsPage })))
 const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
-const ProgramacionPage = lazy(() => import('./onboarding/ProgramacionPage'))
 const ProgramacionV2Page = lazy(() => import('./onboarding/ProgramacionV2Page'))
-const DistribucionMapaPage = lazy(() => import('./onboarding/DistribucionMapaPage'))
 const DistribucionMapaV2Page = lazy(() => import('./onboarding/DistribucionMapaV2Page'))
 const MovimientosPage = lazy(() => import('./inventario/MovimientosPage').then(m => ({ default: m.MovimientosPage })))
 const ControlMovimientosPage = lazy(() => import('./inventario/ControlMovimientosPage').then(m => ({ default: m.ControlMovimientosPage })))
@@ -2125,17 +2123,9 @@ export function HomePage() {
                   </LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/onboarding/programacion" element={
-                <ProtectedRoute submenuName="programacion-entregas" action="view">
-                  <LazyPage>
-                    <ProgramacionPage />
-                  </LazyPage>
-                </ProtectedRoute>
-              } />
-              {/* Programaciones v2: mismo tablero con el flujo de LEADS.
-                  Convive con el v1 sin tocarlo (ver programacion-v2/). Comparte
-                  el permiso del submenu `programacion-entregas`: quien ve el v1
-                  ve el v2, sin tener que dar permisos nuevos. */}
+              {/* Programaciones v1 se eliminó: la ruta vieja lleva al v2. */}
+              <Route path="/onboarding/programacion" element={<Navigate to="/onboarding/programacion-v2" replace />} />
+              {/* Programaciones v2 usa el permiso del submenu `programacion-entregas`. */}
               <Route path="/onboarding/programacion-v2" element={
                 <ProtectedRoute submenuName="programacion-entregas" action="view">
                   <LazyPage>
@@ -2148,11 +2138,8 @@ export function HomePage() {
                   <LazyPage><ZonasPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/onboarding/distribucion-mapa" element={
-                <ProtectedRoute submenuName="distribucion-mapa" action="view">
-                  <LazyPage><DistribucionMapaPage /></LazyPage>
-                </ProtectedRoute>
-              } />
+              {/* Distribución v1 se eliminó: la ruta vieja lleva al v2. */}
+              <Route path="/onboarding/distribucion-mapa" element={<Navigate to="/onboarding/distribucion-mapa-v2" replace />} />
               {/* El v2 es el destino del ítem de menú "Distribución en mapa"
                   (submenú `distribucion-mapa`, ver sql/distribucion_mapa_menu_apunta_a_v2.sql),
                   así que comparte su permiso. No necesita un submenú propio. */}

@@ -12,6 +12,7 @@ import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 
 import { numeroSemana } from '../../../utils/semanaISO'
+import { formatPlata } from '../../../utils/format'
 interface SiniestroSeguimientoProps {
   siniestro: SiniestroCompleto
   onReload: () => void
@@ -463,14 +464,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
     })
   }
 
-  function formatMoney(value: number | undefined | null) {
-    if (!value) return '-'
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+  function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
 
   // Datos pre-seleccionados para mostrar en el formulario
   const selectedVehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)

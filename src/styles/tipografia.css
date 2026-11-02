@@ -237,3 +237,147 @@
 #root .cabify-semana-rango, #root .cabify-last-update-compact { font-size: 11px !important; }
 #root .week-calendar-btn { padding: 0 12px !important; gap: 6px !important; }
 #root .week-calendar-btn svg.lucide { width: 14px !important; height: 14px !important; }
+
+/* =====================================================
+   REPORTES (Dashboard KPI, KPI v2, Directivo, General, Marketing)
+   Misma escala que el resto, con números un poco más grandes porque son
+   la lectura principal de la pantalla:
+     número destacado 20 · número de tarjeta 16 · número chico 14
+     título de tarjeta 13 · texto 12 · etiquetas 10–11
+   ===================================================== */
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(.ddir-camino-total-valor, .dkv2-kpi--hero .dkv2-kpi-value) {
+  font-size: 20px !important;
+}
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(.ddir-kpi-value, .ddir-caidas-valor, .dkv2-kpi:not(.dkv2-kpi--hero) .dkv2-kpi-value, .dkv2-mod-valor) {
+  font-size: 16px !important;
+}
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(.ddir-mini-value, .fleet-donut-legend-value, .fleet-donut-excluded-value) {
+  font-size: 14px !important;
+}
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(
+  .ddir-card-title, .dkv2-card-title, .dashboard-section-title, .cobro-teorico-title,
+  .fact-cob-title, .permanencia-chart__title, .zones-assignments-title,
+  .period-comparison-value-main, .period-comparison-value-secondary
+) {
+  font-size: 13px !important;
+}
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(
+  .ddir-lectura-titulo, .ddir-funnel-label, .ddir-funnel-value, .ddir-causal, .ddir-causal *, .ddir-causal-pct,
+  .ddir-camino-total-label, .ddir-camino-etapa, .ddir-camino-etapa *, .ddir-fila-total td,
+  .dkv2-motivos-titulo, .dkv2-muted, .dkv2-btn,
+  .mkt-link, .mkt-anuncio-n, .mkt-anuncio-cab span,
+  .cobro-teorico-tab, .fact-cob-summary-value, .truncate
+) {
+  font-size: 12px !important;
+}
+#root .dkpis-module :is(.period-comparison-badge, .period-comparison-label) { font-size: 10px !important; }
+/* Texto dentro de los gráficos (centro de donas, ejes) */
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) svg text { font-size: 11px; }
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) .fleet-donut svg text:first-of-type { font-size: 14px; }
+
+/* Reportes: mismos controles y estados que el resto del sistema */
+/* La tarjeta principal no lleva línea de color al costado (no existe en otros módulos) */
+#root .dkv2-module .dkv2-kpi--hero { box-shadow: none !important; }
+
+/* Selectores de período, flechas y botones: 32 px y letra 12 */
+#root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(.ddir-select, .dkv2-periodo-select) {
+  height: 32px !important;
+  box-sizing: border-box;
+  font-size: 12px !important;
+  border-radius: var(--radius-md) !important;
+}
+#root .dkv2-module .dkv2-icon-btn {
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 0 !important;
+  box-sizing: border-box;
+}
+#root .dkv2-module .dkv2-icon-btn svg { width: 16px; height: 16px; }
+#root .dkv2-module .dkv2-btn {
+  height: 32px !important;
+  min-height: 0 !important;
+  box-sizing: border-box;
+  font-size: 12px !important;
+}
+#root .dkpis-module .dashboard-granularity-button {
+  height: 28px !important;
+  font-size: 12px !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+/* Chips de filtro (Directivo, Marketing): como los filtros rápidos del sistema */
+#root :is(.ddir-module, .dkv2-module) :is(.ddir-tab, .mkt-chip) {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  border-radius: var(--radius-full) !important;
+  background: transparent;
+}
+#root :is(.ddir-module, .dkv2-module) :is(.ddir-tab--on, .mkt-chip--activo) {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+
+/* Selector de período del Dashboard Directivo: mismo aspecto que el de KPI's */
+#root .ddir-module select.ddir-select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0 36px 0 12px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+  font-weight: 600;
+}
+
+/* =====================================================
+   BARRAS DE PERÍODO / SINCRONIZACIÓN (Cresium, Alegra, 2Chat)
+   Una sola línea, como la barra de período de los reportes: etiqueta al lado
+   del campo, campos y botones de 32 px con letra 12.
+   ===================================================== */
+#root :is(.cr-filtros, .tc-filtros) {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 10px 16px !important;
+}
+#root :is(.cr-campo, .tc-campo) {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+#root :is(.cr-campo, .tc-campo) > span {
+  font-size: 11px !important;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+#root :is(.cr-filtros, .tc-filtros) :is(input, select) {
+  height: 32px !important;
+  min-height: 0 !important;
+  box-sizing: border-box;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  width: auto !important;
+}
+#root :is(.cr-filtros, .tc-filtros) :is(.btn-primary, .btn-secondary) { height: 32px !important; }
+
+/* Campos de formulario sueltos en pantalla (no en ventanas): mismo alto que el resto */
+#root .main-content :is(input.form-input:not([type="checkbox"]):not([type="radio"]), select.form-input, input.select-input, .ss-trigger):not(.modal-content *):not(td *) {
+  height: 32px !important;
+  min-height: 0 !important;
+  box-sizing: border-box;
+  font-size: 12px !important;
+}
+
+/* El control segmentado usa role="tab": no le aplica el relleno de las pestañas */
+#root .main-content :is(.segmentado-btn, .dkv2-seg-btn)[role="tab"] {
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+#root :is(.cr-filtros, .tc-filtros) select { padding: 0 32px 0 10px !important; min-width: 110px; }

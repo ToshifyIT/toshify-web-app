@@ -290,7 +290,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const navigate = useNavigate()
   const location = useLocation()
   const { user, profile } = useAuth()
-  const { canCreateInSubmenu, canEditInSubmenu, canViewTab } = usePermissions()
+  const { canCreateInSubmenu, canEditInSubmenu, canViewTab, isAdmin } = usePermissions()
   const { sedeActual, verTodas } = useSede()
   const isControlMode = mode === 'control'
   const defaultTab: TabActiva = isControlMode ? 'entradas' : 'nuevo'
@@ -365,8 +365,8 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const [showAprobacionesCerradasHelp, setShowAprobacionesCerradasHelp] = useState(false)
   const [showSeguimientoData, setShowSeguimientoData] = useState(false)
 
-  const userRole = profile?.roles?.name || ''
-  const canApprove = userRole === 'encargado' || userRole === 'admin' || userRole === 'supervisor'
+  // Aprobar pedidos: solo admin (los roles 'encargado' y 'supervisor' ya no existen)
+  const canApprove = isAdmin()
 
   // ============= EFECTOS =============
   // Abrir pestaña según ?tab= en la URL (ej. desde "Pendientes operativos" del Dashboard)

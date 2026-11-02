@@ -2303,3 +2303,50 @@
     font-size: 10px;
   }
 }
+
+/* =====================================================
+   VISITAS EN LA ESCALA DEL SISTEMA
+   Botones de 32 px, letra 12, radio de botón (no píldora); filtros de
+   categoría como los filtros rápidos del resto (11 px, activo en rojo).
+   ===================================================== */
+.visitas-view-toggle { padding: 2px; gap: 2px; border-radius: var(--radius-md); }
+.visitas-view-btn {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+.visitas-view-btn svg { width: 14px; height: 14px; }
+
+.visitas-cat-chip {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: transparent;
+}
+.visitas-cat-chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.visitas-calendario-wrapper .rbc-toolbar { margin-bottom: 12px; gap: 8px; }
+.visitas-calendario-wrapper .rbc-toolbar button {
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+}
+.visitas-calendario-wrapper .rbc-toolbar .rbc-toolbar-label { font-size: 14px; }
+
+/* Zona horaria en la misma línea que Semana / Mes (a su izquierda), sin sumar
+   una fila vacía arriba del calendario */
+@media (min-width: 900px) {
+  .visitas-calendario-wrapper > .visitas-timezone-badge {
+    position: absolute;
+    top: 30px;
+    right: 160px;
+    padding: 0;
+  }
+}

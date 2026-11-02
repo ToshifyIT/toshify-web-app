@@ -5,6 +5,7 @@
 
 import { SEVERITY_THRESHOLDS, SEVERITY_COLORS } from '../constants/uss.constants'
 
+import { formatFecha } from '../../../../utils/format'
 /**
  * Obtiene el nivel de severidad de un exceso
  */
@@ -64,15 +65,7 @@ export function formatDateTime(dateString: string): string {
 /**
  * Formatea solo la fecha en hora Argentina
  */
-export function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('es-AR', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
+export function formatDate(dateString: string): string { return formatFecha(dateString) }
 
 /**
  * Formatea velocidad con unidad

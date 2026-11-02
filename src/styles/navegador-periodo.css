@@ -1,0 +1,51 @@
+/* Navegador de período de los reportes (components/ui/NavegadorPeriodo.tsx).
+   Mismo aspecto que el de Dashboard KPI's: flechas y selector de 32 px. */
+.navper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+.navper-flecha {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.navper-flecha:hover:not(:disabled) { color: var(--text-primary); background: var(--bg-secondary); }
+.navper-flecha:disabled { opacity: 0.4; cursor: default; }
+.navper-select {
+  height: 32px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 36px 0 12px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-secondary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center / 16px 16px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.navper-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-info);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.navper-link:hover { text-decoration: underline; }

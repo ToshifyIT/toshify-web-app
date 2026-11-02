@@ -2166,6 +2166,30 @@
      Ver (ojo) gris · Editar (lápiz) azul · Eliminar (tacho) rojo.
    Se reconocen por el ícono lucide, así no hace falta tocar cada módulo.
    ===================================================== */
+/* Cualquier otra acción de fila que sea solo un ícono (adjuntar, desestimar,
+   restaurar, vincular…): mismo tamaño que ver/editar/eliminar, en gris */
+#root td :is(button.dt-accion-icono, button:has(> svg.lucide:only-child):not([class*="btn-primary"]):not([class*="badge"])) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+#root td :is(button.dt-accion-icono, button:has(> svg.lucide:only-child):not([class*="btn-primary"]):not([class*="badge"])):hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+#root td :is(button.dt-accion-icono, button:has(> svg.lucide:only-child):not([class*="btn-primary"]):not([class*="badge"])):disabled { opacity: 0.4; cursor: not-allowed; }
+#root td :is(button.dt-accion-icono, button:has(> svg.lucide:only-child)) > svg.lucide { width: 16px; height: 16px; }
+
 #root td button:has(> svg.lucide-eye:only-child),
 #root td button:has(> svg.lucide-pen:only-child),
 #root td button:has(> svg.lucide-trash-2:only-child),
