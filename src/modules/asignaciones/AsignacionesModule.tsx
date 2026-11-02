@@ -345,6 +345,29 @@ export function AsignacionesModule() {
   const [cancelMotivo, setCancelMotivo] = useState('')
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
+  // Contacto de los conductores del detalle: teléfono (WhatsApp), secundario, email de
+  // Cabify y mail personal. Se pide aparte con '*' para no romper si alguna columna nueva
+  // (telefono_secundario, correo_personal) todavía no existe en la base.
+  const [contactosDetalle, setContactosDetalle] = useState<Map<string, { tel: string; tel2: string; email: string; email2: string }>>(new Map())
+  useEffect(() => {
+    const ids = (viewAsignacion?.asignaciones_conductores || []).map((ac: any) => ac.conductor_id).filter(Boolean)
+    if (!ids.length) { setContactosDetalle(new Map()); return }
+    let activo = true
+    ;(supabase.from('conductores') as any).select('*').in('id', ids).then(({ data }: { data: any[] | null }) => {
+      if (!activo) return
+      const m = new Map<string, { tel: string; tel2: string; email: string; email2: string }>()
+      for (const c of data || []) {
+        m.set(c.id, {
+          tel: String(c.telefono_contacto || '').trim(),
+          tel2: String(c.telefono_secundario || '').trim(),
+          email: String(c.email || '').trim(),
+          email2: String(c.correo_personal || '').trim(),
+        })
+      }
+      setContactosDetalle(m)
+    })
+    return () => { activo = false }
+  }, [viewAsignacion])
   // Conceptos de alquiler (periodo + monto semanal) para el chip de Tarifa del
   // modal de detalle. Se cargan una sola vez, al abrir el primer modal.
   const [conceptosTarifa, setConceptosTarifa] = useState<MapaConceptosTarifa>({})
@@ -3846,12 +3869,13 @@ export function AsignacionesModule() {
               setShowViewModal(true)
             },
           },
-          // Regularizar (solo para ciertos roles)
+          // Regularizar: oculto por ahora (pedido de operaciones). Para volver a
+          // mostrarlo, usar `hidden: !canCreateManualAssignment`.
           {
             icon: <Pencil size={15} />,
             label: 'Regularizar',
             onClick: () => handleOpenRegularizar(row.original),
-            hidden: !canCreateManualAssignment,
+            hidden: true,
           },
           // Completar Control (visible solo si no se ha completado y creada después del 27/04/2026,
           // y la asignación no está cancelada)
@@ -4490,6 +4514,18 @@ export function AsignacionesModule() {
                                 )}
                               </p>
                               <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
+                              {(() => {
+                                const ct = contactosDetalle.get(ac.conductor_id)
+                                if (!ct || !(ct.tel || ct.tel2 || ct.email || ct.email2)) return null
+                                return (
+                                  <div className="asig-contacto">
+                                    {ct.tel && <span><span className="asig-contacto-lbl">Teléfono (WhatsApp)</span><a href={`https://wa.me/${ct.tel.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{ct.tel}</a></span>}
+                                    {ct.tel2 && <span><span className="asig-contacto-lbl">Tel. secundario</span>{ct.tel2}</span>}
+                                    {ct.email && <span><span className="asig-contacto-lbl">Email (Cabify)</span>{ct.email}</span>}
+                                    {ct.email2 && <span><span className="asig-contacto-lbl">Mail personal</span>{ct.email2}</span>}
+                                  </div>
+                                )
+                              })()}
                               {tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id) && (
                                 <p className="asig-conductor-card-info" style={{ color: 'var(--text-tertiary)' }} title="Este conductor no fue parte del cambio de vehículo">
                                   Asignación: <strong style={{ color: 'var(--text-secondary)' }}>{tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id)}</strong>

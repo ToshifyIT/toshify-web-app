@@ -12,7 +12,7 @@ import {
 import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
-  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Layers, Link2,
+  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Link2,
   CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import { useConductoresEmbajador } from '../../hooks/useConductoresEmbajador'
 import Swal from 'sweetalert2'
+import { ESTADO_DESCARTADO, lineaDescarte, pedirMotivoDescarte } from './motivoDescarte'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showSuccess } from '../../utils/toast'
 import type { Lead, LeadFormData } from '../../types/leads.types'
@@ -822,16 +823,26 @@ export function LeadsModule() {
 
   async function handleChangeEstadoInline(leadId: string, nuevoEstado: string) {
     setEstadoDropdownId(null)
+    // Descartado: el motivo es obligatorio. Si se cancela, el estado no cambia.
+    let extra: Partial<Lead> = {}
+    if (nuevoEstado === ESTADO_DESCARTADO) {
+      const lead = leads.find(l => l.id === leadId)
+      const motivo = await pedirMotivoDescarte(lead?.nombre_completo)
+      if (!motivo) return
+      const linea = lineaDescarte(motivo, profile?.full_name)
+      const previas = (lead?.observaciones || '').trim()
+      extra = { causal_de_cierre: motivo, observaciones: previas ? `${previas}\n${linea}` : linea }
+    }
     try {
       const now = new Date().toISOString()
       // Marcar estado_manual_at para que loadLeads respete este cambio manual
       // y no lo sobrescriba con el auto-cálculo de calcularEstadoLead.
       const { error } = await supabase
         .from('leads')
-        .update({ estado_de_lead: nuevoEstado, estado_manual_at: now, updated_at: now })
+        .update({ estado_de_lead: nuevoEstado, estado_manual_at: now, updated_at: now, ...extra })
         .eq('id', leadId)
       if (error) throw error
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado, estado_manual_at: now, updated_at: now } : l))
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado, estado_manual_at: now, updated_at: now, ...extra } : l))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
       Swal.fire('Error', `No se pudo cambiar el estado: ${msg}`, 'error')
@@ -1470,12 +1481,16 @@ export function LeadsModule() {
   , [leads])
 
   // ---------- FILTERED DATA ----------
+  /** Texto del buscador de la tabla: si hay algo escrito, la búsqueda incluye descartados. */
+  const [busqueda, setBusqueda] = useState('')
   /** Filtro de la tarjeta activa (stat card). Se aplica encima de leadsBase. */
   const filtroTarjeta = useCallback((l: Lead): boolean => {
-    // Los Descartados solo se ven con "Descartados" o "Ver todos". Las demás tarjetas
-    // también los excluyen, así el número de la tarjeta no cambia al clickearla
+    // Los Descartados solo se ven con la tarjeta "Descartados" o al buscar algo
+    // puntual (la búsqueda recorre todos los leads). Las demás tarjetas también los
+    // excluyen, así el número de la tarjeta no cambia al clickearla
     // (antes: 914 en la vista general → 971 al filtrar por Contactado Sellium).
-    if (activeStatCard !== 'descartados' && activeStatCard !== 'todos' && l.estado_de_lead === 'Descartado') return false
+    const buscando = busqueda.trim() !== ''
+    if (!buscando && activeStatCard !== 'descartados' && activeStatCard !== 'todos' && l.estado_de_lead === 'Descartado') return false
     // Por estado_de_lead; Contactado Sellium / Intercom / Damaro también miran fuente_de_lead
     switch (activeStatCard) {
       case 'inicio': return l.estado_de_lead === 'Inicio conversación'
@@ -1495,10 +1510,10 @@ export function LeadsModule() {
       // 'todos': vista general para busquedas. No filtra por estado, por lo que
       // incluye los descartados junto al resto.
       case 'todos': return true
-      // Por defecto: excluir descartados de la tabla
-      default: return l.estado_de_lead !== 'Descartado'
+      // Por defecto: excluir descartados de la tabla (salvo que se esté buscando)
+      default: return buscando || l.estado_de_lead !== 'Descartado'
     }
-  }, [activeStatCard, leadsEnZona, leadsConductorPrevio])
+  }, [activeStatCard, leadsEnZona, leadsConductorPrevio, busqueda])
 
   /** Leads con los filtros propios del módulo (columnas y fechas), SIN la tarjeta activa. */
   const leadsBase = useMemo(() => {
@@ -2162,7 +2177,9 @@ export function LeadsModule() {
       return String(value).trim()
     }
     // CUIT y DNI siempre como string
-    if (dbCol === 'cuit' || dbCol === 'dni') return String(value).trim()
+    // El DNI se guarda siempre solo con números
+    if (dbCol === 'dni') return String(value).trim().replace(/\D/g, '')
+    if (dbCol === 'cuit') return String(value).trim()
     // Campo 'licencia' del lead: SIEMPRE solo 'Si', 'No' o null
     // - 'NO' / 'NÓ' / 'FALSE' / '0' (cualquier capitalización) → 'No'
     // - Cualquier otro valor con contenido (incluso códigos como 'A1.4', 'D1') → 'Si'
@@ -3396,6 +3413,17 @@ export function LeadsModule() {
               <span className="stat-label">Ya fue conductor</span>
             </div>
           </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'descartados' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('descartados')}
+            title="Leads descartados. No aparecen en la vista general, pero sí al buscar un lead puntual"
+          >
+            <Trash2 size={18} className="stat-icon" style={{ color: '#dc2626' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.descartados}</span>
+              <span className="stat-label">Descartados</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3414,6 +3442,8 @@ export function LeadsModule() {
       <DataTable
         data={leadsBase}
         rowFilter={filtroTarjeta}
+        globalFilter={busqueda}
+        onGlobalFilterChange={setBusqueda}
         onBaseDataChange={setLeadsMetricas}
         onFilteredDataChange={setLeadsVisibles}
         columns={columns}
@@ -3431,7 +3461,7 @@ export function LeadsModule() {
               <RefreshCw size={14} />
             </button>
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel" aria-label="Exportar Excel">
-              <Download size={14} /> <span className="leads-btn-label leads-btn-label--sec">Exportar</span>
+              <Download size={14} /> <span className="leads-btn-label">Exportar</span>
             </button>
             {canCreate && (
               <>
@@ -3459,20 +3489,6 @@ export function LeadsModule() {
               title="Ver los leads que ya son conductores y los que tienen un conductor con el mismo documento pero siguen sin convertir"
             >
               <Link2 size={14} /> <span className="leads-btn-label leads-btn-label--sec">Ver Lead/Conductores</span>
-            </button>
-            <button
-              className={`btn-sm ${activeStatCard === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => handleStatClick('todos')}
-              title="Muestra todos los leads, incluidos los descartados, para hacer una busqueda general"
-            >
-              <Layers size={14} /> <span className="leads-btn-label">Ver todos ({stats.todos})</span>
-            </button>
-            <button
-              className={`btn-sm ${activeStatCard === 'descartados' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => handleStatClick('descartados')}
-              style={activeStatCard === 'descartados' ? { background: '#dc2626', borderColor: '#dc2626' } : { color: '#dc2626', borderColor: '#dc2626' }}
-            >
-              <Trash2 size={14} /> <span className="leads-btn-label">Descartados ({stats.descartados})</span>
             </button>
           </div>
         }

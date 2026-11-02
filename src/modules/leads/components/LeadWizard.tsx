@@ -9,6 +9,32 @@ import { useSede } from '../../../contexts/SedeContext'
 import type { LeadFormData } from '../../../types/leads.types'
 import { normalizarCelularAR, validarCelularAR } from '../../../utils/validacionesCampos'
 import { LABELS_CUENTA_APP } from '../cuentasApps'
+import { useAuth } from '../../../contexts/AuthContext'
+import { ESTADO_DESCARTADO, pedirMotivoDescarte } from '../motivoDescarte'
+
+/** Cabecera de cada nota de la bitácora: "[02/11/2026 16:40 · Maria Flores]" */
+const RE_CABECERA = /^\[(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}[^\]]*)\]\s*/
+
+/** Separa las observaciones guardadas en notas. El texto viejo sin cabecera queda como una nota. */
+function parsearBitacora(texto: string): { cabecera: string | null; texto: string }[] {
+  const t = (texto || '').trim()
+  if (!t) return []
+  return t.split(/\n(?=\[\d{2}\/\d{2}\/\d{4} \d{2}:\d{2})/).map(bloque => {
+    const m = bloque.match(RE_CABECERA)
+    return m ? { cabecera: m[1], texto: bloque.slice(m[0].length).trim() } : { cabecera: null, texto: bloque.trim() }
+  }).filter(n => n.texto)
+}
+
+/** Observaciones guardadas + la nota nueva con fecha, hora (Argentina) y usuario. */
+function agregarNota(anteriores: string, nota: string, usuario: string | null | undefined): string {
+  const limpia = nota.trim()
+  if (!limpia) return anteriores
+  const ahora = new Date().toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).replace(',', '')
+  const linea = `[${ahora} · ${usuario || 'Usuario'}] ${limpia}`
+  return anteriores.trim() ? `${anteriores.trim()}\n${linea}` : linea
+}
 
 interface CatalogoItem {
   id: string
@@ -63,6 +89,11 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
   const embajadores = useConductoresEmbajador()
+  const { profile } = useAuth()
+  // Observaciones como bitácora: lo guardado al abrir queda fijo y se agregan notas al final
+  const obsOriginal = useRef<string>(formData.observaciones || '')
+  const [notaNueva, setNotaNueva] = useState('')
+  const bitacoraObs = parsearBitacora(obsOriginal.current)
 
   // Mapping zona → nombre de sede esperada.
   // Cuando el operador (o AddressAutocomplete) cambia la zona, auto-asignamos
@@ -99,9 +130,9 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.zona])
 
-  // Al abrir el wizard, si hay teléfono pero no WhatsApp, copiar el teléfono
+  // Al abrir el wizard, el WhatsApp queda igual al teléfono principal (son el mismo número)
   useEffect(() => {
-    if (formData.phone && !formData.whatsapp_number) {
+    if (formData.phone && formData.whatsapp_number !== formData.phone) {
       setFormData(prev => ({ ...prev, whatsapp_number: prev.phone }))
     }
     // Auto-mapear licencia texto a categorías si hay licencia pero no categorías
@@ -209,15 +240,14 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     if (!normalizado || normalizado === formData[field]) return
     setFormData(prev => {
       const next = { ...prev, [field]: normalizado }
-      // Mantener el WhatsApp sincronizado si venia copiando al telefono
-      if (field === 'phone' && (!prev.whatsapp_number || prev.whatsapp_number === prev.phone)) {
+      // El WhatsApp es siempre el mismo número que el principal
+      if (field === 'phone') {
         next.whatsapp_number = normalizado
       }
       return next
     })
   }
   const errorTelefono = errors.phone || (telefonosTocados.has('phone') ? validarCelularAR(formData.phone) : null)
-  const errorWhatsapp = errors.whatsapp_number || (telefonosTocados.has('whatsapp_number') ? validarCelularAR(formData.whatsapp_number) : null)
   const errorSecundario = errors.telefono_secundario || (telefonosTocados.has('telefono_secundario') && formData.telefono_secundario ? validarCelularAR(formData.telefono_secundario) : null)
 
   function handleNext() {
@@ -229,6 +259,30 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
   function handlePrev() {
     if (currentStep > 1) setCurrentStep(currentStep - 1)
   }
+
+  // Estado de cada paso según sus campos obligatorios:
+  //  verde = completo · amarillo = ya pasaste por ahí pero falta algo · gris = sin visitar
+  const lleno = (v: unknown) => Array.isArray(v) ? v.length > 0 : typeof v === 'boolean' ? true : !!String(v ?? '').trim()
+  const faltantesPorPaso: Record<number, string[]> = {
+    1: [
+      !lleno(formData.nombre_completo) && 'Nombre completo', !lleno(formData.dni) && 'DNI', !lleno(formData.cuit) && 'CUIT',
+      !lleno(formData.fecha_de_nacimiento) && 'Fecha de nacimiento', !lleno(formData.nacionalidad) && 'Nacionalidad',
+      !lleno(formData.estado_civil) && 'Estado civil', !lleno(formData.sede || formData.sede_id) && 'Sede',
+    ].filter(Boolean) as string[],
+    2: [!lleno(formData.phone) && 'Teléfono', !lleno(formData.email) && 'Email Cabify', !lleno(formData.direccion) && 'Dirección'].filter(Boolean) as string[],
+    3: [
+      !lleno(formData.numero_licencia) && 'Nro. licencia', !lleno(formData.vencimiento_licencia) && 'Vencimiento licencia',
+      !lleno(formData.categorias_licencia) && 'Categorías', !lleno(formData.experiencia_previa) && 'Experiencia previa',
+      !lleno(formData.url_folder) && 'Link de documentación',
+    ].filter(Boolean) as string[],
+    4: [!lleno(formData.cochera) && 'Cochera'].filter(Boolean) as string[],
+    5: [
+      formData.referido !== true && formData.referido !== false && 'Referido',
+      formData.referido === true && !lleno(formData.embajador_id) && 'Embajador',
+    ].filter(Boolean) as string[],
+  }
+  const [visitados, setVisitados] = useState<Set<number>>(() => new Set([1]))
+  useEffect(() => { setVisitados(prev => prev.has(currentStep) ? prev : new Set(prev).add(currentStep)) }, [currentStep])
 
   function goToStep(step: number) {
     if (step >= 1 && step <= STEPS.length) {
@@ -242,15 +296,24 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
       <div className="lead-wizard-progress">
         {STEPS.map((step, idx) => (
           <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {(() => {
+              const faltan = faltantesPorPaso[step.id] || []
+              const completo = faltan.length === 0
+              const visto = visitados.has(step.id) || currentStep > step.id
+              const estado = currentStep === step.id ? 'active' : completo ? 'completed' : visto ? 'incompleto' : ''
+              return (
             <div
-              className={`lead-wizard-step ${currentStep === step.id ? 'active' : ''} ${currentStep > step.id ? 'completed' : ''}`}
+              className={`lead-wizard-step ${estado}`}
               onClick={() => goToStep(step.id)}
+              title={completo ? 'Obligatorios completos' : `Falta: ${faltan.join(', ')}`}
             >
               <div className="lead-wizard-step-number">
-                {currentStep > step.id ? <Check size={14} /> : step.id}
+                {estado === 'completed' ? <Check size={14} /> : estado === 'incompleto' ? '!' : step.id}
               </div>
               <span className="lead-wizard-step-label">{step.label}</span>
             </div>
+              )
+            })()}
             {idx < STEPS.length - 1 && <div className="lead-wizard-step-separator" />}
           </div>
         ))}
@@ -305,7 +368,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   type="text"
                   className={errors.dni ? 'field-error' : ''}
                   value={formData.dni || ''}
-                  onChange={e => updateField('dni', e.target.value)}
+                  onChange={e => updateField('dni', e.target.value.replace(/\D/g, ''))}
                   placeholder="Ej: 35123456"
                   maxLength={10}
                 />
@@ -397,7 +460,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
           <>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Teléfono <span className="required">*</span></label>
+                <label>Teléfono (WhatsApp) <span className="required">*</span></label>
                 <input
                   type="text"
                   className={errorTelefono ? 'field-error' : ''}
@@ -405,10 +468,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   onChange={e => {
                     const val = e.target.value
                     updateField('phone', val)
-                    // Auto-fill WhatsApp si está vacío o coincide con el teléfono anterior
-                    if (!formData.whatsapp_number || formData.whatsapp_number === formData.phone) {
-                      updateField('whatsapp_number', val)
-                    }
+                    // El WhatsApp es siempre el mismo número que el principal
+                    updateField('whatsapp_number', val)
                   }}
                   onBlur={() => normalizarTelefonoAlSalir('phone')}
                   placeholder="Ej: 11 1234-5678 o +54 9 11 1234-5678"
@@ -416,52 +477,37 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 {errorTelefono && <span className="error-text">{errorTelefono}</span>}
               </div>
               <div className="lead-wizard-field">
-                <label>WhatsApp</label>
-                <input
-                  type="text"
-                  className={errorWhatsapp ? 'field-error' : ''}
-                  value={formData.whatsapp_number || ''}
-                  onChange={e => updateField('whatsapp_number', e.target.value)}
-                  onBlur={() => normalizarTelefonoAlSalir('whatsapp_number')}
-                  placeholder="Ej: +5491112345678"
-                />
-                {errorWhatsapp && <span className="error-text">{errorWhatsapp}</span>}
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
-                <label>Teléfono secundario <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
+                <label>Teléfono secundario (personal / otra app) <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
                 <input
                   type="text"
                   className={errorSecundario ? 'field-error' : ''}
                   value={formData.telefono_secundario || ''}
                   onChange={e => updateField('telefono_secundario', e.target.value)}
                   onBlur={() => normalizarTelefonoAlSalir('telefono_secundario')}
-                  placeholder="Otro número que use (ej. el de DiDi)"
+                  placeholder="Su número personal u otro que use (ej. el de DiDi)"
                 />
                 {errorSecundario && <span className="error-text">{errorSecundario}</span>}
               </div>
-              <div className="lead-wizard-field" />
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Email <span className="required">*</span></label>
+                <label>Email app móvil (Cabify) <span className="required">*</span></label>
                 <input
                   type="email"
                   className={errors.email ? 'field-error' : ''}
                   value={formData.email || ''}
                   onChange={e => updateField('email', e.target.value)}
-                  placeholder="correo@ejemplo.com"
+                  placeholder="El mismo con el que entra a Cabify"
                 />
                 {errors.email && <span className="error-text">{errors.email}</span>}
               </div>
               <div className="lead-wizard-field">
-                <label>Mail de Respaldo</label>
+                <label>Mail personal / respaldo <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(opcional)</span></label>
                 <input
                   type="email"
                   value={formData.mail_de_respaldo || ''}
                   onChange={e => updateField('mail_de_respaldo', e.target.value)}
-                  placeholder="correo alternativo"
+                  placeholder="Otro correo que use"
                 />
               </div>
             </div>
@@ -758,7 +804,25 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
                 <label>Estado de Lead</label>
-                <select value={formData.estado_de_lead || ''} onChange={e => updateField('estado_de_lead', e.target.value)}>
+                <select
+                  value={formData.estado_de_lead || ''}
+                  onChange={async e => {
+                    const v = e.target.value
+                    // Descartado: motivo obligatorio; si se cancela, el estado no cambia
+                    if (v === ESTADO_DESCARTADO && formData.estado_de_lead !== ESTADO_DESCARTADO) {
+                      const motivo = await pedirMotivoDescarte(formData.nombre_completo)
+                      if (!motivo) return
+                      setFormData(prev => ({
+                        ...prev,
+                        estado_de_lead: v,
+                        causal_de_cierre: motivo,
+                        observaciones: agregarNota(prev.observaciones || '', `Descartado: ${motivo}`, profile?.full_name),
+                      }))
+                      return
+                    }
+                    updateField('estado_de_lead', v)
+                  }}
+                >
                   <option value="">Seleccionar</option>
                   {/* Si el lead tiene un estado que ya no se ofrece (histórico), se conserva como opción */}
                   {formData.estado_de_lead && !estados.includes(formData.estado_de_lead) && (
@@ -803,18 +867,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 </select>
               </div>
               <div className="lead-wizard-field">
-                <label>Entrevista IA</label>
-                <select value={formData.entrevista_ia || ''} onChange={e => updateField('entrevista_ia', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Apto">Apto</option>
-                  <option value="No Apto">No Apto</option>
-                  <option value="Pendiente">Pendiente</option>
-                </select>
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
-                <label>Referido</label>
+                <label>Referido <span className="required">*</span> <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(para pasar a conductor)</span></label>
                 <select
                   value={formData.referido === true ? 'Si' : formData.referido === false ? 'No' : ''}
                   onChange={e => {
@@ -833,6 +886,10 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="No">No</option>
                 </select>
               </div>
+            </div>
+            {/* Embajador: solo cuando es referido */}
+            {formData.referido === true && (
+            <div className="lead-wizard-form-group full-width">
               <div className="lead-wizard-field">
                 <label>
                   Embajador {formData.referido === true && <span className="required">*</span>}
@@ -854,13 +911,31 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
               {/* Codigo Referido (texto libre) reemplazado por Referido / Embajador */}
               {/* Fecha de Inicio oculto */}
             </div>
+            )}
+            {/* Entrevista IA: se quitó del formulario (2026-11-02, ya no se usa). El dato queda en la base. */}
             <div className="lead-wizard-form-group full-width">
               <div className="lead-wizard-field">
                 <label>Observaciones</label>
+                {/* Bitácora: las notas anteriores no se editan; cada nota nueva se guarda
+                    al final con fecha, hora y usuario. */}
+                {bitacoraObs.length > 0 && (
+                  <ul className="lead-obs-bitacora">
+                    {[...bitacoraObs].reverse().map((n, i) => (
+                      <li key={i}>
+                        {n.cabecera ? <span className="lead-obs-cab">{n.cabecera}</span> : <span className="lead-obs-cab">Nota anterior</span>}
+                        <span className="lead-obs-texto">{n.texto}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <textarea
-                  value={formData.observaciones || ''}
-                  onChange={e => updateField('observaciones', e.target.value)}
-                  placeholder="Notas sobre el candidato..."
+                  value={notaNueva}
+                  onChange={e => {
+                    const v = e.target.value
+                    setNotaNueva(v)
+                    updateField('observaciones', agregarNota(obsOriginal.current, v, profile?.full_name))
+                  }}
+                  placeholder={bitacoraObs.length ? 'Agregar una nota nueva…' : 'Notas sobre el candidato...'}
                 />
               </div>
             </div>

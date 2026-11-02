@@ -86,6 +86,8 @@ export interface ConductorPanelRow {
   // undefined = no se pidieron (el llamador no paso opciones.cabify).
   // null      = se pidieron, pero el conductor no cruzo con ningun registro Cabify.
   cabify?: CabifyIngresos | null
+  /** Apps con las que trabajó la última semana cerrada (hoy solo 'Cabify'; DiDi más adelante). */
+  apps?: string[]
   // Km de GPS de la semana de Cabify. undefined si no se pidio Cabify;
   // null si se pidio y ese conductor no tuvo viajes con GPS esa semana.
   kmGeo?: number | null
@@ -179,6 +181,9 @@ export interface PanelOpciones {
   // consulta y las filas quedan con `cabify: undefined` (los modulos de mapa, que
   // tambien usan este servicio, no pagan esa consulta).
   cabify?: { startDate: string; endDate: string }
+  // Semana CERRADA para la etiqueta de app (Cabify): quién trabajó con Cabify esa
+  // semana. Se mira la semana cerrada, no la en curso (el lunes la en curso está vacía).
+  appsSemanaCerrada?: { startDate: string; endDate: string }
 }
 
 /**
@@ -193,7 +198,7 @@ export async function cargarPanelConductores(
   // Las 5 consultas son independientes entre si: se lanzan EN PARALELO para no
   // sumar la latencia de cada una (antes iban en serie). Los datos traidos y el
   // procesamiento posterior son identicos; solo cambia el "cuando" se piden.
-  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias, cabifyDrivers, guias] = await Promise.all([
+  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias, cabifyDrivers, guias, cabifyCerrada] = await Promise.all([
     // 1. Conductores (con estado y dni).
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
@@ -216,6 +221,8 @@ export async function cargarPanelConductores(
         .from('asignaciones_conductores')
         .select('conductor_id, estado, horario, asignaciones(estado, sede_id, modalidad, vehiculos(patente, grupo_flota))')
         .not('conductor_id', 'is', null)
+        // Solo las vigentes (el mismo filtro se aplica abajo): antes se traía todo el historial
+        .in('estado', ['asignado', 'activo'])
         .range(from, to)
     ),
     // 3. Multas activas con responsable cargado (no borradas, no desestimadas).
@@ -243,14 +250,20 @@ export async function cargarPanelConductores(
     // 6. Kardex de saldos, ordenado de mas reciente a mas viejo: la PRIMERA fila de
     // cada conductor es su ultimo saldo. Mismo criterio que el hero de la pestaña
     // "Historial de saldo" del modal de detalle (por eso los numeros coinciden).
+    // Optimización: la vista v_ultimo_saldo_conductor (sql/panel_conductores_rapido.sql)
+    // devuelve una fila por conductor. Si todavía no existe, se lee el kardex completo.
     fetchAll<{ conductor_id: string | null; saldo_pendiente: unknown }>((from, to) =>
+      (supabase.from('v_ultimo_saldo_conductor' as any) as any)
+        .select('conductor_id, saldo_pendiente')
+        .range(from, to)
+    ).catch(() => fetchAll<{ conductor_id: string | null; saldo_pendiente: unknown }>((from, to) =>
       (supabase.from('control_saldos') as any)
         .select('conductor_id, saldo_pendiente')
         .order('anio', { ascending: false })
         .order('semana', { ascending: false })
         .order('created_at', { ascending: false })
         .range(from, to)
-    ),
+    )),
     // 7. Resumen de saldos: fallback para conductores sin movimientos en el kardex.
     fetchAll<{ conductor_id: string | null; saldo_actual: unknown }>((from, to) =>
       (supabase.from('saldos_conductores') as any)
@@ -284,6 +297,13 @@ export async function cargarPanelConductores(
       if (sedeId) q = q.eq('sede_id', sedeId)
       return q
     }).catch(() => [] as { id: string; guia: string | null }[]),
+    // 11. Cabify de la semana cerrada (solo para la etiqueta de app).
+    opciones?.appsSemanaCerrada
+      ? cabifyHistoricalService
+          .getDriversData(opciones.appsSemanaCerrada.startDate, opciones.appsSemanaCerrada.endDate, { sedeId })
+          .then(r => r.drivers)
+          .catch(() => null)
+      : Promise.resolve(null),
   ])
   const guiaPorConductor = new Map(guias.map(g => [g.id, g.guia]))
 
@@ -315,23 +335,31 @@ export async function cargarPanelConductores(
   // usa en el modulo de Cabify. Un conductor puede cruzar con mas de una cuenta
   // Cabify (la agregacion devuelve una fila por cuenta+DNI): en ese caso se SUMAN.
   const cabifyPorConductor = new Map<string, CabifyIngresos>()
+  const porDni = new Map<string, string>()       // dni normalizado -> conductorId
+  const porLicencia = new Map<string, string>()
+  const porNombre = new Map<string, string>()
+  for (const c of conductores) {
+    const d = normalizeDni(c.numero_dni)
+    if (d && !porDni.has(d)) porDni.set(d, c.id)
+    const l = normalizeLicencia(c.numero_licencia)
+    if (l && !porLicencia.has(l)) porLicencia.set(l, c.id)
+    const n = normalizeNombre(`${c.nombres || ''} ${c.apellidos || ''}`)
+    if (n && !porNombre.has(n)) porNombre.set(n, c.id)
+  }
+  const conductorDeCabify = (d: { nationalIdNumber?: string | null; driverLicense?: string | null; name?: string | null; surname?: string | null }) =>
+    porDni.get(normalizeDni(d.nationalIdNumber)) ||
+    porLicencia.get(normalizeLicencia(d.driverLicense)) ||
+    porNombre.get(normalizeNombre(`${d.name || ''} ${d.surname || ''}`))
+  // Etiqueta de app: trabajó con Cabify la semana cerrada (completó viajes o cobró)
+  const conCabifyCerrada = new Set<string>()
+  for (const d of cabifyCerrada || []) {
+    if (!((Number(d.viajesFinalizados) || 0) > 0 || (Number(d.gananciaTotal) || 0) > 0)) continue
+    const cid = conductorDeCabify(d)
+    if (cid) conCabifyCerrada.add(cid)
+  }
   if (cabifyDrivers) {
-    const porDni = new Map<string, string>()       // dni normalizado -> conductorId
-    const porLicencia = new Map<string, string>()
-    const porNombre = new Map<string, string>()
-    for (const c of conductores) {
-      const d = normalizeDni(c.numero_dni)
-      if (d && !porDni.has(d)) porDni.set(d, c.id)
-      const l = normalizeLicencia(c.numero_licencia)
-      if (l && !porLicencia.has(l)) porLicencia.set(l, c.id)
-      const n = normalizeNombre(`${c.nombres || ''} ${c.apellidos || ''}`)
-      if (n && !porNombre.has(n)) porNombre.set(n, c.id)
-    }
     for (const d of cabifyDrivers) {
-      const cid =
-        porDni.get(normalizeDni(d.nationalIdNumber)) ||
-        porLicencia.get(normalizeLicencia(d.driverLicense)) ||
-        porNombre.get(normalizeNombre(`${d.name || ''} ${d.surname || ''}`))
+      const cid = conductorDeCabify(d)
       if (!cid) continue
       const prev = cabifyPorConductor.get(cid)
       if (prev) {
@@ -521,6 +549,7 @@ export async function cargarPanelConductores(
       saldoMenosGarantia: saldoPendiente - garantiaPagada,
       // undefined si no se pidio Cabify; null si se pidio y no hubo cruce.
       cabify: cabifyDrivers ? (cabifyPorConductor.get(c.id) ?? null) : undefined,
+      apps: cabifyCerrada ? (conCabifyCerrada.has(c.id) ? ['Cabify'] : []) : undefined,
       kmGeo: opciones?.cabify ? (kmGeoPorConductor.get(c.id) ?? null) : undefined,
     }
   })

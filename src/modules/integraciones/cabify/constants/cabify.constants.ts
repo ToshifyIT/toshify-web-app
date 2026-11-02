@@ -57,10 +57,11 @@ export const CHART_COLORS = {
 // ESTADO INICIAL
 // =====================================================
 
+// Plegados al entrar: se abren con un clic
 export const INITIAL_ACCORDION_STATE: AccordionState = {
-  mejores: true,
-  peores: true,
-  estadisticas: true,
+  mejores: false,
+  peores: false,
+  estadisticas: false,
 } as const
 
 export const INITIAL_LOADING_PROGRESS = {

@@ -695,7 +695,7 @@ function LlamadasTab() {
         </button>
         <button className="btn-secondary" onClick={() => void exportar()} disabled={loading || porTipo.length === 0}>
           <Download size={16} />
-          Exportar Excel
+          Exportar
         </button>
       </div>
 

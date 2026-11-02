@@ -107,3 +107,43 @@
 .cal-historial-sem { color: var(--text-secondary, #4b5563); }
 .cal-sube { color: #16a34a; font-weight: 600; font-size: 11px; }
 .cal-baja { color: #dc2626; font-weight: 600; font-size: 11px; }
+
+/* Pestaña Calificación (detalle del conductor) */
+.cal-tab { display: flex; flex-direction: column; gap: 14px; }
+.cal-semanas .cal-fila { cursor: pointer; }
+.cal-semanas .cal-fila:hover td { background: var(--bg-secondary, #f9fafb); }
+.cal-semanas .cal-fila.is-abierta td { background: var(--bg-secondary, #f9fafb); font-weight: 600; }
+.cal-ultima { margin-left: 6px; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; }
+.cal-porque { font-size: 12px; color: var(--text-secondary, #4b5563); }
+.cal-igual { color: var(--text-tertiary, #9ca3af); font-size: 11px; font-weight: 600; }
+.cal-expandir { border: none; background: transparent; cursor: pointer; color: var(--text-tertiary, #9ca3af); padding: 4px; display: inline-flex; }
+.cal-detalle-fila > td { padding: 10px 12px 16px !important; background: var(--bg-primary, #fff); }
+.cal-cambios { font-size: 12px; }
+.cal-cambio-valor { color: var(--text-primary, #111827); }
+.cal-cambio-expl { font-size: 11px; color: var(--text-tertiary, #9ca3af); margin-top: 2px; }
+.cal-factores--grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.cal-encurso { border: 1px dashed var(--border-primary, #e5e7eb); border-radius: 8px; padding: 10px 12px; }
+.cal-encurso-cab { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; border: none; background: transparent; cursor: pointer; padding: 0; font-size: 13px; color: var(--text-primary, #111827); text-align: left; }
+.cal-encurso-nota { color: var(--text-tertiary, #9ca3af); font-size: 12px; }
+.cal-encurso-valor { display: inline-flex; align-items: center; gap: 6px; }
+.cal-encurso .cal-factores--grid { margin-top: 10px; }
+
+/* Pestaña Incidencias (detalle del conductor) */
+.inc-cond { display: flex; flex-direction: column; gap: 12px; }
+.inc-cond-tipos { display: flex; flex-wrap: wrap; gap: 6px; }
+.inc-cond-tipo { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-primary, #e5e7eb); background: var(--bg-primary, #fff); color: var(--text-secondary, #4b5563); font-size: 12px; font-weight: 600; cursor: pointer; min-height: 32px; }
+.inc-cond-tipo.is-activo { background: var(--color-primary, #ff0033); border-color: var(--color-primary, #ff0033); color: #fff; }
+.inc-cond-tipo:disabled { opacity: 0.4; cursor: not-allowed; }
+.inc-cond-n { font-size: 11px; padding: 0 6px; border-radius: 999px; background: rgba(0,0,0,0.08); }
+.inc-cond-tipo.is-activo .inc-cond-n { background: rgba(255,255,255,0.25); }
+.inc-cond-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.inc-cond-badge--siniestro { background: #fee2e2; color: #991b1b; }
+.inc-cond-badge--cobro { background: #fef3c7; color: #92400e; }
+.inc-cond-badge--logistica { background: #dbeafe; color: #1e40af; }
+.inc-cond-sub { font-size: 11px; color: var(--text-tertiary, #9ca3af); margin-top: 2px; max-width: 420px; }
+.inc-cond-estado { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg-secondary, #f3f4f6); white-space: nowrap; }
+
+/* Etiqueta de app (semana cerrada) */
+.cpanel-app { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.cpanel-app--cabify { background: #ede9fe; color: #5b21b6; }
+.cpanel-app--didi { background: #ffedd5; color: #9a3412; }

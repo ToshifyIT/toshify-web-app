@@ -6,21 +6,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react'
-import {
-  ArrowLeft,
-  FileSpreadsheet,
-  Loader2,
-  Search,
-  Filter,
-  X,
-  AlertTriangle,
-  Save,
-  RotateCcw,
-  Link2,
-  Plus,
-  Trash2,
-  Eye
-} from 'lucide-react'
+import { ArrowLeft, Loader2, Search, Filter, X, AlertTriangle, Save, RotateCcw, Link2, Plus, Trash2, Eye, Download } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
@@ -893,8 +879,8 @@ export function FacturacionPreviewTable({
             onClick={() => onExport(filteredData.filter(r => !r.isDeleted))}
             disabled={exporting || syncing}
           >
-            {exporting ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
-            {exporting ? 'Exportando...' : 'Exportar Excel'}
+            {exporting ? <Loader2 size={14} className="spinning" /> : <Download size={14} />}
+            {exporting ? 'Exportando...' : 'Exportar'}
           </button>
         </div>
       </div>

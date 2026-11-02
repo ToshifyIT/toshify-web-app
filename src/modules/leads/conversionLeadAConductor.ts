@@ -153,7 +153,10 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
     if (!lead.estado_civil?.trim()) camposFaltantes.push('Estado civil')
     if (!lead.sede_id && !lead.sede) camposFaltantes.push('Sede')
     if (!lead.phone?.trim()) camposFaltantes.push('Teléfono')
-    if (!lead.email?.trim()) camposFaltantes.push('Email')
+    // Referido: hay que indicar sí o no (y si es sí, quién lo refirió)
+    if (lead.referido !== true && lead.referido !== false) camposFaltantes.push('Referido (sí o no)')
+    else if (lead.referido === true && !lead.embajador_id) camposFaltantes.push('Embajador (quién lo refirió)')
+    if (!lead.email?.trim()) camposFaltantes.push('Email app móvil (Cabify)')
     if (!lead.direccion?.trim()) camposFaltantes.push('Dirección')
     if (!lead.numero_licencia?.trim()) camposFaltantes.push('Nro. Licencia')
     if (!lead.categorias_licencia || lead.categorias_licencia.length === 0) camposFaltantes.push('Categorías de licencia')
@@ -213,10 +216,14 @@ export async function buscarConductorExistente(lead: Lead): Promise<Record<strin
  * NO es transaccional: si falla despues de crear el conductor, el lead queda
  * sin marcar como convertido (se conserva el comportamiento original).
  */
-/** true si el error es porque todavía no se corrió sql/conductores_guia.sql. */
-function faltaColumnaGuia(err: { message?: string; code?: string } | null): boolean {
+/** Columnas nuevas opcionales: si su SQL todavía no se corrió, se guarda sin ellas. */
+const COLUMNAS_OPCIONALES = ['guia', 'correo_personal'] as const
+
+/** Columna opcional que falta en la base (según el error), o null. */
+function columnaFaltante(err: { message?: string; code?: string } | null, datos: Record<string, unknown>): string | null {
   const m = String(err?.message || '')
-  return /\bguia\b/.test(m) && (err?.code === 'PGRST204' || err?.code === '42703' || /column/i.test(m))
+  if (!(err?.code === 'PGRST204' || err?.code === '42703' || /column/i.test(m))) return null
+  return COLUMNAS_OPCIONALES.find(c => c in datos && new RegExp(`\\b${c}\\b`).test(m)) ?? null
 }
 
 export async function convertirLeadAConductor(
@@ -357,6 +364,9 @@ export async function convertirLeadAConductor(
       lead_origen_id: lead.id || null,
       // Guía del lead (Ali, Manuel, Marina, Carla o Eunice) o, si no, quien lo convierte
       guia: guiaParaConductor(lead.entrevistador_asignado, usuario),
+      // Mismos datos en lead y conductor: email = el de la app (Cabify),
+      // mail de respaldo del lead = correo personal del conductor
+      ...(lead.mail_de_respaldo?.trim() ? { correo_personal: lead.mail_de_respaldo.trim() } : {}),
     }
 
     let conductorId: string
@@ -417,8 +427,10 @@ export async function convertirLeadAConductor(
           .from('conductores')
           .update(updateData)
           .eq('id', conductorId)
-        if (errUpdate && 'guia' in updateData && faltaColumnaGuia(errUpdate)) {
-          delete updateData.guia
+        for (let intento = 0; errUpdate && intento < COLUMNAS_OPCIONALES.length; intento++) {
+          const col = columnaFaltante(errUpdate, updateData)
+          if (!col) break
+          delete updateData[col]
           ;({ error: errUpdate } = await supabase.from('conductores').update(updateData).eq('id', conductorId))
         }
         if (errUpdate) throw errUpdate
@@ -453,8 +465,10 @@ export async function convertirLeadAConductor(
         .insert(conductorData)
         .select('id')
         .single()
-      if (errCond && 'guia' in conductorData && faltaColumnaGuia(errCond)) {
-        delete conductorData.guia
+      for (let intento = 0; errCond && intento < COLUMNAS_OPCIONALES.length; intento++) {
+        const col = columnaFaltante(errCond, conductorData)
+        if (!col) break
+        delete conductorData[col]
         ;({ data: createdConductor, error: errCond } = await supabase
           .from('conductores')
           .insert(conductorData)

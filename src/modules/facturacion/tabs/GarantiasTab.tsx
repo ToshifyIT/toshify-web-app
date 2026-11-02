@@ -2510,14 +2510,14 @@ export function GarantiasTab() {
                   onClick={exportarRegistrosVisibles}
                   title="Exportar a Excel solo las garantías visibles en la tabla, respetando todos los filtros aplicados"
                 >
-                  <Download size={14} /> Exportar Registros
+                  <Download size={14} /> Exportar
                 </button>
                 <button
                   className="fact-btn fact-btn-secondary"
                   onClick={exportarDeudores}
                   title="Exportar a Excel los conductores de baja que nos deben, con sus datos de contacto y la empresa con la que firmaron contrato"
                 >
-                  <Download size={14} /> Exportar Deudores
+                  <Download size={14} /> Exportar deudores
                 </button>
                 {/* Sincronizar oculto: la garantía se recalcula automáticamente al cerrar período */}
               </div>

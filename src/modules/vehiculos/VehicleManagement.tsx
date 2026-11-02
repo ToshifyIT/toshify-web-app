@@ -117,6 +117,17 @@ function fechaHoraArgentina(): { fecha: string; hora: string } {
   return { fecha: fechaArgFmt.format(ahora), hora: horaArgFmt.format(ahora) }
 }
 
+type PestanaVehiculo = 'basica' | 'tecnico' | 'estado' | 'seguro' | 'adicional'
+
+/** Pestañas de Editar vehículo, agrupadas por categoría. */
+const PESTANAS_VEHICULO: { id: PestanaVehiculo; label: string }[] = [
+  { id: 'basica', label: 'Básica' },
+  { id: 'tecnico', label: 'Combustible y técnico' },
+  { id: 'estado', label: 'Estado y fechas' },
+  { id: 'seguro', label: 'Seguro y titular' },
+  { id: 'adicional', label: 'Adicional' },
+]
+
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const { grupos: gruposFlotaDB } = useGruposFlota()
@@ -125,6 +136,7 @@ export function VehicleManagement() {
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [pestanaVeh, setPestanaVeh] = useState<PestanaVehiculo>('basica')
   const [showEditTitularDropdown, setShowEditTitularDropdown] = useState(false)
   const editTitularInputRef = useRef<HTMLInputElement>(null)
   const editTitularDropdownRef = useRef<HTMLDivElement>(null)
@@ -1414,6 +1426,7 @@ export function VehicleManagement() {
         }))
       }
 
+      setPestanaVeh('basica')
       setShowEditModal(true)
     } catch {
       // silently ignored
@@ -2660,7 +2673,7 @@ export function VehicleManagement() {
       {/* Modal Editar - Formulario completo */}
       {showEditModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={handleCloseEditModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
+          <div className="modal-content edit-tabs-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
             <div className="modal-header">
               <h2>Editar Vehículo</h2>
               <button
@@ -2671,8 +2684,24 @@ export function VehicleManagement() {
                 ×
               </button>
             </div>
+            {/* Pestañas por categoría (como Editar conductor): se edita una parte a la vez */}
+            <div className="edit-tabs" role="tablist" aria-label="Datos del vehículo">
+              {PESTANAS_VEHICULO.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={pestanaVeh === t.id}
+                  className={`edit-tab${pestanaVeh === t.id ? ' is-activa' : ''}`}
+                  onClick={() => setPestanaVeh(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
             <div className="modal-body">
             {/* Mismo formulario que en crear, solo cambia el botón final */}
+            {pestanaVeh === 'basica' && (<>
             <div className="section-title">Información Básica</div>
 
             <div className="form-group">
@@ -2755,6 +2784,8 @@ export function VehicleManagement() {
               </div>
             </div>
 
+            </>)}
+            {pestanaVeh === 'tecnico' && (<>
             <div className="section-title">Combustible y GPS</div>
 
             <div className="form-row">
@@ -2889,6 +2920,8 @@ export function VehicleManagement() {
               </div>
             </div>
 
+            </>)}
+            {pestanaVeh === 'estado' && (<>
             <div className="section-title">Estado y Fechas</div>
 
             <div className="form-row">
@@ -2962,6 +2995,8 @@ export function VehicleManagement() {
               </div>
             </div>
 
+            </>)}
+            {pestanaVeh === 'seguro' && (<>
             <div className="section-title">Seguro</div>
 
             <div className="form-group">
@@ -3120,7 +3155,9 @@ export function VehicleManagement() {
               )}
             </div>
 
-            <div className="section-title" style={{ marginTop: '16px' }}>Información Adicional</div>
+            </>)}
+            {pestanaVeh === 'adicional' && (<>
+            <div className="section-title">Información Adicional</div>
 
             <div className="form-row">
               <div className="form-group">
@@ -3279,6 +3316,7 @@ export function VehicleManagement() {
               />
             </div>
 
+            </>)}
             </div>
             <div className="modal-footer">
               <button
