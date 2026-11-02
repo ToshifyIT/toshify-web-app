@@ -4,9 +4,10 @@ import { supabase } from '../../lib/supabase'
 import { DataTable } from '../../components/ui/DataTable'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import '../../styles/modules.css'
 import './GruposFlotaModule.css'
+import { CuentasCabifySection } from './CuentasCabifySection'
 
 interface GrupoFlota {
   id: string
@@ -176,7 +177,7 @@ export function GruposFlotaModule() {
       setShowModal(false)
       loadGrupos()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'No se pudo guardar', 'error')
+      showError('Error', err.message || 'No se pudo guardar')
     } finally {
       setSaving(false)
     }
@@ -202,7 +203,7 @@ export function GruposFlotaModule() {
       showSuccess('Grupo eliminado')
       loadGrupos()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'No se pudo eliminar', 'error')
+      showError('Error', err.message || 'No se pudo eliminar')
     }
   }
 
@@ -309,7 +310,7 @@ export function GruposFlotaModule() {
         columns={columns}
         loading={loading}
         error={error}
-        pageSize={50}
+        pageSize={100}
         searchPlaceholder="Buscar por nombre, razon social, CUIT..."
         emptyTitle="No hay grupos de flota"
         emptyDescription="Crea el primer grupo de flota para comenzar"
@@ -320,6 +321,9 @@ export function GruposFlotaModule() {
           </button>
         }
       />
+
+      {/* Cuentas de Cabify por sede y grupo de flota (las recorre el sync) */}
+      <CuentasCabifySection />
 
       {/* Modal Crear/Editar */}
       {showModal && (

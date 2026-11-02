@@ -8,7 +8,6 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Swal from 'sweetalert2'
 import { cabifyService } from '../../../../services/cabifyService'
 import { cabifyHistoricalService } from '../../../../services/cabifyHistoricalService'
 import { asignacionesService, type AsignacionActiva } from '../../../../services/asignacionesService'
@@ -25,6 +24,7 @@ import {
   WEEKS_TO_LOAD,
   INITIAL_LOADING_PROGRESS,
 } from '../constants/cabify.constants'
+import { showError } from '../../../../utils/toast'
 
 // =====================================================
 // TIPOS DEL HOOK
@@ -287,11 +287,7 @@ export function useCabifyData(): UseCabifyDataReturn {
       error: errorMessage,
     }))
 
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: errorMessage,
-    })
+    showError('Error', errorMessage)
   }
 
   const extractErrorMessage = (error: unknown): string => {

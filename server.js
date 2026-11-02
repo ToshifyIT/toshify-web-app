@@ -16,7 +16,7 @@ import crypto from 'node:crypto'
 import { insightsDirectivoRouter } from './server-insights-directivo.js'
 // Integración 2Chat: contactos para llamadas + historial de llamadas (clave solo en el servidor)
 import { twoChatRouter } from './server-2chat.js'
-import { cabifyRouter, obtenerTokenCabify, requireUsuario } from './server-cabify.js'
+import { cabifyRouter, obtenerTokenCabifyParaCompany, requireUsuario } from './server-cabify.js'
 // Integración Cresium -> Alegra: movimientos bancarios y carga en Alegra (claves solo en el servidor)
 import { cresiumRouter } from './server-cresium.js'
 // Integraciones > Alegra: Excel de ARCA (comprobantes recibidos) -> Alegra (token solo en el servidor)
@@ -398,9 +398,13 @@ app.post('/api/cabify-efectivo', async (req, res) => {
     //    (las credenciales salen únicamente del .env: ver server-cabify.js)
     const usuario = await requireUsuario(req, res)
     if (!usuario) return
+    //    Se usa la cuenta de la flota del conductor (Grupo CG, 44 Dreams...) según su company.
     let token
+    let cuentaCabify
     try {
-      token = (await obtenerTokenCabify()).access_token
+      const t = await obtenerTokenCabifyParaCompany(cabify_company_id)
+      token = t.access_token
+      cuentaCabify = t.cuenta
     } catch (authError) {
       return res.status(401).json({ error: 'Error de autenticación con Cabify', detail: authError.message })
     }
@@ -468,7 +472,7 @@ app.post('/api/cabify-efectivo', async (req, res) => {
       })
     }
 
-    res.json({ success: true, enabled: result.enabled, driverId: result.driverId })
+    res.json({ success: true, enabled: result.enabled, driverId: result.driverId, cuenta: cuentaCabify })
   } catch (error) {
     res.status(500).json({ error: error.message })
   }

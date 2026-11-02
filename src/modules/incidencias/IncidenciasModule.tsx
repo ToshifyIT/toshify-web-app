@@ -9,7 +9,7 @@ import { useSede } from '../../contexts/SedeContext'
 import { useCategorizedTipos } from '../../hooks/useCategorizedTipos'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import {
   Plus,
   Eye,
@@ -562,7 +562,7 @@ export function IncidenciasModule() {
         }
       }
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
+      showError('Error', 'No se pudieron cargar los datos')
     } finally {
       setLoading(false)
     }
@@ -887,14 +887,14 @@ export function IncidenciasModule() {
   async function handleAplicarMasivo() {
     if (penalidadesSeleccionadas.size === 0) return
     if (!canEdit) {
-      Swal.fire('Sin permiso', 'No tenés permisos para aplicar cobros/descuentos', 'error')
+      showError('Sin permiso', 'No tenés permisos para aplicar cobros/descuentos')
       return
     }
 
     const seleccionadas = penalidades.filter(p => penalidadesSeleccionadas.has(p.id))
     const sinConductor = seleccionadas.filter(p => !p.conductor_id && !p.conductor_nombre)
     if (sinConductor.length > 0) {
-      Swal.fire('Error', `Hay ${sinConductor.length} penalidad(es) sin conductor asignado.`, 'error')
+      showError('Error', `Hay ${sinConductor.length} penalidad(es) sin conductor asignado.`)
       return
     }
 
@@ -999,7 +999,7 @@ export function IncidenciasModule() {
   async function handleRechazarMasivo() {
     if (penalidadesSeleccionadas.size === 0) return
     if (!canEdit) {
-      Swal.fire('Sin permiso', 'No tenés permisos para rechazar cobros/descuentos', 'error')
+      showError('Sin permiso', 'No tenés permisos para rechazar cobros/descuentos')
       return
     }
 
@@ -2072,7 +2072,7 @@ export function IncidenciasModule() {
       .eq('incidencia_id', incidencia.id)
     
     if (checkError) {
-      Swal.fire('Error', 'No se pudo verificar el estado del cobro', 'error')
+      showError('Error', 'No se pudo verificar el estado del cobro')
       return
     }
     
@@ -2139,7 +2139,7 @@ export function IncidenciasModule() {
         cargarDatos(true)
         return
       } catch (error: any) {
-        Swal.fire('Error', error.message || 'No se pudo reenviar', 'error')
+        showError('Error', error.message || 'No se pudo reenviar')
         return
       }
     }
@@ -2197,7 +2197,7 @@ export function IncidenciasModule() {
       cargarDatos(true)
       
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo enviar a facturación', 'error')
+      showError('Error', error.message || 'No se pudo enviar a facturación')
     }
   }
 
@@ -2293,7 +2293,7 @@ export function IncidenciasModule() {
 
   async function handleEliminarIncidencia(incidencia: IncidenciaCompleta) {
     if (!canDelete) {
-      Swal.fire('Sin permisos', 'No tienes permisos para eliminar incidencias', 'error')
+      showError('Sin permisos', 'No tienes permisos para eliminar incidencias')
       return
     }
 
@@ -2333,13 +2333,13 @@ export function IncidenciasModule() {
       showSuccess('Eliminado', 'La incidencia fue eliminada correctamente')
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar la incidencia', 'error')
+      showError('Error', error.message || 'No se pudo eliminar la incidencia')
     }
   }
 
   async function handleEliminarPenalidad(penalidad: PenalidadCompleta) {
     if (!canDelete) {
-      Swal.fire('Sin permisos', 'No tienes permisos para eliminar penalidades', 'error')
+      showError('Sin permisos', 'No tienes permisos para eliminar penalidades')
       return
     }
 
@@ -2369,18 +2369,18 @@ export function IncidenciasModule() {
       showSuccess('Eliminado', 'La penalidad fue eliminada correctamente')
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
+      showError('Error', error.message || 'No se pudo eliminar la penalidad')
     }
   }
 
   // Rechazar penalidad - guarda en historial y marca para reenvío
   async function handleRechazarPenalidad() {
     if (!canEdit) {
-      Swal.fire('Sin permiso', 'No tenés permisos para rechazar cobros/descuentos', 'error')
+      showError('Sin permiso', 'No tenés permisos para rechazar cobros/descuentos')
       return
     }
     if (!penalidadRechazar || !motivoRechazo.trim()) {
-      Swal.fire('Error', 'Debes ingresar un motivo de rechazo', 'error')
+      showError('Error', 'Debes ingresar un motivo de rechazo')
       return
     }
     
@@ -2417,7 +2417,7 @@ export function IncidenciasModule() {
       setMotivoRechazo('')
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
+      showError('Error', error.message || 'No se pudo rechazar')
     } finally {
       setRechazando(false)
     }
@@ -2444,11 +2444,11 @@ export function IncidenciasModule() {
   async function handleGuardarIncidencia() {
     // Validar permisos
     if (modalMode === 'create' && !canCreate) {
-      Swal.fire('Sin permisos', 'No tienes permisos para crear incidencias', 'error')
+      showError('Sin permisos', 'No tienes permisos para crear incidencias')
       return
     }
     if (modalMode === 'edit' && !canEdit) {
-      Swal.fire('Sin permisos', 'No tienes permisos para editar incidencias', 'error')
+      showError('Sin permisos', 'No tienes permisos para editar incidencias')
       return
     }
 
@@ -2596,7 +2596,7 @@ export function IncidenciasModule() {
       setShowModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
+      showError('Error', error.message || 'No se pudo guardar')
     } finally {
       setSaving(false)
     }
@@ -2605,11 +2605,11 @@ export function IncidenciasModule() {
   async function handleGuardarPenalidad() {
     // Validar permisos
     if (modalMode === 'create' && !canCreate) {
-      Swal.fire('Sin permisos', 'No tienes permisos para crear penalidades', 'error')
+      showError('Sin permisos', 'No tienes permisos para crear penalidades')
       return
     }
     if (modalMode === 'edit' && !canEdit) {
-      Swal.fire('Sin permisos', 'No tienes permisos para editar penalidades', 'error')
+      showError('Sin permisos', 'No tienes permisos para editar penalidades')
       return
     }
 
@@ -2693,7 +2693,7 @@ export function IncidenciasModule() {
       setShowModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
+      showError('Error', error.message || 'No se pudo guardar')
     } finally {
       setSaving(false)
     }
@@ -2702,16 +2702,12 @@ export function IncidenciasModule() {
   // Abrir modal de aplicación
   async function handleMarcarAplicado(penalidad: PenalidadCompleta) {
     if (!canEdit) {
-      Swal.fire('Sin permiso', 'No tenés permisos para aplicar cobros/descuentos', 'error')
+      showError('Sin permiso', 'No tenés permisos para aplicar cobros/descuentos')
       return
     }
     // Validar que tenga conductor asignado
     if (!penalidad.conductor_id && !penalidad.conductor_nombre) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin conductor',
-        text: 'Esta penalidad no tiene conductor asignado. Edítela primero para asignar un conductor.'
-      })
+      showError('Sin conductor', 'Esta penalidad no tiene conductor asignado. Edítela primero para asignar un conductor.')
       return
     }
     
@@ -2858,7 +2854,7 @@ export function IncidenciasModule() {
       setShowAplicarModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo aplicar el cobro', 'error')
+      showError('Error', error.message || 'No se pudo aplicar el cobro')
     } finally {
       setAplicandoCobro(false)
     }
@@ -2911,7 +2907,7 @@ export function IncidenciasModule() {
       showSuccess('Desaplicado', 'El cobro/descuento volvió a estado pendiente')
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
+      showError('Error', error.message || 'No se pudo desaplicar')
     }
   }
 
@@ -3064,7 +3060,7 @@ export function IncidenciasModule() {
       
       cargarDatos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo reasignar la semana', 'error')
+      showError('Error', error.message || 'No se pudo reasignar la semana')
     } finally {
       setReasignando(false)
     }
@@ -3206,6 +3202,25 @@ export function IncidenciasModule() {
     return filtered
   }, [incidencias, semanaActual, anioActualStats, activeTab])
 
+  // Período + logs + exportar de las pestañas de penalidades: van en la misma línea
+  // que el buscador de cada tabla (headerAction), como en Logística y Facturación.
+  const accionesPenalidades = (
+    <div className="header-controls-inline">
+      <DateRangeSelector
+        selectedRange={dateRangePenalidades}
+        onRangeChange={setDateRangePenalidades}
+        showAllOption={true}
+        placeholder="Filtrar por fecha"
+      />
+      <VerLogsButton tablas={['incidencias', 'penalidades', 'penalidades_cuotas', 'penalidades_rechazos']} label="Incidencias" />
+      {(activeTab === 'por_aplicar' || activeTab === 'aplicadas') && (
+        <button className="btn-secondary" onClick={handleExportarPenalidades} title="Exportar" style={{ padding: '6px 10px', fontSize: '12px' }}>
+          <Download size={14} /> Exportar
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div className="incidencias-module">
       <style>{`
@@ -3314,27 +3329,6 @@ export function IncidenciasModule() {
             </button>
           )}
         </div>
-        {/* Logística y Facturación llevan el selector de fecha junto al buscador
-            (headerAction de la tabla); acá solo quedan las pestañas de penalidades. */}
-        {(activeTab === 'por_aplicar' || activeTab === 'aplicadas' || activeTab === 'rechazados') && (
-        <div className="tabs-actions">
-          {/* Selector de fecha para tabs de Penalidades */}
-          {(activeTab === 'por_aplicar' || activeTab === 'aplicadas' || activeTab === 'rechazados') && (
-            <DateRangeSelector
-              selectedRange={dateRangePenalidades}
-              onRangeChange={setDateRangePenalidades}
-              showAllOption={true}
-              placeholder="Filtrar por fecha"
-            />
-          )}
-          <VerLogsButton tablas={['incidencias', 'penalidades', 'penalidades_cuotas', 'penalidades_rechazos']} label="Incidencias" />
-          {(activeTab === 'por_aplicar' || activeTab === 'aplicadas') && (
-            <button className="btn-secondary" onClick={handleExportarPenalidades} title="Exportar" style={{ padding: '6px 10px', fontSize: '12px' }}>
-              <Download size={14} /> Exportar
-            </button>
-          )}
-        </div>
-        )}
       </div>
 
       {/* Incidencias Logística Tab */}
@@ -3887,6 +3881,7 @@ export function IncidenciasModule() {
             emptyDescription={hayFiltrosPenalidadesActivos ? "Intenta limpiar los filtros para ver todos los registros" : "Los cobros generados desde incidencias aparecerán aquí"}
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            headerAction={accionesPenalidades}
           />
         </>
       )}
@@ -4006,6 +4001,7 @@ export function IncidenciasModule() {
             emptyDescription={hayFiltrosPenalidadesActivos ? "Intenta limpiar los filtros para ver todos los registros" : "Los cobros que se apliquen aparecerán aquí"}
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            headerAction={accionesPenalidades}
           />
         </>
       )}
@@ -4043,6 +4039,7 @@ export function IncidenciasModule() {
             emptyDescription="Los cobros rechazados aparecerán aquí"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            headerAction={accionesPenalidades}
           />
         </>
       )}

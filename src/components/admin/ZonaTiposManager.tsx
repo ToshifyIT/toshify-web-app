@@ -4,7 +4,7 @@ import { Plus, Edit2, Trash2, AlertTriangle, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Spinner } from '../ui/LoadingOverlay'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import './AdminStyles.css'
 
 interface ZonaTipo {
@@ -84,11 +84,11 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
 
   const handleCreate = async () => {
     if (!formData.codigo.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El codigo es requerido' })
+      showError('Error', 'El codigo es requerido')
       return
     }
     if (!formData.nombre.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El nombre es requerido' })
+      showError('Error', 'El nombre es requerido')
       return
     }
 
@@ -111,7 +111,7 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
       await loadTipos()
       onUpdate()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      showError('Error', err.message)
     } finally {
       setSaving(false)
     }
@@ -121,11 +121,11 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
     if (!selectedTipo) return
 
     if (!formData.codigo.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El codigo es requerido' })
+      showError('Error', 'El codigo es requerido')
       return
     }
     if (!formData.nombre.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El nombre es requerido' })
+      showError('Error', 'El nombre es requerido')
       return
     }
 
@@ -151,7 +151,7 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
       await loadTipos()
       onUpdate()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      showError('Error', err.message)
     } finally {
       setSaving(false)
     }
@@ -196,7 +196,7 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
       await loadTipos()
       onUpdate()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      showError('Error', err.message)
     } finally {
       setSaving(false)
     }

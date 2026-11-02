@@ -159,3 +159,61 @@
   min-height: 0;
   overflow-y: auto;
 }
+
+/* =====================================================
+   PESTAÑAS DE MÓDULO: un solo estilo (subrayado rojo en la activa)
+   Igual que Programación, Incidencias, Facturación, 2Chat y Siniestros.
+   Pisa los estilos viejos (botón rojo lleno / píldoras) de cada módulo.
+   ===================================================== */
+#root .visitas-tabs,
+#root .visitas-subtabs,
+#root .bitacora-tabs,
+#root .audit-tabs,
+#root .pedidos-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0;
+  margin-bottom: 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-primary);
+  border-radius: 0;
+  box-shadow: none;
+}
+#root .visitas-tabs .visitas-tab,
+#root .visitas-subtabs .visitas-subtab,
+#root .bitacora-tabs .bitacora-tab,
+#root .audit-tabs .audit-tab,
+#root .pedidos-tabs .pedidos-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+#root .visitas-tabs .visitas-tab:hover,
+#root .visitas-subtabs .visitas-subtab:hover,
+#root .bitacora-tabs .bitacora-tab:hover,
+#root .audit-tabs .audit-tab:hover,
+#root .pedidos-tabs .pedidos-tab:hover {
+  background: transparent;
+  color: var(--text-primary);
+}
+#root .visitas-tabs .visitas-tab.active,
+#root .visitas-subtabs .visitas-subtab.active,
+#root .bitacora-tabs .bitacora-tab.active,
+#root .audit-tabs .audit-tab.active,
+#root .pedidos-tabs .pedidos-tab.active {
+  background: transparent;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}

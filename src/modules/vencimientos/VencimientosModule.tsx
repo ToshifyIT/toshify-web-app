@@ -4,7 +4,7 @@ import Swal from 'sweetalert2'
 import { supabase } from '../../lib/supabase'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -298,7 +298,7 @@ export function VencimientosModule() {
       setItems(mapped)
     } catch (error) {
       console.error('Error cargando vencimientos:', error)
-      Swal.fire('Error', 'No se pudieron cargar los vencimientos', 'error')
+      showError('Error', 'No se pudieron cargar los vencimientos')
     } finally {
       setLoading(false)
     }
@@ -500,7 +500,7 @@ export function VencimientosModule() {
       showSuccess('Registro eliminado correctamente')
     } catch (error) {
       console.error('Error eliminando vencimiento:', error)
-      Swal.fire('Error', 'No se pudo eliminar el registro', 'error')
+      showError('Error', 'No se pudo eliminar el registro')
     }
   }
 
@@ -520,7 +520,7 @@ export function VencimientosModule() {
       showSuccess('Estado actualizado correctamente')
     } catch (error) {
       console.error('Error actualizando solicitado:', error)
-      Swal.fire('Error', 'No se pudo actualizar el estado', 'error')
+      showError('Error', 'No se pudo actualizar el estado')
     }
   }
 
@@ -625,7 +625,7 @@ export function VencimientosModule() {
       setShowModal(false)
     } catch (error) {
       console.error('Error guardando vencimiento:', error)
-      Swal.fire('Error', 'No se pudo guardar el registro', 'error')
+      showError('Error', 'No se pudo guardar el registro')
     } finally {
       setSaving(false)
     }
@@ -792,7 +792,7 @@ export function VencimientosModule() {
       XLSX.writeFile(wb, `Vencimientos_${fecha}.xlsx`)
     } catch (error) {
       console.error('Error exportando a Excel:', error)
-      Swal.fire('Error', 'No se pudo exportar a Excel', 'error')
+      showError('Error', 'No se pudo exportar a Excel')
     }
   }
 
@@ -879,57 +879,14 @@ export function VencimientosModule() {
         </div>
       </div>
 
-      {/* Sin pestaña única ni aviso suelto: las próximas a vencer ya están en su tarjeta de arriba */}
-      <div className="vencimientos-search-row">
-        <div className="vencimientos-search">
-          <div className="vencimientos-search-wrapper">
-            <svg
-              className="vencimientos-search-icon"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-            <input
-              type="text"
-              className="vencimientos-search-input"
-              placeholder="Buscar por patente o titular..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="tabs-actions">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={exportToExcel}
-          >
-            <Download size={16} />
-            Exportar
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={openCreateModal}
-          >
-            <Plus size={16} />
-            Nuevo Registro
-          </button>
-        </div>
-      </div>
-
       <div className="vencimientos-table">
         <DataTable
           data={filteredItems}
           columns={columns}
           loading={false}
-          showSearch={false}
+          searchPlaceholder="Buscar por patente o titular..."
+          globalFilter={search}
+          onGlobalFilterChange={setSearch}
           pageSize={100}
           emptyIcon={<Shield size={40}
         />}
@@ -937,6 +894,26 @@ export function VencimientosModule() {
           emptyDescription="Los vencimientos aparecerán aquí cuando se registren."
           externalFilters={activeFiltersList}
           onClearAllFilters={() => setActiveFilter('all')}
+          headerAction={
+            <div className="tabs-actions header-controls-inline">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={exportToExcel}
+              >
+                <Download size={16} />
+                Exportar
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={openCreateModal}
+              >
+                <Plus size={16} />
+                Nuevo Registro
+              </button>
+            </div>
+          }
         />
       </div>
 

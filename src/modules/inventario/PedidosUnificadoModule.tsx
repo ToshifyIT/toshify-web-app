@@ -12,7 +12,7 @@ import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import {
   Package,
   Truck,
@@ -473,7 +473,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
         }))
       )
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el catalogo para crear pedidos', 'error')
+      showError('Error', 'No se pudo cargar el catalogo para crear pedidos')
     } finally {
       setLoadingCatalogoPedido(false)
     }
@@ -667,7 +667,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       await loadPedidosData()
       if (timelinePedidoId === respuestaPedido.pedido_id) cargarTimeline(respuestaPedido.pedido_id)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar la respuesta', 'error')
+      showError('Error', error.message || 'No se pudo registrar la respuesta')
     } finally {
       setSavingRespuesta(false)
     }
@@ -1030,7 +1030,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       await loadPedidosData()
       setActiveTab('pedidos')
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo crear el pedido', 'error')
+      showError('Error', error.message || 'No se pudo crear el pedido')
     } finally {
       setCreatingPedido(false)
     }
@@ -1086,7 +1086,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       setCantidadConfirmacion('')
       loadPedidosData()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar' })
+      showError('Error', err.message || 'No se pudo procesar')
     } finally {
       setProcessingItem(null)
     }
@@ -1199,7 +1199,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       await loadPedidosData()
       if (timelinePedidoId === pedido.pedido_id) cargarTimeline(pedido.pedido_id)
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo confirmar la recepción' })
+      showError('Error', error.message || 'No se pudo confirmar la recepción')
     } finally {
       setSavingRecepcion(false)
     }
@@ -1218,7 +1218,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       if (error) throw error
       setMovimientos(((data || []) as MovimientoPendiente[]).filter(movimiento => movimiento.tipo !== 'entrada'))
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los movimientos pendientes', 'error')
+      showError('Error', 'No se pudieron cargar los movimientos pendientes')
     } finally {
       setLoadingAprobaciones(false)
     }
@@ -1277,7 +1277,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
 
       setHistorico(historicoFormateado)
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los movimientos procesados', 'error')
+      showError('Error', 'No se pudieron cargar los movimientos procesados')
     } finally {
       setLoadingHistorico(false)
     }
@@ -1356,7 +1356,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const aprobarMovimiento = async (movimiento: MovimientoPendiente) => {
     // Validar permisos
     if (!canApprove) {
-      Swal.fire('Sin permisos', 'No tienes permisos para aprobar movimientos', 'error')
+      showError('Sin permisos', 'No tienes permisos para aprobar movimientos')
       return
     }
 
@@ -1403,7 +1403,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
 
       cargarMovimientosPendientes()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo aprobar el movimiento', 'error')
+      showError('Error', error.message || 'No se pudo aprobar el movimiento')
     } finally {
       setProcessing(null)
     }
@@ -1412,7 +1412,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const rechazarMovimiento = async (movimiento: MovimientoPendiente) => {
     // Validar permisos
     if (!canApprove) {
-      Swal.fire('Sin permisos', 'No tienes permisos para rechazar movimientos', 'error')
+      showError('Sin permisos', 'No tienes permisos para rechazar movimientos')
       return
     }
 
@@ -1475,7 +1475,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
 
       cargarMovimientosPendientes()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo rechazar el movimiento', 'error')
+      showError('Error', error.message || 'No se pudo rechazar el movimiento')
     } finally {
       setProcessing(null)
     }

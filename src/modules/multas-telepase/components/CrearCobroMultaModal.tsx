@@ -4,11 +4,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
-import Swal from 'sweetalert2'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { useCategorizedTipos } from '../../../hooks/useCategorizedTipos'
+import { showError, showSuccess } from '../../../utils/toast'
 import '../../incidencias/IncidenciasModule.css'
 
 interface MultaInput {
@@ -257,13 +257,13 @@ export function CrearCobroMultaModal({ isOpen, multa, onClose, onSaved }: Props)
 
   async function handleGuardar() {
     if (!multa) return
-    if (!vehiculoId) { Swal.fire('Error', 'Debe seleccionar la patente', 'error'); return }
-    if (!conductorId) { Swal.fire('Error', 'Debe seleccionar un conductor', 'error'); return }
-    if (!fecha) { Swal.fire('Error', 'La fecha es requerida', 'error'); return }
-    if (!estadoId) { Swal.fire('Error', 'Debe seleccionar un estado', 'error'); return }
-    if (!tipoCobroId) { Swal.fire('Error', 'Debe seleccionar un tipo de incidencia', 'error'); return }
-    if (!monto || monto <= 0) { Swal.fire('Error', 'El monto debe ser mayor a 0', 'error'); return }
-    if (!turno) { Swal.fire('Error', 'Debe seleccionar una modalidad (turno)', 'error'); return }
+    if (!vehiculoId) { showError('Error', 'Debe seleccionar la patente'); return }
+    if (!conductorId) { showError('Error', 'Debe seleccionar un conductor'); return }
+    if (!fecha) { showError('Error', 'La fecha es requerida'); return }
+    if (!estadoId) { showError('Error', 'Debe seleccionar un estado'); return }
+    if (!tipoCobroId) { showError('Error', 'Debe seleccionar un tipo de incidencia'); return }
+    if (!monto || monto <= 0) { showError('Error', 'El monto debe ser mayor a 0'); return }
+    if (!turno) { showError('Error', 'Debe seleccionar una modalidad (turno)'); return }
 
     setSaving(true)
     try {
@@ -292,11 +292,11 @@ export function CrearCobroMultaModal({ isOpen, multa, onClose, onSaved }: Props)
       })
       if (error) throw error
 
-      Swal.fire({ icon: 'success', title: 'Incidencia creada', text: 'El cobro fue registrado correctamente', timer: 2000, showConfirmButton: false })
+      showSuccess('Incidencia creada', 'El cobro fue registrado correctamente')
       onSaved?.()
       handleClose()
     } catch (err: any) {
-      Swal.fire('Error', err?.message || 'No se pudo crear la incidencia', 'error')
+      showError('Error', err?.message || 'No se pudo crear la incidencia')
     } finally {
       setSaving(false)
     }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { X, Save, AlertTriangle, Check } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../../utils/toast'
+import { showError, showSuccess } from '../../../../utils/toast'
 import type { Titular, VehiculoTitular } from '../types/titulares.types'
 import type { OfertaLocacion, OfertaLocacionFormData } from '../types/ofertaLocacion.types'
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
@@ -282,7 +282,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
       onClose()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     } finally {
       setSaving(false)
     }

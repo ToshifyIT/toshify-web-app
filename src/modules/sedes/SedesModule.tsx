@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import '../../components/admin/AdminStyles.css'
 
 interface Sede {
@@ -85,7 +85,7 @@ export function SedesModule() {
       if (error) throw error
       setSedes(data || [])
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar las sedes', 'error')
+      showError('Error', 'No se pudieron cargar las sedes')
     } finally {
       setLoading(false)
     }
@@ -126,9 +126,9 @@ export function SedesModule() {
       cargarSedes()
     } catch (error: any) {
       if (error?.code === '23505') {
-        Swal.fire('Error', 'Ya existe una sede con ese código', 'error')
+        showError('Error', 'Ya existe una sede con ese código')
       } else {
-        Swal.fire('Error', 'No se pudo crear la sede', 'error')
+        showError('Error', 'No se pudo crear la sede')
       }
     } finally {
       setSaving(false)
@@ -178,9 +178,9 @@ export function SedesModule() {
       cargarSedes()
     } catch (error: any) {
       if (error?.code === '23505') {
-        Swal.fire('Error', 'Ya existe una sede con ese código', 'error')
+        showError('Error', 'Ya existe una sede con ese código')
       } else {
-        Swal.fire('Error', 'No se pudo actualizar la sede', 'error')
+        showError('Error', 'No se pudo actualizar la sede')
       }
     } finally {
       setSaving(false)
@@ -224,7 +224,7 @@ export function SedesModule() {
       showSuccess('Sede desactivada')
       cargarSedes()
     } catch {
-      Swal.fire('Error', 'No se pudo desactivar la sede', 'error')
+      showError('Error', 'No se pudo desactivar la sede')
     }
   }
 
@@ -240,7 +240,7 @@ export function SedesModule() {
       showSuccess('Sede reactivada')
       cargarSedes()
     } catch {
-      Swal.fire('Error', 'No se pudo reactivar la sede', 'error')
+      showError('Error', 'No se pudo reactivar la sede')
     }
   }
 

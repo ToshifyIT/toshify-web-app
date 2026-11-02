@@ -16,7 +16,7 @@ import { useSede } from '../../../contexts/SedeContext'
 // import { useAuth } from '../../../contexts/AuthContext'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 // import { insertControlSaldo } from '../../../services/controlSaldosService'
-// import { showSuccess } from '../../../utils/toast'
+import { showError } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 import Swal from 'sweetalert2'
 import '../CobrosFraccionados.css'
@@ -278,7 +278,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       // Combinar ambos tipos de cobros
       setCobros([...cobrosConCuotas, ...cobrosDesdesSaldos])
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los cobros fraccionados', 'error')
+      showError('Error', 'No se pudieron cargar los cobros fraccionados')
     } finally {
       setLoading(false)
     }

@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -36,6 +36,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'logistica': Truck,
   'integraciones': Link2,
   'administracion': Settings,
+  'gestion-administrativa': Briefcase,
   'multas-telepase': CreditCard,
   'onboarding': Calendar,
   'inventario': Package,
@@ -2272,7 +2273,9 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
 
-              <Route path="/reportes/facturacion" element={
+              {/* Facturación pasó de Reportes al menú Administración: la ruta vieja redirige */}
+              <Route path="/reportes/facturacion" element={<Navigate to="/administracion/facturacion" replace />} />
+              <Route path="/administracion/facturacion" element={
                 <ProtectedRoute submenuName="facturacion" action="view">
                   <LazyPage>
                     <FacturacionPage />

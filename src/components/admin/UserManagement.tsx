@@ -8,7 +8,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { Users, UserCheck, UserX, Shield, KeyRound, Mail, Pencil, ToggleLeft, ToggleRight, Building2, Trash2 } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { validarEmail } from '../../utils/validacionesCampos'
 import './UserManagement.css'
 import './AdminStyles.css'
@@ -171,16 +171,12 @@ export function UserManagement() {
     const email = newUser.email.trim()
     const fullName = newUser.fullName.trim()
     if (!email || !fullName) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Campos Incompletos',
-        text: 'Completá el nombre y el email'
-      })
+      showError('Campos Incompletos', 'Completá el nombre y el email')
       return
     }
     const errorEmail = validarEmail(email)
     if (errorEmail) {
-      Swal.fire({ icon: 'error', title: 'Email inválido', text: errorEmail })
+      showError('Email inválido', errorEmail)
       return
     }
 
@@ -199,11 +195,7 @@ export function UserManagement() {
       await loadData()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: message
-      })
+      showError('Error', message)
     } finally {
       setCreating(false)
     }
@@ -250,11 +242,7 @@ export function UserManagement() {
       showSuccess('Rol Actualizado', 'El rol se ha actualizado correctamente')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al actualizar rol: ' + message
-      })
+      showError('Error', 'Error al actualizar rol: ' + message)
     }
   }
 
@@ -283,11 +271,7 @@ export function UserManagement() {
       showSuccess('Estado Actualizado', `Usuario ${activar ? 'activado' : 'desactivado'} correctamente`)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al cambiar estado: ' + message
-      })
+      showError('Error', 'Error al cambiar estado: ' + message)
     }
   }
 
@@ -350,7 +334,7 @@ export function UserManagement() {
 
     if (sedeError) {
       console.error('Error guardando la sede del usuario:', sedeError)
-      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar la sede: ' + sedeError.message })
+      showError('Error', 'No se pudo guardar la sede: ' + sedeError.message)
       return
     }
 
@@ -386,7 +370,7 @@ export function UserManagement() {
       const base64 = await prepararFoto(file)
       setForm({ ...form, avatarPreview: base64, avatarBase64: base64, quitarAvatar: false })
     } catch (err: unknown) {
-      Swal.fire({ icon: 'error', title: 'Foto', text: err instanceof Error ? err.message : String(err) })
+      showError('Foto', err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -395,12 +379,12 @@ export function UserManagement() {
     const fullName = form.fullName.trim()
     const email = form.email.trim()
     if (!fullName) {
-      Swal.fire({ icon: 'error', title: 'Falta el nombre', text: 'El nombre no puede estar vacío' })
+      showError('Falta el nombre', 'El nombre no puede estar vacío')
       return
     }
     const errorEmail = validarEmail(email)
     if (errorEmail) {
-      Swal.fire({ icon: 'error', title: 'Email inválido', text: errorEmail })
+      showError('Email inválido', errorEmail)
       return
     }
     const esUsuarioActual = editando.id === currentUser?.id
@@ -442,7 +426,7 @@ export function UserManagement() {
       await loadData()
       showSuccess('Usuario actualizado', `Se guardaron los cambios de ${fullName}`)
     } catch (err: unknown) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err instanceof Error ? err.message : String(err) })
+      showError('Error', err instanceof Error ? err.message : String(err))
     } finally {
       setGuardando(false)
     }

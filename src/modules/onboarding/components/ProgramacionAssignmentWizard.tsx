@@ -15,7 +15,7 @@ import('./ConductoresMapModal').catch(() => { /* ignorar si falla, se reintentar
 import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import type { TipoCandidato, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../types/onboarding.types'
 import type { Vehicle } from '../../../types/vehiculo.types'
 import type { Conductor } from '../../../types/conductor.types'
@@ -834,23 +834,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const handleNext = async () => {
     // Step 1: Validate modalidad (devolución y cambio_vehiculo no requieren modalidad previa, se detecta del vehículo)
     if (step === 1 && !formData.modalidad && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
-      Swal.fire('Error', 'Debes seleccionar una modalidad', 'error')
+      showError('Error', 'Debes seleccionar una modalidad')
       return
     }
 
     // Step 2: Validate vehiculo & preload conductores
     if (step === 2) {
       if (!formData.vehiculo_id) {
-        Swal.fire('Error', 'Debes seleccionar un vehiculo', 'error')
+        showError('Error', 'Debes seleccionar un vehiculo')
         return
       }
       // Cambio de vehículo requiere ambos vehículos
       if (formData.cambio_vehiculo && !formData.vehiculo_cambio_id) {
-        Swal.fire('Error', 'Debes seleccionar el vehículo nuevo (destino)', 'error')
+        showError('Error', 'Debes seleccionar el vehículo nuevo (destino)')
         return
       }
       if (formData.cambio_vehiculo && formData.vehiculo_id === formData.vehiculo_cambio_id) {
-        Swal.fire('Error', 'El vehículo origen y destino no pueden ser el mismo', 'error')
+        showError('Error', 'El vehículo origen y destino no pueden ser el mismo')
         return
       }
       // Cargar conductores del vehiculo antes de pasar al paso 3
@@ -889,19 +889,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     // Step 3: Validate conductores segun modalidad
     if (step === 3) {
       if (formData.modalidad === 'a_cargo' && !formData.conductor_id) {
-        Swal.fire('Error', 'Debes asignar un conductor', 'error')
+        showError('Error', 'Debes asignar un conductor')
         return
       }
       if (formData.modalidad !== 'a_cargo') {
         // Modo TURNO - al menos 1 conductor
         if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
-          Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+          showError('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)')
           return
         }
         // Validar que no sea el mismo conductor en ambos turnos
         if (formData.conductor_diurno_id && formData.conductor_nocturno_id &&
             formData.conductor_diurno_id === formData.conductor_nocturno_id) {
-          Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          showError('Error', 'No se puede asignar el mismo conductor en ambos turnos')
           return
         }
       }
@@ -1433,7 +1433,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     // Validaciones (antes de marcar isSubmitting para no bloquear reintentos)
     const validationError = validateSubmitFields()
     if (validationError) {
-      Swal.fire('Error', validationError, 'error')
+      showError('Error', validationError)
       return
     }
 
@@ -1571,7 +1571,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       onSuccess()
       onClose()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo guardar la programacion', 'error')
+      showError('Error', error.message || 'No se pudo guardar la programacion')
     } finally {
       setLoading(false)
       isSubmittingRef.current = false

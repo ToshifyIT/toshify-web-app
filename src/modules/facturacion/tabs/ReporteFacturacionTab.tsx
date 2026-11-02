@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
 import { evaluarCierre, timestampCierre, descuentoCierre, CIERRE_DEFAULTS, type ParamsCierre } from '../utils/cierreAsignacion'
 import { construirSaldosAnteriores } from '../utils/saldoAnterior'
@@ -1355,7 +1355,7 @@ export function ReporteFacturacionTab() {
         fechaBaja: conductorDesglose?.fecha_terminacion || null,
       })
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el desglose de días', 'error')
+      showError('Error', 'No se pudo cargar el desglose de días')
       setShowDiasModal(false)
     } finally {
       setLoadingDias(false)
@@ -1449,7 +1449,7 @@ export function ReporteFacturacionTab() {
         asignaciones: asignacionesDedup,
       })
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el historial de asignaciones', 'error')
+      showError('Error', 'No se pudo cargar el historial de asignaciones')
       setShowHistorialModal(false)
     } finally {
       setLoadingHistorial(false)
@@ -2202,7 +2202,7 @@ export function ReporteFacturacionTab() {
       }
 
     } catch {
-      Swal.fire('Error', 'No se pudo cargar la facturación', 'error')
+      showError('Error', 'No se pudo cargar la facturación')
     } finally {
       setLoading(false)
     }
@@ -3555,7 +3555,7 @@ export function ReporteFacturacionTab() {
       autoRecalcularRef.current = true
       // El useEffect de abajo detectará el cambio y llamará recalcularPeriodoAbierto()
     } catch {
-      Swal.fire('Error', 'No se pudo crear el período de facturación', 'error')
+      showError('Error', 'No se pudo crear el período de facturación')
       setGenerando(false)
     }
   }
@@ -3666,7 +3666,7 @@ export function ReporteFacturacionTab() {
   // Recalcular período abierto - REGENERACIÓN COMPLETA desde cero (misma lógica que PeriodosTab)
   async function recalcularPeriodoAbierto(skipConfirm = false) {
     if (!periodo || (periodo.estado !== 'abierto' && periodo.estado !== 'procesando')) {
-      Swal.fire('Error', 'Solo se puede recalcular un período abierto', 'error')
+      showError('Error', 'Solo se puede recalcular un período abierto')
       return
     }
 
@@ -3797,11 +3797,7 @@ export function ReporteFacturacionTab() {
       // falla se disfraza de "otro usuario tomo el periodo" y es indiagnosticable.
       if (errorCandado) {
         await cargarFacturacion()
-        Swal.fire(
-          'No se pudo iniciar el recálculo',
-          `La base rechazó la operación: ${errorCandado.message || errorCandado}`,
-          'error'
-        )
+        showError('No se pudo iniciar el recálculo', `La base rechazó la operación: ${errorCandado.message || errorCandado}`)
         return
       }
 
@@ -5325,7 +5321,7 @@ export function ReporteFacturacionTab() {
         .eq('id', periodo.id)
         .eq('lock_token', lockTokenRef.current)
       setPeriodo(prev => prev ? { ...prev, estado: 'abierto' as const } : prev)
-      Swal.fire('Error', error?.message || 'No se pudo recalcular el período', 'error')
+      showError('Error', error?.message || 'No se pudo recalcular el período')
       // Si el paso 2 ya borró la facturación, reasignar los pagos a las
       // facturaciones que alcanzaron a recrearse (best-effort; los que no
       // tengan destino quedan visibles en el aviso de pagos sin vincular).
@@ -5506,7 +5502,7 @@ export function ReporteFacturacionTab() {
       await cargarFacturacion()
       showSuccess('Período desbloqueado', 'Ya podés volver a recalcular')
     } catch (error: any) {
-      Swal.fire('Error', error?.message || 'No se pudo desbloquear el período', 'error')
+      showError('Error', error?.message || 'No se pudo desbloquear el período')
     } finally {
       setDesbloqueando(false)
     }
@@ -5515,7 +5511,7 @@ export function ReporteFacturacionTab() {
   // Cerrar período - copia conductores a la semana siguiente
   async function cerrarPeriodo() {
     if (!periodo || periodo.estado !== 'abierto') {
-      Swal.fire('Error', 'Solo se puede cerrar un período abierto', 'error')
+      showError('Error', 'Solo se puede cerrar un período abierto')
       return
     }
 
@@ -5602,7 +5598,7 @@ export function ReporteFacturacionTab() {
       } : prev)
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo cerrar el período', 'error')
+      showError('Error', error.message || 'No se pudo cerrar el período')
     } finally {
       setCerrando(false)
     }
@@ -5648,7 +5644,7 @@ export function ReporteFacturacionTab() {
 
       showSuccess('Período Reabierto', `Semana ${periodo.semana}/${periodo.anio} está abierta nuevamente`)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo reabrir el período', 'error')
+      showError('Error', error.message || 'No se pudo reabrir el período')
     }
   }
 
@@ -5656,7 +5652,7 @@ export function ReporteFacturacionTab() {
   async function toggleEfectivoCabify(facturacion: FacturacionConductor) {
     const { cabify_driver_id, cabify_company_id, permiso_efectivo, conductor_nombre } = facturacion
     if (!cabify_driver_id || !cabify_company_id) {
-      Swal.fire('Error', 'Este conductor no tiene datos de Cabify asociados', 'error')
+      showError('Error', 'Este conductor no tiene datos de Cabify asociados')
       return
     }
 
@@ -6208,7 +6204,7 @@ export function ReporteFacturacionTab() {
         setDetalleSaldoBreakdown(null)
       }
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el detalle', 'error')
+      showError('Error', 'No se pudo cargar el detalle')
       setShowDetalle(false)
     } finally {
       setLoadingDetalle(false)
@@ -6290,7 +6286,7 @@ export function ReporteFacturacionTab() {
       setDetalleItems([])
       setDetallePagos([])
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar el pago', 'error')
+      showError('Error', error.message || 'No se pudo eliminar el pago')
     }
   }
 
@@ -6312,7 +6308,7 @@ export function ReporteFacturacionTab() {
           .select('*, tipos_cobro_descuento(nombre, categoria), conductores(nombres, apellidos)')
           .eq('id', referenciaId)
           .single()
-        if (!pen) { Swal.fire('Error', 'No se encontró la penalidad', 'error'); return }
+        if (!pen) { showError('Error', 'No se encontró la penalidad'); return }
 
         const creadoPorNombre = await resolverNombreUsuario(pen.created_by_name, pen.created_by)
 
@@ -6379,7 +6375,7 @@ export function ReporteFacturacionTab() {
           .select('*, penalidad:penalidades(*, tipos_cobro_descuento(nombre, categoria), conductores(nombres, apellidos))')
           .eq('id', referenciaId)
           .single()
-        if (!cuota?.penalidad) { Swal.fire('Error', 'No se encontró la cuota', 'error'); return }
+        if (!cuota?.penalidad) { showError('Error', 'No se encontró la cuota'); return }
         const pen = cuota.penalidad
 
         const creadoPorNombre = await resolverNombreUsuario(pen.created_by_name, pen.created_by)
@@ -6416,7 +6412,7 @@ export function ReporteFacturacionTab() {
         })
       }
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo cargar el detalle', 'error')
+      showError('Error', error.message || 'No se pudo cargar el detalle')
     }
   }
 
@@ -6615,7 +6611,7 @@ export function ReporteFacturacionTab() {
         customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
       })
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo cargar las multas', 'error')
+      showError('Error', error.message || 'No se pudo cargar las multas')
     }
   }
 
@@ -6705,7 +6701,7 @@ export function ReporteFacturacionTab() {
       setDetalleItems([])
       setDetallePagos([])
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo editar el pago', 'error')
+      showError('Error', error.message || 'No se pudo editar el pago')
     }
   }
 
@@ -7048,7 +7044,7 @@ export function ReporteFacturacionTab() {
       setDetalleFacturacion(null)
       setDetalleItems([])
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
+      showError('Error', error.message || 'No se pudo registrar el pago')
     }
   }
 
@@ -7343,7 +7339,7 @@ export function ReporteFacturacionTab() {
         })
       }
     } catch (error: any) {
-      Swal.fire('Error', `No se pudo leer el archivo Excel: ${error.message || error}`, 'error')
+      showError('Error', `No se pudo leer el archivo Excel: ${error.message || error}`)
     } finally {
       setLoadingCabifyPagos(false)
     }
@@ -7761,7 +7757,7 @@ export function ReporteFacturacionTab() {
 
       showSuccess('PDF Exportado', `Se descargó: ${nombreArchivo}`)
     } catch {
-      Swal.fire('Error', 'No se pudo exportar el PDF', 'error')
+      showError('Error', 'No se pudo exportar el PDF')
     } finally {
       setExportingPdf(false)
     }
@@ -7863,7 +7859,7 @@ export function ReporteFacturacionTab() {
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
     } catch {
-      Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
+      showError('Error', 'No se pudo exportar el reporte')
     } finally {
       setExportingExcel(false)
     }
@@ -8321,7 +8317,7 @@ export function ReporteFacturacionTab() {
       setShowSiFacturaPreview(true)
 
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el preview de SiFactura', 'error')
+      showError('Error', 'No se pudo cargar el preview de SiFactura')
     } finally {
       setLoadingSiFacturaPreview(false)
     }
@@ -8427,7 +8423,7 @@ export function ReporteFacturacionTab() {
 
       showSuccess('Facturación Exportada', `Se descargó: ${nombreArchivo} (${filasExport.length} líneas)`)
     } catch {
-      Swal.fire('Error', 'No se pudo exportar el reporte de facturación', 'error')
+      showError('Error', 'No se pudo exportar el reporte de facturación')
     } finally {
       setExportingSiFactura(false)
     }
@@ -8926,7 +8922,7 @@ export function ReporteFacturacionTab() {
       setShowSiFacturaPreview(true)
 
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el preview de Facturación', 'error')
+      showError('Error', 'No se pudo cargar el preview de Facturación')
     } finally {
       setLoadingSiFacturaPreview(false)
     }
@@ -9086,7 +9082,7 @@ export function ReporteFacturacionTab() {
       setShowRITPreview(true)
 
     } catch {
-      Swal.fire('Error', 'No se pudo cargar los datos del preview', 'error')
+      showError('Error', 'No se pudo cargar los datos del preview')
     } finally {
       setLoadingRITPreview(false)
     }
@@ -9353,7 +9349,7 @@ export function ReporteFacturacionTab() {
 
       return true
     } catch {
-      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+      showError('Error', 'No se pudieron guardar los cambios')
       return false
     }
   }
@@ -9494,7 +9490,7 @@ export function ReporteFacturacionTab() {
       } else {
         try { msg = JSON.stringify(err) } catch { msg = String(err) }
       }
-      Swal.fire('Error', `No se pudieron guardar los cambios: ${msg}`, 'error')
+      showError('Error', `No se pudieron guardar los cambios: ${msg}`)
       return false
     }
   }
@@ -9507,7 +9503,7 @@ export function ReporteFacturacionTab() {
       // Buscar facturacion_conductores para este conductor
       const facturacion = facturacionesFiltradas.find(f => f.conductor_id === pendiente.conductorId)
       if (!facturacion) {
-        Swal.fire('Error', 'No se encontró la facturación del conductor', 'error')
+        showError('Error', 'No se encontró la facturación del conductor')
         return false
       }
 
@@ -9560,7 +9556,7 @@ export function ReporteFacturacionTab() {
 
       return true
     } catch {
-      Swal.fire('Error', 'No se pudo enlazar el concepto', 'error')
+      showError('Error', 'No se pudo enlazar el concepto')
       return false
     }
   }
@@ -9775,7 +9771,7 @@ export function ReporteFacturacionTab() {
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
     } catch {
-      Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
+      showError('Error', 'No se pudo exportar el reporte')
     } finally {
       setExportingExcel(false)
     }
@@ -9918,7 +9914,7 @@ export function ReporteFacturacionTab() {
       setCabifyPreviewData(previewRows)
       setShowCabifyPreview(true)
     } catch {
-      Swal.fire('Error', 'No se pudo generar el preview de Cabify', 'error')
+      showError('Error', 'No se pudo generar el preview de Cabify')
     } finally {
       setLoadingCabifyPreview(false)
     }
@@ -10139,7 +10135,7 @@ export function ReporteFacturacionTab() {
       setCabifyPreviewData(previewRows)
       setShowCabifyPreview(true)
     } catch {
-      Swal.fire('Error', 'No se pudo generar el preview de Cabify', 'error')
+      showError('Error', 'No se pudo generar el preview de Cabify')
     } finally {
       setLoadingCabifyPreview(false)
     }
@@ -10214,7 +10210,7 @@ export function ReporteFacturacionTab() {
 
       showSuccess('Reporte Cabify Exportado', `Se descargó: ${nombreArchivo}`)
     } catch {
-      Swal.fire('Error', 'No se pudo exportar el reporte de Cabify', 'error')
+      showError('Error', 'No se pudo exportar el reporte de Cabify')
     } finally {
       setExportingCabify(false)
     }
@@ -10272,7 +10268,7 @@ export function ReporteFacturacionTab() {
       setCabifyPreviewData(updatedData)
       return true
     } catch {
-      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+      showError('Error', 'No se pudieron guardar los cambios')
       return false
     }
   }

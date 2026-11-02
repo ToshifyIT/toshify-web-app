@@ -5,7 +5,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import * as XLSX from 'xlsx'
 import {
   Wallet,
@@ -185,7 +185,7 @@ export function SaldosAbonosTab() {
       setKardexEdit({ open: false, row: null, nuevoMonto: '', nuevaSemana: '', motivo: '', saving: false })
       showSuccess(`Monto actualizado: ${formatCurrency(montoAnterior)} → ${formatCurrency(nuevoMonto)}`)
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'No se pudo actualizar', 'error')
+      showError('Error', err.message || 'No se pudo actualizar')
       setKardexEdit(prev => ({ ...prev, saving: false }))
     }
   }
@@ -812,7 +812,7 @@ export function SaldosAbonosTab() {
       cargarSaldos()
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo agregar el saldo', 'error')
+      showError('Error', error.message || 'No se pudo agregar el saldo')
     }
   }
 
@@ -1051,7 +1051,6 @@ export function SaldosAbonosTab() {
         if (semIter > 52) { semIter = 1; anioIter++ }
       }
 
-
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: 0,
@@ -1077,7 +1076,7 @@ export function SaldosAbonosTab() {
       cargarSaldos()
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo fraccionar el saldo', 'error')
+      showError('Error', error.message || 'No se pudo fraccionar el saldo')
     }
   }
 
@@ -1187,7 +1186,6 @@ export function SaldosAbonosTab() {
     try {
       const montoFinal = formValues.tipo === 'abono' ? formValues.monto : -formValues.monto
 
-
       const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
           conductor_id: saldo.conductor_id,
           tipo: formValues.tipo,
@@ -1221,7 +1219,7 @@ export function SaldosAbonosTab() {
       cargarSaldos()
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
+      showError('Error', error.message || 'No se pudo registrar')
     }
   }
 
@@ -1336,7 +1334,7 @@ export function SaldosAbonosTab() {
       cargarSaldos()
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
+      showError('Error', error.message || 'No se pudo registrar el pago')
     }
   }
 
@@ -1421,7 +1419,7 @@ export function SaldosAbonosTab() {
 
       cargarSaldos()
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar el saldo', 'error')
+      showError('Error', 'No se pudo eliminar el saldo')
     }
   }
 
@@ -1528,7 +1526,6 @@ export function SaldosAbonosTab() {
       const diasMora = formValues.diasMora
       const moraAcum = formValues.moraAcum
 
-
       const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
@@ -1559,7 +1556,7 @@ export function SaldosAbonosTab() {
       cargarSaldos()
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
+      showError('Error', error.message || 'No se pudo actualizar el saldo')
     }
   }
 
@@ -1644,7 +1641,7 @@ export function SaldosAbonosTab() {
       cargarSaldos()
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar la mora', 'error')
+      showError('Error', error.message || 'No se pudo actualizar la mora')
     }
   }
   editarMoraAcumulada - fin */
@@ -1716,14 +1713,14 @@ export function SaldosAbonosTab() {
       const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
 
       if (rows.length === 0) {
-        Swal.fire('Error', 'El archivo no contiene datos', 'error')
+        showError('Error', 'El archivo no contiene datos')
         return
       }
 
       // Validar que tenga DNI
       const firstRow = rows[0]
       if (firstRow['DNI'] === undefined && firstRow['dni'] === undefined) {
-        Swal.fire('Error', 'El archivo debe tener la columna "DNI"', 'error')
+        showError('Error', 'El archivo debe tener la columna "DNI"')
         return
       }
 
@@ -1920,13 +1917,13 @@ export function SaldosAbonosTab() {
       if (errors > 0) {
         Swal.fire('Importacion parcial', `${updated} actualizados, ${errors} errores`, 'warning')
       } else {
-        Swal.fire('Importacion exitosa', `${updated} saldos actualizados`, 'success')
+        showSuccess('Importacion exitosa', `${updated} saldos actualizados`)
       }
 
       await cargarSaldos()
     } catch {
       setLoading(false)
-      Swal.fire('Error', 'No se pudo procesar el archivo', 'error')
+      showError('Error', 'No se pudo procesar el archivo')
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
@@ -2022,7 +2019,7 @@ export function SaldosAbonosTab() {
       }
       setKardexModal({ open: true, saldo, rows: rows || [], loading: false, facMap, abonosMap } as any)
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el control de saldos', 'error')
+      showError('Error', 'No se pudo cargar el control de saldos')
       setKardexModal(prev => ({ ...prev, open: false, loading: false }))
     }
   }
@@ -2133,7 +2130,7 @@ export function SaldosAbonosTab() {
       // Recargar datos
       cargarSaldos()
     } catch {
-      Swal.fire('Error', 'No se pudo actualizar el movimiento', 'error')
+      showError('Error', 'No se pudo actualizar el movimiento')
     }
   } editarMovimiento - fin */
 
@@ -2414,93 +2411,6 @@ export function SaldosAbonosTab() {
             }}
           />
 
-          <div className="fact-header">
-            <div className="fact-header-left">
-              {(isAdmin() || isAdministrativo()) && (
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    className="fact-btn fact-btn-secondary"
-                    onClick={exportarSaldos}
-                    title="Exportar saldos a Excel"
-                  >
-                    <Download size={14} /> Exportar
-                  </button>
-                  <button
-                    className="fact-btn fact-btn-primary"
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Importar saldos desde Excel"
-                  >
-                    <Upload size={14} /> Importar
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-              {/* Selector de semana */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px 6px' }}>
-                <button
-                  onClick={() => { setSemanaOffset(prev => prev - 1); setAsignadoFilter('asignado') }}
-                  style={{ padding: '2px 6px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
-                >
-                  ‹
-                </button>
-                <span
-                  style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                  onClick={() => setSemanaOffset(0)}
-                  title="Volver a semana actual"
-                >
-                  {semanaSeleccionada.label}
-                </span>
-                <button
-                  onClick={() => { setSemanaOffset(prev => Math.min(prev + 1, 0)); setAsignadoFilter('asignado') }}
-                  style={{ padding: '2px 6px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: semanaOffset >= 0 ? 'var(--text-tertiary)' : 'var(--text-secondary)' }}
-                  disabled={semanaOffset >= 0}
-                >
-                  ›
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
-                {[
-                  { value: 'todos' as const, label: 'Todos' },
-                  { value: 'asignado' as const, label: 'Asignados' },
-                  { value: 'no_asignado' as const, label: 'No asignados' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setAsignadoFilter(opt.value)}
-                    style={{
-                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
-                      background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
-                      color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
-                {[
-                  { value: 'todos' as const, label: 'Todos' },
-                  { value: 'activo' as const, label: 'Activos' },
-                  { value: 'baja' as const, label: 'Baja' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setEstadoCondFilter(opt.value)}
-                    style={{
-                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
-                      background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
-                      color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <VerLogsButton tablas={['saldos_conductores', 'abonos_conductores', 'cobros_fraccionados']} label="Saldos" />
-            </div>
-          </div>
-
            {/* Stats */}
           <div className="fact-stats">
             <div className="fact-stats-grid">
@@ -2579,6 +2489,94 @@ export function SaldosAbonosTab() {
             emptyDescription="No hay saldos registrados"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            headerAction={
+              <div className="fact-header fact-header-inline">
+                <div className="fact-header-left">
+                  {(isAdmin() || isAdministrativo()) && (
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        className="fact-btn fact-btn-secondary"
+                        onClick={exportarSaldos}
+                        title="Exportar saldos a Excel"
+                      >
+                        <Download size={14} /> Exportar
+                      </button>
+                      <button
+                        className="fact-btn fact-btn-primary"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Importar saldos desde Excel"
+                      >
+                        <Upload size={14} /> Importar
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* Selector de semana */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px 6px' }}>
+                    <button
+                      onClick={() => { setSemanaOffset(prev => prev - 1); setAsignadoFilter('asignado') }}
+                      style={{ padding: '2px 6px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                    >
+                      ‹
+                    </button>
+                    <span
+                      style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      onClick={() => setSemanaOffset(0)}
+                      title="Volver a semana actual"
+                    >
+                      {semanaSeleccionada.label}
+                    </span>
+                    <button
+                      onClick={() => { setSemanaOffset(prev => Math.min(prev + 1, 0)); setAsignadoFilter('asignado') }}
+                      style={{ padding: '2px 6px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: semanaOffset >= 0 ? 'var(--text-tertiary)' : 'var(--text-secondary)' }}
+                      disabled={semanaOffset >= 0}
+                    >
+                      ›
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                    {[
+                      { value: 'todos' as const, label: 'Todos' },
+                      { value: 'asignado' as const, label: 'Asignados' },
+                      { value: 'no_asignado' as const, label: 'No asignados' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setAsignadoFilter(opt.value)}
+                        style={{
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
+                          color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                    {[
+                      { value: 'todos' as const, label: 'Todos' },
+                      { value: 'activo' as const, label: 'Activos' },
+                      { value: 'baja' as const, label: 'Baja' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setEstadoCondFilter(opt.value)}
+                        style={{
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
+                          color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <VerLogsButton tablas={['saldos_conductores', 'abonos_conductores', 'cobros_fraccionados']} label="Saldos" />
+                </div>
+              </div>
+            }
           />
       {/* Modal Kardex - Control de Saldos */}
       {kardexModal.open && kardexModal.saldo && (() => {

@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { Clock, Wrench, Save } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import type { SiniestroReparacion } from '../../../types/siniestros.types'
 
 interface ReparacionTicketProps {
@@ -91,7 +91,7 @@ export function ReparacionTicket({
 
       onSave()
     } catch (error) {
-      Swal.fire('Error', 'No se pudo guardar el ticket de reparacion', 'error')
+      showError('Error', 'No se pudo guardar el ticket de reparacion')
     } finally {
       setSaving(false)
     }

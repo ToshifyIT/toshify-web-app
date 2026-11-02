@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSede } from '../contexts/SedeContext'
 import { TimeInput24h } from './ui/TimeInput24h'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../utils/toast'
+import { showError, showSuccess } from '../utils/toast'
 import type { Vehicle } from '../types/vehiculo.types'
 import type { Conductor } from '../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge } from '../utils/conductorUtils'
@@ -298,25 +298,25 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const handleNext = () => {
     // Step 1: Validate modalidad
     if (step === 1 && (!formData.modalidad || !formData.horario)) {
-      Swal.fire('Error', 'Debes seleccionar una modalidad y horario', 'error')
+      showError('Error', 'Debes seleccionar una modalidad y horario')
       return
     }
 
     // Step 2: Validate vehículo
     if (step === 2 && !formData.vehiculo_id) {
-      Swal.fire('Error', 'Debes seleccionar un vehículo', 'error')
+      showError('Error', 'Debes seleccionar un vehículo')
       return
     }
 
     // Step 3: Validate conductores según el modo
     if (step === 3) {
       if (formData.horario === 'todo_dia' && formData.conductores_ids.length === 0) {
-        Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
+        showError('Error', 'Debes asignar un conductor para A Cargo')
         return
       }
       // Modo turno - requiere al menos 1 conductor
       if (formData.horario !== 'todo_dia' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
-        Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+        showError('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)')
         return
       }
     }
@@ -498,13 +498,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
     // Validaciones según modo - A CARGO
     if (formData.horario === 'todo_dia' && formData.conductores_ids.length === 0) {
-      Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
+      showError('Error', 'Debes asignar un conductor para A Cargo')
       return
     }
 
     // Validaciones según modo - turno requiere al menos 1 conductor
     if (formData.horario !== 'todo_dia' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
-      Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+      showError('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)')
       return
     }
 
@@ -635,7 +635,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       onSuccess()
       onClose()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'Error al crear la asignación', 'error')
+      showError('Error', error.message || 'Error al crear la asignación')
     } finally {
       setLoading(false)
     }

@@ -8,7 +8,7 @@ import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { ExcelColumnFilter, useExcelFilters } from '../../../components/ui/DataTable/ExcelColumnFilter'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
-import { showSuccess, showError } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { generateOfertaLocacion } from '../../../services/ofertaLocacionService'
 import type { OfertaLocacion } from '../titulares/types/ofertaLocacion.types'
 import { OfertaLocacionDetailModal } from './components/OfertaLocacionDetailModal'
@@ -181,7 +181,7 @@ export function OfertaLocacionListModule() {
 
     const { error } = await supabase.from('ofertas_locacion').delete().eq('id', oferta.id)
     if (error) {
-      Swal.fire('Error', error.message, 'error')
+      showError('Error', error.message)
       return
     }
     showSuccess('Oferta eliminada')

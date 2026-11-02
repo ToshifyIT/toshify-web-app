@@ -5,8 +5,7 @@ import {
   TrendingUp, 
   TrendingDown,
   CheckCircle, 
-  Clock, 
-  Search
+  Clock
 } from 'lucide-react';
 import { format, addHours, previousSunday, subWeeks, nextSunday, addWeeks, startOfDay, endOfDay } from 'date-fns';
 import { DataTable } from '../../components/ui/DataTable';
@@ -451,30 +450,20 @@ export function EscuelaModule() {
 
        {/* Filters */}
        <div className="escuela-filters-container">
-         <div className="escuela-filters-bar">
-           <div className="escuela-search-wrapper">
-             <Search className="escuela-search-icon" size={20} />
-             <input
-               type="text"
-               className="escuela-search-input"
-               placeholder="Buscar por nombre o DNI..."
-               value={globalSearch}
-               onChange={(e) => setGlobalSearch(e.target.value)}
-             />
-           </div>
-           
-           <div className="flex gap-3">
-            <DateFilterPill onChange={handleDateFilterChange} />
-          </div>
-         </div>
-
          {/* Table */}
          <div className="escuela-table-container">
             <DataTable
               columns={columns}
               data={filteredData}
               loading={loading}
-              showSearch={false}
+              searchPlaceholder="Buscar por nombre o DNI..."
+              globalFilter={globalSearch}
+              onGlobalFilterChange={setGlobalSearch}
+              headerAction={
+                <div className="header-controls-inline">
+                  <DateFilterPill onChange={handleDateFilterChange} />
+                </div>
+              }
               emptyIcon={<Users size={64}
             />}
               emptyTitle="No hay conductores"

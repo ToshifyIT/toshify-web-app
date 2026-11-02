@@ -23,7 +23,7 @@ import Swal from 'sweetalert2'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 
 interface LeadFila {
   id: string
@@ -253,7 +253,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
       showSuccess('Actualizado', `"${f.leadNombre}" quedó marcado como convertido.`)
       onActualizado?.()
     } catch (e: any) {
-      Swal.fire('Error', e?.message || 'No se pudo actualizar el lead', 'error')
+      showError('Error', e?.message || 'No se pudo actualizar el lead')
     } finally {
       setGuardandoId(null)
     }

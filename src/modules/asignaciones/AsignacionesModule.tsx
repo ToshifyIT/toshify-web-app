@@ -13,7 +13,7 @@ import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { getTodayDateString } from '../../utils/dateUtils'
 import { fechaISOART, partesART } from '../../utils/fechaArgentina'
 import { tieneGncEnFecha, armarMapaGncHistorial, type GncHistorialEntry } from '../../utils/gncHistorial'
@@ -727,7 +727,7 @@ export function AsignacionesModule() {
       loadAsignaciones()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
-      Swal.fire('Error', `No se pudo completar el control: ${msg}`, 'error')
+      showError('Error', `No se pudo completar el control: ${msg}`)
     } finally {
       setControlSaving(false)
     }
@@ -1427,11 +1427,7 @@ export function AsignacionesModule() {
 
     const doc = resultado.documents.find(d => d.conductor_id === conductorId)
     if (!resultado.success || !doc) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo generar el documento',
-        text: resultado.error || 'El servidor no devolvió el documento. Intentá de nuevo en unos minutos.',
-      })
+      showError('No se pudo generar el documento', resultado.error || 'El servidor no devolvió el documento. Intentá de nuevo en unos minutos.')
       return
     }
 
@@ -1893,7 +1889,7 @@ export function AsignacionesModule() {
       showSuccess('Tarifa actualizada', `${nombre}: Tarifa ${nueva === 'antigua' ? 'Antigua' : 'Nueva'}`)
       loadAllData()
     } catch (err: any) {
-      Swal.fire('Error', err?.message || 'No se pudo cambiar la tarifa', 'error')
+      showError('Error', err?.message || 'No se pudo cambiar la tarifa')
     }
   }
 
@@ -1961,7 +1957,7 @@ export function AsignacionesModule() {
         confirmButtonColor: 'var(--color-primary)'
       })
     } catch (err: any) {
-      Swal.fire('Error', err?.message || 'No se pudo cargar el historial de tarifa', 'error')
+      showError('Error', err?.message || 'No se pudo cargar el historial de tarifa')
     }
   }
 
@@ -2150,7 +2146,7 @@ export function AsignacionesModule() {
 
       loadAsignaciones()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al confirmar devolución', 'error')
+      showError('Error', err.message || 'Error al confirmar devolución')
     } finally {
       setIsSubmitting(false)
     }
@@ -2234,7 +2230,7 @@ export function AsignacionesModule() {
 
       loadAsignaciones()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
+      showError('Error', err.message || 'Error al eliminar la asignación')
     } finally {
       setIsSubmitting(false)
     }
@@ -2334,7 +2330,7 @@ export function AsignacionesModule() {
         setConductoresToConfirm([])
         loadAsignaciones()
       } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al confirmar devolución', 'error')
+        showError('Error', err.message || 'Error al confirmar devolución')
       } finally {
         setIsSubmitting(false)
       }
@@ -2617,7 +2613,7 @@ export function AsignacionesModule() {
       setSelectedAsignacion(null)
       loadAsignaciones()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al confirmar', 'error')
+      showError('Error', err.message || 'Error al confirmar')
       // Refrescar para que la grilla muestre lo que sí se guardó antes del error
       loadAsignaciones()
     } finally {
@@ -2667,7 +2663,7 @@ export function AsignacionesModule() {
       setSelectedAsignacion(null)
       loadAsignaciones()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al cancelar', 'error')
+      showError('Error', err.message || 'Error al cancelar')
     } finally {
       setIsSubmitting(false)
     }
@@ -2683,7 +2679,7 @@ export function AsignacionesModule() {
       showSuccess('Actualizado', 'El conductor ha sido desconfirmado.')
       loadAsignaciones()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al desconfirmar', 'error')
+      showError('Error', err.message || 'Error al desconfirmar')
     }
   }
 
@@ -2918,7 +2914,7 @@ export function AsignacionesModule() {
         setRegularizarAsignacion(null)
         loadAsignaciones()
       } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al editar la devolución', 'error')
+        showError('Error', err.message || 'Error al editar la devolución')
       } finally {
         setIsSubmitting(false)
       }
@@ -3184,7 +3180,7 @@ export function AsignacionesModule() {
       setRegularizarAsignacion(null)
       loadAsignaciones()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al regularizar la asignación', 'error')
+      showError('Error', err.message || 'Error al regularizar la asignación')
     } finally {
       setIsSubmitting(false)
     }
@@ -3339,7 +3335,7 @@ export function AsignacionesModule() {
       setSelectedAsignacion(null)
       loadAsignaciones()
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al activar', 'error')
+      showError('Error', err.message || 'Error al activar')
       // Refrescar para que la grilla muestre lo que sí se guardó antes del error
       loadAsignaciones()
     } finally {
@@ -3409,7 +3405,7 @@ export function AsignacionesModule() {
       observaciones: '[ELIMINADA] Eliminada por usuario',
     }).eq('id', devolucionId)
     if (cancelError) {
-      Swal.fire('Error', cancelError.message || 'Error al cancelar devolución', 'error')
+      showError('Error', cancelError.message || 'Error al cancelar devolución')
       return
     }
     showSuccess('Cancelada', 'Devolución cancelada')

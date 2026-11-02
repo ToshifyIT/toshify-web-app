@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -144,7 +144,7 @@ export function ParametrosUssPage() {
       showSuccess('Parametro creado')
       cargarParametros()
     } catch {
-      Swal.fire('Error', 'No se pudo crear el parametro', 'error')
+      showError('Error', 'No se pudo crear el parametro')
     }
   }
 
@@ -211,7 +211,7 @@ export function ParametrosUssPage() {
       showSuccess('Parametro actualizado')
       cargarParametros()
     } catch {
-      Swal.fire('Error', 'No se pudo actualizar el parametro', 'error')
+      showError('Error', 'No se pudo actualizar el parametro')
     }
   }
 
@@ -238,7 +238,7 @@ export function ParametrosUssPage() {
       showSuccess('Parametro eliminado')
       cargarParametros()
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar el parametro', 'error')
+      showError('Error', 'No se pudo eliminar el parametro')
     }
   }
 

@@ -26,6 +26,14 @@
   padding: 12px 16px;
 }
 
+/* Header dentro de la barra del buscador (headerAction del DataTable) */
+.cabify-header-inline {
+  margin-bottom: 0;
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+.cabify-header-inline .cabify-controls { align-items: center; }
+
 .cabify-last-update-compact {
   font-size: 12px;
   color: var(--text-tertiary);

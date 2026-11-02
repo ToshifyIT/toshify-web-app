@@ -22,6 +22,7 @@ import { VISITA_FORM_INITIAL } from '../../../types/visitas.types';
 import { TIPO_ASIGNACION_LABELS } from '../../../types/onboarding.types';
 import { getMotivosByCategoria, checkConflict, buildLocalTimestamp } from '../../../services/visitasService';
 import { format } from 'date-fns';
+import { showError } from '../../../utils/toast'
 
 // Formatear fecha/hora en zona Argentina (independiente del navegador)
 const ARG_TZ = 'America/Argentina/Buenos_Aires';
@@ -687,7 +688,7 @@ export function VisitasFormModal({
 
       await onSave(dataToSave);
     } catch {
-      Swal.fire('Error', 'No se pudo guardar la cita', 'error');
+      showError('Error', 'No se pudo guardar la cita');
     } finally {
       setSaving(false);
     }

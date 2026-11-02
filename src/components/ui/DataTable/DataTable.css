@@ -92,6 +92,26 @@
 
 .dt-header-action {
   flex-shrink: 0;
+  max-width: 100%;
+}
+
+/* Si los filtros no entran al lado del buscador, pasan a la línea de abajo
+   (en vez de desbordar la pantalla). */
+.dt-header-bar { flex-wrap: wrap; }
+
+/* Filtros / período / acciones de un módulo puestos en la misma línea que el
+   buscador (headerAction). Se quita la caja propia que tenían como fila aparte. */
+.dt-header-action .header-controls-inline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* Column Toggle Button */
