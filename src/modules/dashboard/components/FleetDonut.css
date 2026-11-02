@@ -2,7 +2,7 @@
 
 .fleet-donut-card {
   background-color: var(--card-bg, #ffffff);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
   border: 1px solid var(--border-primary, #f3f4f6);
   padding: 24px;
@@ -140,7 +140,7 @@
 
   .fleet-donut-legend-item {
     background-color: var(--bg-secondary, #f9fafb);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 4px 8px;
   }
 }

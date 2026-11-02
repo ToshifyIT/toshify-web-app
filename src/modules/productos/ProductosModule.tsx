@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { Eye, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box, AlertTriangle, CheckCircle, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -430,7 +430,7 @@ export function ProductosModule() {
       return
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Estás seguro?',
       text: 'Esta acción no se puede deshacer',
       icon: 'warning',
@@ -451,7 +451,7 @@ export function ProductosModule() {
           .limit(1)
 
         if (inventarioData && inventarioData.length > 0) {
-          Swal.fire({
+          Alerta.fire({
             icon: 'warning',
             title: 'No se puede eliminar',
             text: 'Este producto tiene movimientos de inventario asociados. Primero elimine los registros de inventario.',
@@ -467,7 +467,7 @@ export function ProductosModule() {
           .limit(1)
 
         if (pedidosData && pedidosData.length > 0) {
-          Swal.fire({
+          Alerta.fire({
             icon: 'warning',
             title: 'No se puede eliminar',
             text: 'Este producto tiene pedidos asociados. Primero elimine los pedidos relacionados.',

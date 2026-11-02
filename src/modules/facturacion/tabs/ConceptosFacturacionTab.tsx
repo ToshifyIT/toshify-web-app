@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { Plus, Edit2, Trash2, Filter } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -8,6 +8,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import type { ConceptoFacturacion } from '../../../types/facturacion.types'
 import { formatCurrency, TIPOS_CONCEPTO, TIPOS_PARAMETRO } from '../../../types/facturacion.types'
 
+import { hoyART, fechaLocalISO } from '../../../utils/fechaArgentina'
 const HTML_CAMPO_PRECIO_BASE = `
           <div class="fact-form-row" id="swal-base-group">
             <div class="fact-form-group">
@@ -205,7 +206,7 @@ export function ConceptosFacturacionTab() {
       `<option value="${t.value}">${t.label}</option>`
     ).join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Nuevo Concepto',
       html: `
         <div class="fact-modal-form">
@@ -314,7 +315,7 @@ export function ConceptosFacturacionTab() {
         const aplicaCargo = (document.getElementById('swal-cargo') as HTMLInputElement).checked
 
         if (!codigo || !descripcion) {
-          Swal.showValidationMessage('Código y descripción son requeridos')
+          Alerta.showValidationMessage('Código y descripción son requeridos')
           return false
         }
 
@@ -386,9 +387,9 @@ export function ConceptosFacturacionTab() {
     ).join('')
 
     // Fecha por defecto para vigencia: hoy
-    const hoyStr = new Date().toISOString().split('T')[0]
+    const hoyStr = hoyART()
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Editar Concepto',
       html: `
         <div class="fact-modal-form">
@@ -523,7 +524,7 @@ export function ConceptosFacturacionTab() {
         const vigenciaValue = vigenciaInput?.value || ''
 
         if (!descripcion) {
-          Swal.showValidationMessage('La descripción es requerida')
+          Alerta.showValidationMessage('La descripción es requerida')
           return false
         }
 
@@ -543,7 +544,7 @@ export function ConceptosFacturacionTab() {
         const priceChanged = Math.abs(newFinal - (concepto.precio_final || 0)) > 0.01
 
         if (priceChanged && !vigenciaValue) {
-          Swal.showValidationMessage('Seleccioná desde qué fecha aplica el nuevo precio')
+          Alerta.showValidationMessage('Seleccioná desde qué fecha aplica el nuevo precio')
           return false
         }
 
@@ -583,7 +584,7 @@ export function ConceptosFacturacionTab() {
         // vigencia = fecha exacta desde la que aplica el nuevo precio (YYYY-MM-DD)
         const hastaDate = new Date(vigencia + 'T00:00:00')
         hastaDate.setDate(hastaDate.getDate() - 1)
-        const hasta = hastaDate.toISOString().split('T')[0]
+        const hasta = fechaLocalISO(hastaDate)
 
         const desde = concepto.updated_at
           ? concepto.updated_at.split('T')[0]
@@ -616,7 +617,7 @@ export function ConceptosFacturacionTab() {
   }
 
   async function eliminarConcepto(concepto: ConceptoFacturacion) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar concepto?',
       text: `Se eliminará "${concepto.descripcion}"`,
       icon: 'warning',
@@ -654,7 +655,7 @@ export function ConceptosFacturacionTab() {
       accessorKey: 'codigo',
       header: 'Código',
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{row.original.codigo}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{row.original.codigo}</span>
       )
     },
     {
@@ -703,7 +704,7 @@ export function ConceptosFacturacionTab() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
             <span style={{
               padding: '2px 8px',
-              borderRadius: '4px',
+              borderRadius: 'var(--radius-xs)',
               fontSize: '11px',
               fontWeight: 600,
               backgroundColor: style.bg,
@@ -761,12 +762,12 @@ export function ConceptosFacturacionTab() {
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px' }}>
           {row.original.aplica_turno && (
-            <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', background: '#DBEAFE', color: '#1D4ED8' }}>
+            <span style={{ padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontSize: '11px', background: '#DBEAFE', color: '#1D4ED8' }}>
               TURNO
             </span>
           )}
           {row.original.aplica_cargo && (
-            <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', background: '#F3E8FF', color: '#7C3AED' }}>
+            <span style={{ padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontSize: '11px', background: '#F3E8FF', color: '#7C3AED' }}>
               CARGO
             </span>
           )}
@@ -809,7 +810,7 @@ export function ConceptosFacturacionTab() {
       cell: ({ row }) => (
         <span style={{
           padding: '2px 8px',
-          borderRadius: '999px',
+          borderRadius: 'var(--radius-full)',
           fontSize: '11px',
           fontWeight: 600,
           backgroundColor: row.original.activo ? '#DCFCE7' : '#FEE2E2',
@@ -829,7 +830,7 @@ export function ConceptosFacturacionTab() {
             style={{
               padding: '6px',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: 'var(--radius-xs)',
               cursor: 'pointer',
               background: '#EFF6FF',
               color: '#3B82F6'
@@ -843,7 +844,7 @@ export function ConceptosFacturacionTab() {
             style={{
               padding: '6px',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: 'var(--radius-xs)',
               cursor: 'pointer',
               background: '#FEF2F2',
               color: '#EF4444'
@@ -879,7 +880,7 @@ export function ConceptosFacturacionTab() {
             background: '#ff0033',
             color: 'white',
             border: 'none',
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-sm)',
             fontSize: '13px',
             fontWeight: 500,
             cursor: 'pointer'

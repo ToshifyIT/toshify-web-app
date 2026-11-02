@@ -6,12 +6,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useSede } from '../contexts/SedeContext'
 import { TimeInput24h } from './ui/TimeInput24h'
-import Swal from 'sweetalert2'
+import { Alerta } from './ui/alertas'
 import { showError, showSuccess } from '../utils/toast'
 import type { Vehicle } from '../types/vehiculo.types'
 import type { Conductor } from '../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge } from '../utils/conductorUtils'
 
+import { hoyART } from '../utils/fechaArgentina'
 interface AssignmentData {
   modalidad: 'dia_completo' | 'medio_dia' | 'por_horas' | 'semanal' | 'mensual' | ''
   horario: 'turno' | 'todo_dia' | ''  // turno = modo con pares de conductores
@@ -60,7 +61,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     conductores_ids: [],
     conductor_diurno_id: '',
     conductor_nocturno_id: '',
-    fecha_programada: new Date().toISOString().split('T')[0],
+    fecha_programada: hoyART(),
     hora_programada: '09:00',
     distancia: '',
     documento_diurno: '',
@@ -402,7 +403,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     const conductor = conductores.find(c => c.id === conductorId)
     // Mostrar advertencia si tiene asignación pero PERMITIR continuar
     if (conductor?.tieneAsignacionDiurna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignación activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno diurno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
@@ -421,7 +422,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     const conductor = conductores.find(c => c.id === conductorId)
     // Mostrar advertencia si tiene asignación pero PERMITIR continuar
     if (conductor?.tieneAsignacionNocturna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignación activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno nocturno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
@@ -440,7 +441,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     const conductor = conductores.find(c => c.id === conductorId)
     // Mostrar advertencia si tiene asignación pero PERMITIR continuar
     if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignación activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
@@ -519,7 +520,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
     if (conductoresConAsignacionActiva.length > 0) {
       const nombres = conductoresConAsignacionActiva.map(c => `${c.nombres} ${c.apellidos}`).join(', ')
-      const result = await Swal.fire({
+      const result = await Alerta.fire({
         title: 'Conductores con asignacion activa',
         html: `Los siguientes conductores ya tienen una asignacion activa:<br><br><b>${nombres}</b><br><br>¿Deseas continuar de todas formas?`,
         icon: 'warning',
@@ -1695,7 +1696,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       flex: 1,
                       padding: '12px 16px',
                       border: '2px solid #E5E7EB',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
                     }}
@@ -1706,7 +1707,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                     style={{
                       padding: '12px 16px',
                       border: '2px solid #E5E7EB',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'white',
@@ -1774,7 +1775,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 background: badgeBg,
                                 color: badgeColor,
                                 padding: '3px 10px',
-                                borderRadius: '6px',
+                                borderRadius: 'var(--radius-sm)',
                                 fontSize: 'clamp(9px, 0.8vw, 11px)',
                                 fontWeight: '600'
                               }}>
@@ -1832,7 +1833,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           minWidth: '120px',
                           padding: '8px 10px',
                           border: '1px solid #E5E7EB',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: 'clamp(10px, 0.9vw, 12px)',
                           fontFamily: 'inherit'
                         }}
@@ -1843,7 +1844,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         style={{
                           padding: '8px 10px',
                           border: '1px solid #E5E7EB',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: 'clamp(10px, 0.9vw, 12px)',
                           fontFamily: 'inherit',
                           background: 'white',
@@ -1863,7 +1864,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         style={{
                           padding: '8px 10px',
                           border: '1px solid #E5E7EB',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: 'clamp(10px, 0.9vw, 12px)',
                           fontFamily: 'inherit',
                           background: 'white',
@@ -1928,7 +1929,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     background: getPreferenciaBadge(conductor.preferencia_turno).bg,
                                     color: getPreferenciaBadge(conductor.preferencia_turno).color
@@ -1940,7 +1941,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                   <span style={{
                                     fontSize: '10px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     marginTop: '4px',
                                     display: 'inline-block',
@@ -1953,7 +1954,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                   <span style={{
                                     fontSize: '10px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     marginTop: '4px',
                                     display: 'inline-block',
@@ -1999,7 +2000,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     background: getPreferenciaBadge(conductorDiurno.preferencia_turno).bg,
                                     color: getPreferenciaBadge(conductorDiurno.preferencia_turno).color
@@ -2049,7 +2050,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     background: getPreferenciaBadge(conductorNocturno.preferencia_turno).bg,
                                     color: getPreferenciaBadge(conductorNocturno.preferencia_turno).color
@@ -2102,7 +2103,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 <span style={{
                                   fontSize: '9px',
                                   padding: '2px 6px',
-                                  borderRadius: '4px',
+                                  borderRadius: 'var(--radius-xs)',
                                   fontWeight: '600',
                                   background: getPreferenciaBadge(conductorCargo.preferencia_turno).bg,
                                   color: getPreferenciaBadge(conductorCargo.preferencia_turno).color
@@ -2159,7 +2160,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           width: '100%',
                           padding: '10px',
                           border: '2px solid #E5E7EB',
-                          borderRadius: '8px',
+                          borderRadius: 'var(--radius-md)',
                           fontSize: '13px',
                           fontFamily: 'inherit'
                         }}
@@ -2205,7 +2206,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         width: '100%',
                         padding: '12px',
                         border: '2px solid #E5E7EB',
-                        borderRadius: '8px',
+                        borderRadius: 'var(--radius-md)',
                         fontSize: '14px'
                       }}
                     />
@@ -2220,7 +2221,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       marginBottom: '24px',
                       padding: '20px',
                       background: '#FEF3C7',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--radius-lg)',
                       border: '2px solid #FCD34D'
                     }}>
                       <h4 style={{ margin: '0 0 16px 0', color: '#92400E', fontSize: '16px', fontWeight: '700' }}>
@@ -2233,7 +2234,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         <select
                           value={formData.documento_diurno}
                           onChange={handleDocumentoDiurnoChange}
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: 'var(--radius-md)', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
                           <option value="CARTA_OFERTA">CARTA OFERTA</option>
@@ -2250,7 +2251,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           value={formData.ubicacion_diurno}
                           onChange={handleUbicacionDiurnoChange}
                           placeholder="Ingrese la zona"
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: 'var(--radius-md)', fontSize: '14px' }}
                         />
                       </div>
                     </div>
@@ -2262,7 +2263,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       marginBottom: '24px',
                       padding: '20px',
                       background: '#DBEAFE',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--radius-lg)',
                       border: '2px solid #93C5FD'
                     }}>
                       <h4 style={{ margin: '0 0 16px 0', color: '#1E3A8A', fontSize: '16px', fontWeight: '700' }}>
@@ -2275,7 +2276,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         <select
                           value={formData.documento_nocturno}
                           onChange={handleDocumentoNocturnoChange}
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: 'var(--radius-md)', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
                           <option value="CARTA_OFERTA">CARTA OFERTA</option>
@@ -2292,7 +2293,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           value={formData.ubicacion_nocturno}
                           onChange={handleUbicacionNocturnoChange}
                           placeholder="Ingrese la zona"
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: 'var(--radius-md)', fontSize: '14px' }}
                         />
                       </div>
                     </div>
@@ -2304,7 +2305,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       marginBottom: '24px',
                       padding: '20px',
                       background: '#D1FAE5',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--radius-lg)',
                       border: '2px solid #10B981'
                     }}>
                       <h4 style={{ margin: '0 0 16px 0', color: '#065F46', fontSize: '16px', fontWeight: '700' }}>
@@ -2317,7 +2318,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         <select
                           value={formData.documento_cargo}
                           onChange={handleDocumentoCargoChange}
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: 'var(--radius-md)', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
                           <option value="CARTA_OFERTA">CARTA OFERTA</option>
@@ -2334,7 +2335,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           value={formData.ubicacion_cargo}
                           onChange={handleUbicacionCargoChange}
                           placeholder="Ingrese la zona"
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: 'var(--radius-md)', fontSize: '14px' }}
                         />
                       </div>
                     </div>
@@ -2359,7 +2360,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         width: '100%',
                         padding: '12px',
                         border: '2px solid #E5E7EB',
-                        borderRadius: '8px',
+                        borderRadius: 'var(--radius-md)',
                         fontSize: '14px',
                         fontFamily: 'inherit',
                         resize: 'vertical'

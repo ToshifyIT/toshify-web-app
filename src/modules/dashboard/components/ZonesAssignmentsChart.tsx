@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts'
-import { startOfWeek, endOfWeek, isWithinInterval, parseISO, getWeek, setWeek } from 'date-fns'
+import { startOfWeek, endOfWeek, isWithinInterval, parseISO, getISOWeek, setISOWeek } from 'date-fns'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { getCache, setCache } from '../../../hooks/useSessionCache'
@@ -24,7 +24,7 @@ export function ZonesAssignmentsChart() {
   // Estado para el filtro semanal
   const [selectedWeek, setSelectedWeek] = useState(() => {
     const now = new Date()
-    const week = getWeek(now, { weekStartsOn: 1 })
+    const week = getISOWeek(now)
     const year = now.getFullYear()
     return `Sem ${week.toString().padStart(2, '0')} ${year}`
   })
@@ -64,7 +64,7 @@ export function ZonesAssignmentsChart() {
             const week = parseInt(match[1], 10)
             const year = parseInt(match[2], 10)
             const baseDate = new Date(year, 0, 4)
-            const targetDate = setWeek(baseDate, week, { weekStartsOn: 1 })
+            const targetDate = setISOWeek(baseDate, week)
             weekStart = startOfWeek(targetDate, { weekStartsOn: 1 })
             weekEnd = endOfWeek(targetDate, { weekStartsOn: 1 })
         } else {

@@ -21,7 +21,7 @@ import('../../components/ConductoresMapModal').catch(() => { /* ignorar si falla
 import { useSede } from '../../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../../components/ui/TimeInput24h'
 import { LoadingOverlay } from '../../../../components/ui/LoadingOverlay'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../../utils/toast'
 import type { TipoCandidatoV2, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../../types/onboarding.types'
 import type { Vehicle } from '../../../../types/vehiculo.types'
@@ -30,7 +30,7 @@ import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } fr
 import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../../lib/googleMaps'
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
 import { cargarConceptosTarifa, getEtiquetaTarifa, getPeriodoTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
-import { enRangoDiasART, fechaISOART } from '../../../../utils/fechaArgentina'
+import { enRangoDiasART, hoyART, sumarDiasISO } from '../../../../utils/fechaArgentina'
 import { repartirTurnosDelPar } from '../../../../types/programacionPrecarga.types'
 import type { PrecargaParMapa, PersonaPrecargaPar } from '../../../../types/programacionPrecarga.types'
 import { vehiculosActivosDeConductores, type VehiculoActivoDeConductor } from '../vehiculoActivoService'
@@ -165,7 +165,7 @@ function ToggleSoloDelPar({ soloDelPar, onToggle }: { soloDelPar: boolean; onTog
     <button
       type="button"
       onClick={onToggle}
-      style={{ padding: '2px 8px', fontSize: '10px', fontWeight: 600, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+      style={{ padding: '2px 8px', fontSize: '10px', fontWeight: 600, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
     >
       {soloDelPar ? 'Ver todos' : 'Ver solo el par'}
     </button>
@@ -184,17 +184,7 @@ const HORA_PRECARGA_MAPA = '09:00'
  * se le suma 1.
  */
 function fechaManianaART(): string {
-  const partes = (fechaISOART(new Date().toISOString()) || '').split('-').map(Number)
-  if (partes.length !== 3 || partes.some(n => Number.isNaN(n))) {
-    // Fallback defensivo: si el formateador fallara, al menos no rompe el alta.
-    const d = new Date()
-    d.setDate(d.getDate() + 1)
-    return d.toISOString().split('T')[0]
-  }
-  const [anio, mes, dia] = partes
-  const dt = new Date(Date.UTC(anio, mes - 1, dia))
-  dt.setUTCDate(dt.getUTCDate() + 1)
-  return dt.toISOString().split('T')[0]
+  return sumarDiasISO(hoyART(), 1)
 }
 
 interface Props {
@@ -377,7 +367,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         lead_nocturno_id: editData.lead_nocturno_id || '',
         lead_cargo_id: editData.lead_cargo_id || '',
         // Fecha y hora
-        fecha_cita: editData.fecha_cita || new Date().toISOString().split('T')[0],
+        fecha_cita: editData.fecha_cita || hoyART(),
         hora_cita: editData.hora_cita?.substring(0, 5) || '10:00',
         // A CARGO - campos
         tipo_candidato_cargo: (isCargo ? (editData.tipo_candidato || '') : '') as TipoCandidatoV2,
@@ -432,7 +422,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     lead_cargo_id: '',
     // Desde el mapa la cita arranca en maniana 09:00 (hora de Argentina).
     // Dando de alta a mano se mantiene el default historico: hoy 10:00.
-    fecha_cita: (precarga && !editData) ? fechaManianaART() : new Date().toISOString().split('T')[0],
+    fecha_cita: (precarga && !editData) ? fechaManianaART() : hoyART(),
     hora_cita: (precarga && !editData) ? HORA_PRECARGA_MAPA : '10:00',
     // Campos A CARGO
     tipo_candidato_cargo: '',
@@ -1164,7 +1154,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
   const usarVehiculoDelPar = useCallback((vehiculoId: string, rol: 'origen' | 'destino') => {
     const vehicle = vehicles.find(v => v.id === vehiculoId)
     if (!vehicle) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Vehiculo fuera de la lista',
         text: 'Ese vehiculo no aparece en la sede seleccionada. Cambia la sede o eligelo de las listas de abajo.',
@@ -1552,7 +1542,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           }
 
           if (conflictos.length > 0) {
-            await Swal.fire({
+            await Alerta.fire({
               icon: 'info',
               title: 'El vehiculo ya tiene gente asignada',
               html: `${conflictos.join('<br><br>')}<br><br>Revisa el paso de Conductores / Leads antes de continuar.`,
@@ -2130,7 +2120,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         }
 
         if (mismosonductores) {
-          Swal.fire({
+          Alerta.fire({
             icon: 'warning',
             title: 'Programación duplicada',
             html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con las mismas personas (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
@@ -2560,7 +2550,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     if (!conductorId) return
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor?.tieneAsignacionDiurna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignacion activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno diurno.`,
@@ -2585,7 +2575,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     if (!conductorId) return
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor?.tieneAsignacionNocturna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignacion activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno nocturno.`,
@@ -2610,7 +2600,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     if (!conductorId) return
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignacion activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa.`,
@@ -4068,7 +4058,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                 </div>
 
                 {/* Resumen del par */}
-                <div style={{ maxWidth: '640px', margin: '0 auto 20px auto', border: '1px solid var(--border-primary)', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{ maxWidth: '640px', margin: '0 auto 20px auto', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '8px 12px', background: 'var(--bg-secondary, rgba(148,163,184,0.12))' }}>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>Par sugerido</span>
                     {typeof precarga.tiempoMinutos === 'number' && (
@@ -4086,7 +4076,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                       <span style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {persona.nombre}
                       </span>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: persona.tipo === 'lead' ? 'rgba(139,92,246,0.18)' : 'rgba(16,185,129,0.18)', color: persona.tipo === 'lead' ? '#7C3AED' : '#047857' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: persona.tipo === 'lead' ? 'rgba(139,92,246,0.18)' : 'rgba(16,185,129,0.18)', color: persona.tipo === 'lead' ? '#7C3AED' : '#047857' }}>
                         {persona.tipo === 'lead' ? 'Lead' : 'Conductor'}
                       </span>
                       {persona.patenteAsignacion && (
@@ -4098,7 +4088,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                     <button
                       type="button"
                       onClick={() => setParInvertido(v => !v)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '8px', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer' }}
                     >
                       <ArrowLeftRight size={14} /> Invertir turnos
                     </button>
@@ -4258,7 +4248,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                       flex: 1,
                       padding: '12px 16px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
                     }}
@@ -4269,7 +4259,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                     style={{
                       padding: '12px 16px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -4290,7 +4280,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                     style={{
                       padding: '12px 16px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -4351,7 +4341,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 background: badgeBg,
                                 color: badgeColor,
                                 padding: '3px 10px',
-                                borderRadius: '6px',
+                                borderRadius: 'var(--radius-sm)',
                                 fontSize: 'clamp(9px, 0.8vw, 11px)',
                                 fontWeight: '600'
                               }}>
@@ -4361,7 +4351,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 background: gncBadge.bg,
                                 color: gncBadge.color,
                                 padding: '3px 10px',
-                                borderRadius: '6px',
+                                borderRadius: 'var(--radius-sm)',
                                 fontSize: 'clamp(9px, 0.8vw, 11px)',
                                 fontWeight: '600'
                               }}>
@@ -4402,7 +4392,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                     No fuerza nada: el operador decide si cada uno es el que se
                     cambia o el destino, y las listas completas siguen abajo. */}
                 {esPrecargaMapa && (cargandoVehiculosPar || vehiculosDelPar.length > 0) && (
-                  <div style={{ maxWidth: '900px', margin: '0 auto 20px auto', border: '1px solid #F59E0B', borderRadius: '10px', overflow: 'hidden' }}>
+                  <div style={{ maxWidth: '900px', margin: '0 auto 20px auto', border: '1px solid #F59E0B', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
                     <div style={{ padding: '8px 12px', background: 'rgba(251, 191, 36, 0.15)' }}>
                       <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>Vehículos del par</h4>
                       <p style={{ margin: '2px 0 0', fontSize: '10px', color: 'var(--text-secondary)' }}>
@@ -4424,9 +4414,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{vehiculo.patente || enLista?.patente || 'Sin patente'}</span>
                               <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{vehiculo.modelo || (enLista ? `${enLista.marca} ${enLista.modelo}` : '')}</span>
                               {badge ? (
-                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px', background: badge.badgeBg, color: badge.badgeColor }}>{badge.badgeText}</span>
+                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-full)', background: badge.badgeBg, color: badge.badgeColor }}>{badge.badgeText}</span>
                               ) : (
-                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px', background: '#94A3B8', color: 'white' }}>Fuera de esta sede</span>
+                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-full)', background: '#94A3B8', color: 'white' }}>Fuera de esta sede</span>
                               )}
                             </div>
                             <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -4438,14 +4428,14 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           <button
                             type="button"
                             onClick={() => usarVehiculoDelPar(vehiculo.vehiculoId, 'origen')}
-                            style={{ padding: '6px 10px', borderRadius: '8px', fontSize: '11px', fontFamily: 'inherit', cursor: 'pointer', border: esOrigen ? '2px solid #F59E0B' : '1px solid var(--border-primary)', background: esOrigen ? 'rgba(251, 191, 36, 0.2)' : 'transparent', color: 'var(--text-primary)', fontWeight: esOrigen ? 700 : 500 }}
+                            style={{ padding: '6px 10px', borderRadius: 'var(--radius-md)', fontSize: '11px', fontFamily: 'inherit', cursor: 'pointer', border: esOrigen ? '2px solid #F59E0B' : '1px solid var(--border-primary)', background: esOrigen ? 'rgba(251, 191, 36, 0.2)' : 'transparent', color: 'var(--text-primary)', fontWeight: esOrigen ? 700 : 500 }}
                           >
                             {esOrigen ? <><Check size={12} className="ico-inline" />Vehículo a cambiar</> : 'Usar como vehículo a cambiar'}
                           </button>
                           <button
                             type="button"
                             onClick={() => usarVehiculoDelPar(vehiculo.vehiculoId, 'destino')}
-                            style={{ padding: '6px 10px', borderRadius: '8px', fontSize: '11px', fontFamily: 'inherit', cursor: 'pointer', border: esDestino ? '2px solid #10B981' : '1px solid var(--border-primary)', background: esDestino ? 'rgba(16, 185, 129, 0.2)' : 'transparent', color: 'var(--text-primary)', fontWeight: esDestino ? 700 : 500 }}
+                            style={{ padding: '6px 10px', borderRadius: 'var(--radius-md)', fontSize: '11px', fontFamily: 'inherit', cursor: 'pointer', border: esDestino ? '2px solid #10B981' : '1px solid var(--border-primary)', background: esDestino ? 'rgba(16, 185, 129, 0.2)' : 'transparent', color: 'var(--text-primary)', fontWeight: esDestino ? 700 : 500 }}
                           >
                             {esDestino ? <><Check size={12} className="ico-inline" />Destino</> : 'Usar como destino'}
                           </button>
@@ -4467,7 +4457,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                       minWidth: 0,
                       padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
                     }}
@@ -4478,7 +4468,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                     style={{
                       padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -4498,7 +4488,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                     style={{
                       padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -4568,12 +4558,12 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                   <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
                                   <span style={{
                                     background: badgeBg, color: badgeColor,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
                                   <span style={{
                                     background: gncBadge.bg, color: gncBadge.color,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{gncBadge.text}</span>
                                   {detalleText && (
@@ -4653,12 +4643,12 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                   <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
                                   <span style={{
                                     background: badgeBg, color: badgeColor,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
                                   <span style={{
                                     background: gncBadge.bg, color: gncBadge.color,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{gncBadge.text}</span>
                                   {detalleText && (
@@ -4680,7 +4670,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
 
                 {/* Resumen de selección */}
                 {(formData.vehiculo_id || formData.vehiculo_cambio_id) && (
-                  <div style={{ maxWidth: '900px', margin: '16px auto 0', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                  <div style={{ maxWidth: '900px', margin: '16px auto 0', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', display: 'block' }}>ORIGEN</span>
                       <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_id ? '#F59E0B' : 'var(--text-tertiary)' }}>
@@ -4736,12 +4726,12 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           placeholder="Buscar..."
                           value={leadSearch}
                           onChange={(e) => setLeadSearch(e.target.value)}
-                          style={{ flex: 1, minWidth: '60px', padding: '7px 10px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '12px', fontFamily: 'inherit' }}
+                          style={{ flex: 1, minWidth: '60px', padding: '7px 10px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontFamily: 'inherit' }}
                         />
                         <select
                           value={leadTurnoFilter}
                           onChange={(e) => setLeadTurnoFilter(e.target.value)}
-                          style={{ padding: '7px 6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)', cursor: 'pointer' }}
+                          style={{ padding: '7px 6px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)', cursor: 'pointer' }}
                         >
                           <option value="">Turno</option>
                           <option value="diurno">Diurno</option>
@@ -4752,7 +4742,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                       <select
                         value={leadEstadoFilter}
                         onChange={(e) => setLeadEstadoFilter(e.target.value)}
-                        style={{ padding: '7px 6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)', cursor: 'pointer' }}
+                        style={{ padding: '7px 6px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)', cursor: 'pointer' }}
                       >
                         <option value="">Estado de lead</option>
                         {estadosLeadDisponibles.map((e) => (
@@ -4766,7 +4756,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           max={leadCreadoHasta || undefined}
                           onChange={(e) => setLeadCreadoDesde(e.target.value)}
                           title="Creado desde"
-                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
                         />
                         <input
                           type="date"
@@ -4774,7 +4764,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           min={leadCreadoDesde || undefined}
                           onChange={(e) => setLeadCreadoHasta(e.target.value)}
                           title="Creado hasta"
-                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
                         />
                       </div>
                     </div>
@@ -4812,13 +4802,13 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span>DNI: {lead.dni || '-'}</span>
                                   {lead.turno && (
-                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', background: 'rgba(139, 92, 246, 0.15)', color: '#8B5CF6' }}>
+                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontWeight: '600', background: 'rgba(139, 92, 246, 0.15)', color: '#8B5CF6' }}>
                                       {lead.turno}
                                     </span>
                                   )}
                                 </p>
                                 {lead.estado_de_lead && (
-                                  <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', marginTop: '2px', display: 'inline-block', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                                  <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontWeight: '600', marginTop: '2px', display: 'inline-block', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
                                     {lead.estado_de_lead}
                                   </span>
                                 )}
@@ -4854,7 +4844,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               background: mostrarParesCercanos ? '#10B981' : 'var(--bg-secondary)',
                               color: mostrarParesCercanos ? 'white' : 'var(--text-secondary)',
                               border: mostrarParesCercanos ? 'none' : '1px solid var(--border-primary)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               cursor: loadingPares ? 'wait' : 'pointer',
                               transition: 'all 0.2s'
                             }}
@@ -4880,7 +4870,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               background: 'var(--bg-secondary)',
                               color: 'var(--text-secondary)',
                               border: '1px solid var(--border-primary)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               cursor: 'pointer',
                               transition: 'all 0.2s'
                             }}
@@ -4905,7 +4895,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           minWidth: '60px',
                           padding: '7px 10px',
                           border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '12px',
                           fontFamily: 'inherit'
                         }}
@@ -4916,7 +4906,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                         style={{
                           padding: '7px 6px',
                           border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '11px',
                           fontFamily: 'inherit',
                           background: 'var(--modal-bg)',
@@ -4933,7 +4923,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                         style={{
                           padding: '7px 6px',
                           border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '11px',
                           fontFamily: 'inherit',
                           background: 'var(--modal-bg)',
@@ -4955,7 +4945,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           max={conductorCreadoHasta || undefined}
                           onChange={(e) => setConductorCreadoDesde(e.target.value)}
                           title="Creado desde"
-                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
                         />
                         <input
                           type="date"
@@ -4963,7 +4953,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           min={conductorCreadoDesde || undefined}
                           onChange={(e) => setConductorCreadoHasta(e.target.value)}
                           title="Creado hasta"
-                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
                         />
                       </div>
                     </div>
@@ -4996,7 +4986,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 padding: '10px',
                                 background: 'rgba(16, 185, 129, 0.08)',
                                 border: '1px solid rgba(16, 185, 129, 0.3)',
-                                borderRadius: '8px',
+                                borderRadius: 'var(--radius-md)',
                                 marginBottom: '8px'
                               }}
                             >
@@ -5038,7 +5028,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                       </p>
                                       <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
                                       {zonaDiurno && (
-                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
                                           <AlertTriangle size={12} className="ico-inline" />Zona restringida
                                         </span>
                                       )}
@@ -5068,7 +5058,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                       </p>
                                       <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
                                       {zonanocturno && (
-                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
                                           <AlertTriangle size={12} className="ico-inline" />Zona restringida
                                         </span>
                                       )}
@@ -5123,7 +5113,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     background: getPreferenciaBadge(conductor.preferencia_turno).bg,
                                     color: getPreferenciaBadge(conductor.preferencia_turno).color
@@ -5136,7 +5126,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                       style={{
                                         fontSize: '9px',
                                         padding: '2px 6px',
-                                        borderRadius: '4px',
+                                        borderRadius: 'var(--radius-xs)',
                                         fontWeight: '600',
                                         background: 'var(--bg-secondary, #F3F4F6)',
                                         color: 'var(--text-secondary, #4B5563)',
@@ -5151,7 +5141,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     marginTop: '2px',
                                     display: 'inline-block',
@@ -5165,7 +5155,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     marginTop: '2px',
                                     display: 'inline-block',
@@ -5327,12 +5317,12 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
             {showMapModal && (
               <Suspense fallback={
                 <div style={{
-                  position: 'fixed', inset: 0, zIndex: 10000,
+                  position: 'fixed', inset: 0, zIndex: 'var(--z-modal-nested)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'rgba(0,0,0,0.5)',
                 }}>
                   <div style={{
-                    background: 'var(--bg-primary)', borderRadius: 16, padding: '40px 60px',
+                    background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', padding: '40px 60px',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
                   }}>
                     <Loader2 size={32} style={{ color: '#ff0033', animation: 'spin 1s linear infinite' }} />

@@ -6,7 +6,7 @@ import type { Menu, Submenu } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { Menu as MenuIcon, ChevronRight } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import './MenuHierarchyManager.css'
 import './AdminStyles.css'
@@ -180,7 +180,7 @@ export function MenuHierarchyManager() {
   }
 
   const handleDeleteMenu = async (menu: Menu) => {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar menú?',
       text: `Se eliminará "${menu.label}" y todos sus submenús`,
       icon: 'warning',
@@ -350,7 +350,7 @@ export function MenuHierarchyManager() {
   }
 
   const handleDeleteSubmenu = async (submenu: Submenu) => {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar submenú?',
       text: `Se eliminará "${submenu.label}"`,
       icon: 'warning',

@@ -78,7 +78,7 @@ export function AlertasMantenimientoModule() {
       </div>
 
       {/* Tabla */}
-      <div className="veh-stats">
+      <div>
         <AlertasTable
           alertas={alertas}
           loading={loading}

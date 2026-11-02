@@ -18,7 +18,7 @@
 
 .prod-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
@@ -48,7 +48,7 @@
 
 .prod-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -65,7 +65,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -110,7 +110,7 @@
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
@@ -203,12 +203,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .prod-modal-content {
   background: var(--card-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   width: 90%;
   max-width: 600px;
   max-height: 90vh;
@@ -253,7 +253,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .prod-modal-close:hover {
@@ -309,7 +309,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -340,7 +340,7 @@
   background: var(--color-primary);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -362,7 +362,7 @@
   background: #F3F4F6;
   color: #374151;
   border: 1px solid #E5E7EB;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -378,7 +378,7 @@
   background: #059669;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;

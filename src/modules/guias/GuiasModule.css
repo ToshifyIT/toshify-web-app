@@ -17,7 +17,7 @@
 
 .guias-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
@@ -47,7 +47,7 @@
 
 .guias-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -67,7 +67,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .guias-stats .stat-card .stat-icon {
@@ -133,7 +133,7 @@
   justify-content: space-between;
   align-items: center;
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
   border: 1px solid var(--border-primary);
 }
@@ -157,7 +157,7 @@
   padding: 10px 10px 10px 36px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   color: var(--text-primary);
   outline: none;
@@ -180,7 +180,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s;
@@ -206,7 +206,7 @@
   padding: 10px 15px;
   background-color: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .active-filters-label {
@@ -226,7 +226,7 @@
   padding: 4px 10px;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;

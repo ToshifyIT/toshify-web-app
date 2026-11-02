@@ -8,7 +8,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import '../../components/admin/AdminStyles.css'
@@ -99,7 +99,7 @@ export function SedesModule() {
   // Crear sede
   const handleCreate = async () => {
     if (!formData.nombre.trim() || !formData.codigo.trim() || !formData.ciudad.trim()) {
-      Swal.fire('Campos requeridos', 'Nombre, código y ciudad son obligatorios', 'warning')
+      Alerta.fire('Campos requeridos', 'Nombre, código y ciudad son obligatorios', 'warning')
       return
     }
 
@@ -140,7 +140,7 @@ export function SedesModule() {
   const handleEdit = async () => {
     if (!selectedSede) return
     if (!formData.nombre.trim() || !formData.codigo.trim() || !formData.ciudad.trim()) {
-      Swal.fire('Campos requeridos', 'Nombre, código y ciudad son obligatorios', 'warning')
+      Alerta.fire('Campos requeridos', 'Nombre, código y ciudad son obligatorios', 'warning')
       return
     }
 
@@ -191,7 +191,7 @@ export function SedesModule() {
   // Eliminar (desactivar) sede
   const handleDelete = async (sede: Sede) => {
     if (sede.es_principal) {
-      Swal.fire('No permitido', 'No se puede desactivar la sede principal', 'warning')
+      Alerta.fire('No permitido', 'No se puede desactivar la sede principal', 'warning')
       return
     }
 
@@ -203,7 +203,7 @@ export function SedesModule() {
 
     const count = conductoresCount?.length || 0
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Desactivar sede?',
       html: `Se desactivará la sede <strong>${sede.nombre}</strong>.${count > 0 ? `<br><br><span style="color: var(--color-warning)">Tiene ${count} conductor(es) asociados.</span>` : ''}`,
       icon: 'warning',
@@ -281,7 +281,7 @@ export function SedesModule() {
             <span style={{
               fontSize: '10px',
               padding: '2px 6px',
-              borderRadius: '4px',
+              borderRadius: 'var(--radius-xs)',
               background: 'var(--color-primary)',
               color: '#fff',
               fontWeight: 600,
@@ -297,7 +297,7 @@ export function SedesModule() {
       header: 'Código',
       cell: ({ row }) => (
         <span style={{
-          fontFamily: 'monospace',
+          fontFamily: 'var(--font-mono)',
           fontWeight: 600,
           color: 'var(--text-secondary)',
         }}>
@@ -336,7 +336,7 @@ export function SedesModule() {
       cell: ({ row }) => (
         <span style={{
           padding: '3px 8px',
-          borderRadius: '12px',
+          borderRadius: 'var(--radius-lg)',
           fontSize: '12px',
           fontWeight: 600,
           background: row.original.activa ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
@@ -360,7 +360,7 @@ export function SedesModule() {
                 padding: '4px 8px',
                 background: 'transparent',
                 border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
                 color: 'var(--text-secondary)',
                 display: 'flex',
@@ -377,7 +377,7 @@ export function SedesModule() {
                   padding: '4px 8px',
                   background: 'transparent',
                   border: '1px solid var(--border-primary)',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                   color: 'var(--color-primary)',
                   display: 'flex',
@@ -395,7 +395,7 @@ export function SedesModule() {
                   padding: '4px 8px',
                   background: 'transparent',
                   border: '1px solid var(--border-primary)',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                   color: '#EF4444',
                   display: 'flex',
@@ -413,7 +413,7 @@ export function SedesModule() {
                   padding: '4px 8px',
                   background: 'transparent',
                   border: '1px solid #10B981',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                   color: '#10B981',
                   display: 'flex',
@@ -443,7 +443,7 @@ export function SedesModule() {
             onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
             placeholder="Ej: CABA"
             style={{
-              width: '100%', padding: '8px 12px', borderRadius: '8px',
+              width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
               color: 'var(--text-primary)', fontSize: '14px',
             }}
@@ -460,9 +460,9 @@ export function SedesModule() {
             placeholder="Ej: BRC"
             maxLength={10}
             style={{
-              width: '100%', padding: '8px 12px', borderRadius: '8px',
+              width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
-              color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'monospace',
+              color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'var(--font-mono)',
             }}
           />
         </div>
@@ -479,7 +479,7 @@ export function SedesModule() {
             onChange={(e) => setFormData({ ...formData, pais: e.target.value })}
             placeholder="Argentina"
             style={{
-              width: '100%', padding: '8px 12px', borderRadius: '8px',
+              width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
               color: 'var(--text-primary)', fontSize: '14px',
             }}
@@ -495,7 +495,7 @@ export function SedesModule() {
             onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
             placeholder="Ej: San Carlos de Bariloche"
             style={{
-              width: '100%', padding: '8px 12px', borderRadius: '8px',
+              width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
               color: 'var(--text-primary)', fontSize: '14px',
             }}
@@ -513,7 +513,7 @@ export function SedesModule() {
           onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
           placeholder="Dirección de la sede"
           style={{
-            width: '100%', padding: '8px 12px', borderRadius: '8px',
+            width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
             color: 'var(--text-primary)', fontSize: '14px',
           }}
@@ -531,7 +531,7 @@ export function SedesModule() {
             onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
             placeholder="Ej: +54 11 1234-5678"
             style={{
-              width: '100%', padding: '8px 12px', borderRadius: '8px',
+              width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
               color: 'var(--text-primary)', fontSize: '14px',
             }}
@@ -547,7 +547,7 @@ export function SedesModule() {
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             placeholder="sede@toshify.com.ar"
             style={{
-              width: '100%', padding: '8px 12px', borderRadius: '8px',
+              width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
               color: 'var(--text-primary)', fontSize: '14px',
             }}
@@ -586,10 +586,10 @@ export function SedesModule() {
   const modalOverlay: React.CSSProperties = {
     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
     background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-    justifyContent: 'center', zIndex: 1000, padding: '20px',
+    justifyContent: 'center', zIndex: 'var(--z-modal)', padding: '20px',
   }
   const modalContent: React.CSSProperties = {
-    background: 'var(--bg-primary)', borderRadius: '12px', padding: '24px',
+    background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', padding: '24px',
     width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto',
     boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
   }
@@ -669,7 +669,7 @@ export function SedesModule() {
               <button
                 onClick={() => setShowCreateModal(false)}
                 style={{
-                  padding: '10px 20px', borderRadius: '8px',
+                  padding: '10px 20px', borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
                   color: 'var(--text-primary)', fontSize: '14px', cursor: 'pointer',
                 }}
@@ -680,7 +680,7 @@ export function SedesModule() {
                 onClick={handleCreate}
                 disabled={saving}
                 style={{
-                  padding: '10px 20px', borderRadius: '8px', border: 'none',
+                  padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none',
                   background: 'var(--color-primary)', color: '#fff',
                   fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
                   opacity: saving ? 0.7 : 1,
@@ -710,7 +710,7 @@ export function SedesModule() {
               <button
                 onClick={() => setShowEditModal(false)}
                 style={{
-                  padding: '10px 20px', borderRadius: '8px',
+                  padding: '10px 20px', borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
                   color: 'var(--text-primary)', fontSize: '14px', cursor: 'pointer',
                 }}
@@ -721,7 +721,7 @@ export function SedesModule() {
                 onClick={handleEdit}
                 disabled={saving}
                 style={{
-                  padding: '10px 20px', borderRadius: '8px', border: 'none',
+                  padding: '10px 20px', borderRadius: 'var(--radius-md)', border: 'none',
                   background: 'var(--color-primary)', color: '#fff',
                   fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
                   opacity: saving ? 0.7 : 1,
@@ -772,7 +772,7 @@ export function SedesModule() {
               <button
                 onClick={() => setShowViewModal(false)}
                 style={{
-                  padding: '10px 20px', borderRadius: '8px',
+                  padding: '10px 20px', borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
                   color: 'var(--text-primary)', fontSize: '14px', cursor: 'pointer',
                 }}

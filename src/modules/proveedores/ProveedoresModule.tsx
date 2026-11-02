@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { Eye, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -340,7 +340,7 @@ export function ProveedoresModule() {
     const proveedor = proveedores.find(p => p.id === id)
     const nombreProveedor = proveedor?.razon_social || 'este proveedor'
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Desactivar proveedor?',
       html: `El proveedor <strong>${nombreProveedor}</strong> será marcado como inactivo y ya no aparecerá en las listas.`,
       icon: 'warning',
@@ -379,7 +379,7 @@ export function ProveedoresModule() {
     const proveedor = proveedores.find(p => p.id === id)
     const nombreProveedor = proveedor?.razon_social || 'este proveedor'
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Reactivar proveedor?',
       html: `El proveedor <strong>${nombreProveedor}</strong> será marcado como activo nuevamente.`,
       icon: 'question',

@@ -5,7 +5,7 @@ import { Eye, User, Car, Clock, ClipboardList, TrendingUp, X } from 'lucide-reac
 import { supabase } from '../../lib/supabase'
 import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { cargarConceptosTarifa, getPeriodoTarifa } from '../onboarding/tarifaConceptos'
@@ -817,7 +817,7 @@ export function AsignacionesActivasModule() {
                    <td style="padding:7px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">${e.count}</td>
                  </tr>`
               ).join('')
-              Swal.fire({
+              Alerta.fire({
                 title: 'Total Flota',
                 html: `
                   <p style="margin:0 0 12px;color:#6B7280;text-align:left;font-size:13px;">
@@ -906,7 +906,7 @@ export function AsignacionesActivasModule() {
             className="stat-card stat-card-clickable" 
             title="Click para ver detalle del cálculo"
             onClick={() => {
-              Swal.fire({
+              Alerta.fire({
                 title: '% Ocupacion',
                 html: `
                   <div style="text-align: left; font-size: 14px; line-height: 1.8;">
@@ -946,7 +946,7 @@ export function AsignacionesActivasModule() {
             className="stat-card stat-card-clickable" 
             title="Click para ver detalle del cálculo"
             onClick={() => {
-              Swal.fire({
+              Alerta.fire({
                 title: '% Operatividad',
                 html: `
                    <div style="text-align: left; font-size: 14px; line-height: 1.8;">

@@ -66,7 +66,7 @@ export function OfertaLocacionDetailModal({ oferta, onClose }: Props) {
                   fontWeight: 600,
                   color: '#fff',
                   backgroundColor: '#dc2626',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   textDecoration: 'none',
                 }}
               >

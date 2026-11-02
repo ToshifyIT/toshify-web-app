@@ -19,6 +19,7 @@ import { cabifyHistoricalService } from '../../../services/cabifyHistoricalServi
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { calcularKmSemanaConductores } from '../../portal/kmRecorridos'
 
+import { hoyART } from '../../../utils/fechaArgentina'
 // Ingresos de Cabify del periodo consultado. MISMA fuente que el modulo
 // Integraciones > Cabify (cabifyHistoricalService), para que los numeros coincidan.
 // Kilometros de Cabify: null significa "sin dato", que NO es lo mismo que 0 km.
@@ -428,7 +429,7 @@ export async function cargarPanelConductores(
 
   // Monto pendiente de una multa: importe con descuento solo si el vencimiento es
   // posterior a hoy; si es hoy o pasado (o no hay descuento), el importe pleno.
-  const hoyStr = new Date().toISOString().slice(0, 10)
+  const hoyStr = hoyART()
   const montoPendienteMulta = (m: RawMulta): number => {
     const desc = parseImporte(m.importe_descuento)
     const vencStr = m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : ''

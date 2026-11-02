@@ -34,7 +34,7 @@
   padding: 12px 16px;
   background: var(--badge-red-bg);
   color: var(--color-danger);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
 }
 
@@ -86,13 +86,16 @@
 
 .dt-search-wrapper {
   position: relative;
-  flex: 1;
+  /* Mismo buscador en todos los módulos: alto 32 (como los botones) y se estira
+     hasta ocupar la línea; filtros y botones quedan a la derecha */
+  flex: 1 1 320px;
   min-width: 200px;
 }
 
 .dt-header-action {
   flex-shrink: 0;
   max-width: 100%;
+  margin-left: auto; /* filtros y botones siempre a la derecha */
 }
 
 /* Si los filtros no entran al lado del buscador, pasan a la línea de abajo
@@ -126,7 +129,7 @@
   gap: 6px;
   padding: 8px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-primary);
   color: var(--text-secondary);
   font-size: 13px;
@@ -172,7 +175,7 @@
   color: white;
   font-size: 11px;
   font-weight: 600;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
 }
 
 /* Column Menu Dropdown */
@@ -184,9 +187,9 @@
   max-height: 320px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  z-index: var(--z-dropdown);
   overflow: hidden;
   animation: dt-menu-fadeIn 0.15s ease-out;
 }
@@ -226,7 +229,7 @@
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   transition: background 0.15s;
 }
 
@@ -250,7 +253,7 @@
 
 .dt-column-menu-list::-webkit-scrollbar-thumb {
   background: var(--border-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .dt-column-menu-item {
@@ -258,7 +261,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
   color: var(--text-primary);
   cursor: pointer;
@@ -310,7 +313,7 @@
   gap: 4px;
   padding: 6px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 12px;
@@ -335,21 +338,14 @@
   margin: 0;
 }
 
-.dt-search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-tertiary);
-  pointer-events: none;
-}
-
 .dt-search-input {
   width: 100%;
-  padding: 12px 16px 12px 44px;
-  font-size: 14px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px 0 36px;
+  font-size: 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
   color: var(--text-primary);
   transition: all 0.2s;
@@ -369,7 +365,9 @@
 
 .dt-search-icon {
   position: absolute;
-  left: 16px;
+  left: 12px;
+  width: 16px;
+  height: 16px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-tertiary);
@@ -380,7 +378,7 @@
 .dt-container {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: visible;
   box-shadow: none;
   position: relative;
@@ -407,12 +405,12 @@
 
 .dt-table-wrapper::-webkit-scrollbar-track {
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .dt-table-wrapper::-webkit-scrollbar-thumb {
   background: var(--text-tertiary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 2px solid var(--bg-secondary);
 }
 
@@ -679,7 +677,7 @@
   padding: 0;
   border: 1px solid var(--border-primary);
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
@@ -715,7 +713,7 @@
   padding: 8px 12px;
   padding-right: 32px;
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 700;
   background: var(--bg-secondary);
@@ -752,9 +750,9 @@
   min-width: 160px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  z-index: 9999;
+  z-index: var(--z-dropdown);
   overflow: hidden;
   animation: dt-dropdown-fade 0.15s ease-out;
 }
@@ -839,7 +837,7 @@
 .dt-btn-action {
   padding: 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
   transition: all 0.15s;
@@ -876,11 +874,11 @@
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   opacity: 0;
   visibility: hidden;
   transition: all 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   pointer-events: none;
 }
 
@@ -895,7 +893,7 @@
   opacity: 0;
   visibility: hidden;
   transition: all 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
 }
 
 .dt-btn-action[data-tooltip]:hover::after,
@@ -973,7 +971,7 @@
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1144,7 +1142,7 @@
   background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   transition: all 0.15s;
 }
 
@@ -1169,9 +1167,9 @@
   padding: 6px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  z-index: 99999;
+  z-index: var(--z-dropdown);
   margin-top: 4px;
 }
 
@@ -1190,7 +1188,7 @@
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   transition: all 0.15s;
   margin-bottom: 2px;
 }
@@ -1226,7 +1224,7 @@
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--input-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -1244,7 +1242,7 @@
   gap: 8px;
   padding: 8px 10px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   color: var(--text-primary);
   transition: background 0.15s;
@@ -1305,7 +1303,7 @@
   overflow-y: auto;
   max-height: 300px;
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
 }
 
@@ -1319,7 +1317,7 @@
 
 .dt-excel-filter-list::-webkit-scrollbar-thumb {
   background: var(--border-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .dt-excel-filter-empty {
@@ -1406,8 +1404,8 @@
   }
 
   .dt-search-wrapper {
-    flex: 1;
-    min-width: 200px;
+    flex: 1 1 100%;
+    min-width: 0;
   }
 
   .dt-header-action {
@@ -1621,7 +1619,7 @@
   border: 1px solid var(--border-primary);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   transition: all 0.15s;
   flex-shrink: 0;
@@ -1669,9 +1667,9 @@
   max-width: 280px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  z-index: 9999;
+  z-index: var(--z-dropdown);
   overflow: hidden;
   animation: dt-filter-fadeIn 0.15s ease-out;
 }
@@ -1725,7 +1723,7 @@
 
 .dt-filter-options::-webkit-scrollbar-thumb {
   background: var(--border-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .dt-filter-option {
@@ -1733,7 +1731,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
   color: var(--text-primary);
   cursor: pointer;
@@ -1748,7 +1746,7 @@
 .dt-filter-option-todas {
   font-weight: 600;
   border-bottom: 1px solid var(--border-primary);
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   margin-bottom: 4px;
 }
 
@@ -1816,7 +1814,7 @@
   width: 100%;
   padding: 6px 8px 6px 18px;
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 13px;
@@ -1846,7 +1844,7 @@
   min-width: 0;
   padding: 4px 8px;
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 11px;
@@ -1900,7 +1898,7 @@
   padding: 8px;
   margin-top: 8px;
   background: var(--bg-tertiary, #f3f4f6);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   color: var(--color-primary, #ef4444);
@@ -1939,7 +1937,7 @@
   margin-bottom: 8px;
   background: var(--bg-secondary, #f9fafb);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   flex-wrap: wrap;
 }
 
@@ -1972,7 +1970,7 @@
   padding: 2px 4px 2px 9px;
   background: var(--color-primary, #ff0033);
   color: white;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 11px;
   font-weight: 500;
 }
@@ -2012,7 +2010,7 @@
   border: 1px solid var(--border-primary, #e5e7eb);
   background: var(--bg-primary, white);
   color: var(--text-secondary, #6b7280);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -2041,7 +2039,7 @@
 .dt-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   transition: box-shadow 0.15s;
   margin-bottom: 6px;
@@ -2140,7 +2138,7 @@
 }
 
 /* Hide table wrapper on mobile, show cards */
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .dt-table-wrapper {
     display: none;
   }
@@ -2179,7 +2177,7 @@
   height: 30px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   box-shadow: none;
   cursor: pointer;

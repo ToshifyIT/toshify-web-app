@@ -62,13 +62,13 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
     <>
       <div
         onClick={onClose}
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', zIndex: 999 }}
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', zIndex: 'var(--z-modal)' }}
       />
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(100vw, 640px)',
         background: 'var(--bg-primary, #fff)',
-        zIndex: 1000,
+        zIndex: 'var(--z-modal)',
         boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
@@ -99,7 +99,7 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 32, height: 32,
               border: '1px solid var(--border-primary, #e5e7eb)',
-              borderRadius: 8, background: 'var(--bg-primary, #fff)',
+              borderRadius: 'var(--radius-md)', background: 'var(--bg-primary, #fff)',
               color: 'var(--text-secondary)', cursor: 'pointer',
             }}
             title="Cerrar"
@@ -133,7 +133,7 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
                   {/* Linea 1: fecha + patente(s) + km del dia */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, flex: 1, minWidth: 0 }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
                         {formatFecha(fecha)}
                         {/* Nocturnos: el turno de esta noche continuó a la madrugada del día
                             siguiente — se evidencia el cruce solo con fechas (sin horas) */}
@@ -145,7 +145,7 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
                         {patentes.join(' - ')}
                       </span>
                     </div>
-                    <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                       {/* Km del dia en entero, igual que el total y que el portal.
                           Ojo: con varios dias la suma de los redondeados puede diferir
                           del acumulado en +-1 km. El valor real (con decimales) sigue
@@ -157,12 +157,12 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Acumulado</span>
-                      <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: barColor }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: barColor }}>
                         {acumActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km · {pctAcum.toFixed(0)}%
                       </span>
                     </div>
-                    <div style={{ width: '100%', height: 5, background: 'var(--bg-secondary)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pctBar}%`, background: barColor, borderRadius: 3 }} />
+                    <div style={{ width: '100%', height: 5, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pctBar}%`, background: barColor, borderRadius: 'var(--radius-xs)' }} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       {excedeAqui ? (

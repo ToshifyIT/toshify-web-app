@@ -15,6 +15,7 @@ import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 import * as XLSX from 'xlsx'
 
+import { hoyART } from '../../../../../utils/fechaArgentina'
 interface BitacoraTableProps {
   registros: BitacoraRegistroTransformado[]
   totalCount: number
@@ -430,7 +431,7 @@ export function BitacoraTable({
             return (
               <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)' }}>
                 RESUMEN {row.original.conductor_wialon}
-                <span style={{ marginLeft: '6px', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 600, background: tipoTurno ? 'var(--color-primary)' : 'var(--color-warning, #f59e0b)', color: '#fff' }}>
+                <span style={{ marginLeft: '6px', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '10px', fontWeight: 600, background: tipoTurno ? 'var(--color-primary)' : 'var(--color-warning, #f59e0b)', color: '#fff' }}>
                   {asignacionLabel}
                 </span>
                 <span style={{ marginLeft: '6px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
@@ -580,7 +581,7 @@ export function BitacoraTable({
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Bitacora')
-    XLSX.writeFile(wb, `Bitacora_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `Bitacora_${hoyART()}.xlsx`)
     setShowExportMenu(false)
   }
 
@@ -593,7 +594,7 @@ export function BitacoraTable({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `Bitacora_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `Bitacora_${hoyART()}.csv`
     a.click()
     URL.revokeObjectURL(url)
     setShowExportMenu(false)
@@ -641,7 +642,7 @@ export function BitacoraTable({
             style={{
               display: 'flex', alignItems: 'center', gap: '4px',
               padding: '6px 10px', fontSize: '13px', fontWeight: 500,
-              border: '1px solid var(--border-color)', borderRadius: '6px',
+              border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)',
               background: vistaAgrupada ? 'var(--color-primary)' : 'var(--bg-primary)',
               color: vistaAgrupada ? '#fff' : 'var(--text-secondary)',
               cursor: 'pointer', whiteSpace: 'nowrap',
@@ -656,7 +657,7 @@ export function BitacoraTable({
               style={{
                 display: 'flex', alignItems: 'center', gap: '4px',
                 padding: '6px 10px', fontSize: '13px', fontWeight: 500,
-                border: '1px solid var(--border-color)', borderRadius: '6px',
+                border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-primary)', color: 'var(--text-secondary)',
                 cursor: 'pointer', whiteSpace: 'nowrap',
               }}>
@@ -666,7 +667,7 @@ export function BitacoraTable({
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: '4px',
                 background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
-                borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                borderRadius: 'var(--radius-sm)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 zIndex: 50, minWidth: '140px', overflow: 'hidden',
               }}>
                 {[

@@ -4,7 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import * as XLSX from 'xlsx'
 import {
@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
-import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getYear } from 'date-fns'
+import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getISOWeekYear } from 'date-fns'
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay, Spinner } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
@@ -72,6 +72,8 @@ import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 
+import { hoyART } from '../../../utils/fechaArgentina'
+import { numeroSemana, semanaISO, sumarSemanasISO } from '../../../utils/semanaISO'
 /** Calcula días calendario entre una fecha y hoy (sin considerar hora) */
 function diasCalendario(desde: string | Date): number {
   const d = new Date(desde)
@@ -211,7 +213,7 @@ export function SaldosAbonosTab() {
     const fin = endOfWeek(fecha, { weekStartsOn: 1 })
     return {
       numero: getISOWeek(inicio),
-      anio: getYear(inicio),
+      anio: getISOWeekYear(inicio),
       inicio: format(inicio, 'yyyy-MM-dd'),
       fin: format(fin, 'yyyy-MM-dd'),
       label: `S${getISOWeek(inicio)} (${format(inicio, 'dd/MM')} - ${format(fin, 'dd/MM')})`
@@ -392,13 +394,6 @@ export function SaldosAbonosTab() {
     }
   }
 
-  // Helper para obtener número de semana
-  function getWeekNumber(dateStr: string): number {
-    const date = new Date(dateStr + 'T12:00:00')
-    const startOfYear = new Date(date.getFullYear(), 0, 1)
-    const days = Math.floor((date.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000))
-    return Math.ceil((days + startOfYear.getDay() + 1) / 7)
-  }
 
   // Hidden: botón de agregar saldo removido de la UI
   async function _agregarSaldoInicial() {
@@ -417,7 +412,7 @@ export function SaldosAbonosTab() {
       }))
 
     if (conductoresParaModal.length === 0) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Sin conductores disponibles',
         text: 'No hay conductores registrados.',
@@ -426,33 +421,20 @@ export function SaldosAbonosTab() {
       return
     }
 
-    // Fecha de hoy en formato YYYY-MM-DD
-    const hoy = new Date()
-    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
-
-    // Calcular semana actual y anterior
-    const semanaActual = getWeekNumber(hoyStr)
-    const anioActual = hoy.getFullYear()
-    let semanaAnterior = semanaActual - 1
-    let anioAnterior = anioActual
-    if (semanaAnterior < 1) {
-      semanaAnterior = 52
-      anioAnterior = anioActual - 1
-    }
+    // Semana actual y anterior (hora Argentina)
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
+    const { semana: semanaAnterior, anio: anioAnterior } = sumarSemanasISO(semanaActual, anioActual, -1)
 
     // Generar opciones de semanas (4 anteriores + actual + 20 siguientes)
     let semanaOptions = ''
-    let sem = semanaActual - 4
-    let anio = anioActual
-    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
+    let { semana: sem, anio } = sumarSemanasISO(semanaActual, anioActual, -4)
     for (let i = 0; i < 25; i++) {
       const selected = (sem === semanaAnterior && anio === anioAnterior) ? 'selected' : ''
       semanaOptions += `<option value="${sem}-${anio}" ${selected}>Semana ${sem} - ${anio}</option>`
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+      { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
     }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Agregar Saldo Inicial</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -511,7 +493,7 @@ export function SaldosAbonosTab() {
 
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Fecha de Referencia:</label>
-            <input id="swal-fecha" type="date" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${hoyStr}">
+            <input id="swal-fecha" type="date" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${hoyART()}">
             <span style="font-size: 10px; color: #6B7280;">Fecha desde la cual se considera este saldo para cálculo de mora</span>
           </div>
 
@@ -656,19 +638,19 @@ export function SaldosAbonosTab() {
         const [semana, anio] = semanaValue.split('-').map(Number)
 
         if (!conductorId) {
-          Swal.showValidationMessage('Seleccione un conductor')
+          Alerta.showValidationMessage('Seleccione un conductor')
           return false
         }
         if (!saldo || parseFloat(saldo) <= 0) {
-          Swal.showValidationMessage('Ingrese un monto de deuda válido (mayor a 0)')
+          Alerta.showValidationMessage('Ingrese un monto de deuda válido (mayor a 0)')
           return false
         }
         if (!fecha) {
-          Swal.showValidationMessage('Ingrese una fecha de referencia')
+          Alerta.showValidationMessage('Ingrese una fecha de referencia')
           return false
         }
         if (fraccionado && cuotas < 2) {
-          Swal.showValidationMessage('El fraccionamiento debe tener al menos 2 cuotas')
+          Alerta.showValidationMessage('El fraccionamiento debe tener al menos 2 cuotas')
           return false
         }
 
@@ -752,8 +734,8 @@ export function SaldosAbonosTab() {
       })
 
       // Registrar movimiento en kardex (control_saldos)
-      const semIni = formValues.fraccionado ? formValues.semanaInicio : getWeekNumber(new Date().toISOString().split('T')[0])
-      const anioIni = formValues.fraccionado ? formValues.anioInicio : new Date().getFullYear()
+      const semIni = formValues.fraccionado ? formValues.semanaInicio : numeroSemana(hoyART())
+      const anioIni = formValues.fraccionado ? formValues.anioInicio : semanaISO(hoyART()).anio
       await insertControlSaldo({
         conductorId: formValues.conductorId,
         semana: semIni,
@@ -800,11 +782,7 @@ export function SaldosAbonosTab() {
           })
 
           // Avanzar a siguiente semana
-          semActual++
-          if (semActual > 52) {
-            semActual = 1
-            anioActual++
-          }
+          { const s = sumarSemanasISO(semActual, anioActual, 1); semActual = s.semana; anioActual = s.anio }
         }
       }
 
@@ -820,7 +798,7 @@ export function SaldosAbonosTab() {
 
   async function fraccionarSaldo(saldo: SaldoConductor) {
     if (saldo.saldo_actual >= 0) {
-      Swal.fire('Sin deuda', 'Solo se puede fraccionar un saldo en deuda.', 'info')
+      Alerta.fire('Sin deuda', 'Solo se puede fraccionar un saldo en deuda.', 'info')
       return
     }
     const montoDeuda = Math.abs(saldo.saldo_actual)
@@ -859,7 +837,7 @@ export function SaldosAbonosTab() {
         fracDetalleHtml += `<div><strong>Incidencias:</strong> ${fracIncidencias.length} cuota(s) pendiente(s), ultima en Sem ${ultimaSem.semana}/${ultimaSem.anio}</div>`
       }
 
-      const { isConfirmed } = await Swal.fire({
+      const { isConfirmed } = await Alerta.fire({
         icon: 'warning',
         title: 'Fraccionamiento pendiente',
         html: `
@@ -880,10 +858,7 @@ export function SaldosAbonosTab() {
       if (!isConfirmed) return
     }
 
-    const hoy = new Date()
-    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
-    const semanaActual = getWeekNumber(hoyStr)
-    const anioActual = hoy.getFullYear()
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
 
     let semanaOptions = ''
     let sem = semanaActual
@@ -892,11 +867,10 @@ export function SaldosAbonosTab() {
       const selected = i === 0 ? 'selected' : ''
       const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
       semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+      { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
     }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: '<span style="font-size:16px;font-weight:600;">Fraccionar Saldo</span>',
       html: `
         <div style="text-align:left;font-size:13px;">
@@ -951,11 +925,11 @@ export function SaldosAbonosTab() {
         const cuotas = parseInt((document.getElementById('swal-frac-cuotas') as HTMLInputElement).value)
         const semanaValue = (document.getElementById('swal-frac-semana') as HTMLSelectElement).value
         if (!cuotas || cuotas < 2) {
-          Swal.showValidationMessage('Mínimo 2 cuotas')
+          Alerta.showValidationMessage('Mínimo 2 cuotas')
           return false
         }
         if (cuotas > 52) {
-          Swal.showValidationMessage('Máximo 52 cuotas')
+          Alerta.showValidationMessage('Máximo 52 cuotas')
           return false
         }
         const [semana, anio] = semanaValue.split('-').map(Number)
@@ -984,7 +958,7 @@ export function SaldosAbonosTab() {
         .single()
       if (errorSaldoFresco) throw errorSaldoFresco
       if (Math.abs(Math.abs(Number(saldoFresco.saldo_actual) || 0) - montoDeuda) >= 0.01) {
-        await Swal.fire(
+        await Alerta.fire(
           'Saldo actualizado',
           `El saldo del conductor cambió a ${formatCurrency(Number(saldoFresco.saldo_actual) || 0)}. Revise y vuelva a fraccionar.`,
           'warning',
@@ -999,9 +973,7 @@ export function SaldosAbonosTab() {
       // ya hay movimientos en una semana posterior (ej. un pago en efectivo cargado en la
       // semana de la primera cuota) se registra en la semana del último movimiento; si no,
       // ese movimiento queda por encima y arrastra la deuda completa como saldo anterior.
-      let semAjuste = formValues.semana - 1
-      let anioAjuste = formValues.anio
-      if (semAjuste < 1) { semAjuste = 52; anioAjuste-- }
+      let { semana: semAjuste, anio: anioAjuste } = sumarSemanasISO(formValues.semana, formValues.anio, -1)
 
       const { data: ultimoMovimiento, error: errorUltimoMov } = await (supabase.from('control_saldos') as any)
         .select('semana, anio')
@@ -1049,8 +1021,7 @@ export function SaldosAbonosTab() {
           sede_id: sedeIdConductor,
         })
         if (error) throw error
-        semIter++
-        if (semIter > 52) { semIter = 1; anioIter++ }
+        { const s = sumarSemanasISO(semIter, anioIter, 1); semIter = s.semana; anioIter = s.anio }
       }
 
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
@@ -1087,25 +1058,19 @@ export function SaldosAbonosTab() {
     const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
 
     // Calcular semana actual
-    const hoy = new Date()
-    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
-    const semanaActual = getWeekNumber(hoyStr)
-    const anioActual = hoy.getFullYear()
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
 
     // Generar opciones de semanas (4 anteriores + actual + 4 siguientes)
     let semanaOptions = ''
-    let sem = semanaActual - 4
-    let anio = anioActual
-    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
+    let { semana: sem, anio } = sumarSemanasISO(semanaActual, anioActual, -4)
     for (let i = 0; i < 9; i++) {
       const selected = (sem === semanaActual && anio === anioActual) ? 'selected' : ''
       const label = sem === semanaActual && anio === anioActual ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
       semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+      { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
     }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Registrar Movimiento</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1164,11 +1129,11 @@ export function SaldosAbonosTab() {
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
 
         if (!monto || parseFloat(monto) <= 0) {
-          Swal.showValidationMessage('Ingrese un monto válido')
+          Alerta.showValidationMessage('Ingrese un monto válido')
           return false
         }
         if (!concepto) {
-          Swal.showValidationMessage('Ingrese un concepto')
+          Alerta.showValidationMessage('Ingrese un concepto')
           return false
         }
 
@@ -1229,7 +1194,7 @@ export function SaldosAbonosTab() {
   async function registrarPago(saldo: SaldoConductor) {
     const saldoColor = saldo.saldo_actual < 0 ? '#DC2626' : saldo.saldo_actual > 0 ? '#16A34A' : '#6B7280'
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1272,11 +1237,11 @@ export function SaldosAbonosTab() {
         const referencia = (document.getElementById('swal-pago-ref') as HTMLInputElement).value
 
         if (!monto || parseFloat(monto) <= 0) {
-          Swal.showValidationMessage('Ingrese un monto valido')
+          Alerta.showValidationMessage('Ingrese un monto valido')
           return false
         }
         if (!concepto) {
-          Swal.showValidationMessage('Ingrese un concepto')
+          Alerta.showValidationMessage('Ingrese un concepto')
           return false
         }
 
@@ -1299,8 +1264,8 @@ export function SaldosAbonosTab() {
         monto: formValues.monto,
         concepto: formValues.concepto,
         referencia: formValues.referencia,
-        semana: getWeekNumber(new Date().toISOString().split('T')[0]),
-        anio: new Date().getFullYear(),
+        semana: numeroSemana(hoyART()),
+        anio: semanaISO(hoyART()).anio,
         fecha_abono: new Date().toISOString()
       })
 
@@ -1316,8 +1281,8 @@ export function SaldosAbonosTab() {
       })
 
       // Registrar movimiento en kardex (control_saldos)
-      const semPago = getWeekNumber(new Date().toISOString().split('T')[0])
-      const anioPago = new Date().getFullYear()
+      const semPago = numeroSemana(hoyART())
+      const anioPago = semanaISO(hoyART()).anio
       const refKardex = formValues.referencia
         ? `${formValues.concepto || 'Pago manual'} | ${formValues.referencia}`
         : formValues.concepto || `Pago manual S${semPago}/${anioPago}`
@@ -1344,7 +1309,7 @@ export function SaldosAbonosTab() {
   void _registrarAbono; void _agregarSaldoInicial;
 
   async function eliminarSaldo(saldo: SaldoConductor) {
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Eliminar Saldo',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1378,7 +1343,7 @@ export function SaldosAbonosTab() {
       preConfirm: () => {
         const motivo = (document.getElementById('swal-motivo-elim') as HTMLSelectElement).value
         if (!motivo) {
-          Swal.showValidationMessage('Seleccione un motivo')
+          Alerta.showValidationMessage('Seleccione un motivo')
           return false
         }
         const detalle = (document.getElementById('swal-detalle-elim') as HTMLInputElement).value.trim()
@@ -1404,8 +1369,8 @@ export function SaldosAbonosTab() {
       if (error) throw error
 
       // Registrar movimiento en kardex (control_saldos)
-      const semElim = getWeekNumber(new Date().toISOString().split('T')[0])
-      const anioElim = new Date().getFullYear()
+      const semElim = numeroSemana(hoyART())
+      const anioElim = semanaISO(hoyART()).anio
       await insertControlSaldo({
         conductorId: saldo.conductor_id,
         semana: semElim,
@@ -1438,7 +1403,7 @@ export function SaldosAbonosTab() {
       if (p009?.precio_base) tasaMora = parseFloat(p009.precio_base)
     } catch { /* usar default */ }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Saldo</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1506,12 +1471,12 @@ export function SaldosAbonosTab() {
       preConfirm: () => {
         const saldoActual = parseFloat((document.getElementById('swal-saldo') as HTMLInputElement).value)
         if (isNaN(saldoActual)) {
-          Swal.showValidationMessage('Ingrese un saldo válido')
+          Alerta.showValidationMessage('Ingrese un saldo válido')
           return false
         }
         const motivo = (document.getElementById('swal-motivo') as HTMLSelectElement).value
         if (!motivo) {
-          Swal.showValidationMessage('Seleccione un motivo')
+          Alerta.showValidationMessage('Seleccione un motivo')
           return false
         }
         const detalle = (document.getElementById('swal-detalle') as HTMLInputElement).value.trim()
@@ -1540,8 +1505,8 @@ export function SaldosAbonosTab() {
       if (error) throw error
 
       // Registrar movimiento en kardex (control_saldos)
-      const semAdj = getWeekNumber(new Date().toISOString().split('T')[0])
-      const anioAdj = new Date().getFullYear()
+      const semAdj = numeroSemana(hoyART())
+      const anioAdj = semanaISO(hoyART()).anio
       await insertControlSaldo({
         conductorId: saldo.conductor_id,
         semana: semAdj,
@@ -1569,7 +1534,7 @@ export function SaldosAbonosTab() {
     const diasActual = (saldo.dias_mora && saldo.dias_mora > 0) ? saldo.dias_mora : (saldo.ultima_actualizacion ? diasCalendario(saldo.ultima_actualizacion) : 0)
     const moraActual = (saldo.monto_mora_acumulada && saldo.monto_mora_acumulada > 0) ? saldo.monto_mora_acumulada : Math.round(Math.abs(saldo.saldo_actual) * 0.01 * diasActual * 100) / 100
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Editar Mora</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1621,8 +1586,8 @@ export function SaldosAbonosTab() {
       if (error) throw error
 
       // Registrar movimiento en kardex (control_saldos) para trazabilidad
-      const semMora = getWeekNumber(new Date().toISOString().split('T')[0])
-      const anioMora = new Date().getFullYear()
+      const semMora = numeroSemana(hoyART())
+      const anioMora = semanaISO(hoyART()).anio
       try {
         await insertControlSaldo({
           conductorId: saldo.conductor_id,
@@ -1651,7 +1616,7 @@ export function SaldosAbonosTab() {
   // ====== EXPORTAR SALDOS A EXCEL ======
   function exportarSaldos() {
     if (saldos.length === 0) {
-      Swal.fire('Sin datos', 'No hay saldos para exportar', 'info')
+      Alerta.fire('Sin datos', 'No hay saldos para exportar', 'info')
       return
     }
 
@@ -1697,7 +1662,7 @@ export function SaldosAbonosTab() {
     wsInstr['!cols'] = [{ wch: 70 }]
     XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones')
 
-    const fecha = new Date().toISOString().slice(0, 10)
+    const fecha = hoyART()
     XLSX.writeFile(wb, `Saldos_Conductores_${fecha}.xlsx`)
     showSuccess('Exportado correctamente')
   }
@@ -1782,7 +1747,7 @@ export function SaldosAbonosTab() {
       }
 
       if (parsed.length === 0) {
-        Swal.fire('Error', `No se pudo procesar ninguna fila.${errores.length > 0 ? '<br><br>' + errores.slice(0, 10).join('<br>') : ''}`, 'error')
+        Alerta.fire('Error', `No se pudo procesar ninguna fila.${errores.length > 0 ? '<br><br>' + errores.slice(0, 10).join('<br>') : ''}`, 'error')
         return
       }
 
@@ -1796,7 +1761,7 @@ export function SaldosAbonosTab() {
       })
 
       if (cambios.length === 0) {
-        Swal.fire('Sin cambios', 'Los valores del archivo son iguales a los actuales', 'info')
+        Alerta.fire('Sin cambios', 'Los valores del archivo son iguales a los actuales', 'info')
         return
       }
 
@@ -1817,7 +1782,7 @@ export function SaldosAbonosTab() {
         </tr>`
       }).join('')
 
-      const { isConfirmed } = await Swal.fire({
+      const { isConfirmed } = await Alerta.fire({
         title: '<span style="font-size:16px;font-weight:600;">Preview de Importacion</span>',
         html: `
           <div style="text-align:left;font-size:13px;">
@@ -1884,8 +1849,8 @@ export function SaldosAbonosTab() {
       let updated = 0
       let errors = 0
 
-      const semImp = getWeekNumber(new Date().toISOString().split('T')[0])
-      const anioImp = new Date().getFullYear()
+      const semImp = numeroSemana(hoyART())
+      const anioImp = semanaISO(hoyART()).anio
 
       for (const c of cambios) {
 
@@ -1917,7 +1882,7 @@ export function SaldosAbonosTab() {
       }
 
       if (errors > 0) {
-        Swal.fire('Importacion parcial', `${updated} actualizados, ${errors} errores`, 'warning')
+        Alerta.fire('Importacion parcial', `${updated} actualizados, ${errors} errores`, 'warning')
       } else {
         showSuccess('Importacion exitosa', `${updated} saldos actualizados`)
       }
@@ -2029,25 +1994,19 @@ export function SaldosAbonosTab() {
   /* editarMovimiento - UI removida, preservada por si se reactiva
   async function editarMovimiento(movimiento: AbonoRow) {
     // Calcular semana actual
-    const hoy = new Date()
-    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
-    const semanaActual = getWeekNumber(hoyStr)
-    const anioActual = hoy.getFullYear()
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
 
     // Generar opciones de semanas (8 anteriores + actual + 4 siguientes)
     let semanaOptions = ''
-    let sem = semanaActual - 8
-    let anio = anioActual
-    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
+    let { semana: sem, anio } = sumarSemanasISO(semanaActual, anioActual, -8)
     for (let i = 0; i < 13; i++) {
       const isSelected = movimiento.semana === sem && movimiento.anio === anio
       const label = sem === semanaActual && anio === anioActual ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
       semanaOptions += `<option value="${sem}-${anio}" ${isSelected ? 'selected' : ''}>${label}</option>`
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+      { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
     }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Movimiento</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -2096,7 +2055,7 @@ export function SaldosAbonosTab() {
         const referencia = (document.getElementById('swal-referencia') as HTMLInputElement).value
 
         if (!concepto.trim()) {
-          Swal.showValidationMessage('El concepto es requerido')
+          Alerta.showValidationMessage('El concepto es requerido')
           return false
         }
 
@@ -2156,7 +2115,7 @@ export function SaldosAbonosTab() {
             <Filter size={12} />
           </button>
           {openColumnFilter === 'conductor' && createPortal(
-            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
+            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 'var(--z-dropdown)' }} onClick={(e) => e.stopPropagation()}>
               <input
                 type="text"
                 placeholder="Buscar conductor..."
@@ -2239,7 +2198,7 @@ export function SaldosAbonosTab() {
             <Filter size={12} />
           </button>
           {openColumnFilter === 'estado' && createPortal(
-            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
+            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 'var(--z-dropdown)' }} onClick={(e) => e.stopPropagation()}>
               <div className="dt-excel-filter-list">
                 {[
                   { value: 'favor', label: 'A Favor' },
@@ -2438,14 +2397,14 @@ export function SaldosAbonosTab() {
             <div style={{
               display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
               background: 'rgba(255, 0, 51, 0.04)', border: '1px solid rgba(255, 0, 51, 0.12)',
-              borderRadius: '6px', marginBottom: '8px', flexWrap: 'wrap', fontSize: '12px'
+              borderRadius: 'var(--radius-sm)', marginBottom: '8px', flexWrap: 'wrap', fontSize: '12px'
             }}>
               <span style={{ color: '#ff0033', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Filter size={12} /> Filtros activos:
               </span>
               {conductorFilter.map(f => (
                 <span key={f} style={{
-                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: 'var(--radius-lg)',
                   fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
                 }} onClick={() => setConductorFilter(prev => prev.filter(v => v !== f))}>
                   {f} <span style={{ fontWeight: 700 }}>&times;</span>
@@ -2453,7 +2412,7 @@ export function SaldosAbonosTab() {
               ))}
               {estadoFilter.map(f => (
                 <span key={f} style={{
-                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: 'var(--radius-lg)',
                   fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
                 }} onClick={() => setEstadoFilter(prev => prev.filter(v => v !== f))}>
                   {f === 'favor' ? 'A Favor' : f === 'deuda' ? 'Deuda' : 'Sin Saldo'} <span style={{ fontWeight: 700 }}>&times;</span>
@@ -2461,7 +2420,7 @@ export function SaldosAbonosTab() {
               ))}
               {asignadoFilter !== 'todos' && (
                 <span style={{
-                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: 'var(--radius-lg)',
                   fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
                 }} onClick={() => setAsignadoFilter('todos')}>
                   {asignadoFilter === 'asignado' ? 'Asignados' : 'No asignados'} <span style={{ fontWeight: 700 }}>&times;</span>
@@ -2471,7 +2430,7 @@ export function SaldosAbonosTab() {
                 onClick={() => { setConductorFilter([]); setEstadoFilter([]); setAsignadoFilter('todos'); setConductorSearch('') }}
                 style={{
                   marginLeft: 'auto', background: 'transparent', border: '1px solid var(--border-primary)',
-                  borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)'
+                  borderRadius: 'var(--radius-xs)', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)'
                 }}
               >
                 Limpiar todos
@@ -2515,7 +2474,7 @@ export function SaldosAbonosTab() {
                 </div>
                 <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                   {/* Selector de semana */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px 6px' }}>
                     <button
                       onClick={() => { setSemanaOffset(prev => prev - 1); setAsignadoFilter('asignado') }}
                       style={{ padding: '2px 6px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
@@ -2537,7 +2496,7 @@ export function SaldosAbonosTab() {
                       ›
                     </button>
                   </div>
-                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
                     {[
                       { value: 'todos' as const, label: 'Todos' },
                       { value: 'asignado' as const, label: 'Asignados' },
@@ -2547,7 +2506,7 @@ export function SaldosAbonosTab() {
                         key={opt.value}
                         onClick={() => setAsignadoFilter(opt.value)}
                         style={{
-                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
                           background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
                           color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
                         }}
@@ -2556,7 +2515,7 @@ export function SaldosAbonosTab() {
                       </button>
                     ))}
                   </div>
-                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
                     {[
                       { value: 'todos' as const, label: 'Todos' },
                       { value: 'activo' as const, label: 'Activos' },
@@ -2566,7 +2525,7 @@ export function SaldosAbonosTab() {
                         key={opt.value}
                         onClick={() => setEstadoCondFilter(opt.value)}
                         style={{
-                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
                           background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
                           color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
                         }}
@@ -2624,7 +2583,7 @@ export function SaldosAbonosTab() {
                         {formatCurrency(saldoRealKardex)}
                       </div>
                       <span style={{
-                        display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '4px',
+                        display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: 'var(--radius-xs)',
                         fontSize: '10px', fontWeight: 600,
                         background: saldoRealKardex >= 0 ? '#DCFCE7' : '#FEE2E2', color: sColor,
                       }}>
@@ -2638,7 +2597,7 @@ export function SaldosAbonosTab() {
                         style={{
                           background: 'none', border: '1px solid var(--border-primary)',
                           cursor: 'pointer', color: 'var(--text-secondary)',
-                          padding: '4px 10px', borderRadius: '4px', fontSize: '11px',
+                          padding: '4px 10px', borderRadius: 'var(--radius-xs)', fontSize: '11px',
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
                         }}
                       >
@@ -2670,7 +2629,7 @@ export function SaldosAbonosTab() {
                           onChange={e => setKardexSearch(e.target.value)}
                           style={{
                             width: '100%', padding: '5px 8px 5px 26px', fontSize: '11px',
-                            border: '1px solid var(--border-primary)', borderRadius: '4px',
+                            border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-xs)',
                             background: 'var(--bg-secondary)', color: 'var(--text-primary)',
                           }}
                         />
@@ -2680,7 +2639,7 @@ export function SaldosAbonosTab() {
                         onChange={e => setKardexSemanaFilter(e.target.value)}
                         style={{
                           padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)',
-                          borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)',
+                          borderRadius: 'var(--radius-xs)', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)',
                         }}
                       >
                         <option value="">Todas las semanas</option>
@@ -2694,7 +2653,7 @@ export function SaldosAbonosTab() {
                         onChange={e => setKardexTipoFilter(e.target.value)}
                         style={{
                           padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)',
-                          borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)',
+                          borderRadius: 'var(--radius-xs)', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)',
                         }}
                       >
                         <option value="">Todos los tipos</option>
@@ -2707,7 +2666,7 @@ export function SaldosAbonosTab() {
                         title="Exportar a PDF"
                         style={{
                           background: 'var(--card-bg, #fff)', border: '1px solid var(--border-primary)',
-                          borderRadius: '4px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer',
+                          borderRadius: 'var(--radius-xs)', padding: '5px 10px', fontSize: '11px', cursor: 'pointer',
                           color: 'var(--text-secondary)',
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
                         }}
@@ -2823,7 +2782,7 @@ export function SaldosAbonosTab() {
 
                   return (
                     <>
-                      <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)' }}>
                         <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -2871,7 +2830,7 @@ export function SaldosAbonosTab() {
                                   </td>
                                   <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', fontSize: '10px' }}>
                                     <span style={{
-                                      display: 'inline-block', padding: '1px 6px', borderRadius: '3px',
+                                      display: 'inline-block', padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                       background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px',
                                     }}>{tipoLabel[tipo] || tipo}</span>
                                   </td>
@@ -2891,7 +2850,7 @@ export function SaldosAbonosTab() {
                                           {i === 0 && (
                                             <span style={{
                                               marginLeft: '6px', padding: '1px 5px', background: '#f59e0b',
-                                              color: '#fff', borderRadius: '3px', fontSize: '9px', fontWeight: 700,
+                                              color: '#fff', borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 700,
                                               textTransform: 'uppercase', letterSpacing: '0.4px',
                                             }}>actual</span>
                                           )}
@@ -2902,12 +2861,12 @@ export function SaldosAbonosTab() {
                                       </>
                                     )
                                   })()}
-                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, whiteSpace: 'nowrap' }}>
+                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: redondear a entero para evitar decimales tipo $0,03 */}
                                     {monto > 0 ? `${montoSigno}${formatCurrency(Math.round(monto))}` : '-'}
                                   </td>
                                   {/* FIX 2026-05-20: columna "Saldo previo" oculta */}
-                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: columna Facturado - click abre detalle + redondeo residuos */}
                                     {(() => {
                                       // Ajustes manuales, pagos manuales y cancelaciones por baja no tienen facturación asociada
@@ -2925,7 +2884,7 @@ export function SaldosAbonosTab() {
                                           }}
                                           style={{
                                             background: 'none', border: 'none', cursor: 'pointer',
-                                            fontFamily: 'monospace', color: '#2563eb',
+                                            fontFamily: 'var(--font-mono)', color: '#2563eb',
                                             textDecoration: 'underline', textDecorationStyle: 'dotted',
                                             padding: 0, fontSize: '11px', fontWeight: 500,
                                           }}
@@ -2937,7 +2896,7 @@ export function SaldosAbonosTab() {
                                     })()}
                                   </td>
                                   <td style={{
-                                    padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700,
+                                    padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700,
                                     color: saldo < 0 ? '#dc2626' : saldo > 0 ? '#16a34a' : 'var(--text-secondary)',
                                     whiteSpace: 'nowrap',
                                   }}>
@@ -2976,25 +2935,25 @@ export function SaldosAbonosTab() {
                       <div style={{
                         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
                         marginTop: '8px', background: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-primary)', borderRadius: '6px',
+                        border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)',
                         overflow: 'hidden',
                       }}>
                         <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
                           <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Total cargos</div>
-                          <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#dc2626', fontFamily: 'monospace' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#dc2626', fontFamily: 'var(--font-mono)' }}>
                             -{formatCurrency(totalCargos)}
                           </div>
                         </div>
                         <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
                           <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Total abonos</div>
-                          <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#16a34a', fontFamily: 'monospace' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#16a34a', fontFamily: 'var(--font-mono)' }}>
                             +{formatCurrency(totalAbonos)}
                           </div>
                         </div>
                         <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
                           <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Neto del rango</div>
                           <div style={{
-                            fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace',
+                            fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'var(--font-mono)',
                             color: saldoNetoRango < 0 ? '#dc2626' : saldoNetoRango > 0 ? '#16a34a' : 'var(--text-secondary)',
                           }}>
                             {formatCurrency(saldoNetoRango)}
@@ -3003,7 +2962,7 @@ export function SaldosAbonosTab() {
                         <div style={{ padding: '8px 12px', textAlign: 'right' }}>
                           <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Saldo final</div>
                           <div style={{
-                            fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace',
+                            fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'var(--font-mono)',
                             color: saldoFinal < 0 ? '#dc2626' : saldoFinal > 0 ? '#16a34a' : 'var(--text-secondary)',
                           }}>
                             {formatCurrency(saldoFinal)}
@@ -3040,11 +2999,11 @@ export function SaldosAbonosTab() {
               {/* Mini-modal edición de fila */}
               {kardexEdit.open && kardexEdit.row && (
                 <div style={{
-                  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1001,
+                  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 'calc(var(--z-modal) + 1)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }} onClick={() => setKardexEdit(prev => ({ ...prev, open: false }))}>
                   <div style={{
-                    background: 'var(--card-bg, #fff)', borderRadius: '10px', padding: '20px', width: '380px',
+                    background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-lg)', padding: '20px', width: '380px',
                     boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
                   }} onClick={e => e.stopPropagation()}>
                     <h3 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 700 }}>Editar Movimiento</h3>
@@ -3066,7 +3025,7 @@ export function SaldosAbonosTab() {
                           value={kardexEdit.nuevoMonto}
                           onChange={e => setKardexEdit(prev => ({ ...prev, nuevoMonto: e.target.value }))}
                           style={{
-                            width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                            width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)',
                             fontSize: '13px', boxSizing: 'border-box',
                           }}
                         />
@@ -3082,7 +3041,7 @@ export function SaldosAbonosTab() {
                           value={kardexEdit.nuevaSemana}
                           onChange={e => setKardexEdit(prev => ({ ...prev, nuevaSemana: e.target.value }))}
                           style={{
-                            width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                            width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)',
                             fontSize: '13px', boxSizing: 'border-box',
                           }}
                         />
@@ -3097,7 +3056,7 @@ export function SaldosAbonosTab() {
                       placeholder="Ej: Corrección de monto por error de carga"
                       rows={2}
                       style={{
-                        width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                        width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)',
                         fontSize: '12px', resize: 'vertical', marginBottom: '14px', boxSizing: 'border-box',
                       }}
                     />
@@ -3105,7 +3064,7 @@ export function SaldosAbonosTab() {
                       <button
                         onClick={() => setKardexEdit(prev => ({ ...prev, open: false }))}
                         style={{
-                          padding: '7px 16px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                          padding: '7px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)',
                           background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: '12px',
                         }}
                       >Cancelar</button>
@@ -3113,7 +3072,7 @@ export function SaldosAbonosTab() {
                         onClick={handleKardexEditSave}
                         disabled={kardexEdit.saving || !kardexEdit.motivo.trim()}
                         style={{
-                          padding: '7px 16px', borderRadius: '6px', border: 'none',
+                          padding: '7px 16px', borderRadius: 'var(--radius-sm)', border: 'none',
                           background: !kardexEdit.motivo.trim() ? '#ccc' : 'var(--color-primary)', color: '#fff',
                           cursor: !kardexEdit.motivo.trim() ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600,
                         }}
@@ -3140,13 +3099,13 @@ export function SaldosAbonosTab() {
             fontSize: isTotal ? '14px' : '12px',
           }}>
             <span>{lbl}</span>
-            <span style={{ fontFamily: 'monospace' }}>{formatCurrency(val)}</span>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{formatCurrency(val)}</span>
           </div>
         )
         return (
           <div
             className="fact-modal-overlay"
-            style={{ zIndex: 9999 }}
+            style={{ zIndex: 'var(--z-modal-nested)' }}
             onClick={() => setFactDetailModal({ open: false, fact: null, anio: null, semana: null })}
           >
             <div

@@ -35,7 +35,7 @@ export function SinModulosPage() {
           onClick={() => { void signOut() }}
           style={{
             padding: '12px 24px',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             border: '1px solid #E5E7EB',
             background: '#fff',
             color: '#374151',
@@ -51,7 +51,7 @@ export function SinModulosPage() {
           marginTop: '32px',
           padding: '16px',
           background: '#FEF3C7',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           display: 'flex',
           gap: '10px',
           alignItems: 'flex-start',

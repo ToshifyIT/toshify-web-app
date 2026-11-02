@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { numeroSemana } from '../../../utils/semanaISO'
 import './DataTable.css'
 import '../DateRangeSelector/DateRangeSelector.css'
 
@@ -51,14 +52,6 @@ const getSundayOf = (y: number, m: number, d: number) => {
   const mon = getMondayOf(y, m, d)
   const sun = new Date(mon.y, mon.m, mon.d + 6)
   return { y: sun.getFullYear(), m: sun.getMonth(), d: sun.getDate() }
-}
-
-const getWeekNum = (y: number, m: number, d: number) => {
-  const dt = new Date(Date.UTC(y, m, d))
-  const dayNum = dt.getUTCDay() || 7
-  dt.setUTCDate(dt.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1))
-  return Math.ceil((((dt.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
 }
 
 export function ExcelDateRangeFilter({
@@ -163,10 +156,10 @@ export function ExcelDateRangeFilter({
     const y = now.getFullYear(), m = now.getMonth(), d = now.getDate()
     const mon = getMondayOf(y, m, d)
     const sun = getSundayOf(y, m, d)
-    const wn = getWeekNum(mon.y, mon.m, mon.d)
+    const wn = numeroSemana(new Date(mon.y, mon.m, mon.d))
     const prevMon = getMondayOf(mon.y, mon.m, mon.d - 7)
     const prevSun = getSundayOf(prevMon.y, prevMon.m, prevMon.d)
-    const pwn = getWeekNum(prevMon.y, prevMon.m, prevMon.d)
+    const pwn = numeroSemana(new Date(prevMon.y, prevMon.m, prevMon.d))
     const yesterday = new Date(y, m, d - 1)
 
     return [

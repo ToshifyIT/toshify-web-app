@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase } from '../../../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { showError, showSuccess } from '../../../utils/toast'
 import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
@@ -67,7 +67,7 @@ import {
   nuevoLockToken,
 } from '../utils/periodoLock'
 import { recalcGarantiasForPeriodo } from '../../../services/garantiasService'
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, startOfDay, differenceInCalendarDays } from 'date-fns'
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, startOfDay, differenceInCalendarDays, getISOWeek, getISOWeekYear } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
 import { DiscrepancyReportModal } from '../../../components/ui/DiscrepancyReportModal'
@@ -96,6 +96,8 @@ import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyP
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 
+import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
+import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
 function parseImporteMulta(val: string): number {
   let s = val.replace(/[$\s]/g, '')
@@ -1462,12 +1464,12 @@ export function ReporteFacturacionTab() {
     setLoading(true)
     setPagosSinVincular([])
     try {
-      const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anio = getYear(semanaActual.inicio)
+      const semana = getISOWeek(semanaActual.inicio)
+      const anio = getISOWeekYear(semanaActual.inicio)
 
       // 0. Verificar si la semana ANTERIOR tiene período cerrado
-      const semanaAnt = getWeek(subWeeks(semanaActual.inicio, 1), { weekStartsOn: 1 })
-      const anioAnt = getYear(subWeeks(semanaActual.inicio, 1))
+      const semanaAnt = getISOWeek(subWeeks(semanaActual.inicio, 1))
+      const anioAnt = getISOWeekYear(subWeeks(semanaActual.inicio, 1))
       let qAnt = supabase
         .from('periodos_facturacion')
         .select('id, estado')
@@ -2221,8 +2223,8 @@ export function ReporteFacturacionTab() {
       // Las deducciones se hacen vía incidencias/bajas, no por días transcurridos
       const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
       // Semana y año del período (para queries)
-      const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
-      const anioDelPeriodo = getYear(parseISO(fechaInicio))
+      const semanaDelPeriodo = getISOWeek(parseISO(fechaInicio))
+      const anioDelPeriodo = getISOWeekYear(parseISO(fechaInicio))
 
       // 1. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
       const sedeParaVP = sedeActualId || sedeUsuario?.id
@@ -2761,7 +2763,7 @@ export function ReporteFacturacionTab() {
       }
       // Función helper para obtener precio FINAL en una fecha específica (precio real ingresado)
       const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
-        const fechaStr = fecha.toISOString().split('T')[0]
+        const fechaStr = fechaLocalISO(fecha)
         const registros = historialPorCodigo.get(codigo)
         if (registros) {
           for (const h of registros) {
@@ -3482,7 +3484,7 @@ export function ReporteFacturacionTab() {
 
     } catch (error) {
       if (showError) {
-        Swal.fire('Error', 'No se pudo cargar la vista previa', 'error')
+        Alerta.fire('Error', 'No se pudo cargar la vista previa', 'error')
       }
     } finally {
       setLoadingVistaPrevia(false)
@@ -3498,12 +3500,12 @@ export function ReporteFacturacionTab() {
   async function generarNuevoPeriodo() {
     if (periodo) return // Ya existe un período
 
-    const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-    const anio = getYear(semanaActual.inicio)
+    const semana = getISOWeek(semanaActual.inicio)
+    const anio = getISOWeekYear(semanaActual.inicio)
     const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
     const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: `<span style="font-size: 18px; font-weight: 600;">Generar Facturación</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -3676,7 +3678,7 @@ export function ReporteFacturacionTab() {
     // (La adquisición atómica de más abajo lo volvería a comprobar igual, pero
     //  así evitamos mostrarle el diálogo de confirmación al pedo.)
     if (lockVigente(periodo) && periodo.lock_token !== lockTokenRef.current) {
-      Swal.fire(
+      Alerta.fire(
         'Recálculo en curso',
         `${periodo.procesando_por || 'Otro usuario'} está recalculando este período ` +
         `(comenzó hace ${Math.max(1, Math.round(minutosDesde(periodo.procesando_desde)))} min). ` +
@@ -3690,7 +3692,7 @@ export function ReporteFacturacionTab() {
     // Si el candado está vencido, el recálculo pasa a ser un "forzar": hay que
     // avisar explícitamente, porque quizá el otro proceso sigue vivo pero lento.
     if (lockHuerfano(periodo) && periodo.lock_token !== lockTokenRef.current) {
-      const forzar = await Swal.fire({
+      const forzar = await Alerta.fire({
         title: '¿Forzar recálculo?',
         html:
           `<p>El período figura como <strong>procesando</strong> desde hace ` +
@@ -3710,7 +3712,7 @@ export function ReporteFacturacionTab() {
     }
 
     if (!skipConfirm) {
-      const confirmResult = await Swal.fire({
+      const confirmResult = await Alerta.fire({
         title: '¿Recalcular facturación?',
         html: `
           <p>Esto <strong>eliminará y regenerará TODA la facturación</strong> del período:</p>
@@ -3814,7 +3816,7 @@ export function ReporteFacturacionTab() {
         })
         // Perdimos la carrera: alguien lo tomó en el intervalo.
         await cargarFacturacion()
-        Swal.fire(
+        Alerta.fire(
           'Recálculo en curso',
           'Otro usuario tomó el período justo antes. No se ejecutó ningún cambio.',
           'info'
@@ -3981,7 +3983,7 @@ export function ReporteFacturacionTab() {
           .eq('id', periodoId)
           .eq('lock_token', miToken)
         await cargarFacturacion()
-        Swal.fire('Aviso', 'No hay conductores con asignaciones ni penalidades en esta semana', 'warning')
+        Alerta.fire('Aviso', 'No hay conductores con asignaciones ni penalidades en esta semana', 'warning')
         return
       }
 
@@ -5263,7 +5265,7 @@ export function ReporteFacturacionTab() {
       if (!cerrado) {
         // Perdimos el candado a mitad de camino (vencido y tomado por otro).
         await cargarFacturacion()
-        Swal.fire(
+        Alerta.fire(
           'Recálculo descartado',
           'Este recálculo perdió el candado del período (probablemente por una interrupción larga) ' +
           'y otra ejecución tomó el control. No se sobrescribieron los totales.',
@@ -5287,7 +5289,7 @@ export function ReporteFacturacionTab() {
         const lista = conductoresConProblema
           .map(c => `<li style="margin-bottom:4px"><strong>${esc(c.nombre)}</strong>: ${esc(c.motivo)}</li>`)
           .join('')
-        Swal.fire({
+        Alerta.fire({
           icon: 'warning',
           title: 'Recálculo incompleto',
           html: `<div style="text-align:left;font-size:13px">
@@ -5301,7 +5303,7 @@ export function ReporteFacturacionTab() {
         })
       } else if (avisoPagos) {
         setPeriodoRecalculadoId(periodoId)
-        Swal.fire('Recálculo completado con pagos a revisar',
+        Alerta.fire('Recálculo completado con pagos a revisar',
           `${conductoresProcesadosCount} conductores regenerados. ${avisoPagos}`,
           'warning')
       } else {
@@ -5473,7 +5475,7 @@ export function ReporteFacturacionTab() {
   async function desbloquearPeriodo() {
     if (!periodo) return
 
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: '¿Desbloquear período?',
       html:
         `<p>El período quedó marcado como <strong>procesando</strong> desde hace ` +
@@ -5519,12 +5521,12 @@ export function ReporteFacturacionTab() {
 
     // Paso 1: el período tiene que haberse recalculado completo en esta sesión
     if (periodoRecalculadoId !== periodo.id) {
-      Swal.fire('Primero recalculá', 'Para cerrar el período primero tocá <strong>Recalcular</strong> y esperá a que termine sin errores.', 'info')
+      Alerta.fire('Primero recalculá', 'Para cerrar el período primero tocá <strong>Recalcular</strong> y esperá a que termine sin errores.', 'info')
       return
     }
 
     // Paso 2: Confirmación final
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Cerrar Período',
       html: `
         <p>¿Cerrar el período <strong>Semana ${periodo.semana} - ${periodo.anio}</strong>?</p>
@@ -5559,7 +5561,7 @@ export function ReporteFacturacionTab() {
 
       if (recalculadoDespues || yaNoAbierto) {
         await cargarFacturacion()
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'warning',
           title: 'No se cerró el período',
           html: yaNoAbierto
@@ -5610,7 +5612,7 @@ export function ReporteFacturacionTab() {
   async function reabrirPeriodo() {
     if (!periodo || periodo.estado !== 'cerrado') return
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Reabrir Período',
       html: `
         <p>¿Reabrir el período <strong>Semana ${periodo.semana} - ${periodo.anio}</strong>?</p>
@@ -5659,7 +5661,7 @@ export function ReporteFacturacionTab() {
     }
 
     const nuevaAccion = permiso_efectivo === 'Activado' ? 'desactivar' : 'activar'
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: `${nuevaAccion === 'desactivar' ? 'Desactivar' : 'Activar'} efectivo`,
       html: `¿Seguro que deseas <b>${nuevaAccion}</b> el efectivo de <b>${conductor_nombre}</b> en Cabify?`,
       icon: 'question',
@@ -5671,7 +5673,7 @@ export function ReporteFacturacionTab() {
     if (!confirm.isConfirmed) return
 
     try {
-      Swal.fire({ title: `${nuevaAccion === 'desactivar' ? 'Desactivando' : 'Activando'} efectivo...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+      Alerta.fire({ title: `${nuevaAccion === 'desactivar' ? 'Desactivando' : 'Activando'} efectivo...`, allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
 
       const { data: { session: sesionEfectivo } } = await supabase.auth.getSession()
       const resp = await fetch('/api/cabify-efectivo', {
@@ -5704,16 +5706,16 @@ export function ReporteFacturacionTab() {
         ))
       }
 
-      await Swal.fire({
+      await Alerta.fire({
         icon: 'success',
         title: `Efectivo ${data.enabled ? 'activado' : 'desactivado'}`,
         text: `Se ${data.enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
         timer: 2500,
         showConfirmButton: false,
-        didOpen: () => { Swal.hideLoading() },
+        didOpen: () => { Alerta.hideLoading() },
       })
     } catch (error: any) {
-      await Swal.fire({ icon: 'error', title: 'Error', text: `No se pudo ${nuevaAccion} el efectivo: ${error.message}` })
+      await Alerta.fire({ icon: 'error', title: 'Error', text: `No se pudo ${nuevaAccion} el efectivo: ${error.message}` })
     }
   }
 
@@ -5884,8 +5886,8 @@ export function ReporteFacturacionTab() {
       }
 
       // Penalidades completas - En Vista Previa buscar pendientes, en período buscar aplicadas
-      const semDetalle = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anioDetalle = periodo?.anio || getYear(semanaActual.inicio)
+      const semDetalle = periodo?.semana || getISOWeek(semanaActual.inicio)
+      const anioDetalle = periodo?.anio || getISOWeekYear(semanaActual.inicio)
       const esPreview = modoVistaPrevia || facturacion.id.startsWith('preview-')
       const fechaInicioDetalle = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
       const fechaFinDetalle = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
@@ -6174,7 +6176,7 @@ export function ReporteFacturacionTab() {
               saldoPrevio: separado.saldoCierre,
               pagos: separado.pagos,
               resultado: objetivo,
-              cierreSemana: getWeek(subWeeks(semanaActual.inicio, 1), { weekStartsOn: 1 }),
+              cierreSemana: getISOWeek(subWeeks(semanaActual.inicio, 1)),
             })
           } else {
             // b) Sin pagos en la semana: el pago manual que dejó el saldo (de antes de la semana).
@@ -6217,7 +6219,7 @@ export function ReporteFacturacionTab() {
   // ELIMINAR PAGO REGISTRADO
   // ==========================================
   async function eliminarPago(pagoId: string, monto: number, conductorId: string, facturacionId: string) {
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: 'Eliminar Pago',
       html: `<p style="font-size:13px;">Se eliminará el pago de <strong>${formatCurrency(monto)}</strong> y se revertirá el saldo.</p>`,
       icon: 'warning',
@@ -6247,8 +6249,8 @@ export function ReporteFacturacionTab() {
       }
 
       // 2b. Registrar movimiento en kardex (control_saldos)
-      const semanaElim = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anioElim = periodo?.anio || getYear(semanaActual.inicio)
+      const semanaElim = periodo?.semana || getISOWeek(semanaActual.inicio)
+      const anioElim = periodo?.anio || getISOWeekYear(semanaActual.inicio)
       await insertControlSaldo({
         conductorId,
         semana: semanaElim,
@@ -6342,7 +6344,7 @@ export function ReporteFacturacionTab() {
           ? `${pen.conductores.nombres || ''} ${pen.conductores.apellidos || ''}`.trim()
           : pen.conductor_nombre || '-'
 
-        await Swal.fire({
+        await Alerta.fire({
           title: 'Detalle de Penalidad',
           html: `
             <div style="text-align:left; font-size:13px; line-height:1.8">
@@ -6389,7 +6391,7 @@ export function ReporteFacturacionTab() {
           ? `${pen.conductores.nombres || ''} ${pen.conductores.apellidos || ''}`.trim()
           : pen.conductor_nombre || '-'
 
-        await Swal.fire({
+        await Alerta.fire({
           title: 'Detalle de Cuota',
           html: `
             <div style="text-align:left; font-size:13px; line-height:1.8">
@@ -6540,7 +6542,7 @@ export function ReporteFacturacionTab() {
       // Si falla la consulta extra, solo mostrar el básico
     }
 
-    await Swal.fire({
+    await Alerta.fire({
       title: titleExtra,
       html: `<div style="text-align:left">${htmlBasico}${htmlExtra}</div>`,
       width: 480,
@@ -6564,7 +6566,7 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
       if (!multas || multas.length === 0) {
-        Swal.fire('Sin multas', `No se encontraron multas para ${patente} en el período`, 'info')
+        Alerta.fire('Sin multas', `No se encontraron multas para ${patente} en el período`, 'info')
         return
       }
 
@@ -6584,7 +6586,7 @@ export function ReporteFacturacionTab() {
         return sum + parseImporteMulta(typeof m.importe === 'string' ? m.importe : String(m.importe || 0))
       }, 0)
 
-      await Swal.fire({
+      await Alerta.fire({
         title: 'Multas de Tránsito',
         html: `
           <div style="text-align:left; font-size:13px">
@@ -6621,7 +6623,7 @@ export function ReporteFacturacionTab() {
   // EDITAR MONTO DE PAGO REGISTRADO
   // ==========================================
   async function editarMontoPago(pagoId: string, montoActual: number, conductorId: string, facturacionId: string) {
-    const { value: nuevoMonto } = await Swal.fire({
+    const { value: nuevoMonto } = await Alerta.fire({
       title: 'Editar Monto',
       input: 'number',
       inputValue: montoActual,
@@ -6633,7 +6635,7 @@ export function ReporteFacturacionTab() {
       confirmButtonColor: '#7C3AED',
       preConfirm: (val) => {
         if (!val || parseFloat(val) <= 0) {
-          Swal.showValidationMessage('Ingrese un monto válido')
+          Alerta.showValidationMessage('Ingrese un monto válido')
           return false
         }
         return parseFloat(val)
@@ -6662,8 +6664,8 @@ export function ReporteFacturacionTab() {
       }
 
       // 2b. Registrar movimiento en kardex (control_saldos)
-      const semanaEdit = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anioEdit = periodo?.anio || getYear(semanaActual.inicio)
+      const semanaEdit = periodo?.semana || getISOWeek(semanaActual.inicio)
+      const anioEdit = periodo?.anio || getISOWeekYear(semanaActual.inicio)
       await insertControlSaldo({
         conductorId,
         semana: semanaEdit,
@@ -6711,14 +6713,10 @@ export function ReporteFacturacionTab() {
   // REGISTRAR PAGO DE FACTURACIÓN SEMANAL
   // ==========================================
   async function registrarPagoFacturacion(facturacion: FacturacionConductor) {
-    const semanaNum = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-    const anioNum = periodo?.anio || getYear(semanaActual.inicio)
+    const semanaNum = periodo?.semana || getISOWeek(semanaActual.inicio)
+    const anioNum = periodo?.anio || getISOWeekYear(semanaActual.inicio)
 
-    const hoy = new Date()
-    const semanaHoy = Math.ceil(
-      (hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000)
-    )
-    const anioHoy = hoy.getFullYear()
+    const { semana: semanaHoy, anio: anioHoy } = semanaISO(hoyART())
 
     // Cargar conceptos individuales de facturacion_detalle
     const { data: detalles } = await supabase
@@ -6782,12 +6780,12 @@ export function ReporteFacturacionTab() {
     const montoPendiente = Math.max(0, totalAbsoluto - yaCobrado)
 
     let semanaOptionsHtml = ''
-    for (let s = 1; s <= 52; s++) {
+    for (let s = 1; s <= semanasDelAnio(anioHoy); s++) {
       const selected = s === semanaHoy ? 'selected' : ''
       semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago Semanal</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -6916,7 +6914,7 @@ export function ReporteFacturacionTab() {
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
         if (!monto || parseFloat(monto) <= 0) {
-          Swal.showValidationMessage('Ingrese un monto válido')
+          Alerta.showValidationMessage('Ingrese un monto válido')
           return false
         }
         return { monto: parseFloat(monto), referencia, semana, anio }
@@ -7065,7 +7063,7 @@ export function ReporteFacturacionTab() {
       const workbook = XLSX.read(arrayBuffer, { type: 'array' })
 
       // Buscar la hoja que coincida con la semana actual del período
-      const semBuscar = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      const semBuscar = periodo?.semana || getISOWeek(semanaActual.inicio)
       let sheetName = workbook.SheetNames[0]
       // 1) Buscar por nombre de hoja que contenga "semana X"
       const hojaMatch = workbook.SheetNames.find((n: string) =>
@@ -7099,7 +7097,7 @@ export function ReporteFacturacionTab() {
       const COL_DESCONTAR_IDX = 16 // Col Q
 
       if (rows.length === 0) {
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'error',
           title: 'Archivo vacío',
           html: `<div style="text-align:left;font-size:13px;">La hoja <strong>${sheetName}</strong> no contiene filas. Verificá que el archivo sea el correcto.</div>`,
@@ -7160,7 +7158,7 @@ export function ReporteFacturacionTab() {
         const filasError = erroresHeader.map(e =>
           `<tr><td style="padding:4px 8px;font-weight:600;color:#dc2626;">${e.letra}</td><td style="padding:4px 8px;">${e.esperado}</td><td style="padding:4px 8px;color:#6b7280;">${e.recibido}</td></tr>`,
         ).join('')
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'error',
           title: 'Estructura del archivo incorrecta',
           html: `
@@ -7216,7 +7214,7 @@ export function ReporteFacturacionTab() {
       if (!formatoOk) {
         const headerLeido = (rows[0] || []).slice(0, 20).map((v: any, i: number) => `<li><strong>${String.fromCharCode(65 + i)}</strong>: ${String(v || '(vacío)')}</li>`).join('')
         const ejemplo = (dataRows[0] || []).slice(0, 20).map((v: any, i: number) => `<li><strong>${String.fromCharCode(65 + i)}</strong>: ${String(v || '(vacío)')}</li>`).join('')
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'error',
           title: 'El archivo no tiene el formato Cabify esperado',
           html: `
@@ -7281,7 +7279,7 @@ export function ReporteFacturacionTab() {
       }
 
       if (excelData.length === 0) {
-        Swal.fire('Sin datos', 'No se encontraron conductores con importes a descontar en el Excel', 'warning')
+        Alerta.fire('Sin datos', 'No se encontraron conductores con importes a descontar en el Excel', 'warning')
         return
       }
 
@@ -7324,7 +7322,7 @@ export function ReporteFacturacionTab() {
       }
 
       if (matched.length === 0) {
-        Swal.fire('Sin coincidencias', 'Ningún conductor del Excel coincide con las facturaciones del período actual', 'warning')
+        Alerta.fire('Sin coincidencias', 'Ningún conductor del Excel coincide con las facturaciones del período actual', 'warning')
         return
       }
 
@@ -7332,7 +7330,7 @@ export function ReporteFacturacionTab() {
       setShowCabifyPagosPreview(true)
 
       if (noMatch.length > 0) {
-        Swal.fire({
+        Alerta.fire({
           title: 'Conductores no encontrados',
           html: `<div style="text-align:left;font-size:12px;max-height:200px;overflow-y:auto;">${noMatch.map(n => `<div>- ${n}</div>`).join('')}</div>`,
           icon: 'info',
@@ -7350,13 +7348,10 @@ export function ReporteFacturacionTab() {
   async function procesarPagosCabifyBatch() {
     if (cabifyPagosData.length === 0) return
 
-    const semanaNum = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-    const anioNum = periodo?.anio || getYear(semanaActual.inicio)
+    const semanaNum = periodo?.semana || getISOWeek(semanaActual.inicio)
+    const anioNum = periodo?.anio || getISOWeekYear(semanaActual.inicio)
     const hoy = new Date()
-    const semanaHoy = Math.ceil(
-      (hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000)
-    )
-    const anioHoy = hoy.getFullYear()
+    const { semana: semanaHoy, anio: anioHoy } = semanaISO(hoyART())
 
     // Antes de registrar nada: la facturación en memoria tiene que seguir
     // siendo la de la base. Si se recalculó mientras la pantalla estaba
@@ -7365,7 +7360,7 @@ export function ReporteFacturacionTab() {
     if (!verificacion.ok) {
       const lista = verificacion.conductores.slice(0, 8).map(n => `<li>${n}</li>`).join('')
       const resto = verificacion.conductores.length > 8 ? `<li>… y ${verificacion.conductores.length - 8} más</li>` : ''
-      await Swal.fire({
+      await Alerta.fire({
         icon: 'warning',
         title: 'No se registró ningún pago',
         html: `<div style="text-align:left;font-size:13px;">
@@ -7379,7 +7374,7 @@ export function ReporteFacturacionTab() {
       return
     }
 
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: 'Confirmar Pagos Cabify',
       html: `<div style="text-align:left;font-size:13px;">
         <p>Se registrarán <strong>${cabifyPagosData.length} pagos</strong> por un total de <strong>${formatCurrency(cabifyPagosData.reduce((s, d) => s + d.importe_descontar, 0))}</strong></p>
@@ -7538,7 +7533,7 @@ export function ReporteFacturacionTab() {
     if (fallidos === 0) {
       showSuccess('Pagos Registrados', `${exitosos} pagos procesados exitosamente`)
     } else {
-      Swal.fire({
+      Alerta.fire({
         title: 'Resultado',
         html: `<div style="text-align:left;font-size:13px;">
           <p style="color:#16a34a;">Exitosos: ${exitosos}</p>
@@ -7587,8 +7582,8 @@ export function ReporteFacturacionTab() {
     if (!detalleFacturacion) return
 
     // Usar periodo si existe, o generar datos desde infoSemana para Vista Previa
-    const semanaNum = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-    const anioNum = periodo?.anio || getYear(semanaActual.inicio)
+    const semanaNum = periodo?.semana || getISOWeek(semanaActual.inicio)
+    const anioNum = periodo?.anio || getISOWeekYear(semanaActual.inicio)
     const fechaInicioStr = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
     const fechaFinStr = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
 
@@ -7789,7 +7784,7 @@ export function ReporteFacturacionTab() {
         : facturacionesFiltradas
 
       if (dataToExport.length === 0) {
-        Swal.fire('Sin datos', 'No hay datos para exportar', 'warning')
+        Alerta.fire('Sin datos', 'No hay datos para exportar', 'warning')
         return
       }
 
@@ -8311,7 +8306,7 @@ export function ReporteFacturacionTab() {
       }
 
       if (filasPreview.length === 0) {
-        Swal.fire('Sin datos', 'No hay conceptos para exportar a SiFactura', 'warning')
+        Alerta.fire('Sin datos', 'No hay conceptos para exportar a SiFactura', 'warning')
         return
       }
 
@@ -8418,8 +8413,8 @@ export function ReporteFacturacionTab() {
       XLSX.utils.book_append_sheet(wb, ws, 'Encabezado ')
 
       // Usar período si existe, sino semanaActual
-      const semanaNum = periodo ? periodo.semana : getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anioNum = periodo ? periodo.anio : getYear(semanaActual.inicio)
+      const semanaNum = periodo ? periodo.semana : getISOWeek(semanaActual.inicio)
+      const anioNum = periodo ? periodo.anio : getISOWeekYear(semanaActual.inicio)
       const nombreArchivo = `Facturacion_Semana${semanaNum}_${anioNum}.xlsx`
       XLSX.writeFile(wb, nombreArchivo)
 
@@ -8439,8 +8434,8 @@ export function ReporteFacturacionTab() {
     setLoadingSiFacturaPreview(true)
     try {
       const conductorIds = vistaPreviaData.map(f => f.conductor_id).filter(Boolean)
-      const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anio = getYear(semanaActual.inicio)
+      const semana = getISOWeek(semanaActual.inicio)
+      const anio = getISOWeekYear(semanaActual.inicio)
 
       // 1. Cargar emails de conductores
       const dnis = [...new Set(vistaPreviaData.map(f => f.conductor_dni).filter(Boolean))]
@@ -8916,7 +8911,7 @@ export function ReporteFacturacionTab() {
       }
 
       if (filasPreview.length === 0) {
-        Swal.fire('Sin datos', 'No hay conceptos para el preview', 'warning')
+        Alerta.fire('Sin datos', 'No hay conceptos para el preview', 'warning')
         return
       }
 
@@ -9566,7 +9561,7 @@ export function ReporteFacturacionTab() {
   // Exportar Vista Previa a Excel - Formato RIT (deshabilitado en Vista Previa)
   /* async function exportarVistaPreviaExcel() {
     if (vistaPreviaData.length === 0) {
-      Swal.fire('Sin datos', 'No hay datos para exportar', 'warning')
+      Alerta.fire('Sin datos', 'No hay datos para exportar', 'warning')
       return
     }
 
@@ -9710,8 +9705,8 @@ export function ReporteFacturacionTab() {
       XLSX.utils.book_append_sheet(wb, wsRIT, 'Facturación RIT')
 
       // HOJA 2: Resumen por conductor
-      const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anio = getYear(semanaActual.inicio)
+      const semana = getISOWeek(semanaActual.inicio)
+      const anio = getISOWeekYear(semanaActual.inicio)
 
       const resumenData: (string | number)[][] = [
         ['TOSHIFY - RESUMEN LIQUIDACIÓN PROYECTADA'],
@@ -9782,7 +9777,7 @@ export function ReporteFacturacionTab() {
   // Preparar Preview Facturación Cabify
   async function prepararCabifyPreview() {
     if (vistaPreviaData.length === 0) {
-      Swal.fire('Sin datos', 'No hay datos para generar preview', 'warning')
+      Alerta.fire('Sin datos', 'No hay datos para generar preview', 'warning')
       return
     }
 
@@ -9836,8 +9831,8 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-      const anio = getYear(semanaActual.inicio)
+      const semana = getISOWeek(semanaActual.inicio)
+      const anio = getISOWeekYear(semanaActual.inicio)
 
       // Proyección: calcular días transcurridos para escalar alquiler a semana completa
       const hoyProyeccion = startOfDay(new Date())
@@ -9925,7 +9920,7 @@ export function ReporteFacturacionTab() {
   // Preparar Preview Cabify desde Facturación Generada (con período)
   async function prepararCabifyPreviewDesdeFacturacion() {
     if (facturaciones.length === 0 || !periodo) {
-      Swal.fire('Sin datos', 'No hay datos para generar preview', 'warning')
+      Alerta.fire('Sin datos', 'No hay datos para generar preview', 'warning')
       return
     }
 
@@ -10470,7 +10465,7 @@ export function ReporteFacturacionTab() {
         </div>
       </div>`
 
-    Swal.fire({
+    Alerta.fire({
       title: 'Detalle del Total Proyectado',
       html,
       customClass: { popup: 'swal-popup-ancho' },
@@ -10486,7 +10481,7 @@ export function ReporteFacturacionTab() {
         })
       },
     }).then((r) => {
-      if (r.dismiss === Swal.DismissReason.cancel) showStatInfo('proyectado')
+      if (r.dismiss === Alerta.DismissReason.cancel) showStatInfo('proyectado')
     })
   }
 
@@ -10978,7 +10973,7 @@ export function ReporteFacturacionTab() {
     }
     const info = descriptions[stat]
     if (!info) return
-    Swal.fire({
+    Alerta.fire({
       title: info.title,
       html: info.html,
       width: 'min(92vw, 520px)',
@@ -11064,7 +11059,7 @@ export function ReporteFacturacionTab() {
             </span>
             {(() => {
               const o = row.original
-              const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600 } as const
+              const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600 } as const
               if (o.tipo_alquiler === 'CARGO') {
                 return <span style={{ ...bs, background: '#d1fae5', color: '#065f46' }}>CARGO</span>
               }
@@ -11076,13 +11071,13 @@ export function ReporteFacturacionTab() {
               return <span style={{ ...bs, background: bg, color: fg }}>{label}</span>
             })()}
             {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Sin GNC</span>
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Sin GNC</span>
             )}
             {row.original.tiene_telepase === true && row.original.vehiculo_patente && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Telepase</span>
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Telepase</span>
             )}
             {row.original.grupo_flota && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>{row.original.grupo_flota}</span>
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>{row.original.grupo_flota}</span>
             )}
             {/* Tarifa con la que se le cobro el alquiler esta semana (ENE-26 / OCT-26).
                 Sale de los codigos de alquiler de su propia factura, asi que no puede
@@ -11094,7 +11089,7 @@ export function ReporteFacturacionTab() {
                 codigos.map(c => periodoPorCodigo.get(c)).filter(Boolean) as string[]
               )]
               return periodos.map(p => (
-                <span key={p} style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>{p}</span>
+                <span key={p} style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>{p}</span>
               ))
             })()}
           </div>
@@ -11165,8 +11160,8 @@ export function ReporteFacturacionTab() {
         return (
           <div title="Toshipass (P027): conductor nuevo, en lugar de garantía. El cobro app lo cubre antes que el alquiler.">
             <div style={{ fontWeight: 600 }}>{formatCurrency(monto)}</div>
-            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
-              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubre ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
+            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: 'var(--radius-xs)', overflow: 'hidden', marginTop: '2px' }}>
+              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubre ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: 'var(--radius-xs)' }} />
             </div>
             <span style={{ fontSize: '9px', color: cubre ? '#10b981' : '#6b7280' }}>{cobroApp === 0 ? 'Sin datos' : `${porcentajeCubierto}%`}{cubre ? ' ✓' : ''}</span>
           </div>
@@ -11208,8 +11203,8 @@ export function ReporteFacturacionTab() {
             {/* Mostrar alquiler redondo: el precio diario (semanal/7) se guarda redondeado
                 a centavos, asi que x dias arrastra +/-0.01-0.03. Solo visual, no toca la BD. */}
             <div style={{ fontWeight: 600 }}>{formatCurrency(Math.round(alquiler))}</div>
-            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
-              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreCuota ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
+            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: 'var(--radius-xs)', overflow: 'hidden', marginTop: '2px' }}>
+              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreCuota ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: 'var(--radius-xs)' }} />
             </div>
             <span style={{ fontSize: '9px', color: cubreCuota ? '#10b981' : '#6b7280' }}>{cobroApp === 0 ? 'Sin datos' : `${porcentajeCubierto}%`}{cubreCuota ? ' ✓' : ''}</span>
           </div>
@@ -11255,7 +11250,7 @@ export function ReporteFacturacionTab() {
             <div style={{ fontSize: '12px' }}>
               <span style={{
                 padding: '2px 6px',
-                borderRadius: '4px',
+                borderRadius: 'var(--radius-xs)',
                 background: 'var(--badge-green-bg)',
                 color: 'var(--badge-green-text)',
                 fontSize: '10px',
@@ -11276,8 +11271,8 @@ export function ReporteFacturacionTab() {
         return (
           <div>
             <div style={{ fontWeight: 500 }}>{formatCurrency(garantia)}</div>
-            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
-              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreGarantia ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
+            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: 'var(--radius-xs)', overflow: 'hidden', marginTop: '2px' }}>
+              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreGarantia ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: 'var(--radius-xs)' }} />
             </div>
             <span style={{ fontSize: '9px', color: cubreGarantia ? '#10b981' : '#6b7280' }}>{cobroApp === 0 ? 'Sin datos' : `${porcentajeCubierto}%`}{cubreGarantia ? ' ✓' : ''}</span>
           </div>
@@ -11299,8 +11294,8 @@ export function ReporteFacturacionTab() {
         return (
           <div>
             <div style={{ fontWeight: 600 }}>{formatCurrency(proyectado)}</div>
-            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
-              <div style={{ width: `${porcentaje}%`, height: '100%', backgroundColor: cubre ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
+            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: 'var(--radius-xs)', overflow: 'hidden', marginTop: '2px' }}>
+              <div style={{ width: `${porcentaje}%`, height: '100%', backgroundColor: cubre ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444', borderRadius: 'var(--radius-xs)' }} />
             </div>
             <span style={{ fontSize: '9px', color: cubre ? '#10b981' : '#6b7280' }}>{cobroApp === 0 ? 'Sin datos' : `${porcentaje}%`}{cubre ? ' ✓' : ''}</span>
           </div>
@@ -11348,7 +11343,7 @@ export function ReporteFacturacionTab() {
               </table>`
             : `<p>Total penalidades: <strong>${formatCurrency(montoPen)}</strong></p>`
 
-          Swal.fire({
+          Alerta.fire({
             title: `Incidencias - ${row.original.conductor_nombre}`,
             html,
             width: 500,
@@ -11367,7 +11362,7 @@ export function ReporteFacturacionTab() {
               alignItems: 'center',
               gap: '1px',
               padding: '3px 6px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
@@ -11420,7 +11415,7 @@ export function ReporteFacturacionTab() {
               </table>`
             : `<p>Total tickets: <strong>${formatCurrency(montoTickets)}</strong></p>`
 
-          Swal.fire({
+          Alerta.fire({
             title: `Tickets a Favor - ${row.original.conductor_nombre}`,
             html,
             width: 500,
@@ -11439,7 +11434,7 @@ export function ReporteFacturacionTab() {
               alignItems: 'center',
               gap: '1px',
               padding: '3px 6px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
@@ -11514,7 +11509,7 @@ export function ReporteFacturacionTab() {
             fontSize: '11px',
             fontWeight: 700,
             padding: '3px 6px',
-            borderRadius: '4px',
+            borderRadius: 'var(--radius-xs)',
             background: total > 0 ? 'var(--badge-red-bg)' : 'var(--badge-green-bg)',
             color: total > 0 ? 'var(--badge-red-text)' : 'var(--badge-green-text)'
           }}>
@@ -11544,7 +11539,7 @@ export function ReporteFacturacionTab() {
               fontSize: '11px',
               fontWeight: 600,
               padding: '2px 8px',
-              borderRadius: '10px',
+              borderRadius: 'var(--radius-lg)',
               background: noCoincide ? '#fef3c7' : estilo.bg,
               color: noCoincide ? '#92400e' : estilo.text,
               whiteSpace: 'nowrap',
@@ -11597,8 +11592,8 @@ export function ReporteFacturacionTab() {
 
   // Info de la semana
   const infoSemana = useMemo(() => {
-    const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-    const anio = getYear(semanaActual.inicio)
+    const semana = getISOWeek(semanaActual.inicio)
+    const anio = getISOWeekYear(semanaActual.inicio)
     const inicio = format(semanaActual.inicio, 'dd/MM', { locale: es })
     const fin = format(semanaActual.fin, 'dd/MM', { locale: es })
     return { semana, anio, inicio, fin }
@@ -11971,9 +11966,9 @@ export function ReporteFacturacionTab() {
                   transform: 'translateX(-50%)',
                   background: 'var(--bg-primary)',
                   border: '1px solid var(--border-primary)',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                  zIndex: 1000,
+                  zIndex: 'var(--z-dropdown)',
                   width: '300px',
                   maxHeight: '380px',
                   display: 'flex',
@@ -11992,7 +11987,7 @@ export function ReporteFacturacionTab() {
                       width: '100%',
                       padding: '6px 10px',
                       border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
+                      borderRadius: 'var(--radius-sm)',
                       background: 'var(--bg-secondary)',
                       color: 'var(--text-primary)',
                       fontSize: '13px',
@@ -12059,13 +12054,13 @@ export function ReporteFacturacionTab() {
         </div>
         {/* Vista Previa indicator inline */}
         {modoVistaPrevia && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'var(--badge-blue-bg)', borderRadius: '6px', border: '1px solid var(--color-info)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'var(--badge-blue-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-info)' }}>
             <Calculator size={14} style={{ color: 'var(--color-info)', flexShrink: 0 }} />
             <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--badge-blue-text)', whiteSpace: 'nowrap' }}>VISTA PREVIA</span>
-            <button onClick={cargarVistaPrevia} disabled={loadingVistaPrevia} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: 'var(--color-info)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <button onClick={cargarVistaPrevia} disabled={loadingVistaPrevia} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: 'var(--color-info)', color: 'white', border: 'none', borderRadius: 'var(--radius-xs)', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <RefreshCw size={12} className={loadingVistaPrevia ? 'spinning' : ''} /> Recalcular
             </button>
-            <button onClick={salirVistaPrevia} style={{ padding: '4px 8px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
+            <button onClick={salirVistaPrevia} style={{ padding: '4px 8px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-xs)', fontSize: '11px', cursor: 'pointer' }}>
               Salir
             </button>
           </div>
@@ -12287,7 +12282,7 @@ export function ReporteFacturacionTab() {
             const gruposFlotaList = Array.from(gruposFlotaMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
             const btnStyle = (active: boolean, bg: string, color: string) => ({
               display: 'inline-flex', alignItems: 'center', gap: '5px',
-              padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
+              padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600 as const,
               border: active ? `2px solid ${color}` : '1px solid var(--border-primary)',
               background: active ? bg : 'var(--bg-secondary)',
               color: active ? color : 'var(--text-secondary)',
@@ -12544,7 +12539,7 @@ export function ReporteFacturacionTab() {
             return (
               <div style={{
                 display: 'flex', gap: '10px', alignItems: 'flex-start',
-                padding: '10px 14px', marginBottom: '12px', borderRadius: '8px',
+                padding: '10px 14px', marginBottom: '12px', borderRadius: 'var(--radius-md)',
                 background: 'rgba(245, 158, 11, 0.10)', border: '1px solid rgba(245, 158, 11, 0.45)',
                 color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.45,
               }}>
@@ -12578,7 +12573,7 @@ export function ReporteFacturacionTab() {
                 justifyContent: 'center',
                 gap: '12px',
                 background: 'var(--bg-overlay, rgba(255,255,255,0.85))',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 minHeight: '200px',
               }}>
                 <Loader2 size={32} className="spinning" style={{ color: 'var(--color-primary)' }} />
@@ -12617,7 +12612,7 @@ export function ReporteFacturacionTab() {
                 marginBottom: '12px',
                 background: 'var(--badge-yellow-bg, #fef3c7)',
                 border: '1px solid #f59e0b',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
               }}>
                 <AlertTriangle size={18} style={{ color: '#f59e0b', flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -12664,7 +12659,7 @@ export function ReporteFacturacionTab() {
               const gruposFlotaList = Array.from(gruposFlotaMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
               const btnStyle = (active: boolean, bg: string, color: string) => ({
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
-                padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
+                padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600 as const,
                 border: active ? `2px solid ${color}` : '1px solid var(--border-primary)',
                 background: active ? bg : 'var(--bg-secondary)',
                 color: active ? color : 'var(--text-secondary)',
@@ -12816,7 +12811,7 @@ export function ReporteFacturacionTab() {
                 </div>
                 {cobroAppPopup.cobroApp === 0 && (
                   <div style={{
-                    backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '6px',
+                    backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 'var(--radius-sm)',
                     padding: '8px 12px', fontSize: '11px', color: '#92400e', marginBottom: '8px',
                     lineHeight: '1.4'
                   }}>
@@ -12828,13 +12823,13 @@ export function ReporteFacturacionTab() {
                 {/* Barra de progreso */}
                 <div style={{
                   width: '100%', height: '14px', backgroundColor: '#e5e7eb',
-                  borderRadius: '7px', overflow: 'hidden', border: '1px solid #d1d5db',
+                  borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid #d1d5db',
                   marginBottom: '4px'
                 }}>
                   <div style={{
                     width: `${porcentaje}%`, height: '100%',
                     backgroundColor: cubierto ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
-                    borderRadius: '6px', transition: 'width 0.3s ease',
+                    borderRadius: 'var(--radius-sm)', transition: 'width 0.3s ease',
                     minWidth: porcentaje > 0 ? '6px' : '0'
                   }} />
                 </div>
@@ -12853,18 +12848,18 @@ export function ReporteFacturacionTab() {
                     {cobroAppPopup.alquiler > 0 && (
                       <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
                         <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Alquiler</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.alquiler)}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.alquiler)}</td>
                       </tr>
                     )}
                     {cobroAppPopup.garantia > 0 && (
                       <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
                         <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Garantía</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.garantia)}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.garantia)}</td>
                       </tr>
                     )}
                     <tr style={{ fontWeight: 700 }}>
                       <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Cuota Semanal</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(cuotaTotal)}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{formatCurrency(cuotaTotal)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -12916,7 +12911,7 @@ export function ReporteFacturacionTab() {
                     const esCompleto = alerta.tipo === 'dia_completo'
                     return (
                       <div style={{
-                        marginBottom: '12px', padding: '10px 14px', borderRadius: '8px',
+                        marginBottom: '12px', padding: '10px 14px', borderRadius: 'var(--radius-md)',
                         background: esCompleto ? 'rgba(239, 68, 68, 0.06)' : 'rgba(234, 179, 8, 0.08)',
                         border: `1px solid ${esCompleto ? 'rgba(239, 68, 68, 0.15)' : 'rgba(234, 179, 8, 0.2)'}`,
                         display: 'flex', alignItems: 'center', gap: '10px',
@@ -13047,7 +13042,7 @@ export function ReporteFacturacionTab() {
                             return (
                               <div key={i} style={{
                                 display: 'flex', alignItems: 'center', gap: '10px',
-                                padding: '7px 12px', borderRadius: '6px',
+                                padding: '7px 12px', borderRadius: 'var(--radius-sm)',
                                 background: bgDia,
                                 border: borderDia,
                               }}>
@@ -13087,7 +13082,7 @@ export function ReporteFacturacionTab() {
                                       fontSize: '9px',
                                       fontWeight: 700,
                                       padding: '1px 6px',
-                                      borderRadius: '999px',
+                                      borderRadius: 'var(--radius-full)',
                                       background: d.gnc ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.15)',
                                       color: d.gnc ? '#059669' : '#64748b',
                                       border: `1px solid ${d.gnc ? 'rgba(16, 185, 129, 0.3)' : 'rgba(148, 163, 184, 0.3)'}`,
@@ -13106,7 +13101,7 @@ export function ReporteFacturacionTab() {
                                           fontSize: '9px',
                                           fontWeight: 700,
                                           padding: '1px 6px',
-                                          borderRadius: '999px',
+                                          borderRadius: 'var(--radius-full)',
                                           background: 'rgba(59, 130, 246, 0.12)',
                                           color: '#2563eb',
                                           border: '1px solid rgba(59, 130, 246, 0.3)',
@@ -13171,7 +13166,7 @@ export function ReporteFacturacionTab() {
 
                             return (
                               <div key={i} style={{
-                                padding: '7px 12px', borderRadius: '6px',
+                                padding: '7px 12px', borderRadius: 'var(--radius-sm)',
                                 background: bgColor,
                                 border: `1px solid ${borderColor}`,
                               }}>
@@ -13186,17 +13181,17 @@ export function ReporteFacturacionTab() {
                                     {h.fechaFin && h.fechaFin !== 'NULL' ? displayArgDate(h.fechaFin) : <span style={{ color: '#10b981', fontWeight: 500 }}>vigente</span>}
                                   </span>
                                   {h.patente && (
-                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(107, 114, 128, 0.1)', color: 'var(--text-secondary)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'rgba(107, 114, 128, 0.1)', color: 'var(--text-secondary)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
                                       {h.patente}
                                     </span>
                                   )}
                                   {h.patente && (
-                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, background: h.tieneGnc ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: h.tieneGnc ? '#10b981' : '#ef4444' }}>
+                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: h.tieneGnc ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: h.tieneGnc ? '#10b981' : '#ef4444' }}>
                                       {h.tieneGnc ? 'GNC' : 'Sin GNC'}
                                     </span>
                                   )}
                                   {h.grupoFlota && (
-                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>
+                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>
                                       {h.grupoFlota}
                                     </span>
                                   )}
@@ -13209,12 +13204,12 @@ export function ReporteFacturacionTab() {
                                     {h.dias > 0 ? `${h.dias} día${h.dias > 1 ? 's' : ''} contados` : h.nota}
                                   </span>
                                   {h.horaEntrega && (
-                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 500 }}>
+                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 500 }}>
                                       Entrega: {h.horaEntrega}hs
                                     </span>
                                   )}
                                   <span style={{
-                                    fontSize: '9px', padding: '1px 5px', borderRadius: '3px', fontWeight: 500,
+                                    fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', fontWeight: 500,
                                     background: `${estadoColor}15`, color: estadoColor,
                                   }}>
                                     {esCompletada ? 'Finalizado'
@@ -13240,7 +13235,7 @@ export function ReporteFacturacionTab() {
                             Devolución
                           </div>
                           <div style={{
-                            padding: '10px 12px', borderRadius: '6px',
+                            padding: '10px 12px', borderRadius: 'var(--radius-sm)',
                             background: diasModalData.devolucion.estado === 'completado' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(245, 158, 11, 0.06)',
                             border: `1px solid ${diasModalData.devolucion.estado === 'completado' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`,
                           }}>
@@ -13265,7 +13260,7 @@ export function ReporteFacturacionTab() {
                             )}
                             {diasModalData.devolucion.ultimo_dia_cobro && (
                               <div style={{ fontSize: '10px', marginTop: '4px', paddingLeft: '16px' }}>
-                                <span style={{ padding: '1px 6px', borderRadius: '3px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 600 }}>
+                                <span style={{ padding: '1px 6px', borderRadius: 'var(--radius-xs)', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 600 }}>
                                   Último día de cobro: {diasModalData.devolucion.ultimo_dia_cobro === 'dia_entrega' ? 'Día de entrega' : diasModalData.devolucion.ultimo_dia_cobro === 'fecha_baja' ? 'Fecha de baja' : diasModalData.devolucion.ultimo_dia_cobro === 'sin_cobro' ? 'Sin cobro' : diasModalData.devolucion.ultimo_dia_cobro}
                                 </span>
                               </div>
@@ -13280,7 +13275,7 @@ export function ReporteFacturacionTab() {
                           <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
                             Baja
                           </div>
-                          <div style={{ padding: '10px 12px', borderRadius: '6px', background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.15)' }}>
+                          <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.15)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />
                               <span style={{ fontSize: '11px', color: 'var(--text-primary)', fontWeight: 500, flex: 1 }}>
@@ -13369,7 +13364,7 @@ export function ReporteFacturacionTab() {
                           return (
                             <div key={a.id} style={{
                               display: 'flex', alignItems: 'center', gap: '10px',
-                              padding: '8px 12px', borderRadius: '6px',
+                              padding: '8px 12px', borderRadius: 'var(--radius-sm)',
                               background: bgColor,
                               border: `1px solid ${borderColor}`,
                             }}>
@@ -13383,7 +13378,7 @@ export function ReporteFacturacionTab() {
                               <span style={{
                                 fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)',
                                 width: '70px', flexShrink: 0,
-                                fontFamily: 'monospace',
+                                fontFamily: 'var(--font-mono)',
                               }}>
                                 {a.vehiculoPatente}
                               </span>
@@ -13405,7 +13400,7 @@ export function ReporteFacturacionTab() {
                               {/* Grupo de flota */}
                               {a.grupoFlota && (
                                 <span style={{
-                                  padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 600,
+                                  padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 600,
                                   background: '#dbeafe', color: '#1e40af',
                                   whiteSpace: 'nowrap',
                                 }}>
@@ -13415,7 +13410,7 @@ export function ReporteFacturacionTab() {
 
                               {/* Estado badge */}
                               <span style={{
-                                padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 500,
+                                padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 500,
                                 background: estadoBg, color: estadoColor,
                                 whiteSpace: 'nowrap',
                               }}>
@@ -13484,7 +13479,7 @@ export function ReporteFacturacionTab() {
                   {/* Info bar: Vehículo, Tipo, Turnos */}
                   <div style={{
                     display: 'flex', gap: '16px', marginBottom: '16px',
-                    padding: '8px 12px', borderRadius: '6px',
+                    padding: '8px 12px', borderRadius: 'var(--radius-sm)',
                     background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -13495,7 +13490,7 @@ export function ReporteFacturacionTab() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Tipo</span>
                       <span style={{
-                        fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
+                        fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
                         background: detalleFacturacion.tipo_alquiler === 'CARGO' ? 'rgba(59,130,246,0.1)' : 'rgba(107,114,128,0.1)',
                         color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : '#6b7280',
                       }}>
@@ -13515,7 +13510,7 @@ export function ReporteFacturacionTab() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Flota</span>
                           <span style={{
-                            fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
+                            fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
                             background: '#dbeafe', color: '#1e40af',
                           }}>
                             {detalleFacturacion.grupo_flota}
@@ -13541,14 +13536,14 @@ export function ReporteFacturacionTab() {
                       const filaIvaDe = (etiqueta: string, valor: number) => (
                         <div style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '7px 12px', borderRadius: '6px',
+                          padding: '7px 12px', borderRadius: 'var(--radius-sm)',
                           background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
                             <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
                             <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{etiqueta}</span>
                           </div>
-                          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
                             {formatCurrency(valor)}
                           </span>
                         </div>
@@ -13580,7 +13575,7 @@ export function ReporteFacturacionTab() {
                           <Fragment key={item.id}>
                           <div style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            padding: '7px 12px', borderRadius: '6px',
+                            padding: '7px 12px', borderRadius: 'var(--radius-sm)',
                             background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
@@ -13613,7 +13608,7 @@ export function ReporteFacturacionTab() {
                                 <Info size={14} />
                               </button>
                             </div>
-                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
                               {/* Importe NETO del concepto. Su IVA va en el renglon de abajo. */}
                               {formatCurrency(netoItem)}
                             </span>
@@ -13636,7 +13631,7 @@ export function ReporteFacturacionTab() {
                         <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                           Subtotal Cargos
                         </span>
-                        <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
                           {/* Subtotal: 2 decimales para todos los conceptos (igual que cada ítem),
                               para que Subtotal + Saldo anterior cierre contra Total a Pagar. */}
                           {formatCurrency(Math.round(detalleCargos.reduce((sum, d) => {
@@ -13667,7 +13662,7 @@ export function ReporteFacturacionTab() {
                           return (
                             <div key={item.id} style={{
                               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                              padding: '7px 12px', borderRadius: '6px',
+                              padding: '7px 12px', borderRadius: 'var(--radius-sm)',
                               background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.12)',
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
@@ -13684,7 +13679,7 @@ export function ReporteFacturacionTab() {
                                   <Info size={14} />
                                 </button>
                               </div>
-                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669', flexShrink: 0, marginLeft: '8px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: '#059669', flexShrink: 0, marginLeft: '8px' }}>
                                 -{formatCurrency(item.total)}
                               </span>
                             </div>
@@ -13700,7 +13695,7 @@ export function ReporteFacturacionTab() {
                           <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                             Subtotal Descuentos
                           </span>
-                          <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#059669' }}>
                             -{formatCurrency(detalleDescuentos.reduce((sum, d) => sum + d.total, 0))}
                           </span>
                         </div>
@@ -13719,14 +13714,14 @@ export function ReporteFacturacionTab() {
                       </div>
                       <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '7px 12px', borderRadius: '6px',
+                        padding: '7px 12px', borderRadius: 'var(--radius-sm)',
                         background: 'rgba(255, 0, 51, 0.04)', border: '1px solid rgba(255, 0, 51, 0.12)',
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
                           <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>Peajes Cabify</span>
                         </div>
-                        <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#ff0033' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: '#ff0033' }}>
                           {formatCurrency(conceptosFaltantes.peajes)}
                         </span>
                       </div>
@@ -13759,7 +13754,7 @@ export function ReporteFacturacionTab() {
                                 : ' anterior'}
                             </span>
                             <span style={{
-                              fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                              fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)',
                               color: detalleSaldoBreakdown.saldoPrevio < 0 ? '#059669' : '#ff0033',
                             }}>
                               {detalleSaldoBreakdown.saldoPrevio < 0 ? '-' : ''}{formatCurrency(Math.abs(detalleSaldoBreakdown.saldoPrevio))}
@@ -13781,7 +13776,7 @@ export function ReporteFacturacionTab() {
                                   </AdaptiveTooltip>
                                 )}
                               </span>
-                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: p.monto < 0 ? '#ff0033' : '#059669' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: p.monto < 0 ? '#ff0033' : '#059669' }}>
                                 {p.monto < 0 ? '+' : '-'}{formatCurrency(Math.abs(p.monto))}
                               </span>
                             </div>
@@ -13800,7 +13795,7 @@ export function ReporteFacturacionTab() {
                                   </span>
                                 </AdaptiveTooltip>
                               </span>
-                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#6366F1' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: '#6366F1' }}>
                                 -{formatCurrency(detalleSaldoBreakdown.fraccionamiento.monto)}
                               </span>
                             </div>
@@ -13828,7 +13823,7 @@ export function ReporteFacturacionTab() {
                           </span>
                         </div>
                         <span style={{
-                          fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                          fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)',
                           color: conceptosFaltantes.saldo > 0 ? '#ff0033' : '#059669',
                         }}>
                           {conceptosFaltantes.saldo > 0 ? '+' : conceptosFaltantes.saldo < 0 ? '-' : ''}{formatCurrency(Math.abs(conceptosFaltantes.saldo))}
@@ -13840,14 +13835,14 @@ export function ReporteFacturacionTab() {
                   {/* Total a Pagar */}
                   <div style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    padding: '16px', borderRadius: '8px', marginTop: '4px',
+                    padding: '16px', borderRadius: 'var(--radius-md)', marginTop: '4px',
                     background: 'var(--bg-secondary)', border: '2px solid var(--border-primary)',
                   }}>
                     <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
                       Total a Pagar
                     </span>
                     <span style={{
-                      fontSize: '28px', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1,
+                      fontSize: '28px', fontWeight: 700, fontFamily: 'var(--font-mono)', lineHeight: 1,
                       margin: '6px 0',
                       color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
                     }}>
@@ -13866,7 +13861,7 @@ export function ReporteFacturacionTab() {
                     const completo = cobrado >= totalAbs;
                     return (
                       <div style={{
-                        marginTop: '12px', padding: '10px 12px', borderRadius: '6px',
+                        marginTop: '12px', padding: '10px 12px', borderRadius: 'var(--radius-sm)',
                         background: completo ? 'rgba(16, 185, 129, 0.06)' : 'rgba(245, 158, 11, 0.06)',
                         border: `1px solid ${completo ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`,
                       }}>
@@ -13881,7 +13876,7 @@ export function ReporteFacturacionTab() {
                             </span>
                           </div>
                           <span style={{
-                            fontSize: '14px', fontWeight: 700, fontFamily: 'monospace',
+                            fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)',
                             color: completo ? '#059669' : '#d97706',
                           }}>
                             {formatCurrency(cobrado)}
@@ -13890,7 +13885,7 @@ export function ReporteFacturacionTab() {
                         {!completo && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', paddingLeft: '16px' }}>
                             <span style={{ fontSize: '11px', color: '#991B1B' }}>Saldo pendiente</span>
-                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#dc2626' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: '#dc2626' }}>
                               {formatCurrency(totalAbs - cobrado)}
                             </span>
                           </div>
@@ -13905,7 +13900,7 @@ export function ReporteFacturacionTab() {
                     if (sueltos.length === 0) return null
                     return (
                       <div style={{
-                        marginTop: '12px', padding: '8px 12px', borderRadius: '6px',
+                        marginTop: '12px', padding: '8px 12px', borderRadius: 'var(--radius-sm)',
                         background: 'rgba(245, 158, 11, 0.10)', border: '1px solid rgba(245, 158, 11, 0.45)',
                         fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.45,
                       }}>
@@ -13929,12 +13924,12 @@ export function ReporteFacturacionTab() {
                         {detallePagos.map((pago) => (
                           <div key={pago.id} style={{
                             display: 'flex', alignItems: 'center', gap: '8px',
-                            padding: '7px 12px', borderRadius: '6px',
+                            padding: '7px 12px', borderRadius: 'var(--radius-sm)',
                             background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
                           }}>
                             <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
                             <div style={{ flex: 1, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>{formatCurrency(pago.monto)}</span>
+                              <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', color: '#059669' }}>{formatCurrency(pago.monto)}</span>
                               <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
                                 S{pago.semana}/{pago.anio}
                               </span>

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Edit2, Trash2, AlertTriangle, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Spinner } from '../ui/LoadingOverlay'
-import Swal from 'sweetalert2'
+import { Alerta } from '../ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { EmptyState } from '../ui/EstadosVista'
 import './AdminStyles.css'
@@ -173,7 +173,7 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
       if (checkError) throw checkError
 
       if (zones && zones.length > 0) {
-        Swal.fire({
+        Alerta.fire({
           icon: 'warning',
           title: 'No se puede eliminar',
           text: 'Este tipo tiene zonas asociadas. Elimina o reasigna las zonas primero.'

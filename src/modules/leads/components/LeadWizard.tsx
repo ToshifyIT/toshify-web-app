@@ -314,7 +314,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
         <div
           style={{
             display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-            margin: '0 0 12px', padding: '10px 14px', borderRadius: 8,
+            margin: '0 0 12px', padding: '10px 14px', borderRadius: 'var(--radius-md)',
             background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e3a8a', fontSize: 13,
           }}
         >
@@ -666,7 +666,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <small style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>Ctrl+Click para múltiples</small>
                 {errors.categorias_licencia && <span className="error-text">{errors.categorias_licencia}</span>}
                 {formData.licencia && (!formData.categorias_licencia || formData.categorias_licencia.length === 0) && (
-                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: 'var(--text-secondary)' }}>
                     Valor anterior: <strong style={{ color: 'var(--text-primary)' }}>{formData.licencia}</strong>
                     <span style={{ display: 'block', fontSize: '11px', marginTop: '2px' }}>Selecciona las categorías correspondientes del listado</span>
                   </div>

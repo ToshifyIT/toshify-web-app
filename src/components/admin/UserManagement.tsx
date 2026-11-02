@@ -7,7 +7,7 @@ import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { Users, UserCheck, UserX, Shield, KeyRound, Mail, ToggleLeft, ToggleRight, Building2, Trash2, Edit2 } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { validarEmail } from '../../utils/validacionesCampos'
 import { StatsGrid } from '../ui/StatsGrid'
@@ -205,7 +205,7 @@ export function UserManagement() {
   const handleRoleChange = async (userId: string, newRoleId: string) => {
     try {
       if (!newRoleId) {
-        Swal.fire({
+        Alerta.fire({
           icon: 'warning',
           title: 'Rol no seleccionado',
           text: 'Selecciona un rol válido'
@@ -216,7 +216,7 @@ export function UserManagement() {
       // El select guarda al instante: se confirma para que un clic sin querer no cambie permisos.
       const usuario = users.find(u => u.id === userId)
       const rolNuevo = roles.find(r => r.id === newRoleId)?.name || 'el nuevo rol'
-      const confirmacion = await Swal.fire({
+      const confirmacion = await Alerta.fire({
         icon: 'question',
         title: 'Cambiar rol',
         html: `¿Cambiar el rol de <strong>${escaparHtml((usuario?.full_name || usuario?.email || 'este usuario') as string)}</strong> a <strong>${escaparHtml(rolNuevo)}</strong>?`,
@@ -252,7 +252,7 @@ export function UserManagement() {
     const activar = !currentStatus
     const userName = (user.full_name || user.email || 'Usuario') as string
 
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       icon: 'warning',
       title: activar ? 'Activar usuario' : 'Desactivar usuario',
       html: activar
@@ -283,7 +283,7 @@ export function UserManagement() {
 
     const sedeOptions = sedes.map(s => `<option value="${s.id}" ${s.id === currentSedeId ? 'selected' : ''}>${s.nombre}</option>`).join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Configurar Sede',
       html: `
         <div style="text-align:left; display:flex; flex-direction:column; gap:16px; margin-top:8px">
@@ -391,12 +391,12 @@ export function UserManagement() {
     const esUsuarioActual = editando.id === currentUser?.id
     const cambiaEstado = form.isActive !== (editando.is_active !== false)
     if (cambiaEstado && esUsuarioActual && !form.isActive) {
-      Swal.fire({ icon: 'warning', title: 'Estado', text: 'No podés desactivar tu propio usuario' })
+      Alerta.fire({ icon: 'warning', title: 'Estado', text: 'No podés desactivar tu propio usuario' })
       return
     }
     const cambiaEmail = email.toLowerCase() !== String(editando.email || '').toLowerCase()
     if (cambiaEmail) {
-      const ok = await Swal.fire({
+      const ok = await Alerta.fire({
         icon: 'question',
         title: 'Cambiar correo',
         html: `Desde ahora va a iniciar sesión con <strong>${escaparHtml(email)}</strong>. Su contraseña no cambia.`,
@@ -440,7 +440,7 @@ export function UserManagement() {
   const eliminarUsuario = async (user: UserWithRole) => {
     const userName = (user.full_name || user.email || 'Usuario') as string
 
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       icon: 'warning',
       title: 'Eliminar usuario',
       html: `Se eliminará <strong>${escaparHtml(userName)}</strong>${user.email ? ` (${escaparHtml(user.email as string)})` : ''} junto con sus permisos.<br><br>Esta acción no se puede deshacer.`,
@@ -451,13 +451,13 @@ export function UserManagement() {
       reverseButtons: true,
       focusCancel: true,
       showLoaderOnConfirm: true,
-      allowOutsideClick: () => !Swal.isLoading(),
+      allowOutsideClick: () => !Alerta.isLoading(),
       preConfirm: async () => {
         try {
           await llamarApiUsuarios('delete', { userId: user.id })
           return true
         } catch (err: unknown) {
-          Swal.showValidationMessage(err instanceof Error ? err.message : String(err))
+          Alerta.showValidationMessage(err instanceof Error ? err.message : String(err))
           return false
         }
       },
@@ -474,11 +474,11 @@ export function UserManagement() {
     const pendiente = estaPendiente(user)
 
     if (!email) {
-      Swal.fire({ icon: 'warning', title: 'Sin correo', text: 'Este usuario no tiene correo registrado.' })
+      Alerta.fire({ icon: 'warning', title: 'Sin correo', text: 'Este usuario no tiene correo registrado.' })
       return
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       icon: 'question',
       title: pendiente ? 'Reenviar invitación' : 'Restablecer contraseña',
       html: `
@@ -496,12 +496,12 @@ export function UserManagement() {
       confirmButtonColor: '#FF0033',
       reverseButtons: true,
       showLoaderOnConfirm: true,
-      allowOutsideClick: () => !Swal.isLoading(),
+      allowOutsideClick: () => !Alerta.isLoading(),
       preConfirm: async () => {
         try {
           return await llamarApiUsuarios('send-access', { userId: user.id })
         } catch (err: unknown) {
-          Swal.showValidationMessage(err instanceof Error ? err.message : String(err))
+          Alerta.showValidationMessage(err instanceof Error ? err.message : String(err))
           return false
         }
       },

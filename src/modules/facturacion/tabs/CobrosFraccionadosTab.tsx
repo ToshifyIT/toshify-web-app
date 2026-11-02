@@ -18,7 +18,7 @@ import { formatNombreCompleto } from '../../../utils/conductorUtils'
 // import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { showError } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import '../CobrosFraccionados.css'
 
@@ -329,7 +329,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
         `).join('')
       : '<tr><td colspan="5" style="padding: 16px; text-align: center; color: #9CA3AF;">Sin pagos registrados</td></tr>'
 
-    Swal.fire({
+    Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Historial de Pagos</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -487,7 +487,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           textAlign: 'center',
           padding: '40px',
           backgroundColor: 'var(--bg-tertiary, #f5f5f5)',
-          borderRadius: '8px'
+          borderRadius: 'var(--radius-md)'
         }}>
           <p>{cobros.length === 0 ? 'No hay cobros fraccionados' : 'No hay registros para el filtro seleccionado'}</p>
         </div>
@@ -518,7 +518,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       <span style={{
                         marginLeft: '8px',
                         padding: '2px 8px',
-                        borderRadius: '4px',
+                        borderRadius: 'var(--radius-xs)',
                         fontSize: '10px',
                         fontWeight: 600,
                         background: esTipoSaldo(cobro) ? 'rgba(99,102,241,0.1)' : 'rgba(234,88,12,0.1)',
@@ -645,7 +645,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                             <td>
                               <span style={{
                                 padding: '4px 8px',
-                                borderRadius: '4px',
+                                borderRadius: 'var(--radius-xs)',
                                 backgroundColor: cancelada
                                   ? '#9CA3AF'
                                   : (cuota.aplicado || cuota.pagado)
@@ -704,13 +704,13 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999,
+            zIndex: 'var(--z-modal-nested)',
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: 'var(--bg-primary)', borderRadius: '12px',
+              background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)',
               padding: '24px', width: '440px', maxWidth: '90vw',
               boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
             }}

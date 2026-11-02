@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Check, Loader2, FileText } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -74,7 +74,7 @@ export function MotivosSubTab() {
   }
 
   async function handleDelete(item: VisitaMotivoConCategoria) {
-    const res = await Swal.fire({
+    const res = await Alerta.fire({
       title: 'Eliminar motivo',
       text: `¿Eliminar "${item.nombre}"?`,
       icon: 'warning',

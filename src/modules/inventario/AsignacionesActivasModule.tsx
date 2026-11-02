@@ -186,7 +186,7 @@ export function AsignacionesActivasModule() {
             width: '32px',
             height: '32px',
             background: 'var(--color-primary)',
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-sm)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -245,7 +245,7 @@ export function AsignacionesActivasModule() {
             color: 'var(--text-primary)',
             background: 'var(--badge-blue-bg)',
             padding: '4px 12px',
-            borderRadius: '6px'
+            borderRadius: 'var(--radius-sm)'
           }}>
             {row.original.cantidad}
           </span>
@@ -284,7 +284,7 @@ export function AsignacionesActivasModule() {
             alignItems: 'center',
             gap: '4px',
             padding: '4px 10px',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-lg)',
             background: bg,
             color,
             fontSize: '12px',
@@ -306,7 +306,7 @@ export function AsignacionesActivasModule() {
             onClick={() => irAMovimientos(row.original, 'devolucion')}
             style={{
               border: '1px solid var(--border-primary)',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               background: 'var(--card-bg)',
               color: 'var(--text-primary)',
               padding: '6px 10px',
@@ -326,7 +326,7 @@ export function AsignacionesActivasModule() {
             onClick={() => irAMovimientos(row.original, 'dano')}
             style={{
               border: '1px solid var(--border-primary)',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               background: 'var(--badge-red-bg)',
               color: 'var(--badge-red-text)',
               padding: '6px 10px',
@@ -360,7 +360,7 @@ export function AsignacionesActivasModule() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
         <div style={{
           background: 'var(--card-bg)',
-          borderRadius: '10px',
+          borderRadius: 'var(--radius-lg)',
           padding: '16px 20px',
           border: '1px solid var(--border-primary)',
           display: 'flex',
@@ -371,7 +371,7 @@ export function AsignacionesActivasModule() {
             width: '44px',
             height: '44px',
             background: 'var(--badge-blue-bg)',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -390,7 +390,7 @@ export function AsignacionesActivasModule() {
 
         <div style={{
           background: 'var(--card-bg)',
-          borderRadius: '10px',
+          borderRadius: 'var(--radius-lg)',
           padding: '16px 20px',
           border: '1px solid var(--border-primary)',
           display: 'flex',
@@ -401,7 +401,7 @@ export function AsignacionesActivasModule() {
             width: '44px',
             height: '44px',
             background: 'var(--badge-blue-bg)',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -420,7 +420,7 @@ export function AsignacionesActivasModule() {
 
         <div style={{
           background: 'var(--card-bg)',
-          borderRadius: '10px',
+          borderRadius: 'var(--radius-lg)',
           padding: '16px 20px',
           border: '1px solid var(--border-primary)',
           display: 'flex',
@@ -431,7 +431,7 @@ export function AsignacionesActivasModule() {
             width: '44px',
             height: '44px',
             background: 'var(--badge-yellow-bg)',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -450,7 +450,7 @@ export function AsignacionesActivasModule() {
 
         <div style={{
           background: 'var(--card-bg)',
-          borderRadius: '10px',
+          borderRadius: 'var(--radius-lg)',
           padding: '16px 20px',
           border: '1px solid var(--border-primary)',
           display: 'flex',
@@ -461,7 +461,7 @@ export function AsignacionesActivasModule() {
             width: '44px',
             height: '44px',
             background: 'var(--badge-red-bg)',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -480,7 +480,7 @@ export function AsignacionesActivasModule() {
 
         <div style={{
           background: 'var(--card-bg)',
-          borderRadius: '10px',
+          borderRadius: 'var(--radius-lg)',
           padding: '16px 20px',
           border: '1px solid var(--border-primary)',
           display: 'flex',
@@ -491,7 +491,7 @@ export function AsignacionesActivasModule() {
             width: '44px',
             height: '44px',
             background: 'var(--badge-yellow-bg)',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'

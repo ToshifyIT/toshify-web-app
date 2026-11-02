@@ -123,7 +123,7 @@ export function SugerenciasDrawer({
               style={{
                 border: '1px solid var(--border-primary)',
                 background: 'var(--bg-secondary)',
-                borderRadius: 7,
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
                 padding: '3px 6px',
                 display: 'flex',
@@ -144,7 +144,7 @@ export function SugerenciasDrawer({
           style={{
             background: 'var(--bg-primary)',
             border: '1px solid var(--border-primary)',
-            borderRadius: 9,
+            borderRadius: 'var(--radius-md)',
             padding: '9px 11px',
             marginTop: 10,
           }}
@@ -192,7 +192,7 @@ export function SugerenciasDrawer({
               justifyContent: 'center',
               gap: 6,
               padding: '5px 12px',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               border: `1px solid ${mostrarTodos ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
               background: mostrarTodos ? '#fff1f3' : 'var(--bg-primary)',
               color:
@@ -228,7 +228,7 @@ export function SugerenciasDrawer({
               marginTop: 9,
               background: '#fef3e2',
               color: '#b45309',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               padding: '7px 9px',
               fontSize: 10.5,
               lineHeight: 1.4,
@@ -248,7 +248,7 @@ export function SugerenciasDrawer({
               marginTop: 9,
               background: '#fef3e2',
               color: '#b45309',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               padding: '7px 9px',
               fontSize: 10.5,
               lineHeight: 1.4,
@@ -333,7 +333,7 @@ export function SugerenciasDrawer({
               marginTop: 12,
               padding: '10px 12px',
               border: '1px dashed var(--border-primary)',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               background: 'var(--bg-primary)',
             }}
           >
@@ -403,7 +403,7 @@ function TarjetaPar({
         background: 'var(--bg-primary)',
         border: `1px solid ${seleccionado || esActual ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
         boxShadow: seleccionado ? '0 0 0 3px rgba(255,0,51,.10)' : undefined,
-        borderRadius: 11,
+        borderRadius: 'var(--radius-lg)',
         padding: '11px 12px',
         marginBottom: 10,
         cursor: esActual ? 'default' : 'pointer',

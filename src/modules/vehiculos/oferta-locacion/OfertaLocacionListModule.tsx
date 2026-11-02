@@ -7,7 +7,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { ExcelColumnFilter, useExcelFilters } from '../../../components/ui/DataTable/ExcelColumnFilter'
 import { type ColumnDef } from '@tanstack/react-table'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { generateOfertaLocacion } from '../../../services/ofertaLocacionService'
 import type { OfertaLocacion } from '../titulares/types/ofertaLocacion.types'
@@ -80,7 +80,7 @@ export function OfertaLocacionListModule() {
         </div>`
       ).join('')
 
-      Swal.fire({
+      Alerta.fire({
         title: 'Campos sin completar',
         html: `<div style="text-align:left;font-size:13px;">
           <p style="margin-bottom:10px;">Faltan <b>${totalFaltantes}</b> campos por completar:</p>
@@ -95,7 +95,7 @@ export function OfertaLocacionListModule() {
     }
 
     // Confirmacion final
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: 'Generar documento',
       html: `<p>Se generara el documento de Oferta de Locacion para:</p>
         <p style="margin-top:8px;"><b>${oferta.patente}</b> - ${oferta.titular_nombre}</p>
@@ -109,24 +109,24 @@ export function OfertaLocacionListModule() {
     if (!confirm.isConfirmed) return
 
     // Mostrar loading
-    Swal.fire({
+    Alerta.fire({
       title: 'Generando documento...',
       html: 'Creando documento en Google Drive. Esto puede tardar unos segundos.',
       allowOutsideClick: false,
       allowEscapeKey: false,
-      didOpen: () => Swal.showLoading()
+      didOpen: () => Alerta.showLoading()
     })
 
     const result = await generateOfertaLocacion({ oferta_id: oferta.id })
 
-    Swal.close()
+    Alerta.close()
 
     if (!result.success) {
       showError(result.error || 'Error al generar documento')
       return
     }
 
-    await Swal.fire({
+    await Alerta.fire({
       title: 'Documento generado',
       html: `<div style="text-align:left;font-size:13px;">
         <p>El documento fue creado exitosamente en Google Drive.</p>
@@ -168,7 +168,7 @@ export function OfertaLocacionListModule() {
   useEffect(() => { loadOfertas() }, [loadOfertas])
 
   const handleDelete = async (oferta: OfertaLocacion) => {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar oferta',
       text: `Eliminar la oferta de ${oferta.titular_nombre} - ${oferta.patente}?`,
       icon: 'warning',
@@ -288,7 +288,7 @@ export function OfertaLocacionListModule() {
         const bg = es44Dreams ? '#fef3c7' : '#dbeafe'
         const color = es44Dreams ? '#92400e' : '#1d4ed8'
         return (
-          <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500, background: bg, color }}>
+          <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 500, background: bg, color }}>
             {label}
           </span>
         )
@@ -323,14 +323,14 @@ export function OfertaLocacionListModule() {
             <div style={{
               width: '50px',
               height: '6px',
-              borderRadius: '3px',
+              borderRadius: 'var(--radius-xs)',
               background: '#e5e7eb',
               overflow: 'hidden',
             }}>
               <div style={{
                 width: `${porcentaje}%`,
                 height: '100%',
-                borderRadius: '3px',
+                borderRadius: 'var(--radius-xs)',
                 background: porcentaje >= 70 ? '#f59e0b' : '#ef4444',
                 transition: 'width 0.3s',
               }} />

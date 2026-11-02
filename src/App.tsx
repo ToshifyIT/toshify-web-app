@@ -67,8 +67,8 @@ function DeviceTypeInitializer({ children }: { children: React.ReactNode }) {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
 
-      // Si hay un SweetAlert2 abierto, dejar que Swal lo maneje
-      if (document.querySelector('.swal2-container')) return
+      // Si hay una alerta abierta, la maneja ella
+      if (document.querySelector('.tsh-alerta-overlay')) return
 
       // Buscar cualquier overlay visible (modal-overlay, wizard-overlay, prog-modal-overlay, etc.)
       // y cerrar el ultimo (el que esta mas arriba en el DOM = mas al frente)

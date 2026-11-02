@@ -10,7 +10,7 @@
   justify-content: center;
   background: rgba(248, 245, 246, 0.95); /* background-light con transparencia */
   backdrop-filter: blur(4px);
-  z-index: 9999;
+  z-index: var(--z-loading);
 }
 
 .loading-overlay.fullscreen {
@@ -122,14 +122,14 @@
   flex: 1;
   height: 6px;
   background: #e5e5e5;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #f90637, #FD97CA);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   transition: width 0.3s ease;
 }
 
@@ -190,14 +190,14 @@
   flex: 1;
   height: 8px;
   background: #e5e5e5;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .linear-progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #f90637, #FD97CA);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   transition: width 0.3s ease;
 }
 
@@ -218,7 +218,7 @@
   background: linear-gradient(90deg, #e5e5e5 25%, #f0f0f0 50%, #e5e5e5 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 @keyframes shimmer {

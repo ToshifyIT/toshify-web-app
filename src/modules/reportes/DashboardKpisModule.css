@@ -8,7 +8,7 @@
 
 .dkpis-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
@@ -34,7 +34,7 @@
 
 .dkpis-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -63,7 +63,7 @@
   gap: 12px;
   padding: 10px 12px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   min-width: 0;
 }
 
@@ -151,7 +151,7 @@
 }
 
 /* Mobile: padding reducido y stats más compactos */
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .dkpis-stats {
     padding: 10px;
   }
@@ -216,7 +216,7 @@
 .dkpis-module div.dashboard-comparison {
   background: var(--bg-primary) !important;
   border: 1px solid var(--border-primary) !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   box-shadow: none !important;
   padding: 16px 18px;
 }
@@ -318,7 +318,7 @@
     height: 32px !important;
     padding: 4px 10px !important;
     border-width: 1px !important;
-    border-radius: 8px !important;
+    border-radius: var(--radius-md) !important;
     font-size: 12.5px !important;
   }
 }
@@ -350,7 +350,7 @@
 .dkpis-module .fact-comp-card {
   padding: 10px 14px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .dkpis-module .cobro-comparativo-card-value,

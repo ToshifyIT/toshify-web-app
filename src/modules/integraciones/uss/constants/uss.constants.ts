@@ -5,27 +5,28 @@
 
 import type { DateRange } from '../types/uss.types'
 
+import { haceDiasART, hoyART } from '../../../../utils/fechaArgentina'
 // Rangos de fechas predefinidos
 export const DATE_RANGES: DateRange[] = [
   {
     label: 'Hoy',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    startDate: hoyART(),
+    endDate: hoyART(),
   },
   {
     label: 'Ayer',
-    startDate: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-    endDate: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+    startDate: haceDiasART(1),
+    endDate: haceDiasART(1),
   },
   {
     label: 'Última semana',
-    startDate: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    startDate: haceDiasART(7),
+    endDate: hoyART(),
   },
   {
     label: 'Últimos 30 días',
-    startDate: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    startDate: haceDiasART(30),
+    endDate: hoyART(),
   },
 ]
 

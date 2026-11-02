@@ -16,7 +16,7 @@ import {
   ArrowDownLeft, ArrowUpRight, Receipt, Clock, CheckCircle2, AlertTriangle, List,
   RefreshCw, DownloadCloud, UploadCloud, ExternalLink, Landmark, EyeOff, Undo2, Link2, Scale, UserPlus,
 } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   obtenerMovimientosCresium,
@@ -38,7 +38,7 @@ import type {
   MovimientosCresiumResponse,
   PropuestasAlegraResponse,
 } from '../../../services/cresiumService'
-import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
+import { formatFechaHoraART, fechaISOART, hoyART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
@@ -89,7 +89,7 @@ const PESOS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS
 const pesos = (n: number) => PESOS.format(n || 0)
 
 function mesActualART(): string {
-  const hoy = fechaISOART(new Date().toISOString()) ?? new Date().toISOString().slice(0, 10)
+  const hoy = hoyART()
   return hoy.slice(0, 7)
 }
 
@@ -251,7 +251,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
 
   const actualizar = async (mesCompleto = false) => {
     if (mesCompleto) {
-      const ok = await Swal.fire({
+      const ok = await Alerta.fire({
         title: `Re-sincronizar ${mes}`,
         text: 'Vuelve a traer de Cresium todos los movimientos del mes (actualiza estados). Lo ya cargado en Alegra no se toca.',
         icon: 'question',
@@ -261,21 +261,21 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       })
       if (!ok.isConfirmed) return
     }
-    Swal.fire({
+    Alerta.fire({
       title: mesCompleto ? 'Trayendo el mes de Cresium...' : 'Buscando movimientos nuevos en Cresium...',
       allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
+      didOpen: () => Alerta.showLoading(),
     })
     try {
       const r = await actualizarDesdeCresium(empresa, mesCompleto ? mes : undefined)
-      Swal.close()
+      Alerta.close()
       showSuccess(
         r.nuevos > 0 ? `${r.nuevos} movimientos nuevos` : 'No hay movimientos nuevos',
         mesCompleto ? `${r.traidos} movimientos revisados del mes` : undefined,
       )
       await cargar()
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       showError('Error', err instanceof Error ? err.message : 'No se pudo actualizar')
     }
   }
@@ -293,7 +293,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
     const pagos = elegidos.filter((f) => f.direccion === 'salida').reduce((s, f) => s + f.importe, 0)
     const impuesto = elegidos.reduce((s, f) => s + f.impuesto, 0)
     const nuevos = [...new Set(elegidos.filter((f) => f.propuesta?.crear_contacto).map((f) => `${f.contraparte} (${f.cuit})`))]
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       title: `Cargar ${elegidos.length} movimientos en Alegra`,
       html: `
         <div class="cr-swal">
@@ -317,11 +317,11 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
 
     let cargados = 0
     const errores: string[] = []
-    Swal.fire({
+    Alerta.fire({
       title: 'Cargando en Alegra...',
       html: `0 de ${items.length}`,
       allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
+      didOpen: () => Alerta.showLoading(),
     })
     try {
       for (let i = 0; i < items.length; i += LOTE_CARGA_ALEGRA) {
@@ -331,21 +331,21 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
           const f = filas.find((y) => y.cresium_id === x.cresium_id)
           errores.push(`${f?.contraparte ?? x.cresium_id}: ${x.error}`)
         })
-        Swal.update({ html: `${Math.min(i + LOTE_CARGA_ALEGRA, items.length)} de ${items.length}` })
-        Swal.showLoading()
+        Alerta.update({ html: `${Math.min(i + LOTE_CARGA_ALEGRA, items.length)} de ${items.length}` })
+        Alerta.showLoading()
       }
-      Swal.close()
+      Alerta.close()
       if (errores.length === 0) {
         showSuccess('Cargado en Alegra', `${cargados} movimientos`)
       } else {
-        await Swal.fire({
+        await Alerta.fire({
           title: `${cargados} cargados, ${errores.length} con error`,
           html: errores.map((e) => `• ${escaparHtml(e)}`).join('<br/>'),
           icon: 'warning',
         })
       }
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       showError('Error', err instanceof Error ? err.message : 'No se pudo cargar en Alegra')
     }
     setElecciones({})
@@ -357,7 +357,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
     const [a, m] = mes.split('-').map(Number)
     const ultimoDia = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10)
     const hoy = fechaISOART(new Date().toISOString()) ?? ultimoDia
-    const pedido = await Swal.fire({
+    const pedido = await Alerta.fire({
       title: 'Conciliar en Alegra',
       html: `<div class="cr-swal">Se concilian los movimientos cargados desde el <b>${formatDia(`${mes}-01`)}</b> hasta la fecha de corte.<br/>No tiene que quedar ninguno pendiente en ese rango.</div>`,
       input: 'date',
@@ -370,11 +370,11 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
     if (!pedido.isConfirmed || !pedido.value) return
     const hasta = String(pedido.value)
 
-    Swal.fire({ title: 'Calculando saldo en Cresium...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    Alerta.fire({ title: 'Calculando saldo en Cresium...', allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
     try {
       const r = await conciliarEnAlegra(empresa, hasta, false)
-      Swal.close()
-      const ok = await Swal.fire({
+      Alerta.close()
+      const ok = await Alerta.fire({
         title: `Conciliación al ${formatDia(hasta)}`,
         html: `
           <div class="cr-swal">
@@ -389,11 +389,11 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
         cancelButtonText: 'Cancelar',
       })
       if (!ok.isConfirmed) return
-      Swal.fire({ title: 'Creando conciliación...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+      Alerta.fire({ title: 'Creando conciliación...', allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
       const creada = await conciliarEnAlegra(empresa, hasta, true)
-      Swal.close()
+      Alerta.close()
       const otraFecha = creada.fecha_conciliacion && creada.fecha_conciliacion !== hasta
-      await Swal.fire({
+      await Alerta.fire({
         title: 'Borrador creado en Alegra',
         html: (otraFecha
           ? `Como en Alegra ya hay una conciliación posterior, el documento quedó con fecha <b>${formatDia(creada.fecha_conciliacion)}</b>. Incluye los movimientos y el saldo al ${formatDia(hasta)}.<br/><br/>`
@@ -402,7 +402,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       })
       await cargar()
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       showError('No se pudo conciliar', err instanceof Error ? err.message : 'Error')
     }
   }
@@ -410,7 +410,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
   const crearContacto = async (m: MovimientoCresium) => {
     const esCliente = m.direccion === 'entrada'
     const juridica = /^3[034]/.test(m.cuit ?? '')
-    const r = await Swal.fire({
+    const r = await Alerta.fire({
       title: esCliente ? 'Crear cliente en Alegra' : 'Crear proveedor en Alegra',
       html: `
         <div class="cr-swal cr-form">
@@ -441,7 +441,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       preConfirm: () => {
         const nombre = (document.getElementById('cr-nombre') as HTMLInputElement | null)?.value.trim() ?? ''
         if (nombre.length < 3) {
-          Swal.showValidationMessage('Ingresá el nombre')
+          Alerta.showValidationMessage('Ingresá el nombre')
           return false
         }
         return {
@@ -465,7 +465,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
 
   const marcar = async (m: MovimientoCresium, accion: 'ignorar' | 'pendiente' | 'vincular') => {
     if (accion === 'vincular') {
-      const ok = await Swal.fire({
+      const ok = await Alerta.fire({
         title: '¿Ya está cargado en Alegra?',
         html: `En la cuenta Cresium de Alegra hay un pago del ${formatDia(m.posible_duplicado?.fecha)} por <b>${pesos(m.posible_duplicado?.monto ?? 0)}</b>. Si es este movimiento, se marca como cargado y no se vuelve a crear (tampoco su impuesto).`,
         icon: 'question',

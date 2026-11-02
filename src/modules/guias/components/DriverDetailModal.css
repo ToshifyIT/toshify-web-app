@@ -1,7 +1,7 @@
 .driver-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-modal-nested);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12,7 +12,7 @@
 
 .driver-modal-content {
   background-color: var(--modal-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--border-primary);
   width: 100%;
@@ -79,7 +79,7 @@
   width: 20px;
   height: 3px;
   background-color: var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .section-title {
@@ -93,16 +93,11 @@
 /* Info Card */
 .info-card {
   background-color: var(--bg-secondary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 1.5rem;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
-}
-
-/* Ensure SweetAlert2 is always above the driver modal */
-.swal2-container {
-  z-index: 20000 !important;
 }
 
 /* Form Styles */
@@ -133,8 +128,8 @@
   justify-content: flex-end;
   gap: 1rem;
   background-color: var(--bg-secondary);
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
 }
 
 .save-button {
@@ -189,7 +184,7 @@
   padding: 6px 12px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--color-primary);
   font-size: 13px;
   font-weight: 500;

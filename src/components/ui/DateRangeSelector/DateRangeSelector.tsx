@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { numeroSemana } from '../../../utils/semanaISO'
 import './DateRangeSelector.css'
 
 export interface DateRange {
@@ -63,14 +64,6 @@ const parseISODate = (isoString: string): { year: number; month: number; day: nu
   }
 }
 
-// Calcular número de semana ISO
-const getWeekNumber = (year: number, month: number, day: number): number => {
-  const d = new Date(Date.UTC(year, month, day))
-  const dayNum = d.getUTCDay() || 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-}
 
 // Obtener lunes de la semana de una fecha
 const getMondayOfWeek = (year: number, month: number, day: number): { year: number; month: number; day: number } => {
@@ -298,7 +291,7 @@ export function DateRangeSelector({
   const emitWeekRange = (year: number, month: number, day: number, close = true) => {
     const monday = getMondayOfWeek(year, month, day)
     const sunday = getSundayOfWeek(year, month, day)
-    const weekNum = getWeekNumber(monday.year, monday.month, monday.day)
+    const weekNum = numeroSemana(new Date(monday.year, monday.month, monday.day))
     onRangeChange({
       startDate: toISODateString(monday.year, monday.month, monday.day),
       endDate: toISODateString(sunday.year, sunday.month, sunday.day),
@@ -426,7 +419,7 @@ export function DateRangeSelector({
       // Modo semana: seleccionar semana completa
       const monday = getMondayOfWeek(dayInfo.year, dayInfo.month, dayInfo.day)
       const sunday = getSundayOfWeek(dayInfo.year, dayInfo.month, dayInfo.day)
-      const weekNum = getWeekNumber(monday.year, monday.month, monday.day)
+      const weekNum = numeroSemana(new Date(monday.year, monday.month, monday.day))
 
       const range: DateRange = {
         startDate: toISODateString(monday.year, monday.month, monday.day),
@@ -449,13 +442,13 @@ export function DateRangeSelector({
     // Esta semana
     const thisMonday = getMondayOfWeek(currentYear, currentMonth, currentDay)
     const thisSunday = getSundayOfWeek(currentYear, currentMonth, currentDay)
-    const thisWeekNum = getWeekNumber(thisMonday.year, thisMonday.month, thisMonday.day)
+    const thisWeekNum = numeroSemana(new Date(thisMonday.year, thisMonday.month, thisMonday.day))
 
     // Semana pasada
     const lastWeekDate = new Date(thisMonday.year, thisMonday.month, thisMonday.day - 7)
     const lastMonday = getMondayOfWeek(lastWeekDate.getFullYear(), lastWeekDate.getMonth(), lastWeekDate.getDate())
     const lastSunday = getSundayOfWeek(lastWeekDate.getFullYear(), lastWeekDate.getMonth(), lastWeekDate.getDate())
-    const lastWeekNum = getWeekNumber(lastMonday.year, lastMonday.month, lastMonday.day)
+    const lastWeekNum = numeroSemana(new Date(lastMonday.year, lastMonday.month, lastMonday.day))
 
     const weekShortcuts: DateRangeShortcut[] = [
       {

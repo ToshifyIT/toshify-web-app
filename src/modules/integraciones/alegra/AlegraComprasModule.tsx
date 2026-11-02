@@ -17,7 +17,7 @@ import {
   FileSpreadsheet, FileUp, RefreshCw, UploadCloud, ExternalLink, EyeOff, Undo2,
   CheckCircle2, AlertTriangle, Clock, List, Receipt, FileMinus, Inbox, Ban, FolderSearch, FileText, Paperclip, UserPlus,
 } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   obtenerImportaciones,
@@ -44,7 +44,7 @@ import type {
   ImportacionesResponse,
   RevisionResponse,
 } from '../../../services/alegraComprasService'
-import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
+import { formatFechaHoraART, mesActualART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import '../cresium/CresiumModule.css'
@@ -136,9 +136,6 @@ function esCargable(c: ComprobanteArca): boolean {
   return esSeleccionable(c) && c.confirmado && !!c.alegra_proveedor_id
 }
 
-function mesActualART(): string {
-  return (fechaISOART(new Date().toISOString()) ?? new Date().toISOString().slice(0, 10)).slice(0, 7)
-}
 
 function resumenRevision(r: RevisionResponse): string {
   return [
@@ -271,19 +268,19 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       showError('No se pudo leer el Excel', err instanceof Error ? err.message : 'Error')
       return
     }
-    Swal.fire({
+    Alerta.fire({
       title: 'Subiendo el Excel...',
       html: `${datos.filas.length} filas · después se revisa cada comprobante en Alegra`,
       allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
+      didOpen: () => Alerta.showLoading(),
     })
     try {
       const r = await importarExcelArca(empresa, { archivo: archivo.name, ...datos })
-      Swal.close()
+      Alerta.close()
       const ultimoMes = [...r.meses].sort().pop()
       if (ultimoMes && ultimoMes !== mes) setMes(ultimoMes)
       else await leerFilas(mes)
-      await Swal.fire({
+      await Alerta.fire({
         title: `${r.comprobantes} comprobantes`,
         icon: r.error_alegra ? 'warning' : 'success',
         html: `
@@ -296,7 +293,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
           </div>`,
       })
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       showError('No se pudo subir', err instanceof Error ? err.message : 'Error')
     }
   }
@@ -324,7 +321,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
     if (aCargar.length === 0) return
     const facturas = aCargar.filter((c) => !esNc(c))
     const notas = aCargar.filter(esNc)
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       title: `Cargar ${aCargar.length} comprobantes en Alegra`,
       html: `
         <div class="cr-swal">
@@ -344,7 +341,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
     const ids = [...facturas, ...notas].map((c) => c.id)
     let cargados = 0
     const errores: string[] = []
-    Swal.fire({ title: 'Cargando en Alegra...', html: `0 de ${ids.length}`, allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    Alerta.fire({ title: 'Cargando en Alegra...', html: `0 de ${ids.length}`, allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
     try {
       for (let i = 0; i < ids.length; i += LOTE_CARGA_COMPROBANTES) {
         const r = await cargarComprobantes(empresa, ids.slice(i, i + LOTE_CARGA_COMPROBANTES))
@@ -353,20 +350,20 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
           const c = filas.find((y) => y.id === x.id)
           errores.push(`${c ? `${c.proveedor} ${numeroArca(c)}` : x.id}: ${x.error}`)
         })
-        Swal.update({ html: `${Math.min(i + LOTE_CARGA_COMPROBANTES, ids.length)} de ${ids.length}` })
-        Swal.showLoading()
+        Alerta.update({ html: `${Math.min(i + LOTE_CARGA_COMPROBANTES, ids.length)} de ${ids.length}` })
+        Alerta.showLoading()
       }
-      Swal.close()
+      Alerta.close()
       if (errores.length === 0) showSuccess('Cargado en Alegra', `${cargados} comprobantes`)
       else {
-        await Swal.fire({
+        await Alerta.fire({
           title: `${cargados} cargados, ${errores.length} sin cargar`,
           html: `<div class="cr-swal">${errores.map((e) => `• ${escaparHtml(e)}`).join('<br/>')}</div>`,
           icon: 'warning',
         })
       }
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       showError('Error', err instanceof Error ? err.message : 'No se pudo cargar en Alegra')
     }
     setSeleccion(new Set())
@@ -424,20 +421,20 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       showError('Archivo muy grande', `Máximo ${MAX_ADJUNTO_MB} MB`)
       return
     }
-    Swal.fire({ title: 'Buscando la carpeta del proveedor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    Alerta.fire({ title: 'Buscando la carpeta del proveedor...', allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
     let sug
     try {
       sug = await obtenerCarpetaSugerida(empresa, c.id)
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       showError('No se pudo leer el Drive', err instanceof Error ? err.message : 'Error')
       return
     }
-    Swal.close()
+    Alerta.close()
     const ext = (/\.[a-z0-9]{2,5}$/i.exec(archivo.name)?.[0] ?? '.pdf').toLowerCase()
     const nombre = sug.nombre.replace(/\.pdf$/, ext)
     const opciones = [...new Set([sug.sugerida, ...sug.carpetas])]
-    const r = await Swal.fire({
+    const r = await Alerta.fire({
       title: 'Adjuntar factura',
       html: `
         <div class="cr-swal cr-form">
@@ -460,10 +457,10 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       preConfirm: () => (document.getElementById('ac-carpeta') as HTMLSelectElement | null)?.value ?? sug.sugerida,
     })
     if (!r.isConfirmed || !r.value) return
-    Swal.fire({ title: 'Subiendo la factura...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    Alerta.fire({ title: 'Subiendo la factura...', allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
     try {
       const res = await adjuntarFactura(empresa, c.id, archivo, String(r.value))
-      Swal.close()
+      Alerta.close()
       setFilas((prev) => prev.map((x) => (x.id === c.id
         ? {
           ...x,
@@ -475,7 +472,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
         : x)))
       showSuccess('Factura guardada en el Drive', `${res.drive_ruta}/${res.drive_nombre}`)
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       showError('No se pudo subir', err instanceof Error ? err.message : 'Error')
     }
   }
@@ -494,7 +491,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
 
   const marcar = async (c: ComprobanteArca, accion: 'ignorar' | 'pendiente') => {
     if (accion === 'ignorar') {
-      const ok = await Swal.fire({
+      const ok = await Alerta.fire({
         title: 'Desestimar comprobante',
         html: `<div class="cr-swal"><b>${escaparHtml(c.proveedor ?? '')}</b> · ${escaparHtml(nombreTipo(c))} ${numeroArca(c)}<br/>No se carga en Alegra y se oculta de la lista. Se ve en la tarjeta «Desestimadas» y se puede restaurar.</div>`,
         icon: 'question',

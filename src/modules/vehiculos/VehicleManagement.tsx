@@ -12,7 +12,7 @@ import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTabl
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showError, showSuccess } from '../../utils/toast'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
@@ -26,7 +26,7 @@ import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { SearchableSelect } from '../../components/ui/SearchableSelect/SearchableSelect'
 import { formatDateTimeAR } from '../../utils/dateUtils'
-import { formatFechaART, formatHoraART, timestampART, toDateART } from '../../utils/fechaArgentina'
+import { formatFechaART, formatHoraART, timestampART, toDateART, hoyART } from '../../utils/fechaArgentina'
 import { VEHICULO_CATEGORIAS, VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import { useGruposFlota } from '../../hooks/useGruposFlota'
 import { StatsGrid } from '../../components/ui/StatsGrid'
@@ -631,7 +631,7 @@ export function VehicleManagement() {
     }
 
     if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.tipo_titular || !formData.titular?.trim() || !formData.cobertura?.trim() || !formData.lugar_radicacion?.trim()) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Campos requeridos',
         text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede, Tipo de Titular, Titular, Cobertura y Lugar de Radicación',
@@ -654,7 +654,7 @@ export function VehicleManagement() {
 
       if (vehiculoEliminado) {
         setSaving(false)
-        const resultado = await Swal.fire({
+        const resultado = await Alerta.fire({
           icon: 'warning',
           title: 'Patente encontrada',
           html: `
@@ -734,7 +734,7 @@ export function VehicleManagement() {
             )
           }
           if (titularId) {
-            const hoy = new Date().toISOString().split('T')[0]
+            const hoy = hoyART()
             // Desactivar titulares anteriores de este vehículo
             await supabase.from('vehiculos_titulares').update({ activo: false, fecha_hasta: hoy }).eq('vehiculo_id', vehiculoEliminado.id).eq('activo', true)
             await supabase.from('vehiculos_titulares').insert([{
@@ -823,7 +823,7 @@ export function VehicleManagement() {
       if (vehiculoCreado) {
         // Si se crea con GNC, registrar en historial
         if (formData.gnc) {
-          const hoy = new Date().toISOString().split('T')[0]
+          const hoy = hoyART()
           await (supabase.from('vehiculos_gnc_historial') as any).insert({
             vehiculo_id: vehiculoCreado.id,
             accion: 'instalacion',
@@ -848,7 +848,7 @@ export function VehicleManagement() {
 
           // Crear relación vehiculo-titular
           if (titularId) {
-            const hoy = new Date().toISOString().split('T')[0]
+            const hoy = hoyART()
             await supabase.from('vehiculos_titulares').insert([{
               vehiculo_id: vehiculoCreado.id,
               titular_id: titularId,
@@ -916,7 +916,7 @@ export function VehicleManagement() {
     if (!formData.titular?.trim()) camposFaltantes.push('Titular')
 
     if (camposFaltantes.length > 0) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Campos requeridos',
         text: `Complete los siguientes campos obligatorios: ${camposFaltantes.join(', ')}`,
@@ -1098,7 +1098,7 @@ export function VehicleManagement() {
       const gncAnterior = !!(selectedVehiculo as any).gnc
       const gncNuevo = formData.gnc || false
       if (gncAnterior !== gncNuevo) {
-        const hoy = new Date().toISOString().split('T')[0]
+        const hoy = hoyART()
         await (supabase.from('vehiculos_gnc_historial') as any).insert({
           vehiculo_id: selectedVehiculo.id,
           accion: gncNuevo ? 'instalacion' : 'desinstalacion',
@@ -1112,7 +1112,7 @@ export function VehicleManagement() {
       const telepaseAnterior = !!(selectedVehiculo as any).telepase
       const telepaseNuevo = formData.telepase || false
       if (telepaseAnterior !== telepaseNuevo) {
-        const hoyTp = new Date().toISOString().split('T')[0]
+        const hoyTp = hoyART()
         await (supabase.from('vehiculos_telepase_historial') as any).insert({
           vehiculo_id: selectedVehiculo.id,
           accion: telepaseNuevo ? 'activacion' : 'desactivacion',
@@ -1181,7 +1181,7 @@ export function VehicleManagement() {
         }
 
         if (titularId) {
-          const hoy = new Date().toISOString().split('T')[0]
+          const hoy = hoyART()
           // Desactivar titular anterior
           await supabase
             .from('vehiculos_titulares')
@@ -1241,7 +1241,7 @@ export function VehicleManagement() {
         .eq('vehiculo_id', selectedVehiculo.id)
 
       if (ofertas && ofertas.length > 0) {
-        const confirm = await Swal.fire({
+        const confirm = await Alerta.fire({
           title: 'Ofertas de locacion asociadas',
           html: `<div style="text-align:left;font-size:13px;">
             <p>Este vehiculo tiene <b>${ofertas.length}</b> oferta(s) de locacion:</p>
@@ -2163,7 +2163,7 @@ export function VehicleManagement() {
                 <span
                   style={{
                     background: '#3b82f6', color: '#fff',
-                    padding: '1px 5px', borderRadius: 3,
+                    padding: '1px 5px', borderRadius: 'var(--radius-xs)',
                     fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
                     width: 'fit-content',
                   }}
@@ -2175,7 +2175,7 @@ export function VehicleManagement() {
                 <span
                   style={{
                     background: '#16a34a', color: '#fff',
-                    padding: '1px 5px', borderRadius: 3,
+                    padding: '1px 5px', borderRadius: 'var(--radius-xs)',
                     fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
                     width: 'fit-content',
                   }}
@@ -2312,7 +2312,7 @@ export function VehicleManagement() {
 
           const handleFolderClick = () => {
             if (folderUrl) window.open(folderUrl, '_blank')
-            else Swal.fire('Sin URL', 'Este vehículo no tiene una URL de documentación configurada', 'info')
+            else Alerta.fire('Sin URL', 'Este vehículo no tiene una URL de documentación configurada', 'info')
           }
           
           return (
@@ -2384,7 +2384,7 @@ export function VehicleManagement() {
     const vehiculosVisibles = filteredVehiculos.filter(filtroBusqueda)
 
     if (vehiculosVisibles.length === 0) {
-      Swal.fire('Sin datos', 'No hay vehículos para exportar', 'info')
+      Alerta.fire('Sin datos', 'No hay vehículos para exportar', 'info')
       return
     }
     try {
@@ -2469,7 +2469,7 @@ export function VehicleManagement() {
         { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 18 },
       ]
 
-      const fecha = new Date().toISOString().split('T')[0]
+      const fecha = hoyART()
       XLSX.writeFile(wb, `Vehiculos_${fecha}.xlsx`)
     } catch (err: any) {
       showError('Error', err?.message || 'No se pudo exportar')
@@ -3035,7 +3035,7 @@ export function VehicleManagement() {
 
             <div style={{
               border: '1px solid var(--border-primary)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               padding: '16px',
               background: 'var(--bg-secondary)',
             }}>
@@ -3091,7 +3091,7 @@ export function VehicleManagement() {
                         overflowY: 'auto',
                         background: 'var(--bg-primary)',
                         border: '1px solid var(--border-primary)',
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                         zIndex: 50,
                         marginTop: '2px',
@@ -3411,7 +3411,7 @@ export function VehicleManagement() {
 
             {/* Mini-modal historial GNC / Telepase */}
             {showHistorialModal && (
-              <div style={{ marginTop: '8px', marginBottom: '12px', padding: '12px 16px', borderRadius: '8px', background: 'var(--bg-secondary, #f9fafb)', border: '1px solid var(--border-primary, #e5e7eb)' }}>
+              <div style={{ marginTop: '8px', marginBottom: '12px', padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary, #f9fafb)', border: '1px solid var(--border-primary, #e5e7eb)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Historial de {showHistorialModal === 'gnc' ? 'GNC' : 'Telepase'}
@@ -3444,7 +3444,7 @@ export function VehicleManagement() {
                           </td>
                           <td style={{ padding: '6px 8px' }}>
                             <span style={{
-                              padding: '1px 6px', borderRadius: '4px', fontWeight: 600, fontSize: '11px',
+                              padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '11px',
                               background: h.accion === 'instalacion' || h.accion === 'activacion' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
                               color: h.accion === 'instalacion' || h.accion === 'activacion' ? '#059669' : '#dc2626',
                             }}>
@@ -3612,7 +3612,7 @@ export function VehicleManagement() {
                       rel="noopener noreferrer"
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: '6px',
-                        padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 600,
+                        padding: '8px 16px', borderRadius: 'var(--radius-sm)', fontSize: '13px', fontWeight: 600,
                         color: '#fff', backgroundColor: '#dc2626', textDecoration: 'none',
                         border: 'none', cursor: 'pointer',
                       }}
@@ -3625,7 +3625,7 @@ export function VehicleManagement() {
                       disabled
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: '6px',
-                        padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 500,
+                        padding: '8px 16px', borderRadius: 'var(--radius-sm)', fontSize: '13px', fontWeight: 500,
                         color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)',
                         border: '1px solid var(--border-primary)', cursor: 'not-allowed', opacity: 0.5,
                       }}
@@ -3739,12 +3739,12 @@ export function VehicleManagement() {
                     {finalizarData.conductores.map((c, i) => (
                       <div key={i} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '8px 12px', borderRadius: '6px',
+                        padding: '8px 12px', borderRadius: 'var(--radius-sm)',
                         background: 'rgba(239, 68, 68, 0.05)',
                         border: '1px solid rgba(239, 68, 68, 0.12)',
                       }}>
                         <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{c.nombre}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: '4px' }}>{c.horario}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{c.horario}</span>
                       </div>
                     ))}
                   </div>

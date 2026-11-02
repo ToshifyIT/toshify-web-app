@@ -6,7 +6,7 @@
 
 .vencimientos-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -23,7 +23,7 @@
   gap: 12px;
   padding: 14px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.2s ease;
   border: 1px solid transparent;
 }
@@ -48,7 +48,7 @@
 .stat-icon {
   width: 32px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -116,7 +116,7 @@
   gap: 4px;
   background: var(--bg-primary);
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .vencimientos-tab {
@@ -127,7 +127,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.15s;
   display: flex;
   align-items: center;
@@ -142,7 +142,7 @@
 .vencimientos-tab .tab-badge {
   background: rgba(255,255,255,0.2);
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 11px;
   font-weight: 600;
 }
@@ -156,7 +156,7 @@
   display: flex;
   align-items: center;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   padding: 0 10px;
   width: 100%;
@@ -187,7 +187,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: none;
   background: var(--color-primary);
   color: white;
@@ -201,7 +201,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-primary);
   background: var(--bg-primary);
   color: var(--text-secondary);
@@ -220,10 +220,7 @@
 }
 
 .vencimientos-table {
-  background: var(--bg-primary);
-  border-radius: 8px;
-  padding: 0;
-  border: 1px solid var(--border-primary);
+  /* La tabla trae su propia tarjeta (DataTable): sin caja extra alrededor */
 }
 
 .vencimientos-table .dt-table th,
@@ -248,20 +245,20 @@
 }
 
 .venc-patente {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 12px;
   color: var(--text-primary);
   background: var(--bg-tertiary);
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .prioridad-badge {
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 11px;
   font-weight: 500;
 }
@@ -300,7 +297,7 @@
   justify-content: center;
   min-width: 60px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: 11px;
   font-weight: 600;
   border: none;
@@ -330,7 +327,7 @@
 .venc-fecha-vencimiento-proxima {
   display: inline-block;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: rgba(250, 204, 21, 0.18);
 }
 
@@ -341,15 +338,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: var(--z-modal-nested);
 }
 
 .modal-content {
   width: 100%;
-  max-width: 760px;
+  max-width: 768px;
   max-height: 90vh;
   background: var(--bg-primary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
@@ -420,7 +417,7 @@
 .form-group select,
 .form-group textarea {
   width: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-primary);
   padding: 8px 10px;
   font-size: 13px;
@@ -551,11 +548,11 @@
   right: 0;
   background: var(--bg-primary, #ffffff);
   border: 1px solid var(--border-primary, #e2e8f0);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   max-height: 220px;
   overflow-y: auto;
-  z-index: 50;
+  z-index: var(--z-dropdown);
   animation: fadeIn 0.1s ease-out;
 }
 
@@ -643,7 +640,7 @@ input:checked + .slider:before {
 
 /* Rounded sliders */
 .slider.round {
-  border-radius: 34px;
+  border-radius: var(--radius-full);
 }
 
 .slider.round:before {
@@ -690,7 +687,7 @@ input:checked + .slider .off-text {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-primary, #e2e8f0);
   background: var(--bg-primary, #ffffff);
   color: var(--text-secondary, #64748b);
@@ -732,7 +729,7 @@ input:checked + .slider .off-text {
   gap: 2px;
   background: var(--bg-secondary, #f8fafc);
   border: 1px solid var(--border-primary, #e2e8f0);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
 }
 

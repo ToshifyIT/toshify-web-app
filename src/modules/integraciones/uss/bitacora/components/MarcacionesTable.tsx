@@ -11,7 +11,7 @@ import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui
 import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X, AlertTriangle } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
-import { partesART } from '../../../../../utils/fechaArgentina';
+import { partesART, hoyART } from '../../../../../utils/fechaArgentina';
 import { claveChecklist } from '../utils/marcacionesPorDia';
 import { getEstadoConductorBadgeStyle, getEstadoConductorDisplay } from '../../../../../utils/conductorUtils';
 import * as XLSX from 'xlsx';
@@ -487,9 +487,9 @@ export function MarcacionesTable({
           onClick={() => setDetalleMarcacion(row.original)}
           title="Ver detalle de trips de esta patente en la semana"
           style={{
-            fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)',
+            fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-primary)',
             fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px',
-            borderRadius: '3px', whiteSpace: 'nowrap',
+            borderRadius: 'var(--radius-xs)', whiteSpace: 'nowrap',
             border: '1px dashed transparent', cursor: 'pointer',
             transition: 'all 0.15s',
           }}
@@ -544,7 +544,7 @@ export function MarcacionesTable({
                 return (
                   <span style={{
                     background: estilo.bg, color: estilo.color, fontSize: '9px', fontWeight: 600,
-                    padding: '1px 6px', borderRadius: '8px', whiteSpace: 'nowrap', lineHeight: 1.4,
+                    padding: '1px 6px', borderRadius: 'var(--radius-md)', whiteSpace: 'nowrap', lineHeight: 1.4,
                   }}>
                     {getEstadoConductorDisplay({ codigo: m.conductorEstado })}
                   </span>
@@ -674,7 +674,7 @@ export function MarcacionesTable({
         return (
           <span style={{
             fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-            borderRadius: '10px', color: '#fff', background: color,
+            borderRadius: 'var(--radius-lg)', color: '#fff', background: color,
           }}>
             {mod === 'a_cargo' ? 'A Cargo' : 'Turno'}
           </span>
@@ -721,11 +721,11 @@ export function MarcacionesTable({
           return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }} title="Sin conductor o sin asignación en esta patente para la fecha">-</span>;
         }
         if (!m.tieneCompanero) {
-          return <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)' }}>No</span>;
+          return <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)' }}>No</span>;
         }
         return (
           <span title={m.companero || undefined} style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px', lineHeight: 1.2, maxWidth: '160px' }}>
-            <span style={{ alignSelf: 'flex-start', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px', color: '#fff', background: '#16a34a' }}>Sí</span>
+            <span style={{ alignSelf: 'flex-start', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: '#16a34a' }}>Sí</span>
             {m.companero && (
               <span style={{ fontSize: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.companero}</span>
             )}
@@ -746,7 +746,7 @@ export function MarcacionesTable({
           return (
             <span style={{
               fontSize: '11px', fontWeight: 600, padding: '2px 8px', whiteSpace: 'nowrap',
-              borderRadius: '10px', color: '#fff', background: getEstadoColor('Sin Actividad'),
+              borderRadius: 'var(--radius-lg)', color: '#fff', background: getEstadoColor('Sin Actividad'),
             }}>
               Sin actividad
             </span>
@@ -764,7 +764,7 @@ export function MarcacionesTable({
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '4px',
                 fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-                borderRadius: '10px', color: '#fff', background: a.color,
+                borderRadius: 'var(--radius-lg)', color: '#fff', background: a.color,
                 border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
               }}
             >
@@ -778,7 +778,7 @@ export function MarcacionesTable({
           return (
             <span style={{
               fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-              borderRadius: '10px', color: '#fff', background: getEstadoColor('En Curso'),
+              borderRadius: 'var(--radius-lg)', color: '#fff', background: getEstadoColor('En Curso'),
             }}>
               En Curso
             </span>
@@ -788,7 +788,7 @@ export function MarcacionesTable({
         return (
           <span style={{
             fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-            borderRadius: '10px', color: '#fff', background: '#16a34a',
+            borderRadius: 'var(--radius-lg)', color: '#fff', background: '#16a34a',
           }}>
             OK
           </span>
@@ -908,7 +908,7 @@ export function MarcacionesTable({
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Marcaciones');
-    XLSX.writeFile(wb, `Marcaciones_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `Marcaciones_${hoyART()}.xlsx`);
     setShowExportMenu(false);
   }
 
@@ -921,7 +921,7 @@ export function MarcacionesTable({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Marcaciones_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `Marcaciones_${hoyART()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
@@ -944,7 +944,7 @@ export function MarcacionesTable({
               style={{
                 display: 'flex', alignItems: 'center', gap: '4px',
                 padding: '6px 10px', fontSize: '13px', fontWeight: 500,
-                border: '1px solid var(--color-danger)', borderRadius: '6px',
+                border: '1px solid var(--color-danger)', borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-primary)', color: 'var(--color-danger)',
                 cursor: 'pointer', whiteSpace: 'nowrap',
               }}>
@@ -958,7 +958,7 @@ export function MarcacionesTable({
               style={{
                 display: 'flex', alignItems: 'center', gap: '4px',
                 padding: '6px 10px', fontSize: '13px', fontWeight: 500,
-                border: '1px solid var(--border-color)', borderRadius: '6px',
+                border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-primary)', color: 'var(--text-secondary)',
                 cursor: 'pointer', whiteSpace: 'nowrap',
               }}>
@@ -968,7 +968,7 @@ export function MarcacionesTable({
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: '4px',
                 background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
-                borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                borderRadius: 'var(--radius-sm)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 zIndex: 50, minWidth: '140px', overflow: 'hidden',
               }}>
                 {[
@@ -1009,7 +1009,7 @@ export function MarcacionesTable({
               onClick={() => setGpsFilter(opt.key)}
               style={{
                 padding: '6px 12px',
-                borderRadius: '999px',
+                borderRadius: 'var(--radius-full)',
                 fontSize: '12px',
                 fontWeight: 600,
                 border: `1px solid ${active ? opt.color : 'var(--border-primary)'}`,
@@ -1076,13 +1076,13 @@ export function MarcacionesTable({
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000,
+            zIndex: 'var(--z-modal)',
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: 'var(--bg-primary, #fff)', borderRadius: '12px',
+              background: 'var(--bg-primary, #fff)', borderRadius: 'var(--radius-lg)',
               padding: '20px', width: '460px', maxWidth: '90vw',
               boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
             }}
@@ -1097,7 +1097,7 @@ export function MarcacionesTable({
                 </h3>
                 <span style={{
                   fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-                  borderRadius: '999px', color: '#fff', background: a.color,
+                  borderRadius: 'var(--radius-full)', color: '#fff', background: a.color,
                 }}>
                   {a.etiqueta}
                 </span>
@@ -1121,7 +1121,7 @@ export function MarcacionesTable({
             <div style={{
               display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px',
               fontSize: '12px', background: 'var(--bg-secondary, #f8f9fa)',
-              borderRadius: '8px', padding: '12px',
+              borderRadius: 'var(--radius-md)', padding: '12px',
             }}>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Patente</span>
               <span style={{ color: 'var(--text-primary)' }}>{alertaMarcacion.patente}</span>

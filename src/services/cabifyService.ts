@@ -2,6 +2,7 @@
 import type { CabifyConfig, CabifyAuthResponse, CabifyDriver, CabifyPeriod } from '../types/cabify.types'
 import { supabase } from '../lib/supabase'
 
+import { numeroSemana } from '../utils/semanaISO'
 /**
  * Servicio para interactuar con la API de Cabify
  * En desarrollo usa proxy de Vite, en producción llama directamente
@@ -1478,16 +1479,8 @@ class CabifyService {
       23, 59, 59, 999
     ))
 
-    // Calcular número de semana ISO (basado en el lunes)
-    const getWeekNumber = (date: Date): number => {
-      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-      const dayNum = d.getUTCDay() || 7
-      d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-      return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-    }
 
-    const weekNum = getWeekNumber(mondayStart)
+    const weekNum = numeroSemana(mondayStart)
 
     let label: string
     if (weeksAgo === 0) {

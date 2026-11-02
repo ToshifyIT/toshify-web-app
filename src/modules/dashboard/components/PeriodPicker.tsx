@@ -1,23 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { 
-  format, 
-  addMonths, 
-  subMonths, 
-  startOfMonth, 
-  endOfMonth, 
-  eachDayOfInterval, 
-  isSameMonth, 
-  getWeek, 
-  startOfWeek, 
-  endOfWeek, 
-  setWeek, 
-  addYears, 
-  subYears, 
-  parse,
-  isValid,
-  startOfDay,
-  isAfter,
-} from 'date-fns'
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, startOfWeek, endOfWeek, addYears, subYears, parse, isValid, startOfDay, isAfter, getISOWeek, setISOWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 
@@ -68,13 +50,13 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
          if (match) {
            const week = parseInt(match[1], 10)
            const year = parseInt(match[2], 10)
-           return setWeek(new Date(year, 0, 4), week, { weekStartsOn: 1 })
+           return setISOWeek(new Date(year, 0, 4), week)
          }
          // Try "Sem XX"
          const simpleMatch = value.match(/Sem (\d+)/)
          if (simpleMatch) {
             const week = parseInt(simpleMatch[1], 10)
-            return setWeek(new Date(now.getFullYear(), 0, 4), week, { weekStartsOn: 1 })
+            return setISOWeek(new Date(now.getFullYear(), 0, 4), week)
          }
       } else if (granularity === 'mes') {
           // "Mmm YYYY"
@@ -139,7 +121,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
   }
 
   const handleWeekSelect = (day: Date) => {
-    const weekNum = getWeek(day, { weekStartsOn: 1 })
+    const weekNum = getISOWeek(day)
     const year = day.getFullYear() 
     // Format: "Sem XX YYYY"
     const newVal = `Sem ${weekNum.toString().padStart(2, '0')} ${year}`
@@ -185,7 +167,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
            return formatted === value
       }
       if (granularity === 'semana') {
-          const currentWeek = getWeek(day, { weekStartsOn: 1 })
+          const currentWeek = getISOWeek(day)
           const currentYear = day.getFullYear()
           
           const match = value.match(/Sem (\d+) (\d{4})/)
@@ -203,7 +185,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
 
   const isWeekHovered = (day: Date) => {
       if (granularity !== 'semana' || !hoveredDate) return false
-      return getWeek(day, { weekStartsOn: 1 }) === getWeek(hoveredDate, { weekStartsOn: 1 }) && 
+      return getISOWeek(day) === getISOWeek(hoveredDate) && 
              day.getFullYear() === hoveredDate.getFullYear()
   }
 
@@ -269,7 +251,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
                 if (isAfter(weekStart, currentWeekStart)) {
                     isDisabled = true
                 } else if (allowedWeeks) {
-                    const wn = getWeek(day, { weekStartsOn: 1 })
+                    const wn = getISOWeek(day)
                     const yr = day.getFullYear()
                     const key = `Sem ${wn.toString().padStart(2, '0')} ${yr}`
                     isDisabled = !allowedWeeks.has(key)

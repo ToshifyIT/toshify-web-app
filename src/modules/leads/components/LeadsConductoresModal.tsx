@@ -19,7 +19,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { X, Search, Link2, AlertTriangle, Check } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -206,7 +206,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
    *  LeadsModule.handleConvertir. No crea ni modifica el conductor: la relacion
    *  no se persiste porque no existe una FK entre ambas tablas. */
   async function marcarConvertido(f: FilaConciliacion) {
-    const res = await Swal.fire({
+    const res = await Alerta.fire({
       title: '<span style="font-size:16px;font-weight:600;">Marcar lead como convertido</span>',
       html: `
         <div style="text-align:left;font-size:13px;">
@@ -292,14 +292,14 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000,
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 'var(--z-modal)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: 'var(--bg-primary)', borderRadius: '10px', width: '100%', maxWidth: '980px',
+          background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '980px',
           maxHeight: '88vh', display: 'flex', flexDirection: 'column',
           boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden',
         }}
@@ -330,7 +330,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
           {/* Aviso: la deteccion de huerfanos es heuristica */}
           <div style={{
             display: 'flex', gap: '8px', alignItems: 'flex-start',
-            background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: '6px',
+            background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 'var(--radius-sm)',
             padding: '8px 10px', fontSize: '11px', color: '#854D0E',
           }}>
             <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -341,7 +341,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
           </div>
 
           {/* Pestañas */}
-          <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '3px' }}>
+          <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '3px' }}>
             {([
               { value: 'convertido' as const, label: `Convertidos (${conteos.convertidos})` },
               { value: 'huerfano' as const, label: `Relación Conductor/Lead sin convertir (${conteos.huerfanos})` },
@@ -351,7 +351,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
                 onClick={() => setVista(t.value)}
                 style={{
                   flex: 1, padding: '6px 12px', fontSize: '11px', fontWeight: 600,
-                  borderRadius: '4px', border: 'none', cursor: 'pointer',
+                  borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
                   background: vista === t.value ? '#ff0033' : 'transparent',
                   color: vista === t.value ? 'white' : 'var(--text-secondary)',
                 }}
@@ -371,14 +371,14 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
               onChange={e => setBusqueda(e.target.value)}
               style={{
                 width: '100%', padding: '7px 10px 7px 32px', fontSize: '12px',
-                border: '1px solid var(--border-primary)', borderRadius: '6px',
+                border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-secondary)', color: 'var(--text-primary)',
               }}
             />
           </div>
 
           {/* Tabla */}
-          <div style={{ flex: 1, overflow: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
+          <div style={{ flex: 1, overflow: 'auto', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)' }}>
             {cargando ? (
               <Spinner size="sm" message="Cargando conciliación..." />
             ) : error ? (
@@ -405,7 +405,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
                     <tr key={f.leadId} style={{ borderBottom: '1px solid var(--border-primary)' }}>
                       <td style={td}>
                         <span style={{
-                          fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
+                          fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-xs)',
                           background: f.situacion === 'huerfano' ? '#FEE2E2' : '#DCFCE7',
                           color: f.situacion === 'huerfano' ? '#991B1B' : '#166534',
                           whiteSpace: 'nowrap',
@@ -414,7 +414,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
                         </span>
                       </td>
                       <td style={{ ...td, fontWeight: 600 }}>{f.leadNombre}</td>
-                      <td style={{ ...td, fontFamily: 'monospace' }}>{f.documento}</td>
+                      <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{f.documento}</td>
                       <td style={{ ...td, color: 'var(--text-secondary)' }}>{f.estadoLead}</td>
                       <td style={td}>{f.conductorNombre || <span style={{ color: 'var(--text-tertiary)' }}>-</span>}</td>
                       <td style={{ ...td, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{fmtFecha(f.fechaConvertido)}</td>
@@ -427,7 +427,7 @@ export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () 
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 5,
                               padding: '4px 9px', fontSize: '11px', fontWeight: 600,
-                              border: '1px solid #16a34a', borderRadius: '4px',
+                              border: '1px solid #16a34a', borderRadius: 'var(--radius-xs)',
                               background: 'transparent', color: '#16a34a',
                               cursor: guardandoId === f.leadId ? 'wait' : 'pointer',
                               opacity: guardandoId === f.leadId ? 0.6 : 1,

@@ -10,7 +10,7 @@
 //   en partes iguales entre sus 7 días; acá se suman los días del período.
 // - Objetivo (forecast semanal): se reparte igual que lo real y SOLO sobre los
 //   días que tienen dato real, para comparar lo mismo contra lo mismo.
-import { getWeek, getWeekYear } from 'date-fns'
+import { getISOWeek, getISOWeekYear } from 'date-fns'
 
 // ───────────── Datos crudos ─────────────
 
@@ -110,8 +110,8 @@ function fechaLocal(iso: string): Date {
 export function numeroSemana(iso: string): { semana: number; anio: number } {
   const d = fechaLocal(iso)
   return {
-    semana: getWeek(d, { weekStartsOn: 1 }),
-    anio: getWeekYear(d, { weekStartsOn: 1 }),
+    semana: getISOWeek(d),
+    anio: getISOWeekYear(d),
   }
 }
 
@@ -722,8 +722,8 @@ export function parseSemana(valor: unknown): string | null {
 
 /** Lunes de la semana N del año, misma convención que numeroSemana. */
 export function lunesDeSemana(semana: number, anio: number): string | null {
-  // La semana 1 es la que contiene el 1 de enero (weekStartsOn: 1, como Facturación).
-  const lunes1 = lunesDe(`${anio}-01-01`)
+  // Semana ISO (como Facturación): la semana 1 es la que contiene el 4 de enero.
+  const lunes1 = lunesDe(`${anio}-01-04`)
   const lunes = sumarDias(lunes1, (semana - 1) * 7)
   const check = numeroSemana(lunes)
   return check.semana === semana && check.anio === anio ? lunes : null

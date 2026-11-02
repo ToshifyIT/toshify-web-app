@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../../lib/supabase";
 import { format } from "date-fns";
-import Swal from "sweetalert2";
+import { Alerta } from '../../../components/ui/alertas'
 import { useSede } from '../../../contexts/SedeContext';
 import { Search, FileEdit, X } from 'lucide-react';
 import { normalizeDni } from '../../../utils/normalizeDocuments';
@@ -445,11 +445,11 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
       setHistoryData(buildHistoryRows(rawHistory, driver, cabifyDataMap, weekAssignments));
 
     } catch (_err) {
-      Swal.fire({
+      Alerta.fire({
         title: 'Error',
         text: 'No se pudo cargar el historial del conductor',
         icon: 'error',
-        didOpen: () => { const c = Swal.getContainer(); if (c) c.style.zIndex = '1100'; }
+        didOpen: () => { const c = Alerta.getContainer(); if (c) c.style.zIndex = '1100'; }
       });
     } finally {
       setLoadingHistory(false);
@@ -458,7 +458,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
 
   const handleViewNotes = (notes: any[]) => {
     if (!notes || notes.length === 0) {
-      Swal.fire({ title: 'Sin notas', text: 'No hay notas registradas para esta semana.', icon: 'info', didOpen: () => { const container = Swal.getContainer(); if (container) container.style.zIndex = '1100'; } });
+      Alerta.fire({ title: 'Sin notas', text: 'No hay notas registradas para esta semana.', icon: 'info', didOpen: () => { const container = Alerta.getContainer(); if (container) container.style.zIndex = '1100'; } });
       return;
     }
 
@@ -469,13 +469,13 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
       </div>
     `).join('');
 
-    Swal.fire({
+    Alerta.fire({
       title: 'Notas de la Semana',
       html: `<div style="max-height: 300px; overflow-y: auto;">${notesHtml}</div>`,
       confirmButtonText: 'Cerrar',
       width: 600,
       didOpen: () => {
-        const container = Swal.getContainer();
+        const container = Alerta.getContainer();
         if (container) container.style.zIndex = '1100';
       }
     });

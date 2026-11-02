@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Car, Search, Check } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../../components/ui/alertas'
 import './ReasignacionModal.css';
 import type { VehicleBasic } from '../../../types/vehiculo.types';
 
@@ -62,12 +62,12 @@ export function ReasignacionModal({
 
   const handleConfirm = async () => {
     if (!selectedGuideId) {
-      Swal.fire('Error', 'Debes seleccionar un guía', 'warning');
+      Alerta.fire('Error', 'Debes seleccionar un guía', 'warning');
       return;
     }
 
     if (selectedGuideId === conductor.id_guia) {
-      Swal.fire('Info', 'El guía seleccionado es el mismo que el actual', 'info');
+      Alerta.fire('Info', 'El guía seleccionado es el mismo que el actual', 'info');
       return;
     }
 

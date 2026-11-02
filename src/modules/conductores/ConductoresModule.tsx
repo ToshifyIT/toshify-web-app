@@ -12,7 +12,7 @@ import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSede } from "../../contexts/SedeContext";
-import Swal from "sweetalert2";
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast';
 import { createIntercomContact } from "../../services/intercomService";
 
@@ -45,6 +45,7 @@ import { normalizeDni } from "../../utils/normalizeDocuments";
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 
+import { hoyART, sumarDiasISO } from '../../utils/fechaArgentina'
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
 
@@ -663,11 +664,8 @@ export function ConductoresModule() {
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
   const calculatedStats = useMemo(() => {
-    const hoy = new Date();
-    const enXDias = new Date();
-    enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
-    const hoyStr = hoy.toISOString().split('T')[0];
-    const enXDiasStr = enXDias.toISOString().split('T')[0];
+    const hoyStr = hoyART();
+    const enXDiasStr = sumarDiasISO(hoyStr, DIAS_LICENCIA_POR_VENCER);
     
     // Rango de la semana actual + semana anterior (para bajas)
     const { inicio: inicioSemana, fin: finSemana } = getWeekRange(true);
@@ -1232,7 +1230,7 @@ export function ConductoresModule() {
 
   const handleCreate = async () => {
     if (!canCreate) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Sin permisos",
         text: "No tienes permisos para crear conductores",
@@ -1247,7 +1245,7 @@ export function ConductoresModule() {
       !formData.licencia_vencimiento ||
       !formData.sede_id
     ) {
-      Swal.fire({
+      Alerta.fire({
         icon: "warning",
         title: "Campos requeridos",
         text: "Complete todos los campos requeridos",
@@ -1257,7 +1255,7 @@ export function ConductoresModule() {
     }
 
     if (formData.referido === true && !formData.embajador_id) {
-      Swal.fire({
+      Alerta.fire({
         icon: "warning",
         title: "Falta el embajador",
         text: "El conductor es referido: seleccione el conductor embajador (paso Seguridad).",
@@ -1277,7 +1275,7 @@ export function ConductoresModule() {
           .maybeSingle();
         if (existente) {
           setSaving(false);
-          Swal.fire({
+          Alerta.fire({
             icon: 'warning',
             title: 'DNI duplicado',
             html: `Ya existe un conductor con DNI <strong>${formData.numero_dni}</strong>:<br/><strong>${existente.apellidos}, ${existente.nombres}</strong>`,
@@ -1402,7 +1400,7 @@ export function ConductoresModule() {
       resetForm();
       await loadConductores(true);
     } catch (err: any) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Error",
         text: err.message,
@@ -1415,7 +1413,7 @@ export function ConductoresModule() {
 
   const handleUpdate = async () => {
     if (!canUpdate) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Sin permisos",
         text: "No tienes permisos para editar conductores",
@@ -1476,7 +1474,7 @@ export function ConductoresModule() {
         embajador_id: 'Embajador (es referido)',
       };
       const faltantes = Object.keys(newErrors).map(k => labels[k] || k);
-      Swal.fire({
+      Alerta.fire({
         icon: "warning",
         title: "Campos obligatorios incompletos",
         html: `<div style="text-align:left">Los siguientes campos son obligatorios:<br/><ul style="margin-top:8px">${faltantes.map(f => `<li>${f}</li>`).join('')}</ul></div>`,
@@ -1495,7 +1493,7 @@ export function ConductoresModule() {
     if (isChangingToBaja) {
       // Validar campos obligatorios para baja
       if (!formData.fecha_terminacion) {
-        Swal.fire({
+        Alerta.fire({
           icon: "warning",
           title: "Fecha de terminación requerida",
           text: "Debes ingresar la fecha de terminación para dar de baja al conductor",
@@ -1504,7 +1502,7 @@ export function ConductoresModule() {
         return;
       }
       if (!formData.motivo_baja?.trim()) {
-        Swal.fire({
+        Alerta.fire({
           icon: "warning",
           title: "Motivo de baja requerido",
           text: "Debes ingresar el motivo de baja para dar de baja al conductor",
@@ -1525,7 +1523,7 @@ export function ConductoresModule() {
         if (impacto.penalidadesCount > 0) {
           filas.push(`<li><strong>${impacto.penalidadesCount}</strong> cuota(s) de multa/penalidad fraccionada por <strong>${fmt(impacto.penalidadesMonto)}</strong> — se cancelan (no afectan el saldo, ya se descontaban en cada facturación).</li>`);
         }
-        const confirma = await Swal.fire({
+        const confirma = await Alerta.fire({
           icon: 'info',
           title: 'Fraccionamientos pendientes',
           html: `
@@ -1569,7 +1567,7 @@ export function ConductoresModule() {
       resetForm();
       await loadConductores(true);
     } catch (err: any) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Error",
         text: err.message,
@@ -2208,7 +2206,7 @@ export function ConductoresModule() {
 
       showSuccess("Baja procesada", "El conductor fue dado de baja y sus asignaciones fueron actualizadas.");
     } catch (err: any) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Error",
         text: err.message,
@@ -2258,7 +2256,7 @@ export function ConductoresModule() {
 
       showSuccess("Baja registrada", "El conductor fue dado de baja. Las asignaciones quedan activas para gestión de Onboarding/Logística.");
     } catch (err: any) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Error",
         text: err.message,
@@ -2313,7 +2311,7 @@ export function ConductoresModule() {
 
       showSuccess("Baja procesada", "El conductor y sus asignaciones fueron actualizados");
     } catch (err: any) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Error",
         text: err.message,
@@ -2326,7 +2324,7 @@ export function ConductoresModule() {
 
   const handleDelete = async () => {
     if (!canDelete) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Sin permisos",
         text: "No tienes permisos para eliminar conductores",
@@ -2378,7 +2376,7 @@ export function ConductoresModule() {
       }
 
       if (bloqueos.length > 0) {
-        Swal.fire({
+        Alerta.fire({
           icon: 'warning',
           title: 'No se puede eliminar',
           html: `<div style="text-align:left;font-size:13px;">
@@ -2414,7 +2412,7 @@ export function ConductoresModule() {
       setSelectedConductor(null);
       await loadConductores(true);
     } catch (err: any) {
-      Swal.fire({
+      Alerta.fire({
         icon: "error",
         title: "Error",
         text: err.message,
@@ -2457,11 +2455,11 @@ export function ConductoresModule() {
     }
 
     if (pendientes.length === 0) {
-      Swal.fire("Nada que completar", "Todos los conductores con ubicación de esta sede ya tienen país y ciudad.", "info");
+      Alerta.fire("Nada que completar", "Todos los conductores con ubicación de esta sede ya tienen país y ciudad.", "info");
       return;
     }
 
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       icon: "warning",
       title: "Completar país y ciudad",
       html:
@@ -2483,7 +2481,7 @@ export function ConductoresModule() {
 
     let detenido = false;
     let terminado = false;
-    Swal.fire({
+    Alerta.fire({
       title: "Completando país y ciudad",
       html: `<span id="pc-progreso">0 de ${pendientes.length}</span>`,
       confirmButtonText: "Detener",
@@ -2539,7 +2537,7 @@ export function ConductoresModule() {
       showError("Error", `Se detuvo el proceso al guardar: ${errorGuardado}`);
       return;
     }
-    Swal.fire({
+    Alerta.fire({
       icon: detenido ? "info" : "success",
       title: detenido ? "Proceso detenido" : "Listo",
       html:
@@ -2773,7 +2771,7 @@ export function ConductoresModule() {
 
     const tablaHtml = `<table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left"><thead><tr style="background:#f1f5f9"><th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;font-weight:600;color:#475569">Campo</th><th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;font-weight:600;color:#475569">Valor</th></tr></thead><tbody>${filas.map(([campo, valor], idx) => `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}"><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;color:#64748b;white-space:nowrap">${campo}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;color:#1e293b;word-break:break-all">${valor || '<span style="color:#94a3b8">-</span>'}</td></tr>`).join('')}</tbody></table>`
 
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       icon: 'info',
       title: intercomIdExistente ? 'Actualizar contacto en Intercom' : 'Crear contacto en Intercom',
       html: tablaHtml,
@@ -2786,11 +2784,11 @@ export function ConductoresModule() {
     if (!confirm.isConfirmed) return
 
     // 7. Enviar a la API
-    Swal.fire({ title: intercomIdExistente ? 'Actualizando contacto...' : 'Creando contacto...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    Alerta.fire({ title: intercomIdExistente ? 'Actualizando contacto...' : 'Creando contacto...', allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
 
     const result = await createIntercomContact(payload)
 
-    Swal.close()
+    Alerta.close()
 
     if (!result.success) {
       showError('Error', result.error || 'Error desconocido')
@@ -2955,11 +2953,8 @@ export function ConductoresModule() {
     const statCardAsigSet = new Set(statCardAsignacionFilter)
 
     // Calcular fechas de licencia UNA sola vez (no por conductor)
-    const hoy = new Date()
-    const enXDias = new Date()
-    enXDias.setDate(hoy.getDate() + DIAS_LICENCIA_POR_VENCER)
-    const hoyStr = hoy.toISOString().split('T')[0]
-    const enXDiasStr = enXDias.toISOString().split('T')[0]
+    const hoyStr = hoyART()
+    const enXDiasStr = sumarDiasISO(hoyStr, DIAS_LICENCIA_POR_VENCER)
     const { inicio: inicioSemana, fin: finSemana } = (statCardEstadoSet.has('BAJA') || statCardEstadoFilter.length > 0)
       ? getWeekRange(true)
       : { inicio: new Date(0), fin: new Date(0) }
@@ -3003,9 +2998,9 @@ export function ConductoresModule() {
         const venc = c.licencia_vencimiento
         let categoria = 'sin_fecha'
         if (venc) {
-          const fechaVenc = new Date(venc)
-          if (fechaVenc < hoy) categoria = 'vencido'
-          else if (fechaVenc <= enXDias) categoria = 'por_vencer'
+          const fechaVenc = String(venc).slice(0, 10)
+          if (fechaVenc < hoyStr) categoria = 'vencido'
+          else if (fechaVenc <= enXDiasStr) categoria = 'por_vencer'
           else categoria = 'vigente'
         }
         if (!vencimientoFilter.includes(categoria)) return false
@@ -3089,7 +3084,7 @@ export function ConductoresModule() {
   const handleDescargarExcel = async () => {
     if (exportando) return;
     if (filasAExportar.length === 0) {
-      Swal.fire("Sin datos", "No hay conductores para exportar con los filtros actuales", "info");
+      Alerta.fire("Sin datos", "No hay conductores para exportar con los filtros actuales", "info");
       return;
     }
 
@@ -3229,7 +3224,7 @@ export function ConductoresModule() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Conductores");
 
-      const fecha = new Date().toISOString().split("T")[0];
+      const fecha = hoyART();
       XLSX.writeFile(wb, `Conductores_${fecha}.xlsx`);
 
       showSuccess(`${dataExport.length} conductores exportados`);
@@ -3770,7 +3765,7 @@ export function ConductoresModule() {
                   label: driveUrl ? 'Ver documentos' : 'Sin carpeta',
                   onClick: () => {
                     if (driveUrl) window.open(driveUrl, '_blank')
-                    else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info')
+                    else Alerta.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info')
                   },
                   variant: driveUrl ? 'success' : 'default'
                 },
@@ -3937,17 +3932,17 @@ export function ConductoresModule() {
                     right: 0,
                     background: 'var(--card-bg, #fff)',
                     border: '1px solid var(--border-primary, #e5e7eb)',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
                     minWidth: '220px',
-                    zIndex: 100,
+                    zIndex: 'var(--z-dropdown)',
                     overflow: 'hidden',
                   }}
                 >
                   <button
                     onClick={async () => {
                       setSyncMenuOpen(false)
-                      const confirm = await Swal.fire({
+                      const confirm = await Alerta.fire({
                         title: 'Sincronizar contratos',
                         text: 'Se buscarán las carpetas de contratos en Drive para los conductores activos con asignación y se actualizará el campo correspondiente.',
                         icon: 'question',
@@ -3957,7 +3952,7 @@ export function ConductoresModule() {
                         confirmButtonColor: 'var(--color-primary)',
                       })
                       if (!confirm.isConfirmed) return
-                      Swal.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+                      Alerta.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
                       try {
                         const res = await fetch('/api/backfill-contract-folders', { method: 'POST' })
                         const data = await res.json()
@@ -3965,7 +3960,7 @@ export function ConductoresModule() {
                         const notFoundList = data.details?.notFound?.length > 0
                           ? '\n\nSin carpeta:\n' + data.details.notFound.map((c: any) => `- ${c.nombre}`).join('\n')
                           : ''
-                        Swal.fire({
+                        Alerta.fire({
                           icon: 'success',
                           title: 'Sincronización completada',
                           html: `<b>${data.updated}</b> actualizados<br><b>${data.notFound}</b> sin carpeta<br><b>${data.errors || 0}</b> errores${notFoundList ? '<br><br><details><summary>Ver sin carpeta</summary><pre style="text-align:left;font-size:12px;max-height:200px;overflow:auto">' + data.details.notFound.map((c: any) => c.nombre).join('\n') + '</pre></details>' : ''}`,
@@ -3999,10 +3994,10 @@ export function ConductoresModule() {
                     onClick={async () => {
                       setSyncMenuOpen(false)
                       if (!sedeActualId) {
-                        Swal.fire('Sede no seleccionada', 'Seleccioná una sede antes de sincronizar.', 'info')
+                        Alerta.fire('Sede no seleccionada', 'Seleccioná una sede antes de sincronizar.', 'info')
                         return
                       }
-                      const confirm = await Swal.fire({
+                      const confirm = await Alerta.fire({
                         title: 'Sincronizar documentación',
                         text: 'Se buscarán carpetas de conductores en Drive y se vincularán al campo url_documentacion (sobreescribe valores existentes). V4-owners (diagnóstico)',
                         icon: 'question',
@@ -4012,7 +4007,7 @@ export function ConductoresModule() {
                         confirmButtonColor: 'var(--color-primary)',
                       })
                       if (!confirm.isConfirmed) return
-                      Swal.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+                      Alerta.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Alerta.showLoading() })
                       try {
                         const res = await fetch('/api/sync-conductores-documentacion', {
                           method: 'POST',
@@ -4085,7 +4080,7 @@ export function ConductoresModule() {
   </details>` : ''}
 </div>
                           `
-                          await Swal.fire({
+                          await Alerta.fire({
                             title: '',
                             html,
                             width: 720,
@@ -4094,7 +4089,7 @@ export function ConductoresModule() {
                           })
                         }
 
-                        const result = await Swal.fire({
+                        const result = await Alerta.fire({
                           icon: 'success',
                           title: 'Sincronización completada',
                           html: `<b>${data.actualizados}</b> actualizados<br><b>${data.sin_coincidencia}</b> sin coincidencia<br><b>${data.errores || 0}</b> errores<br><br><span style="font-size:11px;color:#6b7280">Duración: ${data.duracion_ms ? (data.duracion_ms < 1000 ? data.duracion_ms + 'ms' : (data.duracion_ms/1000).toFixed(2) + 's') : '?'}</span>`,
@@ -4276,7 +4271,7 @@ export function ConductoresModule() {
           onClick={() => setShowImpactoModal(false)}
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.5)', zIndex: 10000,
+            background: 'rgba(0,0,0,0.5)', zIndex: 'var(--z-modal-nested)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '20px',
           }}
@@ -4285,7 +4280,7 @@ export function ConductoresModule() {
             onClick={(e) => e.stopPropagation()}
             style={{
               background: 'white',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               maxWidth: '640px',
               width: '100%',
               maxHeight: '85vh',
@@ -4314,7 +4309,7 @@ export function ConductoresModule() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-              <div style={{ padding: '10px', background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '6px' }}>
+              <div style={{ padding: '10px', background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ fontSize: '11px', color: '#92400E', fontWeight: 600 }}>Saldos fraccionados</div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#78350F', marginTop: '2px' }}>
                   {impactoBajaUI.cobrosCount} cuota(s)
@@ -4323,7 +4318,7 @@ export function ConductoresModule() {
                   {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.cobrosMonto)}
                 </div>
               </div>
-              <div style={{ padding: '10px', background: '#E0E7FF', border: '1px solid #6366F1', borderRadius: '6px' }}>
+              <div style={{ padding: '10px', background: '#E0E7FF', border: '1px solid #6366F1', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ fontSize: '11px', color: '#3730A3', fontWeight: 600 }}>Multas/Penalidades</div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#312E81', marginTop: '2px' }}>
                   {impactoBajaUI.penalidadesCount} cuota(s)
@@ -4332,7 +4327,7 @@ export function ConductoresModule() {
                   {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.penalidadesMonto)}
                 </div>
               </div>
-              <div style={{ padding: '10px', background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: '6px' }}>
+              <div style={{ padding: '10px', background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ fontSize: '11px', color: '#7F1D1D', fontWeight: 600 }}>Total al saldo</div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#7F1D1D', marginTop: '2px' }}>
                   {impactoBajaUI.cobrosCount + impactoBajaUI.penalidadesCount} cuota(s)
@@ -4347,7 +4342,7 @@ export function ConductoresModule() {
             </div>
 
             {impactoBajaUI.detalles.length > 0 ? (
-              <div style={{ border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                   <thead>
                     <tr style={{ background: '#F9FAFB' }}>
@@ -4363,7 +4358,7 @@ export function ConductoresModule() {
                       <tr key={idx} style={{ borderTop: '1px solid #E5E7EB' }}>
                         <td style={{ padding: '6px 8px' }}>
                           <span style={{
-                            fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px',
+                            fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-xs)',
                             background: d.tipo === 'cobro' ? '#FEF3C7' : '#E0E7FF',
                             color: d.tipo === 'cobro' ? '#92400E' : '#3730A3',
                           }}>
@@ -4390,7 +4385,7 @@ export function ConductoresModule() {
                 type="button"
                 onClick={() => setShowImpactoModal(false)}
                 style={{
-                  padding: '8px 16px', border: '1px solid #D1D5DB', borderRadius: '6px',
+                  padding: '8px 16px', border: '1px solid #D1D5DB', borderRadius: 'var(--radius-sm)',
                   background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
                 }}
               >
@@ -4557,7 +4552,7 @@ function ModalEditar({
       }
 
       if (!email) {
-        Swal.fire({
+        Alerta.fire({
           icon: 'info',
           title: 'Sin coincidencia',
           text: `No se encontró email en datos de Cabify con DNI "${dni || 'N/A'}" ni nombre "${primerNombre} ${primerApellido}"`,
@@ -4780,7 +4775,7 @@ function ModalEditar({
                 padding: "10px 14px",
                 backgroundColor: formData.monotributo ? "rgba(16, 185, 129, 0.1)" : "var(--bg-tertiary)",
                 border: formData.monotributo ? "1px solid #10B981" : "1px solid var(--border-primary)",
-                borderRadius: "8px",
+                borderRadius: 'var(--radius-md)',
                 cursor: saving ? "not-allowed" : "pointer",
                 transition: "all 0.2s ease",
                 opacity: saving ? 0.6 : 1
@@ -4790,7 +4785,7 @@ function ModalEditar({
                 style={{
                   width: "20px",
                   height: "20px",
-                  borderRadius: "4px",
+                  borderRadius: 'var(--radius-xs)',
                   backgroundColor: formData.monotributo ? "#10B981" : "transparent",
                   border: formData.monotributo ? "none" : "2px solid var(--border-secondary)",
                   display: "flex",
@@ -5004,7 +4999,7 @@ function ModalEditar({
 
         <div className="form-group" style={{ width: '100%' }}>
           <label className="form-label">Dirección *</label>
-          <div className={editErrors.direccion ? 'input-error' : ''} style={editErrors.direccion ? { borderRadius: 8 } : undefined}>
+          <div className={editErrors.direccion ? 'input-error' : ''} style={editErrors.direccion ? { borderRadius: 'var(--radius-md)' } : undefined}>
             <AddressAutocomplete
               value={formData.direccion}
               lat={formData.direccion_lat}
@@ -5274,7 +5269,7 @@ function ModalEditar({
                     width: '100%',
                     padding: '10px 12px',
                     border: '1px dashed #d1d5db',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     fontSize: '12px',
                     color: '#6b7280',
                   }}>
@@ -5289,7 +5284,7 @@ function ModalEditar({
                       padding: '10px 12px',
                       background: '#FEF3C7',
                       border: '1px solid #F59E0B',
-                      borderRadius: '6px',
+                      borderRadius: 'var(--radius-sm)',
                       cursor: 'pointer',
                       textAlign: 'left',
                       display: 'flex',
@@ -5574,7 +5569,7 @@ function ModalDetalles({
       }
 
       if (!email) {
-        Swal.fire({
+        Alerta.fire({
           icon: 'info',
           title: 'Sin coincidencia',
           text: `No se encontró email en datos de Cabify con DNI "${dni || 'N/A'}" ni nombre "${primerNombre} ${primerApellido}"`,
@@ -5834,7 +5829,7 @@ function ModalDetalles({
                         background: "#DBEAFE",
                         color: "#1E40AF",
                         padding: "4px 8px",
-                        borderRadius: "4px",
+                        borderRadius: 'var(--radius-xs)',
                         fontSize: "12px",
                         fontWeight: "600",
                       }}
@@ -5994,7 +5989,7 @@ function ModalDetalles({
                       backgroundColor: badgeStyle.bg,
                       color: badgeStyle.color,
                       padding: "4px 12px",
-                      borderRadius: "12px",
+                      borderRadius: 'var(--radius-lg)',
                       fontSize: "12px",
                       fontWeight: "600",
                     }}
@@ -6020,7 +6015,7 @@ function ModalDetalles({
                 <div className="detail-value" style={{
                   background: '#FEF2F2',
                   padding: '8px 12px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   color: '#991B1B',
                   fontSize: '13px'
                 }}>
@@ -6203,9 +6198,9 @@ function ModalDetalles({
                       ? new Date(b.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })
                       : '—');
                 return (
-                  <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: '8px', padding: '10px 12px' }}>
+                  <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ background: color, color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px' }}>
+                      <span style={{ background: color, color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
                         {esBaja ? 'Baja' : 'Reactivación'}
                       </span>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -6238,7 +6233,7 @@ function ModalDetalles({
                 disabled={!folderUrl}
                 onClick={() => {
                   if (folderUrl) window.open(folderUrl, '_blank');
-                  else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
+                  else Alerta.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
                 }}
                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                 title={folderUrl ? 'Abrir carpeta de documentos' : 'Sin carpeta configurada'}
@@ -6423,7 +6418,7 @@ function ModalConfirmBaja({
             padding: '16px',
             background: '#EFF6FF',
             border: '1px solid #93C5FD',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
           }}>
             <p style={{
               margin: 0,
@@ -6449,7 +6444,7 @@ function ModalConfirmBaja({
             padding: '16px',
             background: '#FFF8E1',
             border: '1px solid #FFD54F',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
           }}>
             <p style={{
               margin: 0,
@@ -6490,7 +6485,7 @@ function ModalConfirmBaja({
                 color: 'white',
                 border: asignacionesFinalizadas ? '2px solid #16A34A' : 'none',
                 padding: '10px 20px',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 fontWeight: '600',
                 cursor: (processing || asignacionesFinalizadas) ? 'not-allowed' : 'pointer',
                 opacity: (processing || asignacionesFinalizadas) ? 0.8 : 1,
@@ -6507,7 +6502,7 @@ function ModalConfirmBaja({
               color: 'white',
               border: 'none',
               padding: '10px 20px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               fontWeight: '600',
               cursor: processing ? 'not-allowed' : 'pointer',
               opacity: processing ? 0.7 : 1,

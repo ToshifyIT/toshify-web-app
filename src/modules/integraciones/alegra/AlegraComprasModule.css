@@ -148,13 +148,6 @@
   gap: 12px;
 }
 
-.ap-form .swal2-textarea {
-  width: 100%;
-  margin: 0;
-  min-height: 70px;
-  font-size: 14px;
-}
-
 .ac-crear-prov {
   align-self: flex-start;
   display: inline-flex;

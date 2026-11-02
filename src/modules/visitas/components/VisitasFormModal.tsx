@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, User } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../../components/ui/alertas'
 import { supabase } from '../../../lib/supabase';
 import { useSede } from '../../../contexts/SedeContext';
 import type {
@@ -338,14 +338,14 @@ export function VisitasFormModal({
         .map((c, i) =>
           `<div style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background 0.15s;"
                 onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='#fff'"
-                onclick="document.querySelector('#swal-conductor-selected').value='${i}';document.querySelector('.swal2-confirm').click()">
+                onclick="document.querySelector('#swal-conductor-selected').value='${i}';document.querySelector('.tsh-alerta-confirmar').click()">
             <div style="font-weight:600;font-size:14px;">${c.nombre}</div>
             <div style="font-size:12px;color:#6B7280;">DNI: ${c.dni || 'Sin DNI'}</div>
           </div>`
         )
         .join('');
 
-      const { isConfirmed, value } = await Swal.fire({
+      const { isConfirmed, value } = await Alerta.fire({
         title: 'Seleccionar conductor',
         html: `
           <p style="font-size:13px;color:#6B7280;margin-bottom:12px;">La patente <strong>${patente}</strong> tiene ${conductoresInfo.length} conductores asignados:</p>
@@ -606,7 +606,7 @@ export function VisitasFormModal({
     setErrors(e);
 
     if (faltantes.length > 0) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Campos requeridos',
         html: `<ul style="text-align:left;margin:0;padding-left:20px;">${faltantes.map(f => `<li>${f}</li>`).join('')}</ul>`,
@@ -644,7 +644,7 @@ export function VisitasFormModal({
 
         if (hasConflict) {
           const atendedor = atendedores.find((a) => a.id === dataToSave.atendedor_id);
-          await Swal.fire(
+          await Alerta.fire(
             'Conflicto de agenda',
             `${atendedor?.nombre ?? 'El anfitrión'} ya tiene una cita en ese horario.`,
             'warning'
@@ -668,7 +668,7 @@ export function VisitasFormModal({
         );
 
         if (duplicada) {
-          const result = await Swal.fire({
+          const result = await Alerta.fire({
             icon: 'warning',
             title: 'Posible cita duplicada',
             html: `<div style="text-align:left;font-size:14px;">

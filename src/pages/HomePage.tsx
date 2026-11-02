@@ -177,7 +177,7 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
                 background: 'var(--color-primary, #3B82F6)',
                 color: 'white',
                 border: 'none',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
                 fontSize: '14px',
                 fontWeight: 500
@@ -214,7 +214,7 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
               background: 'var(--color-primary, #3B82F6)',
               color: 'white',
               border: 'none',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               cursor: 'pointer',
               fontSize: '14px',
               fontWeight: 500
@@ -571,12 +571,12 @@ export function HomePage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 9999,
+          zIndex: 'var(--z-modal-nested)',
         }}>
           <div style={{
             background: 'var(--bg-primary)',
             padding: '40px',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-lg)',
             maxWidth: '500px',
             width: '90%',
             textAlign: 'center',
@@ -598,7 +598,7 @@ export function HomePage() {
                     fontSize: '16px',
                     background: 'var(--bg-secondary)',
                     border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     color: 'var(--text-primary)',
                     cursor: 'pointer',
                     transition: 'all 0.2s',
@@ -1761,7 +1761,7 @@ export function HomePage() {
                       alignItems: 'center',
                       gap: '8px',
                       padding: '6px 14px',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--border-primary)',
                       background: 'var(--bg-secondary)',
                       cursor: (puedeCambiarSede && (sedes.length > 1 || puedeVerTodasSedes)) ? 'pointer' : 'default',
@@ -1781,7 +1781,7 @@ export function HomePage() {
                       <span style={{
                         fontSize: '10px',
                         padding: '1px 6px',
-                        borderRadius: '4px',
+                        borderRadius: 'var(--radius-xs)',
                         background: 'var(--color-primary)',
                         color: '#fff',
                         fontWeight: 700,
@@ -1803,7 +1803,7 @@ export function HomePage() {
                   {sedeDropdownOpen && (
                     <>
                       <div
-                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 'calc(var(--z-dropdown) - 1)' }}
                         onClick={() => setSedeDropdownOpen(false)}
                       />
                       <div className="sede-dropdown-menu" style={{
@@ -1812,9 +1812,9 @@ export function HomePage() {
                         right: 0,
                         background: 'var(--bg-primary)',
                         border: '1px solid var(--border-primary)',
-                        borderRadius: '12px',
+                        borderRadius: 'var(--radius-lg)',
                         boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-                        zIndex: 9999,
+                        zIndex: 'var(--z-dropdown)',
                         minWidth: '260px',
                         maxWidth: 'calc(100vw - 24px)',
                         padding: '8px',
@@ -1840,7 +1840,7 @@ export function HomePage() {
                             width: '100%',
                             padding: '10px 12px',
                             border: 'none',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-md)',
                             background: verTodas ? 'var(--bg-secondary)' : 'transparent',
                             cursor: 'pointer',
                             textAlign: 'left',
@@ -1852,7 +1852,7 @@ export function HomePage() {
                           <div style={{
                             width: '32px',
                             height: '32px',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-md)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1900,7 +1900,7 @@ export function HomePage() {
                               width: '100%',
                               padding: '10px 12px',
                               border: 'none',
-                              borderRadius: '8px',
+                              borderRadius: 'var(--radius-md)',
                               background: !verTodas && sedeActual?.id === s.id ? 'var(--bg-secondary)' : 'transparent',
                               cursor: 'pointer',
                               textAlign: 'left',
@@ -1912,7 +1912,7 @@ export function HomePage() {
                             <div style={{
                               width: '32px',
                               height: '32px',
-                              borderRadius: '8px',
+                              borderRadius: 'var(--radius-md)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1937,12 +1937,12 @@ export function HomePage() {
                                 alignItems: 'center',
                                 gap: '6px',
                               }}>
-                                <span style={{ fontFamily: 'monospace' }}>@ {s.codigo}</span>
+                                <span style={{ fontFamily: 'var(--font-mono)' }}>@ {s.codigo}</span>
                                 {s.es_principal && (
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '1px 5px',
-                                    borderRadius: '3px',
+                                    borderRadius: 'var(--radius-xs)',
                                     background: '#F59E0B22',
                                     color: '#D97706',
                                     fontWeight: 700,

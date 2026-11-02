@@ -145,3 +145,41 @@ export function enRangoDiasART(
   if (hasta && dia > hasta) return false
   return true
 }
+
+// ---------------------------------------------------------------------------
+// "Hoy" y fechas calendario (ITCODE-428)
+// ---------------------------------------------------------------------------
+// `new Date().toISOString().slice(0, 10)` devuelve el dia en UTC: en Argentina,
+// desde las 21 h ya es "manana". Para el dia de hoy usar siempre hoyART().
+// Para un Date armado con componentes locales (new Date(a, m, d), startOfWeek,
+// setDate...) usar fechaLocalISO(): toISOString() lo corre de dia segun la zona
+// horaria de la PC.
+
+/** Fecha de hoy en Argentina, "YYYY-MM-DD", corra donde corra el navegador. */
+export function hoyART(): string {
+  return fechaISOART(new Date().toISOString()) as string
+}
+
+/** "YYYY-MM" del mes actual en Argentina. */
+export function mesActualART(): string {
+  return hoyART().slice(0, 7)
+}
+
+/** "YYYY-MM-DD" con los componentes LOCALES del Date (sin pasar por UTC). */
+export function fechaLocalISO(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dia}`
+}
+
+/** Suma (o resta) dias calendario a una fecha "YYYY-MM-DD". Aritmetica pura, sin zonas. */
+export function sumarDiasISO(fecha: string, dias: number): string {
+  const [y, m, d] = fecha.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10)
+}
+
+/** Hoy en Argentina menos N dias, "YYYY-MM-DD". */
+export function haceDiasART(dias: number): string {
+  return sumarDiasISO(hoyART(), -dias)
+}

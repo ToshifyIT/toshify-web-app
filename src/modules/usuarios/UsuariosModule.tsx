@@ -7,7 +7,7 @@ export function UsuariosModule() {
       {/* Header - Estilo Bitacora */}
       <div style={{
         background: 'var(--bg-primary)',
-        borderRadius: '8px',
+        borderRadius: 'var(--radius-md)',
         padding: '20px',
         border: '1px solid var(--border-primary)'
       }}>
@@ -24,7 +24,7 @@ export function UsuariosModule() {
       {/* Contenido */}
       <div style={{
         background: 'var(--bg-primary)',
-        borderRadius: '8px',
+        borderRadius: 'var(--radius-md)',
         padding: '40px',
         border: '1px solid var(--border-primary)',
         textAlign: 'center'

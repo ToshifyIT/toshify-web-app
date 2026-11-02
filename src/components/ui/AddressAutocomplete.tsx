@@ -20,7 +20,7 @@ const DEFAULT_CENTER = {
 const mapContainerStyle = {
   width: '100%',
   height: '250px',
-  borderRadius: '8px',
+  borderRadius: 'var(--radius-md)',
   marginTop: '12px',
   border: '1px solid #e5e7eb'
 }

@@ -48,7 +48,7 @@
   min-height: 0;
   height: auto;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 /* Ícono: siempre chico y sin fondo (algunos módulos lo dibujaban como círculo) */

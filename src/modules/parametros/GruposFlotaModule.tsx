@@ -3,7 +3,7 @@ import { Users, Building2, Plus, Trash2, X, CheckCircle, XCircle, Eye, Edit2 } f
 import { supabase } from '../../lib/supabase'
 import { DataTable } from '../../components/ui/DataTable'
 import { type ColumnDef } from '@tanstack/react-table'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import '../../styles/modules.css'
 import './GruposFlotaModule.css'
@@ -123,19 +123,19 @@ export function GruposFlotaModule() {
   async function handleSave() {
     // Validaciones obligatorias
     if (!formData.razon_social.trim()) {
-      Swal.fire('Error', 'La razon social es obligatoria', 'warning')
+      Alerta.fire('Error', 'La razon social es obligatoria', 'warning')
       return
     }
     if (!formData.cuit.trim()) {
-      Swal.fire('Error', 'El CUIT es obligatorio', 'warning')
+      Alerta.fire('Error', 'El CUIT es obligatorio', 'warning')
       return
     }
     if (!formData.representante_nombre.trim()) {
-      Swal.fire('Error', 'El nombre del representante es obligatorio', 'warning')
+      Alerta.fire('Error', 'El nombre del representante es obligatorio', 'warning')
       return
     }
     if (!formData.representante_dni.trim()) {
-      Swal.fire('Error', 'El DNI del representante es obligatorio', 'warning')
+      Alerta.fire('Error', 'El DNI del representante es obligatorio', 'warning')
       return
     }
 
@@ -185,7 +185,7 @@ export function GruposFlotaModule() {
   }
 
   async function handleDelete(grupo: GrupoFlota) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar grupo',
       html: `Esta seguro de eliminar <strong>${grupo.nombre_comercial}</strong>?<br/>Esta accion no se puede deshacer.`,
       icon: 'warning',
@@ -218,7 +218,7 @@ export function GruposFlotaModule() {
     {
       accessorKey: 'cuit',
       header: 'CUIT',
-      cell: ({ getValue }) => <span style={{ fontSize: '12px', fontFamily: 'monospace' }}>{getValue() as string}</span>,
+      cell: ({ getValue }) => <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{getValue() as string}</span>,
       enableSorting: false,
     },
     {
@@ -230,7 +230,7 @@ export function GruposFlotaModule() {
     {
       accessorKey: 'representante_dni',
       header: 'DNI Rep.',
-      cell: ({ getValue }) => <span style={{ fontSize: '12px', fontFamily: 'monospace' }}>{getValue() as string}</span>,
+      cell: ({ getValue }) => <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{getValue() as string}</span>,
       enableSorting: false,
     },
     {
@@ -470,7 +470,7 @@ export function GruposFlotaModule() {
                 </div>
                 <div className="gf-detail-item">
                   <span className="gf-detail-label">CUIT</span>
-                  <span className="gf-detail-value" style={{ fontFamily: 'monospace' }}>{detailGrupo.cuit}</span>
+                  <span className="gf-detail-value" style={{ fontFamily: 'var(--font-mono)' }}>{detailGrupo.cuit}</span>
                 </div>
                 <div className="gf-detail-item">
                   <span className="gf-detail-label">Representante Legal</span>
@@ -478,7 +478,7 @@ export function GruposFlotaModule() {
                 </div>
                 <div className="gf-detail-item">
                   <span className="gf-detail-label">DNI Representante</span>
-                  <span className="gf-detail-value" style={{ fontFamily: 'monospace' }}>{detailGrupo.representante_dni}</span>
+                  <span className="gf-detail-value" style={{ fontFamily: 'var(--font-mono)' }}>{detailGrupo.representante_dni}</span>
                 </div>
                 <div className="gf-detail-item">
                   <span className="gf-detail-label">Email</span>

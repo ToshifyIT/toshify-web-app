@@ -61,7 +61,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
         {/* HEADER */}
         <div className="alerta-drawer-header">
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
-            <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
               {alerta.patente || '-'}
             </span>
             {modelo && (
@@ -83,7 +83,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
               background: sev.bg,
               border: `1px solid ${sev.color}33`,
               borderLeft: `3px solid ${sev.color}`,
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               padding: '14px 16px',
               display: 'flex',
               gap: 12,
@@ -126,18 +126,18 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {/* Odómetro */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Gauge size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Odómetro</span>
                 </div>
-                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {odometro != null ? `${odometro.toLocaleString('es-AR')} km` : '—'}
                 </div>
               </div>
 
               {/* Próximo Service */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Wrench size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Próximo Service</span>
@@ -147,8 +147,8 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                     <div style={{ fontSize: 14, fontWeight: 700, color: vencido ? '#dc2626' : 'var(--text-primary)', marginBottom: 6 }}>
                       {vencido ? `Vencido ${Math.abs(faltanKm).toLocaleString('es-AR')} km` : `En ${faltanKm.toLocaleString('es-AR')} km`}
                     </div>
-                    <div style={{ width: '100%', height: 6, background: 'var(--bg-primary)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100, pctConsumido || 0)}%`, background: barColor, borderRadius: 3 }} />
+                    <div style={{ width: '100%', height: 6, background: 'var(--bg-primary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, pctConsumido || 0)}%`, background: barColor, borderRadius: 'var(--radius-xs)' }} />
                     </div>
                   </>
                 ) : (
@@ -157,7 +157,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
               </div>
 
               {/* Ocurrencias */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Activity size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Ocurrencias</span>
@@ -168,7 +168,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
               </div>
 
               {/* Fecha */}
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Clock size={14} style={{ color: 'var(--text-tertiary)' }} />
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Detectado</span>
@@ -186,7 +186,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
                 Información Técnica
               </div>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: '4px 0' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: '4px 0' }}>
                 {alerta.conductor_name && (
                   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', padding: '8px 14px', borderBottom: '1px solid var(--border-secondary)' }}>
                     <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Conductor</span>
@@ -196,7 +196,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                 {alerta.diagnostic_code && (
                   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', padding: '8px 14px', borderBottom: '1px solid var(--border-secondary)' }}>
                     <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Código</span>
-                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', fontWeight: 500, color: 'var(--text-primary)' }}>{alerta.diagnostic_code}</span>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--text-primary)' }}>{alerta.diagnostic_code}</span>
                   </div>
                 )}
                 {alerta.failure_mode && (
@@ -217,7 +217,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {alerta.fault_description && (
-                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <FileText size={12} style={{ color: 'var(--text-tertiary)' }} />
                       <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Descripción</span>
@@ -226,7 +226,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                   </div>
                 )}
                 {alerta.effect_on_component && (
-                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <AlertTriangle size={12} style={{ color: '#ea580c' }} />
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#ea580c', textTransform: 'uppercase', letterSpacing: 0.3 }}>Efecto en el componente</span>
@@ -235,7 +235,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                   </div>
                 )}
                 {alerta.recommendation && (
-                  <div style={{ background: 'rgba(37, 99, 235, 0.05)', border: '1px solid rgba(37, 99, 235, 0.2)', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ background: 'rgba(37, 99, 235, 0.05)', border: '1px solid rgba(37, 99, 235, 0.2)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <ClipboardList size={12} style={{ color: '#2563eb' }} />
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 0.3 }}>Recomendación del taller</span>
@@ -253,7 +253,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
                 Auditoría
               </div>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: '4px 0' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 'var(--radius-md)', padding: '4px 0' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', padding: '8px 14px', borderBottom: '1px solid var(--border-secondary)' }}>
                   <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                     {alerta.estado === 'atendida' ? 'Atendida por' : 'Descartada por'}

@@ -1,6 +1,6 @@
 // src/modules/integraciones/alegra/proveedorForm.ts
 // Pop-up para crear o editar un proveedor de Alegra (se usa en Comprobantes y en Proveedores).
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { ETIQUETA_IVA } from '../../../services/alegraComprasService'
 import type { CondicionIvaAlegra, ProveedorAlegra } from '../../../services/alegraComprasService'
 
@@ -27,7 +27,7 @@ export async function abrirFormularioProveedor(
   const iva = inicial.iva_condicion ?? 'IVA_RESPONSABLE'
   const campo = (id: string, label: string, valor: string | number | null | undefined, extra = '') =>
     `<label>${label}<input id="pf-${id}" class="swal2-input" value="${esc(valor)}" ${extra} /></label>`
-  const r = await Swal.fire({
+  const r = await Alerta.fire({
     title: titulo,
     width: 640,
     html: `
@@ -90,9 +90,9 @@ export async function abrirFormularioProveedor(
           observaciones: (document.getElementById('pf-obs') as HTMLTextAreaElement | null)?.value.trim() || null,
         } : {}),
       }
-      if (datos.nombre.length < 2) { Swal.showValidationMessage("Falta la razón social"); return false }
-      if (datos.cuit.length !== 11) { Swal.showValidationMessage("El CUIT debe tener 11 dígitos"); return false }
-      if (datos.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email)) { Swal.showValidationMessage("El email no es válido"); return false }
+      if (datos.nombre.length < 2) { Alerta.showValidationMessage("Falta la razón social"); return false }
+      if (datos.cuit.length !== 11) { Alerta.showValidationMessage("El CUIT debe tener 11 dígitos"); return false }
+      if (datos.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email)) { Alerta.showValidationMessage("El email no es válido"); return false }
       return datos
     },
   })

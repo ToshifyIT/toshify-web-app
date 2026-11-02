@@ -8,7 +8,7 @@ import { ArrowLeft, Loader2, Search, X, Save, RotateCcw, UserPlus, Info, Eye, Do
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 
 // Detalle del cálculo por conductor
@@ -310,7 +310,7 @@ export function CabifyPreviewTable({
       patente: patenteMap.get(c.id) || ''
     })).filter(c => !idsExistentes.has(c.id))
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Agregar Conductor',
       html: `
         <div style="display: flex; flex-direction: column; gap: 12px; text-align: left;">
@@ -400,11 +400,11 @@ export function CabifyPreviewTable({
         const excedentes = Math.round((parseFloat((document.getElementById('swal-excedentes') as HTMLInputElement).value) || 0) * 100) / 100
 
         if (!conductorId) {
-          Swal.showValidationMessage('Selecciona un conductor')
+          Alerta.showValidationMessage('Selecciona un conductor')
           return false
         }
         if (importeContrato === 0) {
-          Swal.showValidationMessage('El importe contrato no puede ser 0')
+          Alerta.showValidationMessage('El importe contrato no puede ser 0')
           return false
         }
 
@@ -453,7 +453,7 @@ export function CabifyPreviewTable({
   const handleSync = useCallback(async () => {
     if (!onSync || !hasChanges) return
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Sincronizar cambios',
       text: '¿Guardar los cambios en la base de datos?',
       icon: 'question',
@@ -557,7 +557,7 @@ export function CabifyPreviewTable({
 
   // Mostrar info general de cómo se calcula
   const showInfoGeneral = useCallback(() => {
-    Swal.fire({
+    Alerta.fire({
       title: 'Cómo se calcula el Preview',
       html: `
         <div style="text-align: left; font-size: 13px; line-height: 1.7; color: var(--text-primary, #333);">
@@ -593,7 +593,7 @@ export function CabifyPreviewTable({
   const showDetalleRow = useCallback(async (row: CabifyPreviewRow) => {
     const d = row.detalle;
     if (!d) {
-      Swal.fire('Sin detalle', 'No hay información de cálculo disponible para este conductor.', 'info');
+      Alerta.fire('Sin detalle', 'No hay información de cálculo disponible para este conductor.', 'info');
       return;
     }
 
@@ -656,7 +656,7 @@ export function CabifyPreviewTable({
       ? excesos.map(e => `• S${e.semana || '?'}: +${e.km_exceso || 0} km → ${fmt(e.monto_total)}`).join('<br/>')
       : 'Sin excesos de KM'
 
-    Swal.fire({
+    Alerta.fire({
       title: row.conductor,
       html: `
         <div style="text-align: left; font-size: 13px; line-height: 1.6; color: var(--text-primary, #333);">
@@ -734,7 +734,7 @@ export function CabifyPreviewTable({
                 <span style={{
                   marginLeft: '10px',
                   padding: '2px 8px',
-                  borderRadius: '4px',
+                  borderRadius: 'var(--radius-xs)',
                   background: 'rgba(245, 158, 11, 0.15)',
                   color: 'var(--color-warning, #f59e0b)',
                   fontSize: '11px',
@@ -773,8 +773,8 @@ export function CabifyPreviewTable({
                 <div style={{
                   position: 'absolute', top: 'calc(100% + 6px)', right: 0,
                   background: 'var(--bg-primary)', border: '1px solid var(--border-primary)',
-                  borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                  zIndex: 1000, width: '240px', maxHeight: '300px',
+                  borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  zIndex: 'var(--z-dropdown)', width: '240px', maxHeight: '300px',
                   display: 'flex', flexDirection: 'column', overflow: 'hidden'
                 }}>
                   <div style={{ padding: '8px', borderBottom: '1px solid var(--border-primary)' }}>
@@ -784,7 +784,7 @@ export function CabifyPreviewTable({
                       onChange={(e) => setGrupoBusqueda(e.target.value)}
                       style={{
                         width: '100%', padding: '5px 8px',
-                        border: '1px solid var(--border-primary)', borderRadius: '4px',
+                        border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-xs)',
                         background: 'var(--bg-secondary)', color: 'var(--text-primary)',
                         fontSize: '12px', outline: 'none'
                       }}

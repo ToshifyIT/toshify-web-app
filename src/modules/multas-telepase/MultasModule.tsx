@@ -10,7 +10,7 @@ import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, Dolla
 import { CrearCobroMultaModal } from './components/CrearCobroMultaModal'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showError, showSuccess } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
@@ -23,6 +23,8 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
+import { hoyART } from '../../utils/fechaArgentina'
+import { numeroSemana } from '../../utils/semanaISO'
 import './MultasTelepase.css'
 
 interface Multa {
@@ -114,16 +116,6 @@ function splitDateTime(dateStr: string | null): { date: string; time: string } {
   } catch {
     return { date: '-', time: '' }
   }
-}
-
-function getWeekNumber(dateStr: string): number {
-  const date = new Date(dateStr)
-  const thursday = new Date(date)
-  thursday.setDate(thursday.getDate() - ((thursday.getDay() + 6) % 7) + 3)
-  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-  const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-  return weekNumber
 }
 
 export default function MultasModule() {
@@ -412,7 +404,7 @@ export default function MultasModule() {
     semana: (m: Multa) => {
       if (semanaFilter.length === 0) return true
       if (!m.created_at) return false
-      return semanaFilter.includes((getWeekNumber(m.created_at) + 1).toString())
+      return semanaFilter.includes((numeroSemana(m.created_at) + 1).toString())
     },
     ibutton: (m: Multa) => {
       if (ibuttonFilter.length === 0) return true
@@ -484,7 +476,7 @@ export default function MultasModule() {
     const semanas = new Set<string>()
     getFilteredData('semana').forEach(m => {
       if (m.created_at) {
-        semanas.add((getWeekNumber(m.created_at) + 1).toString())
+        semanas.add((numeroSemana(m.created_at) + 1).toString())
       }
     })
     return [...semanas].sort((a, b) => parseInt(a) - parseInt(b))
@@ -594,7 +586,7 @@ export default function MultasModule() {
     const base = getFilteredData().filter(m =>
       !m.desestimada_at && !tieneConductorConComa(m) && matchBusqueda(m, busqueda)
     )
-    const hoyStr = new Date().toISOString().slice(0, 10)
+    const hoyStr = hoyART()
     let pendiente = 0, pagado = 0, proceso = 0
     // Detalle de las multas que arman cada métrica.
     const pendienteDetalle: Array<{ multa: Multa; columna: 'IMPORTE' | 'IMP_DESC'; monto: number; enviado: boolean }> = []
@@ -676,7 +668,7 @@ export default function MultasModule() {
       .map(v => `<option value="${v.patente}">${v.patente}</option>`)
       .join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Registrar Multa',
       html: `
         <div class="multas-modal-form">
@@ -728,9 +720,9 @@ export default function MultasModule() {
         const conductor = (document.getElementById('swal-conductor') as HTMLInputElement).value
         const detalle = (document.getElementById('swal-detalle') as HTMLTextAreaElement).value
 
-        if (!patente) { Swal.showValidationMessage('Seleccione una patente'); return false }
-        if (!fecha) { Swal.showValidationMessage('Ingrese la fecha'); return false }
-        if (!importe || parseFloat(importe) <= 0) { Swal.showValidationMessage('Ingrese un importe valido'); return false }
+        if (!patente) { Alerta.showValidationMessage('Seleccione una patente'); return false }
+        if (!fecha) { Alerta.showValidationMessage('Ingrese la fecha'); return false }
+        if (!importe || parseFloat(importe) <= 0) { Alerta.showValidationMessage('Ingrese un importe valido'); return false }
 
         return { patente, fecha, importe, infraccion, lugar, conductor, detalle }
       }
@@ -772,7 +764,7 @@ export default function MultasModule() {
   function editarMulta(multa: Multa) {
     const est = multaCobroEstado.get(multa.id)
     if (est === 'aplicada' || est === 'rechazada') {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'No se puede editar',
         text: est === 'aplicada'
@@ -790,7 +782,7 @@ export default function MultasModule() {
   // "Activas" (sin incidencia ni desestimación) y guarda multa_origen_id apuntando
   // a la multa original, para tener el historial de qué copia vino de cuál.
   async function handleCrearCopia(multa: Multa) {
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       icon: 'question',
       title: '¿Crear copia de esta multa?',
       html: `Se creará una multa nueva en <strong>Activas</strong>, copia de la rechazada${multa.infraccion ? ` <strong>${multa.infraccion}</strong>` : ''}, para poder volver a enviarla a facturación. La original queda como está.`,
@@ -838,7 +830,7 @@ export default function MultasModule() {
   // Rechazar el cobro de una multa PAGADA. Marca la penalidad como rechazada (con motivo e
   // historial en penalidades_rechazos) y, si se tildó el check, crea una copia en Activas.
   async function handleRechazarMulta(multa: Multa) {
-    const { isConfirmed, value } = await Swal.fire({
+    const { isConfirmed, value } = await Alerta.fire({
       title: 'Rechazar multa',
       html: `
         <div style="text-align:left; font-size:13px; line-height:1.6;">
@@ -862,7 +854,7 @@ export default function MultasModule() {
       preConfirm: () => {
         const motivo = (document.getElementById('rechazo-motivo') as HTMLTextAreaElement)?.value?.trim() || ''
         const crearCopia = (document.getElementById('rechazo-copia') as HTMLInputElement)?.checked || false
-        if (!motivo) { Swal.showValidationMessage('Debes ingresar un motivo'); return false }
+        if (!motivo) { Alerta.showValidationMessage('Debes ingresar un motivo'); return false }
         return { motivo, crearCopia }
       },
     })
@@ -873,11 +865,11 @@ export default function MultasModule() {
       const { data: incs } = await (supabase.from('incidencias' as any) as any)
         .select('id').eq('multa_id', multa.id)
       const incIds = ((incs || []) as Array<{ id: string }>).map(i => i.id)
-      if (incIds.length === 0) { Swal.fire('Aviso', 'Esta multa no tiene un cobro asociado para rechazar.', 'warning'); return }
+      if (incIds.length === 0) { Alerta.fire('Aviso', 'Esta multa no tiene un cobro asociado para rechazar.', 'warning'); return }
       const { data: pens } = await (supabase.from('penalidades' as any) as any)
         .select('id, monto, detalle, rechazado').in('incidencia_id', incIds)
       const aRechazar = ((pens || []) as Array<any>).filter(p => p.rechazado !== true)
-      if (aRechazar.length === 0) { Swal.fire('Aviso', 'El cobro de esta multa ya estaba rechazado.', 'info'); return }
+      if (aRechazar.length === 0) { Alerta.fire('Aviso', 'El cobro de esta multa ya estaba rechazado.', 'info'); return }
       // 2) Rechazar cada penalidad: historial + marca
       for (const pen of aRechazar) {
         await (supabase.from('penalidades_rechazos' as any) as any).insert({
@@ -973,7 +965,7 @@ export default function MultasModule() {
 
   // Eliminar multa
   async function desestimarMulta(multa: Multa) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Desestimar esta multa?',
       html: `
         <div style="text-align: left; font-size: 13px; line-height: 1.6;">
@@ -1017,7 +1009,7 @@ export default function MultasModule() {
   }
 
   async function reactivarMulta(multa: Multa) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Reactivar esta multa?',
       text: `Volverá a aparecer en el listado principal.`,
       icon: 'question',
@@ -1042,7 +1034,7 @@ export default function MultasModule() {
   }
 
   async function eliminarMulta(multa: Multa) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar multa?',
       text: `${multa.patente} - ${formatMoney(multa.importe)}`,
       icon: 'warning',
@@ -1093,7 +1085,7 @@ export default function MultasModule() {
     enviandoRef.current.add(multa.id)
     try {
     if (multasEnviadas.has(multa.id)) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Ya enviada',
         text: 'Esta multa ya fue enviada a facturación.',
@@ -1127,7 +1119,7 @@ export default function MultasModule() {
       const intro = descuentoVencio
         ? `El descuento de esta multa <strong>venció el ${vencFmt}</strong>. La opción con descuento ya no está disponible:`
         : `La multa tiene un descuento vigente hasta el <strong>${vencFmt}</strong>. Elegí qué importe vas a cobrar:`
-      const result = await Swal.fire({
+      const result = await Alerta.fire({
         title: 'Seleccionar monto a cobrar',
         html: `
           <div style="text-align:left; font-size: 13px; line-height: 1.5;">
@@ -1151,7 +1143,7 @@ export default function MultasModule() {
           const opcion = (document.querySelector('input[name="opcionMonto"]:checked') as HTMLInputElement)?.value
           if (opcion === 'descuento') return { monto: descNum }
           if (opcion === 'total') return { monto: totalNum }
-          Swal.showValidationMessage('Seleccioná una opción')
+          Alerta.showValidationMessage('Seleccioná una opción')
           return false
         },
       })
@@ -1184,11 +1176,11 @@ export default function MultasModule() {
         next.add(multa.id)
         return next
       })
-      Swal.fire({ icon: 'info', title: 'Ya enviada', text: result.reason, timer: 1800, showConfirmButton: false })
+      Alerta.fire({ icon: 'info', title: 'Ya enviada', text: result.reason, timer: 1800, showConfirmButton: false })
       return
     }
     if ('needsManualInput' in result) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Carga manual requerida',
         text: result.reason
@@ -1339,7 +1331,7 @@ export default function MultasModule() {
       ),
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
-        return getWeekNumber(row.original.created_at) + 1
+        return numeroSemana(row.original.created_at) + 1
       }
     },
     {
@@ -1503,7 +1495,7 @@ export default function MultasModule() {
         cell: ({ row }: { row: { original: Multa } }) => {
           const label = estadoMultaLabel(row.original.id)
           const col = label === 'Rechazada' ? { bg: '#e5e7eb', fg: '#4b5563' } : label === 'Pagado' ? { bg: '#dcfce7', fg: '#15803d' } : label === 'En proceso' ? { bg: '#fef3c7', fg: '#b45309' } : label === 'Aplicado' ? { bg: '#dbeafe', fg: '#1d4ed8' } : { bg: '#fee2e2', fg: '#b91c1c' }
-          return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: col.bg, color: col.fg, whiteSpace: 'nowrap' }}>{label}</span>
+          return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: col.bg, color: col.fg, whiteSpace: 'nowrap' }}>{label}</span>
         },
       },
       {
@@ -1784,7 +1776,7 @@ export default function MultasModule() {
     const ws = XLSX.utils.json_to_sheet(dataExport)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Multas')
-    XLSX.writeFile(wb, `multas_${new Date().toISOString().split('T')[0]}.xlsx`)
+    XLSX.writeFile(wb, `multas_${hoyART()}.xlsx`)
   }
 
   return (
@@ -1829,7 +1821,7 @@ export default function MultasModule() {
               disabled={!detalleHabilitado}
               onClick={() => detalleHabilitado && setShowPendienteModal(true)}
               title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 600 }}
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-sm)', padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 600 }}
             >
               <Eye size={13} /> Detalle
             </button>
@@ -1846,7 +1838,7 @@ export default function MultasModule() {
               disabled={!detalleHabilitado}
               onClick={() => detalleHabilitado && setShowPagadoModal(true)}
               title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 600 }}
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-sm)', padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 600 }}
             >
               <Eye size={13} /> Detalle
             </button>
@@ -1863,7 +1855,7 @@ export default function MultasModule() {
               disabled={!detalleHabilitado}
               onClick={() => detalleHabilitado && setShowProcesoModal(true)}
               title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-sm)', padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}
             >
               <Eye size={13} /> Detalle
             </button>
@@ -1877,7 +1869,7 @@ export default function MultasModule() {
           background: 'rgba(245, 158, 11, 0.08)',
           borderLeft: '3px solid #f59e0b',
           padding: '10px 14px',
-          borderRadius: 4,
+          borderRadius: 'var(--radius-xs)',
           fontSize: 12,
           color: 'var(--text-primary)',
           marginBottom: 12,
@@ -1906,7 +1898,7 @@ export default function MultasModule() {
             <div className="multas-vista-switch" style={{
               display: 'inline-flex',
               border: '1px solid var(--border-primary)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               overflow: 'hidden',
             }}>
               {vistaOptions.map((option, index) => {
@@ -1936,7 +1928,7 @@ export default function MultasModule() {
                       background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
                       color: isActive ? '#fff' : 'var(--text-tertiary)',
                       padding: '1px 6px',
-                      borderRadius: 10,
+                      borderRadius: 'var(--radius-lg)',
                       fontSize: 10,
                       fontWeight: 600,
                     }}>
@@ -2034,7 +2026,7 @@ export default function MultasModule() {
               {selectedMulta.ibutton && (
                 <tr>
                   <td className="multas-detail-label">iButton</td>
-                  <td className="multas-detail-value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>{selectedMulta.ibutton}</td>
+                  <td className="multas-detail-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{selectedMulta.ibutton}</td>
                 </tr>
               )}
               {(selectedMulta.observaciones || selectedMulta.detalle) && (
@@ -2043,7 +2035,7 @@ export default function MultasModule() {
                   <td className="multas-detail-value" style={{
                     padding: '12px',
                     background: 'rgba(239, 68, 68, 0.1)',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     border: '1px solid rgba(239, 68, 68, 0.2)'
                   }}>
                     {selectedMulta.observaciones || selectedMulta.detalle}
@@ -2065,7 +2057,7 @@ export default function MultasModule() {
           gap: '6px',
           fontSize: '13px',
           fontWeight: 600,
-          borderRadius: '6px',
+          borderRadius: 'var(--radius-sm)',
           border: '1px solid transparent',
           cursor: 'pointer',
           lineHeight: 1,
@@ -2098,12 +2090,12 @@ export default function MultasModule() {
                   <iframe
                     src={`https://drive.google.com/file/d/${driveFileId}/preview`}
                     title="PDF de la multa"
-                    style={{ width: '100%', height: '100%', border: 'none', display: 'block', borderRadius: '8px', background: '#fff' }}
+                    style={{ width: '100%', height: '100%', border: 'none', display: 'block', borderRadius: 'var(--radius-md)', background: '#fff' }}
                     allow="autoplay"
                   />
                 ) : (
                   <div style={{
-                    width: '100%', height: '100%', borderRadius: '8px',
+                    width: '100%', height: '100%', borderRadius: 'var(--radius-md)',
                     background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(148,163,184,0.4)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     gap: '12px', color: 'rgba(148,163,184,0.9)', padding: '32px', textAlign: 'center',
@@ -2303,7 +2295,7 @@ export default function MultasModule() {
                           bottom: 0,
                           backgroundColor: onlyActiveConductors ? '#2563EB' : '#E5E7EB',
                           transition: '.4s',
-                          borderRadius: '34px'
+                          borderRadius: 'var(--radius-full)'
                         }}></span>
                         <span style={{
                           position: 'absolute',
@@ -2416,7 +2408,7 @@ export default function MultasModule() {
                           padding: '8px 12px',
                           background: '#ECFDF5',
                           border: '1px solid #A7F3D0',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           color: '#047857',
                           fontSize: '13px',
                           display: 'flex',
@@ -2435,7 +2427,7 @@ export default function MultasModule() {
                           padding: '8px 12px',
                           background: '#FEF2F2',
                           border: '1px solid #FECACA',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           color: '#e6002e',
                           fontSize: '13px',
                           display: 'flex',
@@ -2504,7 +2496,7 @@ export default function MultasModule() {
         const td = { padding: '6px 8px', borderBottom: '1px solid #f6f7f8' }
         return (
           <div className="multas-modal-overlay" onClick={() => setHistorialMulta(null)}>
-            <div onClick={e => e.stopPropagation()} style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: 760, maxHeight: '86vh', overflow: 'auto', border: '1px solid var(--border-primary, #e5e7eb)' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-lg)', width: '95%', maxWidth: 760, maxHeight: '86vh', overflow: 'auto', border: '1px solid var(--border-primary, #e5e7eb)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #eef0f2' }}>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Historial de la multa{historialMulta.infraccion ? ` · ${historialMulta.infraccion}` : ` #${historialMulta.id}`}</h3>
                 <button onClick={() => setHistorialMulta(null)} aria-label="Cerrar" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', padding: 4 }}><X size={18} /></button>
@@ -2514,7 +2506,7 @@ export default function MultasModule() {
                   <div style={{ marginBottom: copias.length > 0 ? 20 : 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 8 }}>Esta multa es una copia de (origen)</div>
                     {parent ? (
-                      <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, fontSize: 13, lineHeight: 1.7 }}>
+                      <div style={{ border: '1px solid #e5e7eb', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, lineHeight: 1.7 }}>
                         <div><strong>Multa #{parent.id}</strong> · Acta {parent.infraccion || '—'} · <span style={{ fontWeight: 700, color: multaCobroEstado.get(parent.id) === 'rechazada' ? '#b91c1c' : '#6b7280' }}>{multaCobroEstado.get(parent.id) === 'rechazada' ? 'Rechazada' : 'Original'}</span></div>
                         <div>Patente: {parent.patente || '—'} · Importe: {formatMoney(parent.importe)}</div>
                         <div>Conductor: {parent.conductor_responsable || '—'}</div>
@@ -2561,7 +2553,7 @@ export default function MultasModule() {
         <div className="multas-modal-overlay" onClick={() => setShowPendienteModal(false)}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: 1280, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
+            style={{ background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-lg)', width: '95%', maxWidth: 1280, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid var(--border-primary, #eef0f2)' }}>
               <div>
@@ -2596,7 +2588,7 @@ export default function MultasModule() {
                     const hl = !enviado ? { background: '#dcfce7', color: '#15803d', fontWeight: 700 } : {}
                     const inci = multasIncidencia.get(multa.id)
                     const semanaEnvio = enviado && inci?.fechaEnvio
-                      ? `S${getWeekNumber(inci.fechaEnvio) + 1}/${new Date(inci.fechaEnvio).getFullYear()}`
+                      ? `S${numeroSemana(inci.fechaEnvio) + 1}/${new Date(inci.fechaEnvio).getFullYear()}`
                       : 'N/A'
                     return (
                       <tr key={multa.id}>
@@ -2613,12 +2605,12 @@ export default function MultasModule() {
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', ...(!enviado && !usoImporte ? hl : {}) }}>{multa.importe_descuento || '-'}</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.fecha_vencimiento_descuento ? String(multa.fecha_vencimiento_descuento).slice(0, 10) : '-'}</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: enviado ? '#dbeafe' : '#f3f4f6', color: enviado ? '#1d4ed8' : '#6b7280', whiteSpace: 'nowrap' }}>{enviado ? 'Enviado' : 'No enviado'}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: enviado ? '#dbeafe' : '#f3f4f6', color: enviado ? '#1d4ed8' : '#6b7280', whiteSpace: 'nowrap' }}>{enviado ? 'Enviado' : 'No enviado'}</span>
                         </td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{semanaEnvio}</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', fontWeight: 700 }}>
                           {formatMoney(monto)}
-                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999, background: enviado ? '#ede9fe' : '#dcfce7', color: enviado ? '#6d28d9' : '#15803d' }}>{enviado ? 'Incidencia' : (usoImporte ? 'Importe' : 'Imp. Desc.')}</span>
+                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-full)', background: enviado ? '#ede9fe' : '#dcfce7', color: enviado ? '#6d28d9' : '#15803d' }}>{enviado ? 'Incidencia' : (usoImporte ? 'Importe' : 'Imp. Desc.')}</span>
                         </td>
                       </tr>
                     )
@@ -2645,7 +2637,7 @@ export default function MultasModule() {
           <div className="multas-modal-overlay" onClick={cerrar}>
             <div
               onClick={e => e.stopPropagation()}
-              style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: esPagado ? 1040 : 1340, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
+              style={{ background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-lg)', width: '95%', maxWidth: esPagado ? 1040 : 1340, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid var(--border-primary, #eef0f2)' }}>
                 <div>
@@ -2712,7 +2704,7 @@ export default function MultasModule() {
                                   <td style={{ padding: '8px 10px', borderBottom: bb, textAlign: 'right', fontWeight: 700, color: acento }}>
                                     {formatMoney(monto)}
                                     {esFracc && (
-                                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: '#e0e7ff', color: '#4338ca' }}>Fraccionada</span>
+                                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-full)', background: '#e0e7ff', color: '#4338ca' }}>Fraccionada</span>
                                     )}
                                   </td>
                                   <td style={{ padding: '8px 10px', borderBottom: bb, whiteSpace: 'normal' }}>{semanasPago && semanasPago.length ? semanasPago.join(', ') : '-'}</td>
@@ -2730,7 +2722,7 @@ export default function MultasModule() {
                             {showSub && (
                               <tr>
                                 <td colSpan={6} style={{ padding: '0 10px 10px', borderBottom: '1px solid #f6f7f8' }}>
-                                  <div style={{ background: 'var(--bg-secondary, #fafafa)', border: '1px solid #f0f0f0', borderRadius: 8, padding: '8px 12px' }}>
+                                  <div style={{ background: 'var(--bg-secondary, #fafafa)', border: '1px solid #f0f0f0', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
                                     <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>
                                       {cobradas.length} de {cuotas.length} cuotas cobradas · Cobrado {formatMoney(montoCobrado)} · Pendiente {formatMoney(montoPendiente)}
                                     </div>
@@ -2740,7 +2732,7 @@ export default function MultasModule() {
                                           <span style={{ fontWeight: 600, minWidth: 96 }}>Cuota {c.numero} de {cuotas.length}</span>
                                           <span style={{ color: '#6b7280', minWidth: 78 }}>S{c.semana}/{c.anio}</span>
                                           <span style={{ minWidth: 110, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(c.monto)}</span>
-                                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: c.aplicado ? '#dcfce7' : '#fef3c7', color: c.aplicado ? '#15803d' : '#b45309' }}>{c.aplicado ? 'Pagada' : 'Pendiente'}</span>
+                                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 'var(--radius-full)', background: c.aplicado ? '#dcfce7' : '#fef3c7', color: c.aplicado ? '#15803d' : '#b45309' }}>{c.aplicado ? 'Pagada' : 'Pendiente'}</span>
                                         </div>
                                       ))}
                                     </div>

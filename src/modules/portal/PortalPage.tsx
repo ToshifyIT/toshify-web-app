@@ -2464,7 +2464,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                 {selectedFactura.grupo_flota && (
                   <div className="portal-detail-info-item">
                     <span className="portal-detail-info-label">Flota</span>
-                    <span className="portal-detail-info-value" style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+                    <span className="portal-detail-info-value" style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontSize: '11px', fontWeight: 600 }}>
                       {selectedFactura.grupo_flota}
                     </span>
                   </div>
@@ -2473,7 +2473,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
               <div className="portal-detail-body">
                 {detalleError && (
-                  <div style={{ padding: '12px', background: '#FEE2E2', color: '#dc2626', borderRadius: '6px', fontSize: '12px', marginBottom: '8px' }}>
+                  <div style={{ padding: '12px', background: '#FEE2E2', color: '#dc2626', borderRadius: 'var(--radius-sm)', fontSize: '12px', marginBottom: '8px' }}>
                     {detalleError}
                   </div>
                 )}
@@ -2850,7 +2850,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           {m.drive_url ? (
             <a className="portal-pdf-btn" style={{ padding: '6px 14px', fontSize: '12px' }} href={driveDownloadUrl(m.drive_url)} download={`Multa_${m.infraccion || 'acta'}.pdf`} rel="noopener noreferrer">Descargar</a>
           ) : (
-            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>Sin PDF</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)' }}>Sin PDF</span>
           )}
         </div>
       </div>
@@ -3181,7 +3181,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           contentStyle={{
                             background: 'var(--bg-tertiary)',
                             border: '1px solid var(--border-primary)',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-md)',
                             fontSize: '12px',
                             color: 'var(--text-primary)',
                           }}
@@ -3244,7 +3244,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           contentStyle={{
                             background: 'var(--bg-tertiary)',
                             border: '1px solid var(--border-primary)',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-md)',
                             fontSize: '12px',
                             color: 'var(--text-primary)',
                           }}
@@ -3341,12 +3341,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                               <span style={{ color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                                 Cobertura {Math.round(cobertura)}%
                               </span>
-                              <span style={{ color: estadoColor, fontWeight: 700, fontFamily: 'monospace' }}>
+                              <span style={{ color: estadoColor, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                                 {estadoTexto}
                               </span>
                             </div>
-                            <div style={{ height: '6px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${cobertura}%`, background: fillColor, borderRadius: '3px' }} />
+                            <div style={{ height: '6px', background: '#f3f4f6', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${cobertura}%`, background: fillColor, borderRadius: 'var(--radius-xs)' }} />
                             </div>
                           </div>
                         </div>
@@ -3449,12 +3449,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                             <div style={{ marginTop: '6px' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '4px' }}>
                                 <span style={{ color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{pct}% del límite</span>
-                                <span style={{ color: excedido ? 'var(--color-primary)' : '#059669', fontWeight: 700, fontFamily: 'monospace' }}>
+                                <span style={{ color: excedido ? 'var(--color-primary)' : '#059669', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                                   {excedido ? 'Excedido' : `${disponibles.toLocaleString('es-AR')} km disponibles`}
                                 </span>
                               </div>
-                              <div style={{ height: '6px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${pct}%`, background: excedido ? 'var(--color-primary)' : '#9ca3af', borderRadius: '3px' }} />
+                              <div style={{ height: '6px', background: '#f3f4f6', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: excedido ? 'var(--color-primary)' : '#9ca3af', borderRadius: 'var(--radius-xs)' }} />
                               </div>
                             </div>
                             {excedido && (
