@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { type ColumnDef, type Table, type FilterFn } from '@tanstack/react-table'
@@ -111,7 +111,7 @@ function NumericRangeFilter({
         <div
           ref={dropRef}
           className="dt-filter-dropdown"
-          style={{ position: 'fixed', top: position.top, left: position.left, zIndex: 9999 }}
+          style={{ position: 'fixed', top: position.top, left: position.left, zIndex: 'var(--z-dropdown)' }}
           onClick={e => e.stopPropagation()}
         >
           <div className="dt-filter-number-range">
@@ -236,7 +236,7 @@ export function RangoSeguimientoPage() {
       { value: 'false', label: 'Sin GNC' },
     ].map(g => `<option value="${g.value}">${g.label}</option>`).join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Nuevo Rango de Seguimiento',
       html: `
         <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
@@ -287,8 +287,8 @@ export function RangoSeguimientoPage() {
         const gncVal = (document.getElementById('swal-gnc') as HTMLSelectElement).value
         const desde = (document.getElementById('swal-desde') as HTMLInputElement).value
         const hasta = (document.getElementById('swal-hasta') as HTMLInputElement).value
-        if (!nombre) { Swal.showValidationMessage('El nombre es obligatorio'); return false }
-        if (desde === '') { Swal.showValidationMessage('El valor "Desde" es obligatorio'); return false }
+        if (!nombre) { Alerta.showValidationMessage('El nombre es obligatorio'); return false }
+        if (desde === '') { Alerta.showValidationMessage('El valor "Desde" es obligatorio'); return false }
         return {
           rango_nombre: nombre,
           color,
@@ -328,7 +328,7 @@ export function RangoSeguimientoPage() {
       { value: 'false', label: 'Sin GNC' },
     ].map(g => `<option value="${g.value}" ${g.value === gncCurrentVal ? 'selected' : ''}>${g.label}</option>`).join('')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Editar Rango de Seguimiento',
       html: `
         <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
@@ -379,8 +379,8 @@ export function RangoSeguimientoPage() {
         const gncVal = (document.getElementById('swal-gnc') as HTMLSelectElement).value
         const desde = (document.getElementById('swal-desde') as HTMLInputElement).value
         const hasta = (document.getElementById('swal-hasta') as HTMLInputElement).value
-        if (!nombre) { Swal.showValidationMessage('El nombre es obligatorio'); return false }
-        if (desde === '') { Swal.showValidationMessage('El valor "Desde" es obligatorio'); return false }
+        if (!nombre) { Alerta.showValidationMessage('El nombre es obligatorio'); return false }
+        if (desde === '') { Alerta.showValidationMessage('El valor "Desde" es obligatorio'); return false }
         return {
           rango_nombre: nombre,
           color,
@@ -404,7 +404,7 @@ export function RangoSeguimientoPage() {
   }
 
   async function eliminarRango(rango: RangoSeguimiento) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar rango?',
       text: `Se eliminará el rango "${rango.rango_nombre}"`,
       icon: 'warning',
@@ -529,7 +529,7 @@ export function RangoSeguimientoPage() {
             background: '#ef4444',
             color: 'white',
             border: 'none',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             fontSize: '14px',
             fontWeight: 600,
             cursor: 'pointer',

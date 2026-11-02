@@ -63,7 +63,7 @@ export function ProtectedRoute({
           onClick={() => window.location.reload()}
           style={{
             padding: '10px 20px',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             border: 'none',
             cursor: 'pointer',
             fontWeight: 600,

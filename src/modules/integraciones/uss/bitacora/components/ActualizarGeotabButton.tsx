@@ -7,7 +7,7 @@
 
 import { useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { Alerta } from '../../../../../components/ui/alertas'
 import { useAuth } from '../../../../../contexts/AuthContext';
 import { showError, showSuccess } from '../../../../../utils/toast';
 import { useGeotabResync, type ResyncPedido } from '../hooks/useGeotabResync';
@@ -53,7 +53,7 @@ export function ActualizarGeotabButton({
       ? `<br><br><span style="color:#d97706"><b>Exceso de km ya cobrado con viajes reasignados (${r.excesos_afectados!.length}):</b>`
         + ` el cobro no se recalcula, revisar a mano.<br>${excesos.join('<br>')}</span>`
       : '';
-    Swal.fire({
+    Alerta.fire({
       icon: 'success',
       title: 'Semana actualizada desde Geotab',
       html: `
@@ -79,7 +79,7 @@ export function ActualizarGeotabButton({
 
   const handleClick = useCallback(async () => {
     if (!resync.semana) return;
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       icon: 'question',
       title: `Actualizar semana ${resync.semana.semana} desde Geotab`,
       html: `
@@ -125,7 +125,7 @@ export function ActualizarGeotabButton({
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '8px 12px', fontSize: 13, fontWeight: 500,
-        border: '1px solid var(--border-primary)', borderRadius: 8,
+        border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)', color: 'var(--text-primary)',
         cursor: bloqueado ? 'not-allowed' : 'pointer',
         opacity: bloqueado ? 0.7 : 1, whiteSpace: 'nowrap',

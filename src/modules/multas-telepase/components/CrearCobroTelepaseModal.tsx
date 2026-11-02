@@ -13,6 +13,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { useCategorizedTipos } from '../../../hooks/useCategorizedTipos'
 import { showError, showSuccess } from '../../../utils/toast'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { numeroSemana } from '../../../utils/semanaISO'
 import '../../incidencias/IncidenciasModule.css'
 
 interface TelepaseInput {
@@ -50,17 +51,6 @@ interface SedeSimple { id: string; nombre: string }
 function getLocalDateString(fromIso?: string | null): string {
   const d = fromIso ? new Date(fromIso) : new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function getWeekNumber(dateStr: string): number {
-  if (!dateStr) return 0
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day, 12, 0, 0)
-  const thursday = new Date(date)
-  thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3)
-  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-  return Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
 }
 
 // Parsea tarifa telepase (formato europeo "3.622,54" o simple) a numero
@@ -251,7 +241,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
     if (t) setTipoCobroId(t.id)
   }, [tiposCobro, tipoCobroId])
 
-  const semanaCalc = useMemo(() => fecha ? getWeekNumber(fecha) : 0, [fecha])
+  const semanaCalc = useMemo(() => fecha ? numeroSemana(fecha) : 0, [fecha])
   const selectedVehiculo = vehiculos.find(v => v.id === vehiculoId)
   const selectedConductor = conductores.find(c => c.id === conductorId)
 
@@ -547,7 +537,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
               {/* Origen: registro telepase */}
               <div className="form-section">
                 <div className="form-section-title">Peaje de Origen (TelePASE)</div>
-                <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--text-secondary)' }}>
                   <strong>{registro.patente}</strong>
                   {registro.fecha ? ` · ${registro.fecha}${registro.hora ? ' ' + registro.hora : ''}` : ''}
                   {registro.estacion ? ` · ${registro.estacion}` : ''}

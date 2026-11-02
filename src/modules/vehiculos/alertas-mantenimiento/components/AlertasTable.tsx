@@ -82,7 +82,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
         const modelo = v ? `${v.marca || ''} ${v.modelo || ''}`.trim() : ''
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, maxWidth: 150 }}>
-            <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, fontWeight: 600 }}>{p}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>{p}</span>
             {modelo && (
               <span
                 style={{
@@ -111,7 +111,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
         const km = getValue() as number | null
         if (km == null) return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
         return (
-          <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, fontWeight: 600 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>
             {km.toLocaleString('es-AR')} km
           </span>
         )
@@ -132,8 +132,8 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
         const vencido = faltan <= 0
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, paddingRight: 8 }}>
-            <div style={{ width: '100%', height: 6, background: 'var(--bg-secondary)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: colors.fg, borderRadius: 3 }} />
+            <div style={{ width: '100%', height: 6, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: colors.fg, borderRadius: 'var(--radius-xs)' }} />
             </div>
             <span style={{ fontSize: 10, color: vencido ? '#dc2626' : 'var(--text-tertiary)', fontWeight: vencido ? 600 : 400 }}>
               {vencido ? `VENCIDO ${Math.abs(faltan).toLocaleString('es-AR')} km` : `en ${faltan.toLocaleString('es-AR')} km`}

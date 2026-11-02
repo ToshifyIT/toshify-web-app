@@ -235,7 +235,7 @@ function Evolucion({ periodos, seleccionado, onSeleccionar }: EvolucionProps) {
               contentStyle={{
                 background: 'var(--bg-primary)',
                 border: '1px solid var(--border-primary)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 color: 'var(--text-primary)',
                 fontSize: 12,
               }}

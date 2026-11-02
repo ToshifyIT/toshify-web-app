@@ -68,7 +68,7 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
   border: '1px solid var(--border-primary)',
-  borderRadius: '6px',
+  borderRadius: 'var(--radius-sm)',
   fontSize: '13px',
   fontFamily: 'inherit',
   background: 'var(--modal-bg)',
@@ -409,7 +409,7 @@ export function ConvertirLeadModal({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10001,
+        zIndex: 'calc(var(--z-modal-nested) + 1)',
         background: 'rgba(0,0,0,0.6)',
         display: 'flex',
         alignItems: 'center',
@@ -420,7 +420,7 @@ export function ConvertirLeadModal({
       <div
         style={{
           background: 'var(--modal-bg, #fff)',
-          borderRadius: '16px',
+          borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: '820px',
           maxHeight: '90vh',
@@ -474,7 +474,7 @@ export function ConvertirLeadModal({
                 <div
                   style={{
                     padding: '10px 14px',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     background: 'rgba(22, 163, 74, 0.1)',
                     border: '1px solid rgba(22, 163, 74, 0.35)',
                     marginBottom: '18px',
@@ -493,7 +493,7 @@ export function ConvertirLeadModal({
                     display: 'flex',
                     gap: '10px',
                     padding: '12px 14px',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     background: 'rgba(220, 38, 38, 0.08)',
                     border: '1px solid rgba(220, 38, 38, 0.3)',
                     marginBottom: '18px',
@@ -513,7 +513,7 @@ export function ConvertirLeadModal({
                     display: 'flex',
                     gap: '10px',
                     padding: '12px 14px',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     background: 'rgba(220, 38, 38, 0.1)',
                     border: '1px solid rgba(220, 38, 38, 0.35)',
                     marginBottom: '18px',
@@ -532,7 +532,7 @@ export function ConvertirLeadModal({
                     display: 'flex',
                     gap: '10px',
                     padding: '12px 14px',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     background: 'rgba(245, 158, 11, 0.12)',
                     border: '1px solid rgba(245, 158, 11, 0.35)',
                     marginBottom: '18px',
@@ -650,7 +650,7 @@ export function ConvertirLeadModal({
                           onClick={() => toggleCategoria(c.descripcion)}
                           style={{
                             padding: '5px 11px',
-                            borderRadius: '6px',
+                            borderRadius: 'var(--radius-sm)',
                             fontSize: '12px',
                             fontWeight: 600,
                             cursor: 'pointer',
@@ -690,7 +690,7 @@ export function ConvertirLeadModal({
               alignItems: 'center',
               gap: '6px',
               padding: '10px 18px',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)',
               background: 'var(--modal-bg)',
               color: 'var(--text-primary)',
@@ -708,7 +708,7 @@ export function ConvertirLeadModal({
             disabled={guardando || saliendo}
             style={{
               padding: '10px 20px',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)',
               background: 'var(--modal-bg)',
               color: 'var(--text-primary)',
@@ -725,7 +725,7 @@ export function ConvertirLeadModal({
             title="Guarda lo cargado sin convertir. Podés volver más tarde y seguir."
             style={{
               padding: '10px 20px',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)',
               background: 'var(--modal-bg)',
               color: puedeGuardar ? 'var(--text-primary)' : '#9CA3AF',
@@ -741,7 +741,7 @@ export function ConvertirLeadModal({
             disabled={!puedeConvertir}
             style={{
               padding: '10px 22px',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               border: 'none',
               background: puedeConvertir ? '#16a34a' : '#9CA3AF',
               color: 'white',

@@ -140,7 +140,7 @@ export function VisitaDetalleModal({
 
             {/* Bloque de arribo: confirmado, pendiente (con botón), o atrasado */}
             {yaMarcadoPresente && (
-              <div className="visita-detalle-row" style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              <div className="visita-detalle-row" style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
                 <Clock size={16} style={{ color: '#10b981' }} />
                 <div>
                   <strong style={{ color: '#10b981' }}>Presente</strong>

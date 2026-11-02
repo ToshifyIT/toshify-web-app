@@ -54,7 +54,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
         </span>
         {resumen.tieneDeuda && (
           <span style={{
-            fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
+            fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
             background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
           }}>
             <AlertTriangle size={12} className="ico-inline" />Deuda real ${resumen.deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
@@ -65,25 +65,25 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
       {/* Resumen: objetivo vs total real pagado (+ excedente) */}
       <div style={{
         display: 'flex', gap: '16px', marginBottom: '12px', padding: '10px 14px',
-        background: 'var(--bg-secondary, #f9fafb)', borderRadius: '6px',
+        background: 'var(--bg-secondary, #f9fafb)', borderRadius: 'var(--radius-sm)',
         border: '1px solid var(--border-primary, #e5e7eb)', alignItems: 'center', flexWrap: 'wrap',
       }}>
         <div style={{ flex: 1, minWidth: '120px' }}>
           <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Garantía objetivo</div>
-          <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary, #111827)', marginTop: '2px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary, #111827)', marginTop: '2px' }}>
             {formatCurrency(Math.round(resumen.montoTotal))}
           </div>
         </div>
         <div style={{ flex: 1, minWidth: '120px' }}>
           <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Total real pagado</div>
-          <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: resumen.tieneExcedente ? '#16a34a' : 'var(--text-primary, #111827)', marginTop: '2px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: resumen.tieneExcedente ? '#16a34a' : 'var(--text-primary, #111827)', marginTop: '2px' }}>
             {formatCurrency(resumen.totalRealPagado)}
           </div>
         </div>
         {resumen.tieneExcedente && (
           <div style={{ flex: 1, minWidth: '120px' }}>
             <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Excedente</div>
-            <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: '#16a34a', marginTop: '2px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#16a34a', marginTop: '2px' }}>
               +{formatCurrency(resumen.excedente)}
             </div>
           </div>
@@ -100,7 +100,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
             onChange={e => setSearch(e.target.value)}
             style={{
               flex: 1, minWidth: '180px', padding: '6px 10px', fontSize: '11px',
-              border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '4px',
+              border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-xs)',
               background: 'var(--bg-secondary, #f9fafb)', color: 'var(--text-primary, #111827)',
             }}
           />
@@ -109,7 +109,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
             onChange={e => setSemanaFilter(e.target.value)}
             style={{
               padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary, #e5e7eb)',
-              borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary, #6b7280)',
+              borderRadius: 'var(--radius-xs)', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary, #6b7280)',
             }}
           >
             <option value="">Todas las semanas</option>
@@ -125,7 +125,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
         <EmptyState size="sm" title="Sin movimientos en el kardex de garantía." />
       ) : (
         <>
-          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px' }}>
+          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)' }}>
             <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--bg-secondary, #f9fafb)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -182,31 +182,31 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
                       <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--text-primary, #111827)', whiteSpace: 'nowrap' }}>
                         {f.anio} S{String(f.semana || '').padStart(2, '0')}
                         {(esExtraFacturacion || esExcedente) && (
-                          <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: '3px', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
+                          <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
                             EXTRA
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px', fontWeight: 600, color: esExtraFacturacion ? '#b45309' : 'var(--text-primary, #111827)' }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: esExtraFacturacion ? '#b45309' : 'var(--text-primary, #111827)' }}>
                         {esExtraFacturacion ? '-' : f.cuotaRef}
                       </td>
                       <td style={{ padding: '10px 12px', color: esExtraFacturacion ? '#b45309' : 'var(--text-secondary, #6b7280)', fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origenLabel}>
                         {origenLabel}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, fontWeight: 700 }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, fontWeight: 700 }}>
                         {formatCurrency(f.montoCuota || 0)}
                       </td>
                       {(() => {
                         // Las filas EXTRA (excedente) no se comparan contra la cuota fija.
                         const celdaVacia = (
-                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary, #9ca3af)' }}>-</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-tertiary, #9ca3af)' }}>-</td>
                         )
                         if (esExtraFacturacion) return celdaVacia
                         const diff = (f.montoCuota || 0) - resumen.montoCuotaFijo
                         if (Math.abs(diff) < 0.01) return celdaVacia
                         const esExcedenteDiff = diff > 0
                         return (
-                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', fontWeight: 600, color: esExcedenteDiff ? '#16a34a' : '#ef4444' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600, color: esExcedenteDiff ? '#16a34a' : '#ef4444' }}>
                             {esExcedenteDiff ? '+' : ''}{formatCurrency(diff)}
                           </td>
                         )
@@ -222,11 +222,11 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
             marginTop: '8px', background: 'var(--bg-secondary, #f9fafb)',
-            border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', overflow: 'hidden',
+            border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
           }}>
             <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'center' }}>
               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.4px' }}>Pagadas</div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '4px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
                 {resumen.cuotasPagadas}
               </div>
               <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
@@ -235,7 +235,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
             </div>
             <div style={{ padding: '12px 16px', textAlign: 'center', gridColumn: 'span 3' }}>
               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.4px' }}>Restantes</div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary, #6b7280)', fontFamily: 'monospace', marginTop: '4px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary, #6b7280)', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
                 {resumen.cuotasRestantes}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary, #6b7280)', marginTop: '2px', fontWeight: 500 }}>
@@ -263,8 +263,8 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
       {alertTip && (
         <div style={{
           position: 'fixed', left: alertTip.x, top: alertTip.y, transform: 'translateY(-50%)',
-          zIndex: 3000, maxWidth: '260px', background: '#1f2937', color: '#fff',
-          padding: '8px 10px', borderRadius: '6px', fontSize: '11px', lineHeight: 1.35,
+          zIndex: 'var(--z-tooltip)', maxWidth: '260px', background: '#1f2937', color: '#fff',
+          padding: '8px 10px', borderRadius: 'var(--radius-sm)', fontSize: '11px', lineHeight: 1.35,
           boxShadow: '0 6px 20px rgba(0,0,0,0.28)', pointerEvents: 'none',
         }}>
           Esta semana aún no está cerrada, por lo tanto el monto aún no se considera en el Total Real Pagado

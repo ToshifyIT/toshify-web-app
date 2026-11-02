@@ -8,7 +8,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import { useCategorizedTipos } from '../../hooks/useCategorizedTipos'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import {
   Plus,
@@ -59,6 +59,8 @@ import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 
+import { hoyART } from '../../utils/fechaArgentina'
+import { semanaISO, numeroSemana, sumarSemanasISO } from '../../utils/semanaISO'
 type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas' | 'rechazados'
 
 // Helper para mapear rol de usuario a área (para incidencias)
@@ -272,11 +274,7 @@ export function IncidenciasModule() {
 
   // Helper para obtener fecha local en formato YYYY-MM-DD
   function getLocalDateString() {
-    const today = new Date()
-    const year = today.getFullYear()
-    const month = String(today.getMonth() + 1).padStart(2, '0')
-    const day = String(today.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+    return hoyART()
   }
 
   // Form data
@@ -900,9 +898,7 @@ export function IncidenciasModule() {
     }
 
     // Calcular semana por defecto (semana anterior)
-    const hoy = new Date()
-    const semActual = getWeekNumber(hoy.toISOString().split('T')[0])
-    const anioActual = hoy.getFullYear()
+    const { semana: semActual, anio: anioActual } = semanaISO(hoyART())
 
     // Consultar periodos cerrados para filtrarlos del dropdown
     const sedeId = sedeActualId || sedeUsuario?.id
@@ -919,23 +915,20 @@ export function IncidenciasModule() {
     }
 
     // Generar opciones de períodos (solo abiertos)
-    let sem = semActual - 4
-    let anio = anioActual
-    if (sem < 1) { sem = 52 + sem; anio-- }
+    let { semana: sem, anio: anio } = sumarSemanasISO(semActual, anioActual, -4)
     const opcionesPeriodos: Array<{semana: number, anio: number, label: string}> = []
     for (let i = 0; i < 25; i++) {
       if (!periodosCerradosSet.has(`${sem}-${anio}`)) {
         opcionesPeriodos.push({ semana: sem, anio: anio, label: `Semana ${sem} - ${anio}` })
       }
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+      { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
     }
 
     // Determinar indice por defecto (semana actual o la primera disponible)
     const defaultIdx = opcionesPeriodos.findIndex(p => p.semana === semActual && p.anio === anioActual)
     const selectedDefault = defaultIdx >= 0 ? defaultIdx : 0
 
-    const { value: semanaSeleccionada } = await Swal.fire({
+    const { value: semanaSeleccionada } = await Alerta.fire({
       title: 'Aplicar en lote',
       html: `
         <p style="margin-bottom:8px;">Se aplicarán <strong>${seleccionadas.length}</strong> cobros/descuentos.</p>
@@ -974,7 +967,7 @@ export function IncidenciasModule() {
             fraccionado: false,
             semana_aplicacion: semFinal,
             anio_aplicacion: anioFinal,
-            fecha_aplicacion: new Date().toISOString().split('T')[0],
+            fecha_aplicacion: hoyART(),
             updated_by: profile?.full_name || 'Sistema'
           })
           .eq('id', pen.id)
@@ -989,7 +982,7 @@ export function IncidenciasModule() {
     setPenalidadesSeleccionadas(new Set())
 
     if (errores > 0) {
-      Swal.fire('Resultado', `Aplicados: ${aplicados}, Errores: ${errores}`, 'warning')
+      Alerta.fire('Resultado', `Aplicados: ${aplicados}, Errores: ${errores}`, 'warning')
     } else {
       showSuccess('Aplicados', `${aplicados} cobros/descuentos aplicados en Semana ${semFinal}-${anioFinal}`)
     }
@@ -1006,7 +999,7 @@ export function IncidenciasModule() {
 
     const seleccionadas = penalidades.filter(p => penalidadesSeleccionadas.has(p.id))
 
-    const { value: motivo } = await Swal.fire({
+    const { value: motivo } = await Alerta.fire({
       title: 'Rechazar en lote',
       html: `<p style="margin-bottom:12px;">Se rechazarán <strong>${seleccionadas.length}</strong> cobros/descuentos.</p>`,
       input: 'textarea',
@@ -1060,7 +1053,7 @@ export function IncidenciasModule() {
     setPenalidadesSeleccionadas(new Set())
 
     if (errores > 0) {
-      Swal.fire('Resultado', `Rechazados: ${rechazados}, Errores: ${errores}`, 'warning')
+      Alerta.fire('Resultado', `Rechazados: ${rechazados}, Errores: ${errores}`, 'warning')
     } else {
       showSuccess('Rechazados', `${rechazados} cobros/descuentos rechazados`)
     }
@@ -1076,7 +1069,7 @@ export function IncidenciasModule() {
     // Validar que todas tengan conductor
     const sinConductor = seleccionadas.filter(i => !i.conductor_id && !i.conductor_display)
     if (sinConductor.length > 0) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'error',
         title: 'Incidencias sin conductor',
         html: `Hay <strong>${sinConductor.length}</strong> incidencia(s) sin conductor asignado.<br><br>Edite las incidencias y asigne un conductor antes de enviar a facturación.`
@@ -1084,7 +1077,7 @@ export function IncidenciasModule() {
       return
     }
     
-    const confirmResult = await Swal.fire({
+    const confirmResult = await Alerta.fire({
       icon: 'question',
       title: 'Enviar a facturación',
       html: `¿Confirmas enviar <strong>${seleccionadas.length}</strong> incidencias a facturación?<br><br>
@@ -1121,7 +1114,7 @@ export function IncidenciasModule() {
           if (error) throw error
         } else {
           // Nueva penalidad
-          const semana = getWeekNumber(incidencia.fecha || new Date().toISOString().split('T')[0])
+          const semana = numeroSemana(incidencia.fecha || hoyART())
           const { error } = await (supabase.from('penalidades' as any) as any)
             .insert({
               incidencia_id: incidencia.id,
@@ -1155,7 +1148,7 @@ export function IncidenciasModule() {
     setIncidenciasSeleccionadas(new Set())
     
     if (errores > 0) {
-      Swal.fire('Resultado', `Enviadas: ${enviados}, Errores: ${errores}`, 'warning')
+      Alerta.fire('Resultado', `Enviadas: ${enviados}, Errores: ${errores}`, 'warning')
     } else {
       showSuccess('Enviadas a facturación', `${enviados} incidencias enviadas correctamente`)
     }
@@ -1555,12 +1548,12 @@ export function IncidenciasModule() {
         // Telepase: Cod Inc = nombre del tipo (ej. "P005 - Peaje")
         if ((row.original as any).telepase_id) {
           const nombre = tipo?.nombre || '-'
-          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
         }
         if (!tipo?.categoria) return '-'
         const label = codIncLabels[tipo.categoria] || tipo.nombre || tipo.categoria
         const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{label}</span>
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{label}</span>
       }
     },
     {
@@ -1579,7 +1572,7 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         // Telepase: Tipo Inc = "Telepase" (el origen), no el nombre del tipo de cobro
         if ((row.original as any).telepase_id) {
-          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Telepase</span>
+          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>Telepase</span>
         }
         const tipoId = row.original.tipo_cobro_descuento_id
         if (!tipoId) return '-'
@@ -1587,7 +1580,7 @@ export function IncidenciasModule() {
         const nombre = tipo?.nombre || '-'
         if (!tipo?.categoria) return nombre
         const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
       }
     },
     {
@@ -1601,7 +1594,7 @@ export function IncidenciasModule() {
         const tipoId = row.original.tipo_cobro_descuento_id
         const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
         const bg = tipo?.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{formatMoney(monto)}</span>
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{formatMoney(monto)}</span>
       }
     },
     {
@@ -1849,12 +1842,12 @@ export function IncidenciasModule() {
         // Telepase: Cod Inc = nombre del tipo (ej. "P005 - Peaje")
         if ((row.original as any).telepase_id) {
           const nombre = tipo?.nombre || '-'
-          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
         }
         if (!tipo?.categoria) return '-'
         const label = codIncLabels[tipo.categoria] || tipo.categoria
         const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{label}</span>
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{label}</span>
       }
     },
     {
@@ -1884,14 +1877,14 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         // Telepase: Tipo Inc = "Telepase" (el origen), no el nombre del tipo de cobro
         if ((row.original as any).telepase_id) {
-          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Telepase</span>
+          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>Telepase</span>
         }
         const tipoId = row.original.tipo_cobro_descuento_id
         const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
         const nombre = row.original.tipo_nombre || tipo?.nombre || '-'
         if (!tipo?.categoria) return nombre
         const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
       }
     },
     {
@@ -1901,7 +1894,7 @@ export function IncidenciasModule() {
         const tipoId = row.original.tipo_cobro_descuento_id
         const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
         const bg = tipo?.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{formatMoney(row.original.monto)}</span>
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{formatMoney(row.original.monto)}</span>
       }
     },
     {
@@ -2084,7 +2077,7 @@ export function IncidenciasModule() {
     // Solo bloquear si hay penalidades y NINGUNA está rechazada
     if (penalidadesExistentes && penalidadesExistentes.length > 0 && !penalidadRechazada) {
       const montoTotal = penalidadesExistentes.reduce((sum: number, p: any) => sum + (p.monto || 0), 0)
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Ya enviado a facturación',
         html: `Esta incidencia ya fue enviada a facturación.<br><br>Monto: <strong>$${montoTotal.toLocaleString('es-AR')}</strong><br><br>Revisa la pestaña <strong>Cobros/Descuentos</strong> para ver o aplicar el cobro.`,
@@ -2095,19 +2088,19 @@ export function IncidenciasModule() {
     
     // Validar que tenga monto
     if (!incidencia.monto || incidencia.monto <= 0) {
-      Swal.fire('Error', 'La incidencia no tiene monto definido para enviar a facturación. Edite la incidencia y agregue el monto.', 'warning')
+      Alerta.fire('Error', 'La incidencia no tiene monto definido para enviar a facturación. Edite la incidencia y agregue el monto.', 'warning')
       return
     }
     
     // Validar que tenga conductor
     if (!incidencia.conductor_id && !incidencia.conductor_display) {
-      Swal.fire('Error', 'La incidencia no tiene conductor asignado. Edite la incidencia y asigne un conductor antes de enviar a facturación.', 'warning')
+      Alerta.fire('Error', 'La incidencia no tiene conductor asignado. Edite la incidencia y asigne un conductor antes de enviar a facturación.', 'warning')
       return
     }
     
     // Si es reenvío (penalidad rechazada), actualizar en lugar de crear
     if (penalidadRechazada) {
-      const confirmReenvio = await Swal.fire({
+      const confirmReenvio = await Alerta.fire({
         icon: 'warning',
         title: 'Reenviar a facturación',
         html: `Esta incidencia fue rechazada anteriormente.<br><br>
@@ -2146,7 +2139,7 @@ export function IncidenciasModule() {
     }
     
     // Confirmar envío (nuevo)
-    const confirmResult = await Swal.fire({
+    const confirmResult = await Alerta.fire({
       icon: 'question',
       title: 'Enviar a facturación',
       html: `¿Confirmas enviar esta incidencia a facturación?<br><br>
@@ -2165,7 +2158,7 @@ export function IncidenciasModule() {
     // Crear la penalidad
     try {
       const areaResponsable = getAreaResponsablePorRol(profile?.roles?.name)
-      const semanaCalculada = getWeekNumber(incidencia.fecha || getLocalDateString())
+      const semanaCalculada = numeroSemana(incidencia.fecha || getLocalDateString())
       
       const penalidadData = {
         incidencia_id: incidencia.id,
@@ -2298,7 +2291,7 @@ export function IncidenciasModule() {
       return
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar incidencia?',
       html: `
         <p>Se eliminará la incidencia del <strong>${formatDate(incidencia.fecha)}</strong></p>
@@ -2344,7 +2337,7 @@ export function IncidenciasModule() {
       return
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar penalidad?',
       html: `
         <p>Se eliminará la penalidad de <strong>${formatMoney(penalidad.monto)}</strong></p>
@@ -2424,23 +2417,6 @@ export function IncidenciasModule() {
     }
   }
 
-  // Calcular número de semana ISO 8601
-  function getWeekNumber(dateStr: string): number {
-    if (!dateStr) return 0
-    // Parsear la fecha usando componentes locales para evitar problemas de timezone
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const date = new Date(year, month - 1, day, 12, 0, 0) // mediodía hora local
-
-    // ISO week: la semana 1 es la que contiene el primer jueves del año
-    const thursday = new Date(date)
-    thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3) // Ir al jueves de la semana
-
-    const firstThursday = new Date(thursday.getFullYear(), 0, 4) // 4 de enero siempre está en semana 1
-    firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-
-    const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-    return weekNumber
-  }
 
   async function handleGuardarIncidencia() {
     // Validar permisos
@@ -2455,31 +2431,31 @@ export function IncidenciasModule() {
 
     // Validar campos obligatorios comunes
     if (!incidenciaForm.vehiculo_id) {
-      Swal.fire('Error', 'Por favor seleccione una patente', 'warning')
+      Alerta.fire('Error', 'Por favor seleccione una patente', 'warning')
       return
     }
     if (!incidenciaForm.conductor_id) {
-      Swal.fire('Error', 'Por favor seleccione un conductor', 'warning')
+      Alerta.fire('Error', 'Por favor seleccione un conductor', 'warning')
       return
     }
     if (!incidenciaForm.fecha) {
-      Swal.fire('Error', 'Por favor seleccione una fecha', 'warning')
+      Alerta.fire('Error', 'Por favor seleccione una fecha', 'warning')
       return
     }
     if (!incidenciaForm.turno) {
-      Swal.fire('Error', 'Por favor seleccione una modalidad (turno)', 'warning')
+      Alerta.fire('Error', 'Por favor seleccione una modalidad (turno)', 'warning')
       return
     }
     if (!incidenciaForm.tipo_cobro_descuento_id) {
-      Swal.fire('Error', 'Por favor seleccione el tipo de incidencia', 'warning')
+      Alerta.fire('Error', 'Por favor seleccione el tipo de incidencia', 'warning')
       return
     }
     if (!incidenciaForm.area) {
-      Swal.fire('Error', 'Por favor seleccione un área', 'warning')
+      Alerta.fire('Error', 'Por favor seleccione un área', 'warning')
       return
     }
     if (!incidenciaForm.estado_id) {
-      Swal.fire('Error', 'Por favor seleccione un estado', 'warning')
+      Alerta.fire('Error', 'Por favor seleccione un estado', 'warning')
       return
     }
 
@@ -2488,7 +2464,7 @@ export function IncidenciasModule() {
     const esCobro = activeTab === 'cobro' || (modalMode === 'edit' && selectedIncidencia?.tipo === 'cobro')
     if (esCobro) {
       if (!incidenciaForm.monto || incidenciaForm.monto <= 0) {
-        Swal.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
+        Alerta.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
         return
       }
     }
@@ -2496,7 +2472,7 @@ export function IncidenciasModule() {
     setSaving(true)
     try {
       // Calcular semana basada en la fecha
-      const semanaCalculada = getWeekNumber(incidenciaForm.fecha)
+      const semanaCalculada = numeroSemana(incidenciaForm.fecha)
       
       const tipoCobroId = incidenciaForm.tipo_cobro_descuento_id
       
@@ -2615,14 +2591,14 @@ export function IncidenciasModule() {
     }
 
     if (!penalidadForm.fecha) {
-      Swal.fire('Error', 'Por favor complete los campos requeridos', 'warning')
+      Alerta.fire('Error', 'Por favor complete los campos requeridos', 'warning')
       return
     }
 
     setSaving(true)
     try {
       // Calcular semana basada en la fecha
-      const semanaCalculada = getWeekNumber(penalidadForm.fecha)
+      const semanaCalculada = numeroSemana(penalidadForm.fecha)
       
       // Construir objeto solo con campos que existen en la tabla penalidades
       const dataToSave: Record<string, unknown> = {
@@ -2717,9 +2693,7 @@ export function IncidenciasModule() {
     setCantidadCuotas(2)
     
     // Calcular semana actual y semana anterior (para regularización)
-    const hoy = new Date()
-    const semanaActual = getWeekNumber(hoy.toISOString().split('T')[0])
-    const anioActual = hoy.getFullYear()
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
     
     // Por defecto usar semana actual
     setSemanaInicio(semanaActual)
@@ -2744,12 +2718,7 @@ export function IncidenciasModule() {
     const periodos: Array<{semana: number, anio: number, label: string}> = []
 
     // Agregar 4 semanas anteriores
-    let sem = semanaActual - 4
-    let anio = anioActual
-    if (sem < 1) {
-      sem = 52 + sem
-      anio = anioActual - 1
-    }
+    let { semana: sem, anio: anio } = sumarSemanasISO(semanaActual, anioActual, -4)
 
     for (let i = 0; i < 25; i++) { // 4 anteriores + actual + 20 siguientes
       if (!periodosCerradosSet.has(`${sem}-${anio}`)) {
@@ -2759,11 +2728,7 @@ export function IncidenciasModule() {
           label: `Semana ${sem} - ${anio}`
         })
       }
-      sem++
-      if (sem > 52) {
-        sem = 1
-        anio++
-      }
+      { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
     }
 
     // Si la semana por defecto está cerrada, usar la primera disponible
@@ -2805,11 +2770,7 @@ export function IncidenciasModule() {
             aplicado: false
           })
           
-          sem++
-          if (sem > 52) {
-            sem = 1
-            anio++
-          }
+          { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
         }
         
         // Insertar cuotas
@@ -2826,7 +2787,7 @@ export function IncidenciasModule() {
             aplicado: true, // Marcamos como aplicado porque ya se fraccionó
             semana_aplicacion: semanaInicio,
             anio_aplicacion: anioInicio,
-            fecha_aplicacion: new Date().toISOString().split('T')[0],
+            fecha_aplicacion: hoyART(),
             updated_by: profile?.full_name || 'Sistema'
           })
           .eq('id', penalidadAplicar.id)
@@ -2842,7 +2803,7 @@ export function IncidenciasModule() {
             fraccionado: false,
             semana_aplicacion: semanaInicio,
             anio_aplicacion: anioInicio,
-            fecha_aplicacion: new Date().toISOString().split('T')[0],
+            fecha_aplicacion: hoyART(),
             updated_by: profile?.full_name || 'Sistema'
           })
           .eq('id', penalidadAplicar.id)
@@ -2863,7 +2824,7 @@ export function IncidenciasModule() {
 
   // Desaplicar un cobro/descuento (revertir la aplicación)
   async function handleDesaplicar(penalidad: PenalidadCompleta) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Desaplicar cobro/descuento?',
       html: `
         <p>Se revertirá la aplicación de:</p>
@@ -2936,16 +2897,10 @@ export function IncidenciasModule() {
 
     // Generar períodos disponibles (8 semanas anteriores + 20 semanas futuras)
     // Excluir los que ya están cerrados
-    const semanaActual = getWeek(new Date())
-    const anioActual = new Date().getFullYear()
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
     const periodos: Array<{semana: number, anio: number, label: string}> = []
 
-    let sem = semanaActual - 8
-    let anio = anioActual
-    if (sem < 1) {
-      sem = 52 + sem
-      anio = anioActual - 1
-    }
+    let { semana: sem, anio: anio } = sumarSemanasISO(semanaActual, anioActual, -8)
 
     for (let i = 0; i < 30; i++) { // 8 anteriores + actual + 21 siguientes
       if (!periodosCerradosSet.has(`${sem}-${anio}`)) {
@@ -2955,23 +2910,13 @@ export function IncidenciasModule() {
           label: `Semana ${sem} - ${anio}`
         })
       }
-      sem++
-      if (sem > 52) {
-        sem = 1
-        anio++
-      }
+      { const s = sumarSemanasISO(sem, anio, 1); sem = s.semana; anio = s.anio }
     }
 
     setPeriodosDisponibles(periodos)
     setShowReasignarModal(true)
   }
 
-  // Helper para obtener semana del año
-  function getWeek(date: Date): number {
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
-    const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000
-    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7)
-  }
 
   // Ejecutar reasignación de semana con recálculo en cascada
   async function handleConfirmarReasignacion() {
@@ -2981,7 +2926,7 @@ export function IncidenciasModule() {
     const anioOrigen = penalidadReasignar.anio_aplicacion
     
     if (semanaOrigen === nuevaSemana && anioOrigen === nuevoAnio) {
-      Swal.fire('Sin cambios', 'La semana seleccionada es la misma que la actual', 'info')
+      Alerta.fire('Sin cambios', 'La semana seleccionada es la misma que la actual', 'info')
       return
     }
     
@@ -3097,7 +3042,7 @@ export function IncidenciasModule() {
   function handleExportarIncidencias() {
     const filas = incidenciasVisiblesRef.current.length > 0 ? incidenciasVisiblesRef.current : incidenciasFiltradas
     if (filas.length === 0) {
-      Swal.fire('Sin datos', 'No hay incidencias para exportar', 'info')
+      Alerta.fire('Sin datos', 'No hay incidencias para exportar', 'info')
       return
     }
 
@@ -3129,14 +3074,14 @@ export function IncidenciasModule() {
     ]
     ws['!cols'] = colWidths
 
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = hoyART()
     XLSX.writeFile(wb, `Incidencias_${fecha}.xlsx`)
   }
 
   function handleExportarPenalidades() {
     const filas = penalidadesVisiblesRef.current.length > 0 ? penalidadesVisiblesRef.current : penalidadesFiltradas
     if (filas.length === 0) {
-      Swal.fire('Sin datos', 'No hay penalidades para exportar', 'info')
+      Alerta.fire('Sin datos', 'No hay penalidades para exportar', 'info')
       return
     }
 
@@ -3169,7 +3114,7 @@ export function IncidenciasModule() {
     ws['!cols'] = colWidths
 
     const tabName = activeTab === 'por_aplicar' ? 'PorAplicar' : 'Todas'
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = hoyART()
     XLSX.writeFile(wb, `Penalidades_${tabName}_${fecha}.xlsx`)
   }
 
@@ -3179,12 +3124,7 @@ export function IncidenciasModule() {
   const countRechazados = penalidades.filter(p => p.rechazado).length
 
   // Stats: filtrar por semana actual y pestaña seleccionada
-  const semanaActual = useMemo(() => {
-    const hoy = new Date()
-    const dateStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
-    return getWeekNumber(dateStr)
-  }, [])
-  const anioActualStats = new Date().getFullYear()
+  const { semana: semanaActual, anio: anioActualStats } = useMemo(() => semanaISO(hoyART()), [])
 
   const statsIncidencias = useMemo(() => {
     // Filtrar por semana actual y año
@@ -3520,7 +3460,7 @@ export function IncidenciasModule() {
                 <button
                   onClick={() => setQuickCategoriaFilter(null)}
                   style={{
-                    padding: '6px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600,
+                    padding: '6px 12px', borderRadius: 'var(--radius-full)', fontSize: '12px', fontWeight: 600,
                     border: `1px solid ${quickCategoriaFilter === null ? 'var(--color-primary)' : 'var(--border-primary)'}`,
                     background: quickCategoriaFilter === null ? 'var(--color-primary)' : 'transparent',
                     color: quickCategoriaFilter === null ? '#fff' : 'var(--text-secondary)',
@@ -3538,7 +3478,7 @@ export function IncidenciasModule() {
                       key={c.key}
                       onClick={() => setQuickCategoriaFilter(active ? null : c.key)}
                       style={{
-                        padding: '6px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600,
+                        padding: '6px 12px', borderRadius: 'var(--radius-full)', fontSize: '12px', fontWeight: 600,
                         border: `1px solid ${active ? c.color : 'var(--border-primary)'}`,
                         background: active ? c.color : 'transparent',
                         color: active ? '#fff' : 'var(--text-secondary)',
@@ -4135,7 +4075,7 @@ export function IncidenciasModule() {
               </button>
             </div>
             <div className="modal-body">
-              <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+              <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
                 <div style={{ marginBottom: '8px' }}>
                   <strong>{penalidadRechazar.conductor_display}</strong>
                 </div>
@@ -4188,7 +4128,7 @@ export function IncidenciasModule() {
               <div style={{ 
                 background: '#f5f5f5', 
                 padding: '16px 20px', 
-                borderRadius: '8px', 
+                borderRadius: 'var(--radius-md)', 
                 marginBottom: '24px' 
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -4216,7 +4156,7 @@ export function IncidenciasModule() {
                       flex: 1, 
                       padding: '14px', 
                       border: `2px solid ${!aplicarFraccionado ? '#F59E0B' : '#e5e5e5'}`,
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                       background: !aplicarFraccionado ? 'rgba(245, 158, 11, 0.08)' : '#fff',
                       textAlign: 'center'
@@ -4236,7 +4176,7 @@ export function IncidenciasModule() {
                       flex: 1, 
                       padding: '14px', 
                       border: `2px solid ${aplicarFraccionado ? '#F59E0B' : '#e5e5e5'}`,
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                       background: aplicarFraccionado ? 'rgba(245, 158, 11, 0.08)' : '#fff',
                       textAlign: 'center'
@@ -4261,7 +4201,7 @@ export function IncidenciasModule() {
                 <div style={{ 
                   padding: '14px 16px', 
                   background: 'rgba(16, 185, 129, 0.1)', 
-                  borderRadius: '8px', 
+                  borderRadius: 'var(--radius-md)', 
                   marginBottom: '20px',
                   border: '1px solid rgba(16, 185, 129, 0.3)'
                 }}>
@@ -4287,7 +4227,7 @@ export function IncidenciasModule() {
                   style={{ 
                     width: '100%', 
                     padding: '12px 14px', 
-                    borderRadius: '6px', 
+                    borderRadius: 'var(--radius-sm)', 
                     border: '1px solid #e5e5e5',
                     background: '#f5f5f5',
                     color: '#333',
@@ -4320,7 +4260,7 @@ export function IncidenciasModule() {
                     style={{ 
                       width: '100%', 
                       padding: '12px 14px', 
-                      borderRadius: '6px', 
+                      borderRadius: 'var(--radius-sm)', 
                       border: '1px solid #e5e5e5',
                       background: '#f5f5f5',
                       color: '#333',
@@ -4336,7 +4276,7 @@ export function IncidenciasModule() {
                     marginTop: '16px', 
                     padding: '16px 20px', 
                     background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', 
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     border: '2px solid #F59E0B'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4349,7 +4289,7 @@ export function IncidenciasModule() {
                           {formatMoney(Math.ceil((penalidadAplicar.monto || 0) / cantidadCuotas))}
                         </div>
                         <div style={{ fontSize: '12px', color: '#B45309' }}>
-                          Semana {((semanaInicio + cantidadCuotas - 2) % 52) + 1} - {anioInicio + Math.floor((semanaInicio + cantidadCuotas - 2) / 52)}
+                          Semana {sumarSemanasISO(semanaInicio, anioInicio, cantidadCuotas - 1).semana} - {sumarSemanasISO(semanaInicio, anioInicio, cantidadCuotas - 1).anio}
                         </div>
                       </div>
                     </div>
@@ -4364,7 +4304,7 @@ export function IncidenciasModule() {
                 disabled={aplicandoCobro}
                 style={{
                   padding: '10px 24px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   border: '1px solid #e5e5e5',
                   background: '#fff',
                   color: '#666',
@@ -4379,7 +4319,7 @@ export function IncidenciasModule() {
                 disabled={aplicandoCobro}
                 style={{
                   padding: '10px 24px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   border: 'none',
                   background: '#ef4444',
                   color: '#fff',
@@ -4417,7 +4357,7 @@ export function IncidenciasModule() {
               <div style={{ 
                 padding: '16px', 
                 background: '#f8f9fa', 
-                borderRadius: '8px', 
+                borderRadius: 'var(--radius-md)', 
                 marginBottom: '20px',
                 border: '1px solid #e9ecef'
               }}>
@@ -4456,7 +4396,7 @@ export function IncidenciasModule() {
                   style={{ 
                     width: '100%', 
                     padding: '12px 14px', 
-                    borderRadius: '6px', 
+                    borderRadius: 'var(--radius-sm)', 
                     border: '1px solid #e5e5e5',
                     background: '#fff',
                     color: '#333',
@@ -4482,7 +4422,7 @@ export function IncidenciasModule() {
               <div style={{ 
                 padding: '12px 14px', 
                 background: 'rgba(59, 130, 246, 0.1)', 
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 border: '1px solid rgba(59, 130, 246, 0.3)',
                 fontSize: '13px',
                 color: '#1E40AF'
@@ -4497,7 +4437,7 @@ export function IncidenciasModule() {
                 disabled={reasignando}
                 style={{
                   padding: '10px 24px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   border: '1px solid #e5e5e5',
                   background: '#fff',
                   color: '#666',
@@ -4512,7 +4452,7 @@ export function IncidenciasModule() {
                 disabled={reasignando || (nuevaSemana === penalidadReasignar.semana_aplicacion && nuevoAnio === penalidadReasignar.anio_aplicacion)}
                 style={{
                   padding: '10px 24px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   border: 'none',
                   background: '#3B82F6',
                   color: '#fff',
@@ -4864,25 +4804,8 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
     setPatentesAsignadas([])
   }
 
-  // Calcular número de semana ISO 8601
-  const getWeekNumber = (dateStr: string): number => {
-    if (!dateStr) return 0
-    // Parsear la fecha usando componentes locales para evitar problemas de timezone
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const date = new Date(year, month - 1, day, 12, 0, 0) // mediodía hora local
 
-    // ISO week: la semana 1 es la que contiene el primer jueves del año
-    const thursday = new Date(date)
-    thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3) // Ir al jueves de la semana
-
-    const firstThursday = new Date(thursday.getFullYear(), 0, 4) // 4 de enero siempre está en semana 1
-    firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-
-    const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-    return weekNumber
-  }
-
-  const semanaCalculada = getWeekNumber(formData.fecha)
+  const semanaCalculada = numeroSemana(formData.fecha)
 
   const filteredVehiculos = vehiculos.filter(v => {
     const term = vehiculoSearch.toLowerCase()
@@ -5125,7 +5048,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               {(() => {
                 // Evaluar GNC una sola vez (antes se calculaba por cada botón)
                 const modalidadGnc = formData.turno === 'A cargo' ? 'CARGO' : formData.turno === 'Nocturno' ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO'
-                const fechaInc = formData.fecha || new Date().toISOString().split('T')[0]
+                const fechaInc = formData.fecha || hoyART()
                 const gncActual = !!selectedVehiculo?.gnc
                 let tieneGnc = gncActual
                 if (gncHistorial.length > 0) {
@@ -5163,7 +5086,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                             disabled={turnosDisabled}
                             onClick={() => setFormData(prev => ({ ...prev, monto: montoCalculado }))}
                             style={{
-                              padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                              padding: '4px 8px', borderRadius: 'var(--radius-xs)', fontSize: '11px', fontWeight: 600,
                               border: '1px solid var(--border-primary)',
                               background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
                               color: isSelected ? 'white' : 'var(--text-primary)',
@@ -5200,7 +5123,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                         }}
                         style={{
                           width: '90px', padding: '4px 6px', fontSize: '11px',
-                          borderRadius: '4px', border: '1px solid var(--border-primary)',
+                          borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-primary)',
                           background: 'var(--bg-secondary)', color: 'var(--text-primary)',
                           opacity: turnosDisabled ? 0.5 : 1,
                         }}
@@ -5316,7 +5239,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   className="conductor-select-option"
                   onClick={() => handleSelectPatenteFromModal(p)}
                 >
-                  <span className="conductor-select-name" style={{ fontFamily: 'monospace', fontWeight: 700 }}>{p.patente}</span>
+                  <span className="conductor-select-name" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{p.patente}</span>
                   <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                     {p.fechaDesde ? p.fechaDesde.substring(0, 10) : '?'} — {p.fechaHasta ? p.fechaHasta.substring(0, 10) : 'actual'}
                   </span>
@@ -5386,7 +5309,7 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
   const vehiculoTexto = [incidencia.vehiculo_marca, incidencia.vehiculo_modelo].filter(Boolean).join(' ')
 
   // Estilos (compactos: etiqueta chica arriba, valor abajo, en grilla)
-  const seccion = { border: '1px solid var(--border-primary)', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px' }
+  const seccion = { border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: '10px' }
   const tituloSeccion = { fontSize: '10.5px', fontWeight: 700 as const, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: 'var(--text-tertiary)', marginBottom: '8px' }
   const grilla = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 14px' }
   const etiqueta = { display: 'block', fontSize: '10px', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.03em', color: 'var(--text-tertiary)', marginBottom: '2px' }
@@ -5409,7 +5332,7 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
             <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>{incidencia.patente_display || 'Sin patente'}</span>
             <span className={`estado-badge estado-${estadoEfectivo.color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{estadoEfectivo.nombre}</span>
             {codInc !== '-' && (
-              <span style={{ background: tipoObj?.categoria === 'P004' ? '#dcfce7' : '#fee2e2', color: tipoObj?.categoria === 'P004' ? '#166534' : '#991b1b', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{codInc}</span>
+              <span style={{ background: tipoObj?.categoria === 'P004' ? '#dcfce7' : '#fee2e2', color: tipoObj?.categoria === 'P004' ? '#166534' : '#991b1b', padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '11px' }}>{codInc}</span>
             )}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -5471,7 +5394,7 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
       </div>
 
       {/* FIX 2026-05-20: ID completo visible en el detalle */}
-      <p style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', fontFamily: 'monospace', wordBreak: 'break-all', margin: '4px 0 0' }}>ID: {incidencia.id}</p>
+      <p style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', margin: '4px 0 0' }}>ID: {incidencia.id}</p>
     </div>
   )
 }
@@ -5521,7 +5444,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
       <div className="detail-header">
         <div>
           {/* FIX 2026-05-20: mostrar ID completo en el modal de detalle */}
-          <p className="detail-id" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>ID: {penalidad.id}</p>
+          <p className="detail-id" style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>ID: {penalidad.id}</p>
           <h3 className="detail-title">{penalidad.conductor_display || 'Sin conductor'}</h3>
           <span className={`aplicado-badge ${esRechazado ? 'aplicado-rechazado' : penalidad.aplicado ? 'aplicado-si' : 'aplicado-no'}`}>
             {esRechazado ? 'Rechazado' : penalidad.aplicado ? 'Aplicado' : 'Pendiente'}
@@ -5550,7 +5473,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
             <span className="detail-item-label">Cod Inc.</span>
             <span className="detail-item-value">
               {codInc !== '-' ? (
-                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '12px', color: '#1a1a1a' }}>{codInc}</span>
+                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '12px', color: '#1a1a1a' }}>{codInc}</span>
               ) : '-'}
             </span>
           </div>
@@ -5558,7 +5481,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
             <span className="detail-item-label">Tipo Inc.</span>
             <span className="detail-item-value">
               {tipoNombreResuelto !== '-' && colorBg ? (
-                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: '4px', fontWeight: 500, color: '#1a1a1a' }}>{tipoNombreResuelto}</span>
+                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontWeight: 500, color: '#1a1a1a' }}>{tipoNombreResuelto}</span>
               ) : tipoNombreResuelto}
             </span>
           </div>
@@ -5622,7 +5545,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
           <div className="detail-item">
             <span className="detail-item-label">ID Incidencia</span>
             {/* FIX 2026-05-20: mostrar ID completo */}
-            <span className="detail-item-value" style={{ fontFamily: 'monospace', fontSize: '12px', wordBreak: 'break-all' }}>{penalidad.incidencia_id}</span>
+            <span className="detail-item-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', wordBreak: 'break-all' }}>{penalidad.incidencia_id}</span>
           </div>
           {penalidad.incidencia_descripcion && (
             <div className="detail-item">
@@ -5657,7 +5580,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
             <div key={rechazo.id} style={{ 
               padding: '12px', 
               background: 'white', 
-              borderRadius: '6px', 
+              borderRadius: 'var(--radius-sm)', 
               marginBottom: idx < historialRechazos.length - 1 ? '8px' : 0 
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>

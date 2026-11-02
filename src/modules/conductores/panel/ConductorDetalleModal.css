@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   padding: 24px;
 }
 
@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
   background: var(--card-bg, #fff);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-primary, #e5e7eb);
   overflow: hidden;
 }
@@ -32,7 +32,7 @@
   color: #9ca3af;
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .cdet-close:hover { background: #f3f4f6; color: #374151; }
 
@@ -55,7 +55,7 @@
 }
 .cdet-name { font-size: 17px; font-weight: 700; color: var(--text-primary, #111827); }
 .cdet-meta { font-size: 12px; color: var(--text-secondary, #6b7280); margin-top: 2px; }
-.cdet-chip { background: #dbeafe; color: #1d4ed8; padding: 1px 7px; border-radius: 999px; font-weight: 600; letter-spacing: .03em; }
+.cdet-chip { background: #dbeafe; color: #1d4ed8; padding: 1px 7px; border-radius: var(--radius-full); font-weight: 600; letter-spacing: .03em; }
 .cdet-ok { color: #15803d; font-weight: 600; }
 .cdet-off { color: #6b7280; font-weight: 600; text-transform: capitalize; }
 /* Botón "Abrir conversación" de Intercom (opt-in vía prop mostrarIntercom).
@@ -65,7 +65,7 @@
   margin-left: auto; margin-right: 20px; flex-shrink: 0;
   border: 1px solid transparent;
   background: var(--color-primary, #ff0033); color: #fff;
-  border-radius: 8px; padding: 7px 12px;
+  border-radius: var(--radius-md); padding: 7px 12px;
   font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .cdet-intercom:hover:not(:disabled) { filter: brightness(0.92); }
@@ -85,7 +85,7 @@
 .cdet-kpi {
   display: flex; align-items: center; gap: 10px;
   background: #f9fafb;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 10px 12px;
 }
 .cdet-kpi-ico { color: #6b7280; display: flex; flex-shrink: 0; }
@@ -98,14 +98,14 @@
   margin-top: 3px;
   font-size: 10px;
   color: #b0b6c0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 /* Badge de estado dentro de una tarjeta KPI (estado de garantía). */
 .cdet-kpi-badge {
   display: inline-block;
-  padding: 2px 8px; border-radius: 5px;
+  padding: 2px 8px; border-radius: var(--radius-sm);
   font-size: 12px; font-weight: 700; white-space: nowrap;
   background: #f3f4f6; color: #6b7280;
 }
@@ -114,7 +114,7 @@
   margin-left: auto; flex-shrink: 0;
   border: 1px solid var(--border-primary, #e5e7eb);
   background: #fff; color: #6b7280; cursor: pointer;
-  border-radius: 6px; padding: 3px 7px; font-size: 10px; font-weight: 600;
+  border-radius: var(--radius-sm); padding: 3px 7px; font-size: 10px; font-weight: 600;
 }
 .cdet-kpi-detalle:hover { background: #f3f4f6; color: #dc2626; border-color: #fca5a5; }
 
@@ -123,12 +123,12 @@
   position: fixed; inset: 0;
   background: rgba(17, 24, 39, 0.55);
   display: flex; align-items: center; justify-content: center;
-  z-index: 1100; padding: 24px;
+  z-index: var(--z-modal); padding: 24px;
 }
 .cdet-deuda-modal {
   position: relative;
   width: 100%; max-width: 560px;
-  background: #fff; border-radius: 14px;
+  background: #fff; border-radius: var(--radius-lg);
   border: 1px solid var(--border-primary, #e5e7eb);
   padding: 24px 26px;
 }
@@ -136,7 +136,7 @@
   position: absolute; top: 14px; right: 14px;
   border: 1px solid var(--border-primary, #e5e7eb);
   background: #fff; color: #6b7280; cursor: pointer;
-  border-radius: 8px; padding: 4px;
+  border-radius: var(--radius-md); padding: 4px;
 }
 .cdet-deuda-close:hover { background: #f3f4f6; }
 .cdet-deuda-title { font-size: 16px; font-weight: 800; color: var(--text-primary, #111827); }
@@ -223,7 +223,7 @@
   width: 24px; height: 24px;
   border: 1px solid var(--border-primary, #e5e7eb);
   background: #fff; color: #6b7280;
-  border-radius: 6px; cursor: pointer;
+  border-radius: var(--radius-sm); cursor: pointer;
   transition: transform .15s ease, background .15s ease, color .15s ease;
 }
 .cdet-km-toggle:hover:not(:disabled) { background: #f3f4f6; color: #dc2626; border-color: #fca5a5; }
@@ -239,7 +239,7 @@
 }
 .cdet-km-dias-tabla {
   width: 100%; border-collapse: collapse; font-size: 12px;
-  background: #fff; border: 1px solid var(--border-primary, #e5e7eb); border-radius: 8px;
+  background: #fff; border: 1px solid var(--border-primary, #e5e7eb); border-radius: var(--radius-md);
   overflow: hidden;
 }
 .cdet-km-dias-tabla th {
@@ -273,7 +273,7 @@
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 .cdet-tag.ok { background: #dcfce7; color: #15803d; }
 .cdet-tag.impaga { background: #fee2e2; color: #b91c1c; }
@@ -284,7 +284,7 @@
   background: #dcfce7;
   color: #15803d;
   font-weight: 700;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .cdet-venc-ok { color: #15803d; font-size: 12px; }
 .cdet-venc-off { color: #9ca3af; font-size: 12px; }
@@ -293,17 +293,17 @@
 .cdet-cuotas-head { font-size: 12px; font-weight: 700; color: #374151; }
 .cdet-cuotas-list { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 3px; }
 .cdet-cuotas-list.right { align-items: flex-end; }
-.cdet-cuotas-list span { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.cdet-cuotas-list span { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: var(--radius-xs); white-space: nowrap; }
 .cdet-cuotas-list .cuota-ok { background: #dcfce7; color: #15803d; }
 .cdet-cuotas-list .cuota-no { background: #fef9c3; color: #a16207; }
 
 /* Historial de bajas / reactivaciones */
 .cdet-bajas-list { display: flex; flex-direction: column; gap: 8px; }
-.cdet-baja-item { border-left: 3px solid #9ca3af; border-radius: 8px; padding: 10px 12px; }
+.cdet-baja-item { border-left: 3px solid #9ca3af; border-radius: var(--radius-md); padding: 10px 12px; }
 .cdet-baja-item.baja { border-left-color: #dc2626; background: rgba(220,38,38,0.06); }
 .cdet-baja-item.reac { border-left-color: #059669; background: rgba(5,150,105,0.06); }
 .cdet-baja-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cdet-baja-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #fff; }
+.cdet-baja-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); color: #fff; }
 .cdet-baja-badge.baja { background: #dc2626; }
 .cdet-baja-badge.reac { background: #059669; }
 .cdet-baja-estado { font-size: 12px; color: #6b7280; }
@@ -327,7 +327,7 @@
 }
 .cdet-fac-stat {
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
 }
 .cdet-fac-stat-lbl { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: .3px; font-weight: 600; }
@@ -343,7 +343,7 @@
 .cdet-fac-list { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
 .cdet-fac-card {
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
 }
 .cdet-fac-card.pend { border-color: #fca5a5; }
@@ -355,11 +355,11 @@
 .cdet-fac-sub { font-size: 12px; color: #9ca3af; margin: 4px 0 10px; }
 .cdet-fac-cov { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
 .cdet-fac-cov-lbl { font-size: 10px; color: #9ca3af; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
-.cdet-fac-cov-est { font-size: 12px; font-weight: 700; font-family: monospace; }
+.cdet-fac-cov-est { font-size: 12px; font-weight: 700; font-family: var(--font-mono); }
 .cdet-fac-cov-est.pendiente { color: #dc2626; }
 .cdet-fac-cov-est.cubierto, .cdet-fac-cov-est.favor { color: #059669; }
-.cdet-fac-bar { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
-.cdet-fac-bar-fill { height: 100%; border-radius: 3px; }
+.cdet-fac-bar { height: 6px; background: #f3f4f6; border-radius: var(--radius-xs); overflow: hidden; }
+.cdet-fac-bar-fill { height: 100%; border-radius: var(--radius-xs); }
 .cdet-fac-bar-fill.pendiente { background: linear-gradient(90deg, #f59e0b, #dc2626); }
 .cdet-fac-bar-fill.cubierto { background: #059669; }
 .cdet-fac-bar-fill.favor { background: #10b981; }

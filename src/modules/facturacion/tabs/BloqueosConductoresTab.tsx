@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import {
   Ban,
@@ -169,7 +169,7 @@ export function BloqueosConductoresTab() {
   }
 
   async function bloquearConductor(conductor: ConductorConDeuda) {
-    const { value: motivo } = await Swal.fire({
+    const { value: motivo } = await Alerta.fire({
       title: 'Bloquear Conductor',
       html: `
         <div class="fact-modal-form">
@@ -200,7 +200,7 @@ export function BloqueosConductoresTab() {
       preConfirm: () => {
         const motivo = (document.getElementById('swal-motivo') as HTMLTextAreaElement).value
         if (!motivo.trim()) {
-          Swal.showValidationMessage('Debe indicar un motivo')
+          Alerta.showValidationMessage('Debe indicar un motivo')
           return false
         }
         return motivo
@@ -233,7 +233,7 @@ export function BloqueosConductoresTab() {
   }
 
   async function desbloquearConductor(conductor: ConductorConDeuda) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Desbloquear Conductor',
       html: `
         <div class="fact-modal-form">
@@ -286,7 +286,7 @@ export function BloqueosConductoresTab() {
   }
 
   function verDetalle(conductor: ConductorConDeuda) {
-    Swal.fire({
+    Alerta.fire({
       title: 'Detalle del Conductor',
       html: `
         <div class="fact-modal-form">
@@ -350,7 +350,7 @@ export function BloqueosConductoresTab() {
   }
 
   async function configurarParametros() {
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Configurar Límites de Bloqueo',
       html: `
         <div class="fact-modal-form">
@@ -510,7 +510,7 @@ export function BloqueosConductoresTab() {
       header: 'Vehículo',
       cell: ({ row }) => (
         <div>
-          <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
             {row.original.vehiculo_patente || '-'}
           </span>
           {row.original.tipo_alquiler && (

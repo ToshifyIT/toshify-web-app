@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, Save, AlertTriangle, Check } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../../utils/toast'
 import type { Titular, VehiculoTitular } from '../types/titulares.types'
 import type { OfertaLocacion, OfertaLocacionFormData } from '../types/ofertaLocacion.types'
@@ -273,7 +273,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           })
         if (error) {
           if (error.code === '23505') {
-            Swal.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular.', 'warning')
+            Alerta.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular.', 'warning')
             return
           }
           throw error
@@ -297,7 +297,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
     width: '100%',
     padding: '9px 12px',
     border: '1px solid var(--border-primary)',
-    borderRadius: '6px',
+    borderRadius: 'var(--radius-sm)',
     fontSize: '13px',
     background: 'var(--bg-primary)',
     color: 'var(--text-primary)',

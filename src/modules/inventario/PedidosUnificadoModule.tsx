@@ -11,7 +11,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import {
   Package,
@@ -46,6 +46,7 @@ import {
 import { Spinner } from '../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../components/ui/EstadosVista'
 
+import { hoyART } from '../../utils/fechaArgentina'
 // ============= TIPOS =============
 // Tipos para Pedidos en Tránsito
 interface PedidoItem {
@@ -247,7 +248,7 @@ const escapeHtml = (value: string | number | null | undefined) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-const todayInputValue = () => new Date().toISOString().slice(0, 10)
+const todayInputValue = () => hoyART()
 
 const formatFechaCorta = (value?: string | null) => {
   if (!value) return '—'
@@ -618,12 +619,12 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     for (const item of respuestaPedido.items) {
       const r = respuestaItems[item.item_id]
       if (r && r.estado !== 'rechazado' && Number(r.cantidad_confirmada) > item.cantidad_pedida) {
-        Swal.fire('Cantidad inválida', `No se puede confirmar más de lo pedido en ${item.producto_codigo} (máx ${item.cantidad_pedida})`, 'warning')
+        Alerta.fire('Cantidad inválida', `No se puede confirmar más de lo pedido en ${item.producto_codigo} (máx ${item.cantidad_pedida})`, 'warning')
         return
       }
       const recibido = Number(item.cantidad_recibida || 0)
       if (r && recibido > 0 && (r.estado === 'rechazado' || Number(r.cantidad_confirmada) < recibido)) {
-        Swal.fire(
+        Alerta.fire(
           'Respuesta inconsistente',
           `Ya se recibieron ${recibido} unidades de ${item.producto_codigo}. La respuesta no puede quedar por debajo de lo recibido.`,
           'warning'
@@ -637,7 +638,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       return r && r.estado !== 'rechazado' && Number(r.cantidad_confirmada) > 0
     })
     if (hayEntrega && !respuestaFechaComprometida) {
-      Swal.fire('Falta la fecha comprometida', 'Como el proveedor va a entregar productos, indicá la fecha comprometida de entrega.', 'warning')
+      Alerta.fire('Falta la fecha comprometida', 'Como el proveedor va a entregar productos, indicá la fecha comprometida de entrega.', 'warning')
       return
     }
     setSavingRespuesta(true)
@@ -938,11 +939,11 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const previewPedidoProveedor = async () => {
     const validationError = validatePedidoProveedor()
     if (validationError) {
-      Swal.fire('Revisar pedido', validationError, 'warning')
+      Alerta.fire('Revisar pedido', validationError, 'warning')
       return
     }
 
-    await Swal.fire({
+    await Alerta.fire({
       title: 'Vista previa del pedido',
       html: buildPedidoPreviewHtml(),
       width: 760,
@@ -968,13 +969,13 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const crearPedidoProveedor = async () => {
     const validationError = validatePedidoProveedor()
     if (validationError) {
-      Swal.fire('Revisar pedido', validationError, 'warning')
+      Alerta.fire('Revisar pedido', validationError, 'warning')
       return
     }
 
     const proveedor = getPedidoProveedorSeleccionado()
     const tieneEmail = Boolean(proveedor?.email?.trim())
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: tieneEmail ? 'Crear pedido y enviar correo' : 'Crear pedido sin correo',
       html: buildPedidoPreviewHtml(),
       icon: 'question',
@@ -1014,14 +1015,14 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
           await enviarCorreoPedidoProveedor()
           showSuccess('Pedido enviado', `Pedido ${numeroPedidoDraft} creado y enviado a ${proveedor?.email}`)
         } catch (emailError: any) {
-          await Swal.fire({
+          await Alerta.fire({
             icon: 'warning',
             title: 'Pedido creado, correo pendiente',
             text: emailError.message || 'El pedido quedó creado pero no se pudo enviar el correo.'
           })
         }
       } else {
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'warning',
           title: 'Pedido creado sin correo',
           text: 'El pedido quedó registrado. Contacta al proveedor por fuera y luego registra su respuesta en el seguimiento.'
@@ -1098,7 +1099,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     const itemsPendientes = getPedidoItemsPendientesRecepcion(pedido)
 
     if (itemsPendientes.length === 0) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Sin saldo por recibir',
         text: 'Este pedido no tiene productos pendientes de recepción.'
@@ -1187,7 +1188,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       }
 
       if (errores.length > 0) {
-        await Swal.fire({
+        await Alerta.fire({
           icon: ok > 0 ? 'warning' : 'error',
           title: ok > 0 ? 'Recepción parcial' : 'No se pudo confirmar la recepción',
           html: `${ok} producto(s) ingresados.<br>${errores.map(escapeHtml).join('<br>')}`
@@ -1366,7 +1367,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       ? `<p><strong>Vehículo:</strong> ${movimiento.vehiculo_patente}</p>`
       : ''
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Aprobar Movimiento',
       html: `
         <div style="text-align: left;">
@@ -1422,7 +1423,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       ? `<p><strong>Vehículo:</strong> ${movimiento.vehiculo_patente}</p>`
       : ''
 
-    const { value: motivo } = await Swal.fire({
+    const { value: motivo } = await Alerta.fire({
       title: 'Rechazar Movimiento',
       html: `
         <div style="text-align: left; margin-bottom: 16px;">
@@ -1467,7 +1468,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       if (rejectError) throw rejectError
       if (rpcResult && !rpcResult.success) throw new Error(rpcResult.error)
 
-      await Swal.fire({
+      await Alerta.fire({
         title: 'Rechazado',
         text: 'El movimiento fue rechazado. El stock no cambió y el motivo quedó registrado.',
         icon: 'info',
@@ -1518,7 +1519,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       </div>
     `
 
-    Swal.fire({
+    Alerta.fire({
       title: 'Detalles del Movimiento',
       html: detallesHtml,
       icon: 'info',
@@ -1833,7 +1834,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
             color: 'var(--badge-yellow-text)',
             background: 'var(--badge-yellow-bg)',
             padding: '4px 12px',
-            borderRadius: '8px'
+            borderRadius: 'var(--radius-md)'
           }}>
             {row.original.cantidad}
           </span>
@@ -1880,7 +1881,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
               background: 'var(--color-success)',
               color: 'white',
               border: 'none',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               cursor: processingItem === row.original.id ? 'not-allowed' : 'pointer',
               fontSize: '13px',
               fontWeight: 600,
@@ -4704,7 +4705,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                       id={`pedido-card-${pedido.pedido_id}`}
                       style={{
                         background: 'var(--card-bg)',
-                        borderRadius: '12px',
+                        borderRadius: 'var(--radius-lg)',
                         border: '1px solid var(--border-primary)',
                         overflow: 'hidden'
                       }}
@@ -4726,7 +4727,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                             width: '40px',
                             height: '40px',
                             background: 'var(--color-primary)',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-md)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
@@ -4911,15 +4912,15 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                                       const pendienteReal = Math.max(0, objetivo - (item.cantidad_recibida || 0))
 
                                       if (rechazado) {
-                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-red-bg, #fef2f2)', color: 'var(--badge-red-text, #dc2626)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Rechazado</span>
+                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-red-bg, #fef2f2)', color: 'var(--badge-red-text, #dc2626)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Rechazado</span>
                                       }
                                       if (pendienteReal <= 0) {
-                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-green-bg)', color: 'var(--badge-green-text)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Completo</span>
+                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-green-bg)', color: 'var(--badge-green-text)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Completo</span>
                                       }
                                       if ((item.cantidad_recibida || 0) > 0) {
-                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-blue-bg, #eff6ff)', color: 'var(--badge-blue-text, #1d4ed8)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Parcial</span>
+                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-blue-bg, #eff6ff)', color: 'var(--badge-blue-text, #1d4ed8)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Parcial</span>
                                       }
-                                      return <span style={{ padding: '6px 12px', background: 'var(--badge-yellow-bg)', color: 'var(--badge-yellow-text)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Pendiente</span>
+                                      return <span style={{ padding: '6px 12px', background: 'var(--badge-yellow-bg)', color: 'var(--badge-yellow-text)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Pendiente</span>
                                     })()}
                                   </td>
                                 </tr>
@@ -4932,7 +4933,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                               marginTop: '12px',
                               padding: '10px 12px',
                               background: 'var(--bg-secondary)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               fontSize: '13px',
                               color: 'var(--text-secondary)',
                               border: '1px solid var(--border-secondary)'

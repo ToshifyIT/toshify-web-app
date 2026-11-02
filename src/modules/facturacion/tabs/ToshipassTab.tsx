@@ -16,7 +16,7 @@
 // tarjetas, al hacer click, filtran la tabla por ese criterio.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { descargarExcel } from '../../../utils/excelCorporativo'
 import {
   Ticket,
@@ -42,6 +42,7 @@ import { analizarRegimenToshipass, CODIGO_TOSHIPASS, TOSHIPASS_VIGENCIA_DESDE } 
 import { showError } from '../../../utils/toast'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 
+import { hoyART } from '../../../utils/fechaArgentina'
 const LOTE_IDS = 200
 const PAGINA = 1000
 
@@ -374,7 +375,7 @@ export function ToshipassTab() {
           <td style="padding:5px 8px;border-bottom:1px solid #E5E7EB;text-align:right;">${formatCurrency(s.monto)}</td>
         </tr>`).join('')
 
-    Swal.fire({
+    Alerta.fire({
       title: `<span style="font-size:16px;">Toshipass · ${f.conductor}</span>`,
       html: `
         <div style="text-align:left;font-size:12px;padding-bottom:4px;">
@@ -404,7 +405,7 @@ export function ToshipassTab() {
   function exportarVisibles() {
     const filasExport = filasVisiblesRef.current
     if (filasExport.length === 0) {
-      Swal.fire('Sin datos', 'No hay registros visibles para exportar', 'info')
+      Alerta.fire('Sin datos', 'No hay registros visibles para exportar', 'info')
       return
     }
     const filas = filasExport.map(f => ({
@@ -425,7 +426,7 @@ export function ToshipassTab() {
       'Estado Pago': f.estadoPago,
     }))
     void descargarExcel({
-      archivo: `Toshipass_${new Date().toISOString().slice(0, 10)}`,
+      archivo: `Toshipass_${hoyART()}`,
       titulo: 'Toshipass',
       subtitulo: 'Registros visibles con los filtros aplicados',
       hojas: [{
@@ -567,7 +568,7 @@ export function ToshipassTab() {
   })
 
   const botonToggle = (activo: boolean) => ({
-    padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+    padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
     background: activo ? '#ff0033' : 'transparent',
     color: activo ? 'white' : 'var(--text-secondary)',
   })
@@ -658,7 +659,7 @@ export function ToshipassTab() {
               </button>
             </div>
             <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
                 {([
                   { value: 'todos', label: 'Todos' },
                   { value: 'nuevo', label: 'Nuevos' },
@@ -669,7 +670,7 @@ export function ToshipassTab() {
                   </button>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
                 {([
                   { value: 'todos', label: 'Todos' },
                   { value: 'activo', label: 'Activos' },

@@ -11,7 +11,7 @@ import { format } from 'date-fns'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 
 // Tipo para conceptos pendientes de enlazar
@@ -309,7 +309,7 @@ export function FacturacionPreviewTable({
 
     const conductoresList = [...conductoresBD, ...conductoresDelPreview]
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Agregar Ajuste',
       html: `
         <div style="display: flex; flex-direction: column; gap: 12px; text-align: left;">
@@ -471,19 +471,19 @@ export function FacturacionPreviewTable({
         const descripcion = (document.getElementById('swal-descripcion') as HTMLInputElement).value
 
         if (!conductorId) {
-          Swal.showValidationMessage('Selecciona un conductor')
+          Alerta.showValidationMessage('Selecciona un conductor')
           return false
         }
         if (!concepto) {
-          Swal.showValidationMessage('Selecciona un concepto')
+          Alerta.showValidationMessage('Selecciona un concepto')
           return false
         }
         if (monto === 0) {
-          Swal.showValidationMessage('El monto no puede ser 0')
+          Alerta.showValidationMessage('El monto no puede ser 0')
           return false
         }
         if (!descripcion.trim()) {
-          Swal.showValidationMessage('Ingresa una descripción')
+          Alerta.showValidationMessage('Ingresa una descripción')
           return false
         }
 
@@ -676,7 +676,7 @@ export function FacturacionPreviewTable({
   const handleSync = useCallback(async () => {
     if (!onSync || !hasChanges) return
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Sincronizar cambios',
       text: '¿Guardar los cambios en la base de datos?',
       icon: 'question',
@@ -691,13 +691,13 @@ export function FacturacionPreviewTable({
     setSyncing(true)
 
     // Mostrar progreso bloqueante
-    Swal.fire({
+    Alerta.fire({
       title: 'Sincronizando...',
       html: '<div id="sync-progress" style="font-size: 14px; color: #666;">Preparando datos...</div><div style="margin-top: 12px; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden;"><div id="sync-bar" style="height: 100%; width: 0%; background: #059669; border-radius: 3px; transition: width 0.3s;"></div></div>',
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
-      didOpen: () => { Swal.showLoading() }
+      didOpen: () => { Alerta.showLoading() }
     })
 
     try {
@@ -729,7 +729,7 @@ export function FacturacionPreviewTable({
       if (progressEl) progressEl.textContent = 'Finalizando...'
 
       await new Promise(r => setTimeout(r, 400))
-      Swal.close()
+      Alerta.close()
 
       if (success) {
         setHasChanges(false)
@@ -764,7 +764,7 @@ export function FacturacionPreviewTable({
             padding: '2px 4px',
             fontSize: '11px',
             border: '2px solid #059669',
-            borderRadius: '3px',
+            borderRadius: 'var(--radius-xs)',
             textAlign: isNumber ? 'right' : 'left'
           }}
         />
@@ -777,7 +777,7 @@ export function FacturacionPreviewTable({
         style={{
           cursor: canEdit ? 'pointer' : 'default',
           padding: '2px 4px',
-          borderRadius: '3px',
+          borderRadius: 'var(--radius-xs)',
           background: canEdit ? 'rgba(5, 150, 105, 0.1)' : 'transparent'
         }}
         title={canEdit ? 'Click para editar' : ''}
@@ -918,7 +918,7 @@ export function FacturacionPreviewTable({
                         className="btn-ver-detalle"
                         onClick={() => {
                           const origen = p.siniestroId ? 'Siniestro' : p.incidenciaId ? 'Incidencia' : 'Penalidad directa'
-                          Swal.fire({
+                          Alerta.fire({
                             title: 'Detalle del Concepto',
                             html: `
                               <div style="text-align: left; font-size: 13px;">

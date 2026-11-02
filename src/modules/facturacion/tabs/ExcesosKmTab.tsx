@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import {
   Gauge,
@@ -151,7 +151,7 @@ export function ExcesosKmTab() {
 
   async function crearExceso() {
     if (periodos.length === 0) {
-      Swal.fire('Error', 'No hay períodos disponibles. Cree un período primero.', 'warning')
+      Alerta.fire('Error', 'No hay períodos disponibles. Cree un período primero.', 'warning')
       return
     }
 
@@ -183,7 +183,7 @@ export function ExcesosKmTab() {
     // Guardar conductores en variable global temporal para el modal
     ;(window as any).__excesoConductores = conductoresConVehiculo
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: 'Registrar Exceso de Kilometraje',
       html: `
         <div style="text-align: left; padding: 0 8px;">
@@ -345,15 +345,15 @@ export function ExcesosKmTab() {
         const km = parseFloat((document.getElementById('swal-km') as HTMLInputElement).value)
 
         if (!periodoId) {
-          Swal.showValidationMessage('Seleccione un período')
+          Alerta.showValidationMessage('Seleccione un período')
           return false
         }
         if (!conductorId) {
-          Swal.showValidationMessage('Seleccione un conductor')
+          Alerta.showValidationMessage('Seleccione un conductor')
           return false
         }
         if (!km || km <= KM_BASE_SEMANAL) {
-          Swal.showValidationMessage(`Los km deben ser mayores a ${KM_BASE_SEMANAL}`)
+          Alerta.showValidationMessage(`Los km deben ser mayores a ${KM_BASE_SEMANAL}`)
           return false
         }
 
@@ -406,11 +406,11 @@ export function ExcesosKmTab() {
 
   async function editarExceso(exceso: ExcesoConRelaciones) {
     if (exceso.aplicado) {
-      Swal.fire('No permitido', 'No se puede editar un exceso ya aplicado', 'warning')
+      Alerta.fire('No permitido', 'No se puede editar un exceso ya aplicado', 'warning')
       return
     }
 
-    const { value: nuevoKm } = await Swal.fire({
+    const { value: nuevoKm } = await Alerta.fire({
       title: 'Editar Exceso',
       html: `
         <div style="text-align: left;">
@@ -430,7 +430,7 @@ export function ExcesosKmTab() {
       preConfirm: () => {
         const km = parseFloat((document.getElementById('swal-km') as HTMLInputElement).value)
         if (!km || km <= KM_BASE_SEMANAL) {
-          Swal.showValidationMessage(`Los km deben ser mayores a ${KM_BASE_SEMANAL}`)
+          Alerta.showValidationMessage(`Los km deben ser mayores a ${KM_BASE_SEMANAL}`)
           return false
         }
         return km
@@ -471,11 +471,11 @@ export function ExcesosKmTab() {
 
   async function eliminarExceso(exceso: ExcesoConRelaciones) {
     if (exceso.aplicado) {
-      Swal.fire('No permitido', 'No se puede eliminar un exceso ya aplicado', 'warning')
+      Alerta.fire('No permitido', 'No se puede eliminar un exceso ya aplicado', 'warning')
       return
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: '¿Eliminar exceso?',
       text: `Se eliminará el exceso de ${exceso.km_exceso} km de ${exceso.conductor_nombre}`,
       icon: 'warning',
@@ -504,7 +504,7 @@ export function ExcesosKmTab() {
   }
 
   async function verDetalle(exceso: ExcesoConRelaciones) {
-    Swal.fire({
+    Alerta.fire({
       title: 'Detalle de Exceso',
       html: `
         <div style="text-align: left;">
@@ -653,7 +653,7 @@ export function ExcesosKmTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
           {row.original.vehiculo_patente}
         </span>
       )

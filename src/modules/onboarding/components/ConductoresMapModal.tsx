@@ -154,14 +154,14 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 10000,
+        position: 'fixed', inset: 0, zIndex: 'var(--z-modal-nested)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'rgba(0,0,0,0.5)',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div style={{
-        background: 'var(--bg-primary)', borderRadius: 16, width: '94vw', maxWidth: 1300,
+        background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', width: '94vw', maxWidth: 1300,
         height: '90vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
         overflow: 'hidden',
@@ -181,7 +181,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-secondary)' }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', display: 'inline-block' }} /> Diurno
               </span>
@@ -193,7 +193,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
               </span>
             </div>
             <button onClick={onClose} style={{
-              background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 8,
+              background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)',
               cursor: 'pointer', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)',
             }}>
@@ -217,7 +217,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                 onChange={e => setSearchMap(e.target.value)}
                 style={{
                   width: '100%', padding: '7px 10px', border: '1px solid var(--border-primary)',
-                  borderRadius: 8, fontSize: 12, outline: 'none', boxSizing: 'border-box',
+                  borderRadius: 'var(--radius-md)', fontSize: 12, outline: 'none', boxSizing: 'border-box',
                   background: 'var(--bg-secondary)', color: 'var(--text-primary)',
                 }}
               />
@@ -226,7 +226,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                 onChange={e => setFiltroAsignacion(e.target.value as 'todos' | 'con' | 'sin')}
                 style={{
                   width: '100%', padding: '6px 8px', border: '1px solid var(--border-primary)',
-                  borderRadius: 8, fontSize: 11, outline: 'none', boxSizing: 'border-box',
+                  borderRadius: 'var(--radius-md)', fontSize: 11, outline: 'none', boxSizing: 'border-box',
                   background: 'var(--bg-secondary)', color: 'var(--text-primary)', marginTop: 6,
                   cursor: 'pointer',
                 }}
@@ -270,7 +270,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                           fontSize: 9, fontWeight: 700, marginLeft: 'auto',
                           color: role === 'diurno' ? '#92400E' : '#1E40AF',
                           background: role === 'diurno' ? '#FEF3C7' : '#DBEAFE',
-                          padding: '1px 5px', borderRadius: 4,
+                          padding: '1px 5px', borderRadius: 'var(--radius-xs)',
                         }}>
                           {role === 'diurno' ? 'DIURNO' : 'NOCTURNO'}
                         </span>
@@ -285,7 +285,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                         <button
                           onClick={(e) => { e.stopPropagation(); handleSelectAs(c, 'diurno') }}
                           style={{
-                            flex: 1, padding: '4px', borderRadius: 5, cursor: 'pointer',
+                            flex: 1, padding: '4px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                             fontSize: 10, fontWeight: 600,
                             background: 'transparent', color: '#B45309',
                             border: '1px solid #F59E0B',
@@ -296,7 +296,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                         <button
                           onClick={(e) => { e.stopPropagation(); handleSelectAs(c, 'nocturno') }}
                           style={{
-                            flex: 1, padding: '4px', borderRadius: 5, cursor: 'pointer',
+                            flex: 1, padding: '4px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                             fontSize: 10, fontWeight: 600,
                             background: 'transparent', color: '#1D4ED8',
                             border: '1px solid #3B82F6',
@@ -315,7 +315,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                         }}
                         style={{
                           marginTop: 3, padding: '2px 6px', border: '1px solid var(--border-primary)',
-                          borderRadius: 4, fontSize: 9, cursor: 'pointer',
+                          borderRadius: 'var(--radius-xs)', fontSize: 9, cursor: 'pointer',
                           background: 'var(--bg-secondary)', color: 'var(--text-tertiary)',
                         }}
                       >
@@ -340,7 +340,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No se pudo cargar Google Maps</span>
                 <button
                   onClick={() => window.location.reload()}
-                  style={{ padding: '8px 20px', background: '#ff0033', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  style={{ padding: '8px 20px', background: '#ff0033', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                 >
                   Reintentar
                 </button>
@@ -413,7 +413,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                                 <button
                                   onClick={() => handleSelectAs(c, 'diurno')}
                                   style={{
-                                    flex: 1, padding: '5px', borderRadius: 6, cursor: 'pointer',
+                                    flex: 1, padding: '5px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                                     fontSize: 11, fontWeight: 600,
                                     background: 'transparent', color: '#B45309',
                                     border: '1.5px solid #F59E0B',
@@ -424,7 +424,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                                 <button
                                   onClick={() => handleSelectAs(c, 'nocturno')}
                                   style={{
-                                    flex: 1, padding: '5px', borderRadius: 6, cursor: 'pointer',
+                                    flex: 1, padding: '5px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                                     fontSize: 11, fontWeight: 600,
                                     background: 'transparent', color: '#1D4ED8',
                                     border: '1.5px solid #3B82F6',
@@ -462,7 +462,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
             }}>
               {/* Diurno slot */}
               <div style={{
-                flex: 1, padding: '6px 10px', borderRadius: 8,
+                flex: 1, padding: '6px 10px', borderRadius: 'var(--radius-md)',
                 border: selectedDiurno ? '2px solid #F59E0B' : '2px dashed #D1D5DB',
                 background: selectedDiurno ? '#FFFBEB' : '#F9FAFB',
               }}>
@@ -479,7 +479,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
               </div>
               {/* Nocturno slot */}
               <div style={{
-                flex: 1, padding: '6px 10px', borderRadius: 8,
+                flex: 1, padding: '6px 10px', borderRadius: 'var(--radius-md)',
                 border: selectedNocturno ? '2px solid #3B82F6' : '2px dashed #D1D5DB',
                 background: selectedNocturno ? '#EFF6FF' : '#F9FAFB',
               }}>
@@ -496,7 +496,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
               </div>
               {routeInfo && (
                 <div style={{
-                  padding: '6px 10px', borderRadius: 8, background: '#FEF2F2',
+                  padding: '6px 10px', borderRadius: 'var(--radius-md)', background: '#FEF2F2',
                   border: '1px solid #FECACA', textAlign: 'center', minWidth: 80,
                 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#991B1B' }}>{routeInfo.distancia}</div>
@@ -509,7 +509,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                   if (selectedDiurno && selectedNocturno) onConfirmPair(selectedDiurno, selectedNocturno)
                 }}
                 style={{
-                  padding: '10px 20px', border: 'none', borderRadius: 8,
+                  padding: '10px 20px', border: 'none', borderRadius: 'var(--radius-md)',
                   fontSize: 12, fontWeight: 700, cursor: selectedDiurno && selectedNocturno ? 'pointer' : 'not-allowed',
                   background: selectedDiurno && selectedNocturno ? '#ff0033' : '#D1D5DB',
                   color: '#fff', whiteSpace: 'nowrap',

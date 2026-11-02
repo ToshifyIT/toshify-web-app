@@ -58,7 +58,7 @@ import { tomarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../../types/onboarding.types'
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
 import { avisarDatosIncompletos, avisarTarifasFaltantes, esBarilocheTurno, validarDatosDocumento, validarTarifasDocumento, type ConductorAValidar } from '../validacionDocumento'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { generateContracts } from '../../../services/contractService'
 import type { GeneratedDocument } from '../../../services/contractService'
@@ -655,7 +655,7 @@ export function ProgramacionV2Module() {
       </button>
     )
     return (
-      <div style={{ display: 'inline-flex', border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+      <div style={{ display: 'inline-flex', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
         {boton('conductor', 'Conductores')}
         {boton('lead', 'Leads')}
       </div>
@@ -723,7 +723,7 @@ export function ProgramacionV2Module() {
                 >
                   <strong>{l.nombre}</strong> {l.dni && <span style={{ color: 'var(--text-tertiary)' }}>- DNI: {l.dni}</span>}
                   {l.estado && (
-                    <span style={{ marginLeft: '6px', fontSize: '11px', padding: '1px 6px', borderRadius: '4px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                    <span style={{ marginLeft: '6px', fontSize: '11px', padding: '1px 6px', borderRadius: 'var(--radius-xs)', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
                       {l.estado}
                     </span>
                   )}
@@ -924,7 +924,7 @@ export function ProgramacionV2Module() {
         fontSize: '10px',
         fontWeight: 700,
         padding: '2px 7px',
-        borderRadius: '4px',
+        borderRadius: 'var(--radius-xs)',
         whiteSpace: 'nowrap',
         background: tipo === 'lead' ? 'rgba(139, 92, 246, 0.18)' : 'rgba(16, 185, 129, 0.15)',
         color: tipo === 'lead' ? '#7C3AED' : '#047857',
@@ -1290,13 +1290,13 @@ export function ProgramacionV2Module() {
         // Validar que no sean el mismo conductor en ambos turnos
         if (quickEditData.conductor_diurno_id && quickEditData.conductor_nocturno_id &&
             quickEditData.conductor_diurno_id === quickEditData.conductor_nocturno_id) {
-          await Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          await Alerta.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
           return
         }
         // Mismo control para leads
         if (quickEditData.lead_diurno_id && quickEditData.lead_nocturno_id &&
             quickEditData.lead_diurno_id === quickEditData.lead_nocturno_id) {
-          await Swal.fire('Error', 'No se puede asignar el mismo lead en ambos turnos', 'error')
+          await Alerta.fire('Error', 'No se puede asignar el mismo lead en ambos turnos', 'error')
           return
         }
 
@@ -1427,7 +1427,7 @@ export function ProgramacionV2Module() {
   }
 
   const handleDelete = async (id: string, yaEnviada: boolean = false) => {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: yaEnviada ? 'Eliminar programacion enviada?' : 'Eliminar programacion?',
       html: yaEnviada
         ? '<p style="color: #ff0033; font-weight: 500;">ATENCION: Esta programacion ya fue enviada a Entrega.</p><p>Solo se eliminara de esta lista, la asignacion en Entrega permanecera.</p>'
@@ -1648,7 +1648,7 @@ export function ProgramacionV2Module() {
         .eq('id', prog.id)
         .neq('estado', 'completado')
       setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
-      Swal.fire('Atención', 'Ya existe una devolución creada para esta programación. Se marcó como enviada.', 'warning')
+      Alerta.fire('Atención', 'Ya existe una devolución creada para esta programación. Se marcó como enviada.', 'warning')
       return
     }
 
@@ -1662,7 +1662,7 @@ export function ProgramacionV2Module() {
       fechaProgramada = new Date().toISOString()
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Crear Devolución',
       html: `
         <div style="text-align: left; font-size: 14px;">
@@ -1973,7 +1973,7 @@ export function ProgramacionV2Module() {
       
       // Si ninguno confirmó, advertir pero permitir continuar
       if (!diurnoConfirmo && !nocturnoConfirmo) {
-        const result = await Swal.fire({
+        const result = await Alerta.fire({
           title: 'Ningún conductor confirmó',
           html: `
             <div style="text-align: left; font-size: 14px;">
@@ -1999,7 +1999,7 @@ export function ProgramacionV2Module() {
           ? (prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
           : (prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
 
-        const result = await Swal.fire({
+        const result = await Alerta.fire({
           title: 'Solo 1 conductor confirmó',
           html: `
             <div style="text-align: left; font-size: 14px;">
@@ -2105,7 +2105,7 @@ export function ProgramacionV2Module() {
       conductorDisplay = prog.conductor_display || prog.conductor_nombre || '-'
     }
 
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Enviar a Entrega',
       html: `
         <div style="text-align: left; font-size: 14px;">
@@ -2246,7 +2246,7 @@ export function ProgramacionV2Module() {
         setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
         setEnviandoEntrega(false)
         await new Promise((r) => setTimeout(r, 0))
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'info',
           title: 'Ya estaba enviada',
           html: `Esta programación ya tenía la asignación <strong>${asignacion.codigo}</strong>. No se creó otra.`,
@@ -2381,7 +2381,7 @@ export function ProgramacionV2Module() {
             return `<li><strong>${label}</strong>: <a href="${d.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a></li>`
           }).join('')
 
-          await Swal.fire({
+          await Alerta.fire({
             icon: 'success',
             title: 'Documentos generados',
             html: `<p>Se generaron los siguientes documentos:</p><ul style="text-align:left;margin-top:8px">${docLinks}</ul>`,
@@ -2391,7 +2391,7 @@ export function ProgramacionV2Module() {
           // La asignacion YA quedo creada en la base: el fallo es solo del
           // documento. Se dice las dos cosas para que nadie crea que se perdio
           // todo, y se sigue mostrando el exito abajo.
-          await Swal.fire({
+          await Alerta.fire({
             icon: 'warning',
             title: 'Error al generar documentos',
             html: `<p>${contractResult.error || 'No se pudieron generar los documentos.'}</p>`
@@ -3316,7 +3316,7 @@ export function ProgramacionV2Module() {
           onVolver={() => setConversionLead(null)}
           onConvertido={async (conductorId, nombreConductor, esFusion) => {
             const pendiente = conversionLead
-            // Se desmontan los modales ANTES de cualquier Swal: mientras estan
+            // Se desmontan los modales ANTES de cualquier Alerta: mientras estan
             // montados (z-index 10001) tapan a SweetAlert2 (1060) y el dialogo
             // queda invisible esperando un click imposible.
             setConversionLead(null)
@@ -3390,7 +3390,7 @@ export function ProgramacionV2Module() {
                 .eq('id', pendiente.prog.id)
                 .single()
 
-              await Swal.fire({
+              await Alerta.fire({
                 icon: 'success',
                 title: esFusion ? 'Fusionado con un conductor existente' : 'Convertido a conductor',
                 text: esFusion
@@ -3403,7 +3403,7 @@ export function ProgramacionV2Module() {
               const [conLeads] = await adjuntarLeadIds([base])
               handleEnviarAEntrega(conLeads)
             } catch (e) {
-              Swal.fire(
+              Alerta.fire(
                 'Conductor creado, pero no se actualizó la programación',
                 e instanceof Error ? e.message : 'Reintentá el envío desde el tablero.',
                 'warning'
@@ -3469,7 +3469,7 @@ export function ProgramacionV2Module() {
               </div>
 
               {/* Modalidad (solo lectura) */}
-              <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+              <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
                   <div>
                     <label style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Modalidad</label>
@@ -3507,7 +3507,7 @@ export function ProgramacionV2Module() {
               {editingProgramacion.modalidad === 'turno' ? (
                 <>
                   {/* Conductor Diurno */}
-                  <div className="prog-modal-section" style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '12px', borderRadius: '8px' }}>
+                  <div className="prog-modal-section" style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                     <h3 style={{ color: '#FBBF24', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Sun size={16} /> Conductor Diurno</h3>
                     {/* Selector de conductor / lead diurno */}
                     <div style={{ marginBottom: '12px' }}>
@@ -3647,7 +3647,7 @@ export function ProgramacionV2Module() {
                   </div>
 
                   {/* Conductor Nocturno */}
-                  <div className="prog-modal-section" style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: '8px', marginTop: '12px' }}>
+                  <div className="prog-modal-section" style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: 'var(--radius-md)', marginTop: '12px' }}>
                     <h3 style={{ color: '#60A5FA', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Moon size={16} /> Conductor Nocturno</h3>
                     {/* Selector de conductor / lead nocturno */}
                     <div style={{ marginBottom: '12px' }}>
@@ -3786,7 +3786,7 @@ export function ProgramacionV2Module() {
                 </>
               ) : (
                 /* A Cargo - campos legacy */
-                <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px' }}>
+                <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                   <h3 style={{ margin: '0 0 12px 0', fontSize: '14px' }}><User size={16} /> Conductor</h3>
                   {/* Selector de conductor / lead */}
                   <div style={{ marginBottom: '12px' }}>
@@ -3954,13 +3954,13 @@ export function ProgramacionV2Module() {
                 {(previewProgramacion as any).cambio_vehiculo && (previewProgramacion as any).vehiculo_cambio_patente ? (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0' }}>
-                      <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(251, 191, 36, 0.15)', borderRadius: '8px', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
+                      <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(251, 191, 36, 0.15)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
                         <label style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO ANTERIOR</label>
                         <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{(previewProgramacion as any).vehiculo_cambio_patente || '-'}</p>
                         <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-tertiary)' }}>{(previewProgramacion as any).vehiculo_cambio_modelo || ''}</p>
                       </div>
                       <ArrowLeftRight size={20} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-                      <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
                         <label style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO NUEVO</label>
                         <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
                         <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-tertiary)' }}>{previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || ''}</p>
@@ -3992,7 +3992,7 @@ export function ProgramacionV2Module() {
                         <p>
                           {previewProgramacion.conductor_diurno_nombre || 'Sin asignar'}
                           {previewProgramacion.conductor_diurno_id && conductoresBajaIds.has(previewProgramacion.conductor_diurno_id) && (
-                            <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px' }}>De baja</span>
+                            <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: 'var(--radius-lg)' }}>De baja</span>
                           )}
                         </p>
                       </div>
@@ -4009,7 +4009,7 @@ export function ProgramacionV2Module() {
                         <p>
                           {previewProgramacion.conductor_nocturno_nombre || 'Sin asignar'}
                           {previewProgramacion.conductor_nocturno_id && conductoresBajaIds.has(previewProgramacion.conductor_nocturno_id) && (
-                            <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px' }}>De baja</span>
+                            <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: 'var(--radius-lg)' }}>De baja</span>
                           )}
                         </p>
                       </div>
@@ -4028,7 +4028,7 @@ export function ProgramacionV2Module() {
                       <p>
                         {previewProgramacion.conductor_display || previewProgramacion.conductor_nombre || '-'}
                         {previewProgramacion.conductor_id && conductoresBajaIds.has(previewProgramacion.conductor_id) && (
-                          <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px' }}>De baja</span>
+                          <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: 'var(--radius-lg)' }}>De baja</span>
                         )}
                       </p>
                     </div>

@@ -47,7 +47,7 @@
   background: var(--color-primary);
   color: var(--text-inverse);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -76,7 +76,7 @@
   background: var(--bg-primary);
   color: var(--text-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -98,7 +98,7 @@
 .no-permission-msg {
   background: var(--badge-yellow-bg);
   border: 1px solid var(--color-warning);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 10px 14px;
   margin-bottom: 12px;
   color: var(--badge-yellow-text);
@@ -119,14 +119,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   padding: 16px;
 }
 
 .modal-content {
   background: var(--modal-bg);
   padding: 20px 24px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   max-width: 900px;
   width: 100%;
   max-height: 90vh;
@@ -151,7 +151,7 @@
   padding: 20px 20px 0;
   background: var(--modal-bg);
   flex-shrink: 0;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   position: relative;
 }
 
@@ -176,7 +176,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .modal-close:hover {
@@ -240,7 +240,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-family: inherit;
   transition: all 0.15s;
@@ -286,7 +286,7 @@
   width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-family: inherit;
   transition: all 0.15s;
@@ -379,7 +379,7 @@ input[type="checkbox"] {
 .delete-warning {
   background: var(--badge-red-bg);
   border: 1px solid var(--color-danger-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 12px;
   margin-bottom: 12px;
 }
@@ -408,7 +408,7 @@ input[type="checkbox"] {
   padding: 20px;
   background: var(--modal-bg);
   flex-shrink: 0;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 /* Botón primario ROJO */
@@ -417,7 +417,7 @@ input[type="checkbox"] {
   border: none !important;
   color: white !important;
   padding: 10px 20px !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   font-size: 14px !important;
   font-weight: 500 !important;
 }
@@ -432,7 +432,7 @@ input[type="checkbox"] {
   border: 1px solid var(--border-primary) !important;
   color: var(--text-primary) !important;
   padding: 10px 20px !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   font-size: 14px !important;
   font-weight: 500 !important;
 }
@@ -447,9 +447,9 @@ input[type="checkbox"] {
   background: var(--color-gray-800);
   color: var(--text-inverse);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 1px;
 }
@@ -603,7 +603,7 @@ input[type="checkbox"] {
 
   .modal-content:not(:has(.modal-header)) {
     padding: 14px 16px;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     max-height: 95vh;
   }
 
@@ -699,7 +699,7 @@ input[type="checkbox"] {
 
 .bitacora-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
   margin-bottom: 16px;
@@ -717,7 +717,7 @@ input[type="checkbox"] {
   gap: 8px;
   padding: 8px 10px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .stat-card .stat-icon {
@@ -790,7 +790,7 @@ input[type="checkbox"] {
   padding: 5px 10px;
   border: 1px solid;
   border-left-width: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   line-height: 1.35;
 }

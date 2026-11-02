@@ -1,6 +1,6 @@
 // src/modules/leads/LeadsModule.tsx
 import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
-import { fechaISOART } from '../../utils/fechaArgentina'
+import { fechaISOART, hoyART } from '../../utils/fechaArgentina'
 import { traerTodasLasPaginas } from '../../utils/paginacionSupabase'
 import { inferZona } from '../../utils/zonaUtils'
 import { normalizarCelularAR, validarCelularAR } from '../../utils/validacionesCampos'
@@ -22,7 +22,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import { useConductoresEmbajador } from '../../hooks/useConductoresEmbajador'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { ESTADO_DESCARTADO, lineaDescarte, pedirMotivoDescarte } from './motivoDescarte'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showError, showSuccess } from '../../utils/toast'
@@ -1049,7 +1049,7 @@ export function LeadsModule() {
     const c = m.conductor
     const esc = (t: string | null | undefined) => String(t ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const fecha = (d: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('/') : '-')
-    void Swal.fire({
+    void Alerta.fire({
       title: m.activo ? 'Ya es conductor' : 'Ya fue conductor',
       icon: 'info',
       html: `
@@ -1655,7 +1655,7 @@ export function LeadsModule() {
     void (async () => {
       const { data, error } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle()
       if (error || !data) {
-        Swal.fire('Lead no encontrado', 'El enlace no corresponde a un lead existente.', 'warning')
+        Alerta.fire('Lead no encontrado', 'El enlace no corresponde a un lead existente.', 'warning')
         return
       }
       handleOpenDetails(data as Lead)
@@ -1694,7 +1694,7 @@ export function LeadsModule() {
     setEditErrors(errores)
     if (Object.keys(errores).length === 0) return true
     const etiquetas: Record<string, string> = { phone: 'Teléfono (WhatsApp)', telefono_secundario: 'Teléfono secundario' }
-    Swal.fire(
+    Alerta.fire(
       'Celular inválido',
       Object.entries(errores).map(([campo, msg]) => `${etiquetas[campo]}: ${msg}`).join('<br>'),
       'warning'
@@ -1713,7 +1713,7 @@ export function LeadsModule() {
     }
     if (fields.embajador_id) return true
     setEditErrors(prev => ({ ...prev, embajador_id: 'Seleccione el conductor embajador' }))
-    Swal.fire('Falta el embajador', 'El lead es referido: seleccione el conductor embajador (paso Proceso).', 'warning')
+    Alerta.fire('Falta el embajador', 'El lead es referido: seleccione el conductor embajador (paso Proceso).', 'warning')
     return false
   }
 
@@ -1801,7 +1801,7 @@ export function LeadsModule() {
     const camposFaltantes = validarCamposConversion(lead)
 
     if (camposFaltantes.length > 0) {
-      await Swal.fire({
+      await Alerta.fire({
         icon: 'warning',
         title: 'Faltan campos obligatorios',
         html: `<p>Para convertir a conductor se requieren los siguientes campos:</p>
@@ -1825,7 +1825,7 @@ export function LeadsModule() {
     if (esFusion && conductorExistente) {
       // Mensaje informativo no bloqueante: se muestra mientras la fusion se ejecuta
       const ce = conductorExistente
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'El conductor ya existe',
         html: `
@@ -1842,11 +1842,11 @@ export function LeadsModule() {
         `,
         showConfirmButton: false,
         allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading() },
+        didOpen: () => { Alerta.showLoading() },
       })
     } else {
       // Flujo normal: confirmar creación
-      const result = await Swal.fire({
+      const result = await Alerta.fire({
         icon: 'question',
         title: 'Convertir Lead a Conductor',
         html: `
@@ -1879,7 +1879,7 @@ export function LeadsModule() {
         conductorExistente,
       })
 
-      if (esFusion) Swal.close()
+      if (esFusion) Alerta.close()
       const msgExito = !esFusion
         ? `El lead "${nombre}" fue convertido a conductor exitosamente.`
         : res.reactivado
@@ -1888,7 +1888,7 @@ export function LeadsModule() {
       showSuccess(!esFusion ? 'Convertido' : res.reactivado ? 'Reingreso' : 'Ya era conductor', msgExito)
       loadLeads()
     } catch (err) {
-      if (esFusion) Swal.close()
+      if (esFusion) Alerta.close()
       const msg = err instanceof Error ? err.message : 'No se pudo convertir el lead a conductor'
       showError('Error', msg)
     } finally {
@@ -1911,7 +1911,7 @@ export function LeadsModule() {
     }
     const c = conductor as Record<string, unknown>
     const esc = (t: unknown) => String(t ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const r = await Swal.fire({
+    const r = await Alerta.fire({
       icon: 'question',
       title: 'Reactivar conductor',
       html: `
@@ -1957,11 +1957,11 @@ export function LeadsModule() {
   // agregan a continuacion, agrupados como en el modal.
   async function handleExportExcel() {
     try {
-      Swal.fire({
+      Alerta.fire({
         title: 'Generando Excel...',
         html: `<p>${filteredLeads.length} leads</p>`,
         allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
+        didOpen: () => Alerta.showLoading(),
       })
       const XLSX = await import('xlsx')
       const data = filteredLeads.map(l => {
@@ -2034,8 +2034,8 @@ export function LeadsModule() {
       const ws = XLSX.utils.json_to_sheet(data)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Leads')
-      XLSX.writeFile(wb, `leads_export_${new Date().toISOString().split('T')[0]}.xlsx`)
-      Swal.close()
+      XLSX.writeFile(wb, `leads_export_${hoyART()}.xlsx`)
+      Alerta.close()
     } catch {
       showError('Error', 'No se pudo exportar')
     }
@@ -2217,11 +2217,11 @@ export function LeadsModule() {
 
     try {
       // Mostrar loading mientras se lee y procesa el archivo
-      Swal.fire({
+      Alerta.fire({
         title: 'Leyendo archivo...',
         html: `<p>${file.name}</p>`,
         allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
+        didOpen: () => Alerta.showLoading(),
       })
       const XLSX = await import('xlsx')
       const buffer = await file.arrayBuffer()
@@ -2248,7 +2248,7 @@ export function LeadsModule() {
         }
       }
 
-      Swal.close() // Cerrar loading de lectura
+      Alerta.close() // Cerrar loading de lectura
 
       // Obtener headers del Excel, trimear espacios (excluir columnas vacías, null, y __EMPTY)
       const excelHeadersRaw = Object.keys(jsonData[0]).filter(h =>
@@ -2321,7 +2321,7 @@ export function LeadsModule() {
           html += '<p style="color: #6B7280; margin-top: 8px;">Todas las columnas del Excel deben coincidir exactamente con el formato esperado.</p>'
           html += '</div>'
 
-          Swal.fire({
+          Alerta.fire({
             title: 'Columnas incorrectas',
             html,
             icon: 'error',
@@ -2448,7 +2448,7 @@ export function LeadsModule() {
           ? sinDni.map(r => `<li>Fila ${r.idx}: <strong>${r.nombre}</strong></li>`).join('')
           : sinDni.slice(0, 30).map(r => `<li>Fila ${r.idx}: <strong>${r.nombre}</strong></li>`).join('')
             + `<li style="color:#9CA3AF;">... y ${sinDni.length - 30} más</li>`
-        Swal.fire({
+        Alerta.fire({
           title: `${sinDni.length} lead${sinDni.length > 1 ? 's' : ''} sin DNI`,
           html: `
             <div style="text-align:left;font-size:13px;">
@@ -2467,11 +2467,11 @@ export function LeadsModule() {
       }
 
       // ─── Detectar duplicados por DNI ───
-      Swal.fire({
+      Alerta.fire({
         title: 'Verificando duplicados...',
         html: '<p>Comparando registros con la base de datos</p>',
         allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
+        didOpen: () => Alerta.showLoading(),
       })
       const excelDnis = dbRows
         .map(r => String(r.dni || '').trim())
@@ -2501,7 +2501,7 @@ export function LeadsModule() {
           .map(d => ({ dni: d, nombre: existingDnis.get(d) || 'Sin nombre' }))
       }
 
-      Swal.close() // Cerrar loading de verificación
+      Alerta.close() // Cerrar loading de verificación
 
       // Variable para controlar el modo de inserción
       let modoInsercion: 'insertar' | 'reemplazar' | 'duplicar' = 'insertar'
@@ -2513,7 +2513,7 @@ export function LeadsModule() {
           : duplicados.slice(0, 20).map(d => `<li><strong>${d.nombre}</strong> — DNI: ${d.dni}</li>`).join('')
             + `<li style="color: var(--text-tertiary);">... y ${duplicados.length - 20} más</li>`
 
-        const dupResult = await Swal.fire({
+        const dupResult = await Alerta.fire({
           title: `${duplicados.length} lead${duplicados.length > 1 ? 's' : ''} ya existe${duplicados.length > 1 ? 'n' : ''} en la base de datos`,
           html: `
             <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
@@ -2540,7 +2540,7 @@ export function LeadsModule() {
         modoInsercion = dupResult.isConfirmed ? 'reemplazar' : 'duplicar'
       } else {
         // Sin duplicados — confirmar carga normal
-        const confirmResult = await Swal.fire({
+        const confirmResult = await Alerta.fire({
           title: '¿Estás seguro que quieres subir los datos?',
           html: `<p style="font-size: 14px;">Se cargarán <strong>${jsonData.length.toLocaleString()}</strong> registros a la base de datos.</p>`,
           icon: 'question',
@@ -2570,11 +2570,11 @@ export function LeadsModule() {
         ? rowsNuevos.length + rowsDuplicados.length
         : dbRows.length
 
-      Swal.fire({
+      Alerta.fire({
         title: 'Cargando datos...',
         html: `<p>Procesando 0 de ${totalOps} registros</p>`,
         allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
+        didOpen: () => Alerta.showLoading(),
       })
 
       // Insertar registros nuevos
@@ -2607,7 +2607,7 @@ export function LeadsModule() {
         } else {
           insertados += batch.length
         }
-        Swal.update({
+        Alerta.update({
           html: `<p>Procesando ${Math.min(insertados + actualizados + errores, totalOps)} de ${totalOps} registros</p>`,
         })
       }
@@ -2634,14 +2634,14 @@ export function LeadsModule() {
             actualizados++
           }
           if ((actualizados + errores) % 50 === 0) {
-            Swal.update({
+            Alerta.update({
               html: `<p>Procesando ${insertados + actualizados + errores} de ${totalOps} registros</p>`,
             })
           }
         }
       }
 
-      Swal.close()
+      Alerta.close()
 
       // Resultado final
       if (errores > 0) {
@@ -2655,7 +2655,7 @@ export function LeadsModule() {
             </div>`
           : ''
 
-        Swal.fire({
+        Alerta.fire({
           title: insertados > 0 || actualizados > 0 ? 'Carga parcial' : 'Error en la carga',
           html: `
             <div style="font-size: 14px; text-align: left;">
@@ -2673,7 +2673,7 @@ export function LeadsModule() {
         if (insertados > 0) resumenParts.push(`<strong>${insertados.toLocaleString()}</strong> insertados`)
         if (actualizados > 0) resumenParts.push(`<strong>${actualizados.toLocaleString()}</strong> actualizados`)
 
-        await Swal.fire({
+        await Alerta.fire({
           title: 'Carga exitosa',
           html: `<p style="font-size: 14px;">${resumenParts.join(' y ')} correctamente.</p>`,
           icon: 'success',
@@ -2683,7 +2683,7 @@ export function LeadsModule() {
 
       loadLeads()
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       const msg = err instanceof Error ? err.message : 'Error al procesar el archivo'
       showError('Error', msg)
     }
@@ -2769,7 +2769,7 @@ export function LeadsModule() {
               background: enZonaRestringida ? 'var(--badge-red-bg)' : undefined,
               borderLeft: enZonaRestringida ? '3px solid var(--color-primary)' : undefined,
               padding: '6px 8px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -2841,7 +2841,7 @@ export function LeadsModule() {
                   style={{
                     fontSize: '9px',
                     padding: '2px 6px',
-                    borderRadius: '4px',
+                    borderRadius: 'var(--radius-xs)',
                     fontWeight: 600,
                     marginTop: '2px',
                     display: 'inline-block',
@@ -2862,7 +2862,7 @@ export function LeadsModule() {
                   style={{
                     fontSize: '9px',
                     padding: '2px 6px',
-                    borderRadius: '4px',
+                    borderRadius: 'var(--radius-xs)',
                     fontWeight: 600,
                     marginTop: '2px',
                     display: 'inline-block',
@@ -3432,7 +3432,7 @@ export function LeadsModule() {
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
           <button
             onClick={() => { setError(''); loadLeads() }}
-            style={{ padding: '8px 20px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-primary)', color: 'var(--color-primary)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+            style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-primary)', color: 'var(--color-primary)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
           >
             Reintentar
           </button>
@@ -3708,7 +3708,7 @@ function ObservacionesCell({ leadId, value, isOpen, canEdit, onToggle, onSave, o
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           padding: '2px 6px',
-          borderRadius: '4px',
+          borderRadius: 'var(--radius-xs)',
           border: canEdit ? '1px dashed transparent' : 'none',
           cursor: canEdit ? 'text' : 'default',
           color: obs ? 'var(--text-primary)' : 'var(--text-tertiary)',
@@ -3726,11 +3726,11 @@ function ObservacionesCell({ leadId, value, isOpen, canEdit, onToggle, onSave, o
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            zIndex: 99999,
+            zIndex: 'var(--z-dropdown)',
             width: 320,
             background: 'var(--bg-primary, #fff)',
             border: '1px solid var(--border-primary, #e5e7eb)',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             boxShadow: '0 4px 20px rgba(0,0,0,.15)',
             padding: '10px',
             display: 'flex',
@@ -3757,7 +3757,7 @@ function ObservacionesCell({ leadId, value, isOpen, canEdit, onToggle, onSave, o
               lineHeight: 1.4,
               padding: '6px 8px',
               border: '1px solid var(--border-primary, #d1d5db)',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               background: 'var(--bg-secondary, #fff)',
               color: 'var(--text-primary)',
               fontFamily: 'inherit',
@@ -3769,7 +3769,7 @@ function ObservacionesCell({ leadId, value, isOpen, canEdit, onToggle, onSave, o
               type="button"
               onClick={onClose}
               disabled={guardando}
-              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: '1px solid var(--border-primary, #d1d5db)', borderRadius: '6px', background: 'var(--bg-primary, #fff)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: '1px solid var(--border-primary, #d1d5db)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary, #fff)', color: 'var(--text-secondary)', cursor: 'pointer' }}
             >
               Cancelar
             </button>
@@ -3777,7 +3777,7 @@ function ObservacionesCell({ leadId, value, isOpen, canEdit, onToggle, onSave, o
               type="button"
               onClick={() => void guardar()}
               disabled={guardando}
-              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: 'none', borderRadius: '6px', background: 'var(--color-primary, #ff0033)', color: '#fff', cursor: guardando ? 'wait' : 'pointer' }}
+              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600, border: 'none', borderRadius: 'var(--radius-sm)', background: 'var(--color-primary, #ff0033)', color: '#fff', cursor: guardando ? 'wait' : 'pointer' }}
             >
               {guardando ? 'Guardando...' : 'Guardar'}
             </button>
@@ -3854,7 +3854,7 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
           color,
           cursor: canEdit ? 'pointer' : 'default',
           padding: '2px 8px',
-          borderRadius: '4px',
+          borderRadius: 'var(--radius-xs)',
           background: norm === 'Si' ? '#DCFCE7' : norm === 'No' ? '#FEE2E2' : 'transparent',
           border: canEdit ? '1px dashed #d1d5db' : 'none',
         }}
@@ -3870,9 +3870,9 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            zIndex: 99999,
+            zIndex: 'var(--z-dropdown)',
             background: '#fff',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             boxShadow: '0 4px 20px rgba(0,0,0,.15)',
             padding: '4px 0',
             minWidth: '100px',
@@ -3984,7 +3984,7 @@ function GuiaDropdownCell({ leadId, field = 'entrevistador_asignado', value, gui
           color: actual ? 'var(--text-primary)' : '#9ca3af',
           cursor: canEdit ? 'pointer' : 'default',
           padding: '2px 8px',
-          borderRadius: '4px',
+          borderRadius: 'var(--radius-xs)',
           border: canEdit ? '1px dashed #d1d5db' : 'none',
         }}
         onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(dropdownKey) } : undefined}
@@ -3999,9 +3999,9 @@ function GuiaDropdownCell({ leadId, field = 'entrevistador_asignado', value, gui
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            zIndex: 99999,
+            zIndex: 'var(--z-dropdown)',
             background: '#fff',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             boxShadow: '0 4px 20px rgba(0,0,0,.15)',
             padding: '4px 0',
             minWidth: '160px',
@@ -4129,7 +4129,7 @@ function EstadoDropdownCell({ leadId, estado, badgeClass, isOpen, canEdit, onTog
         <div
           ref={dropdownRef}
           className="lead-estado-dropdown"
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999, maxHeight: maxH, overflowY: maxH ? 'auto' : undefined }}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 'var(--z-dropdown)', maxHeight: maxH, overflowY: maxH ? 'auto' : undefined }}
           onClick={(e) => e.stopPropagation()}
         >
           {estados.map(est => (

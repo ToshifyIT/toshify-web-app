@@ -358,7 +358,7 @@ export function CabifyModule() {
   const [showUnassigned, setShowUnassigned] = useState(false)
 
   return (
-    <div className="module-container">
+    <div className="cabify-module">
       {/* Orden estándar de los módulos: indicadores arriba, después buscador + filtros en una línea */}
       {!isLoading && hasHistoricalDrivers && (
         <StatsAccordion estadisticas={estadisticas} />

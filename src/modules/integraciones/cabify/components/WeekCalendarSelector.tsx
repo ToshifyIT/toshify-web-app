@@ -8,6 +8,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
 
+import { numeroSemana } from '../../../../utils/semanaISO'
 interface WeekCalendarSelectorProps {
   readonly selectedWeek: WeekOption | null
   readonly availableWeeks: readonly WeekOption[]
@@ -103,14 +104,6 @@ export function WeekCalendarSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Calcular número de semana ISO
-  const getWeekNumber = (year: number, month: number, day: number): number => {
-    const d = new Date(Date.UTC(year, month, day))
-    const dayNum = d.getUTCDay() || 7
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-  }
 
   // Generar días del calendario
   const calendarDays = useMemo(() => {
@@ -279,7 +272,7 @@ export function WeekCalendarSelector({
     }
 
     if (!selectedWeek || !selectedRange) return 'Seleccionar semana'
-    const weekNum = getWeekNumber(selectedRange.start.year, selectedRange.start.month, selectedRange.start.day)
+    const weekNum = numeroSemana(new Date(selectedRange.start.year, selectedRange.start.month, selectedRange.start.day))
     if (selectedWeek.weeksAgo === 0) {
       return `Esta semana (S${weekNum})`
     }
@@ -465,7 +458,7 @@ export function WeekCalendarSelector({
           <div className="week-calendar-shortcuts">
             {availableWeeks.slice(0, 2).map(week => {
               const start = parseISODate(week.startDate)
-              const weekNum = getWeekNumber(start.year, start.month, start.day)
+              const weekNum = numeroSemana(new Date(start.year, start.month, start.day))
               const label = week.weeksAgo === 0
                 ? `Esta semana (S${weekNum})`
                 : `Semana pasada (S${weekNum})`

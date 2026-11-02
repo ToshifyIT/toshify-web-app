@@ -11,6 +11,7 @@ import type { VehiculoSimple, ConductorSimple } from '../../../types/incidencias
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 
+import { numeroSemana } from '../../../utils/semanaISO'
 interface SiniestroSeguimientoProps {
   siniestro: SiniestroCompleto
   onReload: () => void
@@ -71,18 +72,6 @@ function getLocalDateString() {
   return `${year}-${month}-${day}`
 }
 
-// Calcular número de semana ISO 8601
-function getWeekNumber(dateStr: string): number {
-  if (!dateStr) return 0
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day, 12, 0, 0)
-  const thursday = new Date(date)
-  thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3)
-  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-  const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-  return weekNumber
-}
 
 export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: SiniestroSeguimientoProps) {
   const { user, profile } = useAuth()
@@ -372,7 +361,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
       // Obtener datos del conductor y vehículo para guardar nombres
       const selectedConductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
       const selectedVehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
-      const semana = getWeekNumber(incidenciaForm.fecha)
+      const semana = numeroSemana(incidenciaForm.fecha)
 
       // Crear la incidencia
       const { data: incidenciaData, error: incError } = await (supabase
@@ -486,7 +475,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
   // Datos pre-seleccionados para mostrar en el formulario
   const selectedVehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
   const selectedConductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
-  const semanaCalculada = getWeekNumber(incidenciaForm.fecha)
+  const semanaCalculada = numeroSemana(incidenciaForm.fecha)
 
   // Categorizar tipos de cobro/descuento
   const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useMemo(() => ({
@@ -664,8 +653,8 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
 
       {/* Modal "Ver detalle incidencia" (solo lectura) */}
       {showDetalleIncidencia && (
-        <div onClick={() => setShowDetalleIncidencia(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: 24 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-primary)', borderRadius: 12, width: '100%', maxWidth: 640, maxHeight: '88vh', overflow: 'auto', border: '1px solid var(--border-primary)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+        <div onClick={() => setShowDetalleIncidencia(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'calc(var(--z-modal-nested) + 1)', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 640, maxHeight: '88vh', overflow: 'auto', border: '1px solid var(--border-primary)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid var(--border-primary)' }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Detalle de la incidencia</h2>
               <button onClick={() => setShowDetalleIncidencia(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4 }}><X size={18} /></button>
@@ -679,7 +668,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                 <>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
                     {incidenciaDetalle.incidencias_estados?.nombre && (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#6366f1', padding: '2px 10px', borderRadius: 999 }}>{incidenciaDetalle.incidencias_estados.nombre}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#6366f1', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}>{incidenciaDetalle.incidencias_estados.nombre}</span>
                     )}
                     {incidenciaDetalle.tipo && <span style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>Tipo: {incidenciaDetalle.tipo}</span>}
                     <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtFechaInc(incidenciaDetalle.fecha)}</span>
@@ -733,11 +722,11 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 9999
+          zIndex: 'var(--z-modal-nested)'
         }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{
             background: 'var(--bg-primary)',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-lg)',
             width: '100%',
             maxWidth: '700px',
             maxHeight: '90vh',
@@ -783,7 +772,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       type="text"
                       value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : '-'}
                       readOnly
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     />
                   </div>
                   <div className="form-group">
@@ -792,7 +781,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       type="text"
                       value={selectedConductor?.nombre_completo || '-'}
                       readOnly
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     />
                   </div>
                 </div>
@@ -808,7 +797,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       value={incidenciaForm.fecha}
                       onChange={e => setIncidenciaForm(prev => ({ ...prev, fecha: e.target.value }))}
                       disabled={savingIncidencia}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     />
                   </div>
                   <div className="form-group">
@@ -817,7 +806,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       type="text"
                       value={semanaCalculada || '-'}
                       readOnly
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     />
                   </div>
                   <div className="form-group">
@@ -826,7 +815,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       type="text"
                       value={incidenciaForm.turno || '-'}
                       readOnly
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     />
                   </div>
                 </div>
@@ -841,7 +830,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       value={incidenciaForm.tipo_cobro_descuento_id || ''}
                       onChange={e => setIncidenciaForm(prev => ({ ...prev, tipo_cobro_descuento_id: e.target.value || undefined }))}
                       disabled={savingIncidencia}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
                       <option value="">Seleccionar</option>
                       {/* P006 - Exceso KM */}
@@ -882,7 +871,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       value={incidenciaForm.area || ''}
                       onChange={e => setIncidenciaForm(prev => ({ ...prev, area: e.target.value }))}
                       disabled={savingIncidencia}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
                       <option value="">Seleccionar</option>
                       <option value="Logística">Logística</option>
@@ -899,7 +888,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       value={incidenciaForm.estado_id}
                       onChange={e => setIncidenciaForm(prev => ({ ...prev, estado_id: e.target.value }))}
                       disabled={savingIncidencia}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
                       <option value="">Seleccionar</option>
                       {incidenciasEstados.map(e => (
@@ -923,7 +912,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       onChange={e => setIncidenciaForm(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
                       placeholder="0.00"
                       disabled={savingIncidencia}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     />
                   </div>
                   <div className="form-group">
@@ -932,7 +921,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       value={incidenciaForm.estado_vehiculo || ''}
                       onChange={e => setIncidenciaForm(prev => ({ ...prev, estado_vehiculo: e.target.value }))}
                       disabled={savingIncidencia}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
                       <option value="">Seleccionar</option>
                       <option value="Operativo">Operativo</option>
@@ -950,7 +939,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                       type="text"
                       value={profile?.full_name || 'Sistema'}
                       readOnly
-                      style={{ width: '300px', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      style={{ width: '300px', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     />
                   </div>
                 </div>
@@ -967,7 +956,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                     placeholder="Describa la incidencia..."
                     rows={4}
                     disabled={savingIncidencia}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
                   />
                 </div>
 
@@ -981,7 +970,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                     placeholder="Mensaje adicional para administración..."
                     rows={2}
                     disabled={savingIncidencia}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
                   />
                 </div>
               </div>

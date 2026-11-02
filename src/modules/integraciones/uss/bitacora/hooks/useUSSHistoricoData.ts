@@ -17,6 +17,7 @@ import {
 } from '../../../../../services/wialonBitacoraService';
 import { agruparMarcacionesPorDia, claveChecklist } from '../utils/marcacionesPorDia';
 
+import { hoyART } from '../../../../../utils/fechaArgentina'
 // Zona horaria Argentina
 const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires';
 
@@ -280,7 +281,7 @@ export function useUSSHistoricoData(
       // Asi un nocturno entrado domingo 23:00 cuenta en la semana del domingo
       // (donde fue su ENTRADA), no en la siguiente semana.
       // Usar el endDate del filtro visible para anclarse a la semana del ultimo dia visible.
-      const refDate = new Date((dateRange.endDate || new Date().toISOString().slice(0, 10)) + 'T12:00:00-03:00');
+      const refDate = new Date((dateRange.endDate || hoyART()) + 'T12:00:00-03:00');
       const dow = refDate.getDay() === 0 ? 7 : refDate.getDay(); // domingo=7
       const lunes = new Date(refDate); lunes.setDate(refDate.getDate() - (dow - 1)); lunes.setHours(0, 0, 0, 0);
       // Inicio de la semana en ART como ISO timestamp: lunes 00:00:00-03:00

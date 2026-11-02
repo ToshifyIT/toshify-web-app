@@ -16,6 +16,7 @@ import {
   Download,
   RefreshCw
 } from 'lucide-react'
+import { hoyART } from '../../utils/fechaArgentina'
 import './HistorialMovimientos.css'
 
 interface Movimiento {
@@ -295,7 +296,7 @@ export function HistorialMovimientosModule() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `historial-movimientos-${new Date().toISOString().slice(0, 10)}.csv`
+    link.download = `historial-movimientos-${hoyART()}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }

@@ -547,7 +547,7 @@ function BarraFlotante({
         transform: 'translateX(-50%)',
         background: 'var(--bg-primary)',
         border: '1px solid var(--border-primary)',
-        borderRadius: 11,
+        borderRadius: 'var(--radius-lg)',
         boxShadow: '0 6px 22px rgba(15,23,42,.18)',
         padding: '7px 12px',
         display: 'flex',
@@ -566,7 +566,7 @@ function BarraFlotante({
         style={{
           border: '1px solid var(--border-primary)',
           background: 'var(--bg-secondary)',
-          borderRadius: 7,
+          borderRadius: 'var(--radius-md)',
           cursor: 'pointer',
           padding: '3px 6px',
           display: 'flex',
@@ -588,7 +588,7 @@ function Pildora({ children, fondo }: { children: React.ReactNode; fondo?: strin
         fontWeight: 750,
         background: fondo || 'var(--color-primary, #ff0033)',
         color: '#fff',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         padding: '3px 9px',
         whiteSpace: 'nowrap',
       }}
@@ -667,7 +667,7 @@ function InfoEntidad({
           title="Cerrar"
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 22, height: 22, marginRight: -2, border: 'none', borderRadius: 6,
+            width: 22, height: 22, marginRight: -2, border: 'none', borderRadius: 'var(--radius-sm)',
             background: 'transparent', color: '#6B7280', cursor: 'pointer', flexShrink: 0,
           }}
         >
@@ -681,7 +681,7 @@ function InfoEntidad({
             fontSize: 10,
             fontWeight: 700,
             padding: '1px 6px',
-            borderRadius: 4,
+            borderRadius: 'var(--radius-xs)',
             background: badge.bg,
             color: badge.color,
           }}
@@ -783,7 +783,7 @@ function InfoEntidad({
         <div
           style={{
             display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '6px 8px',
-            borderRadius: 8, background: 'rgba(255,0,51,.05)', border: '1px solid rgba(255,0,51,.35)',
+            borderRadius: 'var(--radius-md)', background: 'rgba(255,0,51,.05)', border: '1px solid rgba(255,0,51,.35)',
             fontSize: 11, color: '#374151',
           }}
         >
@@ -802,7 +802,7 @@ function InfoEntidad({
             marginTop: 9,
             padding: '8px 10px',
             border: '1px solid #ff0033',
-            borderRadius: 9,
+            borderRadius: 'var(--radius-md)',
             background: 'rgba(255,0,51,.05)',
           }}
         >
@@ -882,7 +882,7 @@ function BotonSoltarBase({ onClick }: { onClick: () => void }) {
         padding: '0 10px',
         flexShrink: 0,
         border: '1px solid var(--color-primary, #ff0033)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         background: '#fff1f3',
         color: 'var(--color-primary, #ff0033)',
         fontSize: 12,
@@ -922,7 +922,7 @@ function BotonIcono({
         height: 26,
         flexShrink: 0,
         border: `1px solid ${activo ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         background: activo ? '#fff1f3' : 'var(--bg-primary)',
         color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)',
         cursor: 'pointer',
@@ -967,7 +967,7 @@ function FichaFlotante({ lado, children }: { lado: 'izquierda' | 'derecha'; chil
         padding: '10px 12px 12px',
         background: '#fff',
         border: '1px solid #E5E7EB',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         boxShadow: '0 8px 24px rgba(0,0,0,.18)',
         cursor: 'default',
       }}
@@ -987,7 +987,7 @@ function BotonQuitar({ onClick }: { onClick: () => void }) {
       title="Quitar la línea del mapa"
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
-        padding: '2px 6px', border: 'none', borderRadius: 6, background: 'transparent',
+        padding: '2px 6px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent',
         color: '#6B7280', fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
       }}
     >

@@ -9,7 +9,7 @@ import { User, Mail, Phone, FileText, Lock, Save, X, Camera, Check, AlertCircle 
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { AvatarUploadModal } from '../../components/ui/AvatarUploadModal'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import './ProfileModule.css'
 
@@ -120,7 +120,7 @@ export function ProfileModule() {
   const handleChangePassword = async () => {
     // Validaciones
     if (!passwordData.currentPassword) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Campo requerido',
         text: 'Ingresa tu contraseña actual',
@@ -144,7 +144,7 @@ export function ProfileModule() {
     }
 
     if (passwordErrors.length > 0) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Contraseña débil',
         html: `La contraseña debe cumplir:<br>• ${passwordErrors.join('<br>• ')}`,
@@ -153,7 +153,7 @@ export function ProfileModule() {
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'warning',
         title: 'Las contraseñas no coinciden',
         text: 'La nueva contraseña y su confirmación deben ser iguales',

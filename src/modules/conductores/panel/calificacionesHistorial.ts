@@ -10,6 +10,7 @@ import { cabifyService } from '../../../services/cabifyService'
 import { cargarPanelConductores } from './conductoresPanelService'
 import { calificarConductor, referenciaIngresos, type ExcesosRecientes, type ExtrasCalificacion, type FactorGuardado } from './calificacionConductor'
 
+import { fechaISOART } from '../../../utils/fechaArgentina'
 export interface CalificacionSemana {
   semana_inicio: string
   estrellas: number
@@ -72,7 +73,7 @@ export async function cargarExtrasCalificacion(conductorIds: string[], hasta: Da
   const hastaIso = hasta.toISOString()
 
   const cargo = (async () => {
-    const desde = new Date(hasta.getTime() - 21 * DIA).toISOString().slice(0, 10)
+    const desde = fechaISOART(new Date(hasta.getTime() - 21 * DIA).toISOString()) as string
     const out = new Map<string, { inicio: string; monto: number }>()
     for (const lote of lotes) {
       const { data, error } = await (supabase.from('facturacion_conductores') as any)
@@ -92,7 +93,7 @@ export async function cargarExtrasCalificacion(conductorIds: string[], hasta: Da
   })().catch(err => { console.error('[Calificaciones] cargo semanal', err); return null })
 
   const siniestros = (async () => {
-    const desde = new Date(hasta.getTime() - 84 * DIA).toISOString().slice(0, 10)
+    const desde = fechaISOART(new Date(hasta.getTime() - 84 * DIA).toISOString()) as string
     const out = new Map<string, number>()
     for (const lote of lotes) {
       const { data, error } = await (supabase.from('v_siniestros_completos' as any) as any)

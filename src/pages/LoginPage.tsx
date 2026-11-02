@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { tomarErrorAuth, MENSAJE_USUARIO_INACTIVO } from '../lib/authRedirectError'
 import { supabase } from '../lib/supabase'
-import Swal from 'sweetalert2'
+import { Alerta } from '../components/ui/alertas'
 import logoToshify from '../assets/logo-toshify.png'
 
 export function LoginPage() {
@@ -72,7 +72,7 @@ export function LoginPage() {
   const handleForgotPassword = async (e: React.MouseEvent) => {
     e.preventDefault()
 
-    const { value: forgotEmail } = await Swal.fire({
+    const { value: forgotEmail } = await Alerta.fire({
       title: 'Recuperar contraseña',
       input: 'email',
       inputLabel: 'Ingresá tu correo electrónico',
@@ -101,7 +101,7 @@ export function LoginPage() {
         })
 
         if (!emailExists) {
-          await Swal.fire({
+          await Alerta.fire({
             icon: 'warning',
             title: 'Email no registrado',
             text: 'No existe una cuenta con este correo electrónico.',
@@ -115,14 +115,14 @@ export function LoginPage() {
         })
 
         if (error) {
-          await Swal.fire({
+          await Alerta.fire({
             icon: 'error',
             title: 'Error',
             text: error.message,
             confirmButtonColor: '#FF0033'
           })
         } else {
-          await Swal.fire({
+          await Alerta.fire({
             icon: 'success',
             title: 'Correo enviado',
             text: 'Revisá tu bandeja de entrada. Te enviamos un enlace para restablecer tu contraseña.',
@@ -131,7 +131,7 @@ export function LoginPage() {
           })
         }
       } catch {
-        await Swal.fire({
+        await Alerta.fire({
           icon: 'error',
           title: 'Error',
           text: 'No se pudo enviar el correo. Intentá de nuevo.',

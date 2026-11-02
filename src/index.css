@@ -72,7 +72,7 @@ body.device-mobile .sidebar {
   position: fixed;
   left: -280px;
   transition: left 0.3s ease;
-  z-index: 1000;
+  z-index: var(--z-sidebar);
 }
 
 body.device-mobile .sidebar.open {
@@ -93,7 +93,7 @@ body.device-mobile .main-content {
     bottom: 0 !important;
     width: 280px !important;
     height: 100vh !important;
-    z-index: 1000;
+    z-index: var(--z-sidebar);
     transition: left 0.3s ease;
     overflow-y: auto;
   }
@@ -147,8 +147,7 @@ body.device-mobile .btn {
 }
 
 /* Modales en móvil - full width */
-body.device-mobile .modal-content,
-body.device-mobile .swal2-popup {
+body.device-mobile .modal-content {
   width: 95vw !important;
   max-width: 95vw !important;
   margin: 10px auto;
@@ -190,7 +189,7 @@ body.device-tablet .sidebar {
   bottom: 0;
   width: 280px;
   height: 100vh;
-  z-index: 1000;
+  z-index: var(--z-sidebar);
   transition: left 0.3s ease;
   overflow-y: auto;
 }
@@ -236,7 +235,7 @@ body.device-touch ::-webkit-scrollbar {
 }
 
 body.device-touch ::-webkit-scrollbar-thumb {
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 /* --- iOS SPECIFIC --- */
@@ -303,90 +302,6 @@ body.device-touch .show-touch-only {
    VIEWPORT-BASED RESPONSIVE (no depende de user-agent)
    Cubre cuando el navegador se redimensiona en desktop también.
    ============================================ */
-
-/* SweetAlert2 siempre por encima de cualquier modal de la app
-   (modal-overlay = 1000, visita-submodal-overlay = 1100). */
-.swal2-container {
-  z-index: 10000 !important;
-}
-
-/* SweetAlert2 GLOBAL: prevenir desborde en cualquier viewport.
-   Cualquier `width: 420` que venga del código se topa con este max-width.
-   En viewport >= 641px: respeta el width del código pero acotado a 92vw.
-   En viewport <= 640px: fuerza 92vw para legibilidad mobile. */
-.swal2-popup {
-  max-width: min(92vw, 900px) !important;
-}
-/* Tablas dentro de Swal: scroll horizontal en mobile */
-.swal2-html-container table {
-  display: block;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.swal2-html-container {
-  overflow-x: auto !important;
-}
-
-.swal-popup-fix {
-  padding-top: 2.5rem !important;
-}
-
-/* Modal ancho para tablas de detalle (ej. Detalle del Total Proyectado):
-   levanta el tope de 900px y deja la tabla como tabla real (sin display:block)
-   para que las columnas usen todo el ancho. */
-.swal2-popup.swal-popup-ancho {
-  width: 98vw !important;
-  max-width: 1700px !important;
-}
-.swal-popup-ancho .swal2-html-container table {
-  display: table;
-}
-
-/* Inputs en SweetAlert: 16px en todos los viewports para prevenir zoom iOS */
-.swal2-input,
-.swal2-select,
-.swal2-textarea,
-.swal2-file {
-  font-size: 16px !important;
-}
-
-/* Modales SweetAlert2 en pantallas chicas: ancho fluido */
-@media (max-width: 640px) {
-  .swal2-popup {
-    width: 92vw !important;
-    max-width: 92vw !important;
-    padding: 1rem 1.25rem !important;
-  }
-  .swal2-title {
-    font-size: 1.1rem !important;
-  }
-  .swal2-html-container {
-    font-size: 0.85rem !important;
-    padding: 0 !important;
-  }
-  .swal2-input,
-  .swal2-select,
-  .swal2-textarea {
-    margin: 0.4rem 0 !important;
-  }
-  .swal2-actions {
-    gap: 0.4rem !important;
-    flex-wrap: wrap;
-  }
-  .swal2-confirm,
-  .swal2-cancel {
-    padding: 0.6rem 1rem !important;
-    font-size: 0.9rem !important;
-    min-height: 44px;
-  }
-}
-
-/* SweetAlert2 en tablet: ancho razonable, max 90vw */
-@media (min-width: 641px) and (max-width: 1024px) {
-  .swal2-popup {
-    max-width: min(90vw, 720px) !important;
-  }
-}
 
 /* Stats cards: una sola columna en pantallas muy chicas */
 @media (max-width: 480px) {
@@ -462,7 +377,7 @@ body.device-touch .show-touch-only {
   h2 { font-size: 0.95rem !important; }
   h3 { font-size: 0.9rem !important; }
   /* Botones secundarios: padding reducido pero target táctil mantenido */
-  button:not(.swal2-confirm):not(.swal2-cancel),
+  
   .btn {
     padding: 8px 12px;
     font-size: 13px;

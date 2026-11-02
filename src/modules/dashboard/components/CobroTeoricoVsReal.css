@@ -1,7 +1,7 @@
 /* Contenedor principal */
 .cobro-teorico-container {
   background-color: var(--card-bg, #ffffff);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
   border: 1px solid var(--border-primary, #e5e7eb);
   padding: 20px;
@@ -51,7 +51,7 @@
   right: 0;
   height: 2px;
   background: #ef4444;
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
 }
 
 /* Header — siempre columna: título arriba, controles abajo */
@@ -99,7 +99,7 @@
   min-width: 0;
   flex: 0 1 auto;
   margin-bottom: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border-primary, #e2e8f0);
   height: 34px;
@@ -160,7 +160,7 @@
 .cobro-teorico-controls .period-picker__select {
   height: 34px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-primary, #e0e4ea);
   font-size: 12.5px;
   background-color: var(--card-bg, #ffffff);
@@ -197,7 +197,7 @@
 .cobro-teorico-tooltip {
   background-color: var(--card-bg, #ffffff);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px;
   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }

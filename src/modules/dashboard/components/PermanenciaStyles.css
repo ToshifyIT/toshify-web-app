@@ -1,6 +1,6 @@
 .permanencia-chart {
   background-color: var(--card-bg, #ffffff) !important;
-  border-radius: 16px !important;
+  border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-sm, 0 4px 6px -1px rgba(0, 0, 0, 0.1)) !important;
   border: 1px solid var(--border-primary, #f3f4f6);
   padding: 24px;
@@ -43,7 +43,7 @@
 .permanencia-chart__tooltip {
   background-color: var(--card-bg, #ffffff);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px;
   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
@@ -82,7 +82,7 @@
   width: 100%;
   min-height: 280px;
   background-color: var(--card-bg, #ffffff);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
@@ -128,7 +128,7 @@
   .permanencia-chart {
     padding: 12px;
     min-height: 220px;
-    border-radius: 12px !important;
+    border-radius: var(--radius-lg) !important;
   }
 
   .permanencia-chart__title {

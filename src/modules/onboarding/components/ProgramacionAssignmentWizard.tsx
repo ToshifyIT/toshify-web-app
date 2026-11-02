@@ -14,7 +14,7 @@ const ConductoresMapModal = lazy(() => import('./ConductoresMapModal'))
 import('./ConductoresMapModal').catch(() => { /* ignorar si falla, se reintentará al abrir */ })
 import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import type { TipoCandidato, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../types/onboarding.types'
 import type { Vehicle } from '../../../types/vehiculo.types'
@@ -24,6 +24,7 @@ import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL
 import { useGruposFlota } from '../../../hooks/useGruposFlota'
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from '../tarifaConceptos'
 
+import { hoyART } from '../../../utils/fechaArgentina'
 interface ProgramacionData {
   sede_id: string
   modalidad: 'turno' | 'a_cargo' | ''
@@ -212,7 +213,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         conductor_nocturno_nombre: editData.conductor_nocturno_nombre || '',
         conductor_nocturno_dni: editData.conductor_nocturno_dni || '',
         // Fecha y hora
-        fecha_cita: editData.fecha_cita || new Date().toISOString().split('T')[0],
+        fecha_cita: editData.fecha_cita || hoyART(),
         hora_cita: editData.hora_cita?.substring(0, 5) || '10:00',
         // A CARGO - campos
         tipo_candidato_cargo: (isCargo ? (editData.tipo_candidato || '') : '') as TipoCandidato,
@@ -262,7 +263,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     conductor_nocturno_id: '',
     conductor_nocturno_nombre: '',
     conductor_nocturno_dni: '',
-    fecha_cita: new Date().toISOString().split('T')[0],
+    fecha_cita: hoyART(),
     hora_cita: '10:00',
     // Campos A CARGO
     tipo_candidato_cargo: '',
@@ -1408,7 +1409,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         if (mismosonductores) {
-          Swal.fire({
+          Alerta.fire({
             icon: 'warning',
             title: 'Programación duplicada',
             html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
@@ -1720,7 +1721,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     if (!conductorId) return
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor?.tieneAsignacionDiurna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignacion activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno diurno.`,
@@ -1740,7 +1741,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     if (!conductorId) return
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor?.tieneAsignacionNocturna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignacion activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno nocturno.`,
@@ -1760,7 +1761,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     if (!conductorId) return
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
-      Swal.fire({
+      Alerta.fire({
         icon: 'info',
         title: 'Conductor con asignacion activa',
         html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa.`,
@@ -3044,7 +3045,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       flex: 1,
                       padding: '12px 16px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
                     }}
@@ -3055,7 +3056,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     style={{
                       padding: '12px 16px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -3076,7 +3077,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     style={{
                       padding: '12px 16px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -3133,7 +3134,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 background: badgeBg,
                                 color: badgeColor,
                                 padding: '3px 10px',
-                                borderRadius: '6px',
+                                borderRadius: 'var(--radius-sm)',
                                 fontSize: 'clamp(9px, 0.8vw, 11px)',
                                 fontWeight: '600'
                               }}>
@@ -3143,7 +3144,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 background: gncBadge.bg,
                                 color: gncBadge.color,
                                 padding: '3px 10px',
-                                borderRadius: '6px',
+                                borderRadius: 'var(--radius-sm)',
                                 fontSize: 'clamp(9px, 0.8vw, 11px)',
                                 fontWeight: '600'
                               }}>
@@ -3192,7 +3193,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       minWidth: 0,
                       padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
                     }}
@@ -3203,7 +3204,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     style={{
                       padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -3223,7 +3224,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     style={{
                       padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
@@ -3293,12 +3294,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
                                   <span style={{
                                     background: badgeBg, color: badgeColor,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
                                   <span style={{
                                     background: gncBadge.bg, color: gncBadge.color,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{gncBadge.text}</span>
                                   {detalleText && (
@@ -3378,12 +3379,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
                                   <span style={{
                                     background: badgeBg, color: badgeColor,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
                                   <span style={{
                                     background: gncBadge.bg, color: gncBadge.color,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{gncBadge.text}</span>
                                   {detalleText && (
@@ -3405,7 +3406,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                 {/* Resumen de selección */}
                 {(formData.vehiculo_id || formData.vehiculo_cambio_id) && (
-                  <div style={{ maxWidth: '900px', margin: '16px auto 0', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                  <div style={{ maxWidth: '900px', margin: '16px auto 0', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', display: 'block' }}>ORIGEN</span>
                       <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_id ? '#F59E0B' : 'var(--text-tertiary)' }}>
@@ -3457,7 +3458,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               background: mostrarParesCercanos ? '#10B981' : 'var(--bg-secondary)',
                               color: mostrarParesCercanos ? 'white' : 'var(--text-secondary)',
                               border: mostrarParesCercanos ? 'none' : '1px solid var(--border-primary)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               cursor: loadingPares ? 'wait' : 'pointer',
                               transition: 'all 0.2s'
                             }}
@@ -3483,7 +3484,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               background: 'var(--bg-secondary)',
                               color: 'var(--text-secondary)',
                               border: '1px solid var(--border-primary)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               cursor: 'pointer',
                               transition: 'all 0.2s'
                             }}
@@ -3507,7 +3508,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           minWidth: '60px',
                           padding: '7px 10px',
                           border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '12px',
                           fontFamily: 'inherit'
                         }}
@@ -3518,7 +3519,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         style={{
                           padding: '7px 6px',
                           border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '11px',
                           fontFamily: 'inherit',
                           background: 'var(--modal-bg)',
@@ -3535,7 +3536,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         style={{
                           padding: '7px 6px',
                           border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '11px',
                           fontFamily: 'inherit',
                           background: 'var(--modal-bg)',
@@ -3577,7 +3578,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 padding: '10px',
                                 background: 'rgba(16, 185, 129, 0.08)',
                                 border: '1px solid rgba(16, 185, 129, 0.3)',
-                                borderRadius: '8px',
+                                borderRadius: 'var(--radius-md)',
                                 marginBottom: '8px'
                               }}
                             >
@@ -3619,7 +3620,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       </p>
                                       <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
                                       {zonaDiurno && (
-                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
                                           <AlertTriangle size={12} className="ico-inline" />Zona restringida
                                         </span>
                                       )}
@@ -3649,7 +3650,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       </p>
                                       <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
                                       {zonanocturno && (
-                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
                                           <AlertTriangle size={12} className="ico-inline" />Zona restringida
                                         </span>
                                       )}
@@ -3702,7 +3703,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     background: getPreferenciaBadge(conductor.preferencia_turno).bg,
                                     color: getPreferenciaBadge(conductor.preferencia_turno).color
@@ -3714,7 +3715,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     marginTop: '2px',
                                     display: 'inline-block',
@@ -3728,7 +3729,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
-                                    borderRadius: '4px',
+                                    borderRadius: 'var(--radius-xs)',
                                     fontWeight: '600',
                                     marginTop: '2px',
                                     display: 'inline-block',
@@ -3880,12 +3881,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             {showMapModal && (
               <Suspense fallback={
                 <div style={{
-                  position: 'fixed', inset: 0, zIndex: 10000,
+                  position: 'fixed', inset: 0, zIndex: 'var(--z-modal-nested)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'rgba(0,0,0,0.5)',
                 }}>
                   <div style={{
-                    background: 'var(--bg-primary)', borderRadius: 16, padding: '40px 60px',
+                    background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', padding: '40px 60px',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
                   }}>
                     <Loader2 size={32} style={{ color: '#ff0033', animation: 'spin 1s linear infinite' }} />

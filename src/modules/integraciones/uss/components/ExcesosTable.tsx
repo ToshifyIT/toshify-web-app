@@ -83,7 +83,7 @@ function UbicacionCell({
       title={clickable ? `Ver en mapa: ${direccion || coordsTexto}` : 'Sin coordenadas'}
       style={{
         display: 'flex', alignItems: 'center', gap: '6px',
-        padding: '4px 8px', borderRadius: '6px',
+        padding: '4px 8px', borderRadius: 'var(--radius-sm)',
         background: 'transparent',
         border: clickable ? '1px solid var(--border-primary, #e5e7eb)' : '1px solid transparent',
         color: clickable ? 'var(--color-primary, #ef4444)' : 'var(--text-tertiary)',
@@ -214,7 +214,7 @@ export function ExcesosTable({
             color: '#fff',
             background: isGeotab ? '#3b82f6' : '#10b981',
             padding: '2px 8px',
-            borderRadius: '3px',
+            borderRadius: 'var(--radius-xs)',
             whiteSpace: 'nowrap',
             letterSpacing: '0.5px'
           }}>
@@ -231,7 +231,7 @@ export function ExcesosTable({
       cell: ({ row }) => (
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
           <span style={{ fontSize: '13px', fontWeight: 500 }}>{formatDate(row.original.fecha_evento)}</span>
-          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
             {formatTimeART(row.original.fecha_evento)}
           </span>
         </div>
@@ -351,7 +351,7 @@ export function ExcesosTable({
                 background: velFilterActive ? 'var(--color-primary, #ef4444)' : 'var(--bg-secondary, #f3f4f6)',
                 color: velFilterActive ? 'white' : 'var(--text-secondary)',
                 border: velFilterActive ? 'none' : '1px solid var(--border-primary, #e5e7eb)',
-                borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap',
+                borderRadius: 'var(--radius-md)', cursor: 'pointer', whiteSpace: 'nowrap',
               }}
             >
               <Gauge size={15} />
@@ -361,7 +361,7 @@ export function ExcesosTable({
               <div style={{
                 position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '6px',
                 background: 'var(--bg-primary, white)', border: '1px solid var(--border-primary, #e5e7eb)',
-                borderRadius: '10px', padding: '14px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: '220px',
+                borderRadius: 'var(--radius-lg)', padding: '14px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: '220px',
               }}>
                 <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '10px', color: 'var(--text-primary)' }}>Filtrar por velocidad (km/h)</div>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
@@ -370,7 +370,7 @@ export function ExcesosTable({
                     placeholder="Min"
                     value={velMin}
                     onChange={(e) => setVelMin(e.target.value)}
-                    style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
+                    style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
                   />
                   <span style={{ color: 'var(--text-tertiary)', fontSize: '14px', fontWeight: 600 }}>—</span>
                   <input
@@ -378,19 +378,19 @@ export function ExcesosTable({
                     placeholder="Max"
                     value={velMax}
                     onChange={(e) => setVelMax(e.target.value)}
-                    style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
+                    style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
                   />
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     onClick={applyVelocidadFilter}
-                    style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--color-primary, #ef4444)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--color-primary, #ef4444)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
                   >
                     Aplicar
                   </button>
                   <button
                     onClick={clearVelocidadFilter}
-                    style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--bg-secondary, #f3f4f6)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', cursor: 'pointer' }}
+                    style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--bg-secondary, #f3f4f6)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
                   >
                     Limpiar
                   </button>
@@ -421,7 +421,7 @@ export function ExcesosTable({
               onClick={() => setGpsFilter(opt.key)}
               style={{
                 padding: '6px 12px',
-                borderRadius: '999px',
+                borderRadius: 'var(--radius-full)',
                 fontSize: '12px',
                 fontWeight: 600,
                 border: `1px solid ${active ? opt.color : 'var(--border-primary)'}`,
@@ -468,7 +468,7 @@ export function ExcesosTable({
               position: 'fixed',
               top: 0, left: 0, right: 0, bottom: 0,
               background: 'rgba(0,0,0,0.4)',
-              zIndex: 999,
+              zIndex: 'var(--z-modal)',
             }}
           />
           {/* Panel a la izquierda */}
@@ -478,7 +478,7 @@ export function ExcesosTable({
             width: '440px',
             maxWidth: '90vw',
             background: 'var(--bg-primary, #fff)',
-            zIndex: 1000,
+            zIndex: 'var(--z-modal)',
             boxShadow: '4px 0 20px rgba(0,0,0,0.15)',
             display: 'flex',
             flexDirection: 'column',
@@ -505,7 +505,7 @@ export function ExcesosTable({
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   width: '32px', height: '32px',
                   border: '1px solid var(--border-primary, #e5e7eb)',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   background: 'var(--bg-primary, #fff)',
                   color: 'var(--text-secondary)',
                   cursor: 'pointer',
@@ -553,7 +553,7 @@ export function ExcesosTable({
               </div>
               <div>
                 <div style={{ color: 'var(--text-tertiary)', marginBottom: '2px' }}>Hora</div>
-                <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'monospace' }}>{formatTimeART(mapaExceso.fecha_evento)}</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{formatTimeART(mapaExceso.fecha_evento)}</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-tertiary)', marginBottom: '2px' }}>Velocidad</div>

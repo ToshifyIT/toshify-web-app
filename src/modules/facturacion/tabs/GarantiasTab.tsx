@@ -4,7 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import {
   Shield,
@@ -44,6 +44,8 @@ import { cargarConceptosTarifa } from '../../onboarding/tarifaConceptos'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 
+import { hoyART } from '../../../utils/fechaArgentina'
+import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 interface ConductorBasico {
   id: string
   nombres: string
@@ -772,27 +774,25 @@ export function GarantiasTab() {
 
     if (conductoresDisponibles.length === 0) {
       if (!conductores || conductores.length === 0) {
-        Swal.fire('Info', 'No se encontraron conductores en el sistema', 'info')
+        Alerta.fire('Info', 'No se encontraron conductores en el sistema', 'info')
       } else {
-        Swal.fire('Info', 'Todos los conductores ya tienen garantía registrada', 'info')
+        Alerta.fire('Info', 'Todos los conductores ya tienen garantía registrada', 'info')
       }
       return
     }
 
     // Generar opciones de semana
-    const hoy = new Date()
-    const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
-    const anioActual = hoy.getFullYear()
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
     
     // Generar opciones de año y semana por separado
     const anioOptions = `<option value="2025">2025</option><option value="${anioActual}" selected>${anioActual}</option>`
     let semanaOptionsHtml = ''
-    for (let s = 1; s <= 52; s++) {
+    for (let s = 1; s <= semanasDelAnio(anioActual); s++) {
       const selected = s === semanaActual ? 'selected' : ''
       semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Agregar Garantía</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -906,15 +906,15 @@ export function GarantiasTab() {
         const cuotas = parseInt((document.getElementById('swal-cuotas') as HTMLInputElement).value)
 
         if (!conductorId) {
-          Swal.showValidationMessage('Seleccione un conductor')
+          Alerta.showValidationMessage('Seleccione un conductor')
           return false
         }
         if (!monto || monto <= 0) {
-          Swal.showValidationMessage('Ingrese un monto válido')
+          Alerta.showValidationMessage('Ingrese un monto válido')
           return false
         }
         if (!cuotas || cuotas < 1) {
-          Swal.showValidationMessage('Ingrese número de cuotas válido')
+          Alerta.showValidationMessage('Ingrese número de cuotas válido')
           return false
         }
 
@@ -968,7 +968,7 @@ export function GarantiasTab() {
     const montoPagadoActual = estaDevuelta ? 0 : montoPagadoHistorico
     const montoTotalActual = dosDecimales(garantia.monto_total)
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantia</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1024,11 +1024,11 @@ export function GarantiasTab() {
         const motivo = (document.getElementById('swal-motivo') as HTMLTextAreaElement).value.trim()
 
         if (isNaN(montoPagado) || montoPagado < 0) {
-          Swal.showValidationMessage('El ajuste genera un monto pagado negativo')
+          Alerta.showValidationMessage('El ajuste genera un monto pagado negativo')
           return false
         }
         if (!motivo) {
-          Swal.showValidationMessage('El motivo es obligatorio')
+          Alerta.showValidationMessage('El motivo es obligatorio')
           return false
         }
 
@@ -1090,7 +1090,7 @@ export function GarantiasTab() {
   }
 
   async function eliminarGarantia(garantia: GarantiaConductor) {
-    const result = await Swal.fire({
+    const result = await Alerta.fire({
       title: 'Eliminar Garantía',
       html: `<p>¿Eliminar la garantía de <strong>${garantia.conductor_nombre}</strong>?</p>
              <p style="color: #ff0033; font-size: 12px;">Esto también eliminará el historial de pagos.</p>`,
@@ -1130,20 +1130,18 @@ export function GarantiasTab() {
     const sugerido = Math.min(CUOTA_SEMANAL, pendiente)
 
     // Generar opciones de semana
-    const hoy = new Date()
-    const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
-    const anioActual = hoy.getFullYear()
+    const { semana: semanaActual, anio: anioActual } = semanaISO(hoyART())
 
     const anioOptions = `<option value="2025">2025</option><option value="${anioActual}" selected>${anioActual}</option>`
     let semanaOptionsHtml = ''
-    for (let s = 1; s <= 52; s++) {
+    for (let s = 1; s <= semanasDelAnio(anioActual); s++) {
       const selected = s === semanaActual ? 'selected' : ''
       semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
     const porcentajeRegistrar = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Registrar Pago de Garantía</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1195,11 +1193,11 @@ export function GarantiasTab() {
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
         const monto = Math.round(parseFloat(montoRaw))
         if (!montoRaw || isNaN(monto) || monto <= 0) {
-          Swal.showValidationMessage('Ingrese un monto válido')
+          Alerta.showValidationMessage('Ingrese un monto válido')
           return false
         }
         if (monto > pendiente) {
-          Swal.showValidationMessage(`El monto no puede superar el pendiente (${formatCurrency(pendiente)})`)
+          Alerta.showValidationMessage(`El monto no puede superar el pendiente (${formatCurrency(pendiente)})`)
           return false
         }
         return { monto, referencia, semana, anio }
@@ -1260,7 +1258,7 @@ export function GarantiasTab() {
     if (retenida <= 0 || saldoActual === undefined) return
     const saldoResultante = Math.round((saldoActual + retenida) * 100) / 100
 
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Actualizar saldo</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1325,7 +1323,7 @@ export function GarantiasTab() {
           userName: profile?.full_name || undefined,
         })
       } catch (errorSaldos: any) {
-        Swal.fire('Atención', `La garantía quedó aplicada, pero no se pudo actualizar el saldo: ${errorSaldos?.message || 'error desconocido'}. Corregilo desde Saldos (Editar saldo).`, 'warning')
+        Alerta.fire('Atención', `La garantía quedó aplicada, pero no se pudo actualizar el saldo: ${errorSaldos?.message || 'error desconocido'}. Corregilo desde Saldos (Editar saldo).`, 'warning')
         cargarGarantias()
         return
       }
@@ -1361,7 +1359,7 @@ export function GarantiasTab() {
       : 0
     const estadoConductorModal = String((garantia as any).estado_conductor || 'ACTIVO')
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">${esCambioTarifa ? 'Devolución de Garantía' : 'Registrar Devolución de Garantía'}</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1422,12 +1420,12 @@ export function GarantiasTab() {
         // a entero y cualquier devolucion menor a $0,50 quedaba en 0 -> invalida.
         const monto = Math.round(parseFloat(String(montoRaw).replace(',', '.')) * 100) / 100
         if (!montoRaw || isNaN(monto) || monto <= 0) {
-          Swal.showValidationMessage('Ingrese un monto válido')
+          Alerta.showValidationMessage('Ingrese un monto válido')
           return false
         }
         // Media centavo de tolerancia para no rechazar el pendiente exacto por redondeo.
         if (monto > pendienteDevolver + 0.005) {
-          Swal.showValidationMessage(`El monto no puede superar ${formatCurrency(pendienteDevolver)}`)
+          Alerta.showValidationMessage(`El monto no puede superar ${formatCurrency(pendienteDevolver)}`)
           return false
         }
         return { monto, referencia }
@@ -1479,12 +1477,12 @@ export function GarantiasTab() {
     // Generar opciones de año y semana por separado
     const anioOptions = `<option value="">-</option><option value="2025" ${pago.anio === 2025 ? 'selected' : ''}>2025</option><option value="${anioActual}" ${pago.anio === anioActual ? 'selected' : ''}>${anioActual}</option>`
     let semanaOptionsHtml = '<option value="">-</option>'
-    for (let s = 1; s <= 52; s++) {
+    for (let s = 1; s <= semanasDelAnio(anioActual); s++) {
       const selected = s === pago.semana ? 'selected' : ''
       semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
-    const { value: formValues } = await Swal.fire({
+    const { value: formValues } = await Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Editar Movimiento</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
@@ -1643,7 +1641,7 @@ export function GarantiasTab() {
       (g as any).estado_conductor === 'BAJA' && garantiaPorCobrar(g, saldosPorConductor)
     )
     if (deudores.length === 0) {
-      Swal.fire('Sin datos', 'No hay conductores de baja que nos deban', 'info')
+      Alerta.fire('Sin datos', 'No hay conductores de baja que nos deban', 'info')
       return
     }
 
@@ -1687,7 +1685,7 @@ export function GarantiasTab() {
       .sort((a, b) => b['A cobrar'] - a['A cobrar'])
 
     await descargarExcel({
-      archivo: `Deudores_${new Date().toISOString().slice(0, 10)}`,
+      archivo: `Deudores_${hoyART()}`,
       titulo: 'Deudores',
       subtitulo: 'Conductores de baja que siguen debiendo. A cobrar = saldo pendiente − garantía retenida',
       hojas: [{
@@ -1712,7 +1710,7 @@ export function GarantiasTab() {
     const registros = (garantiasVisiblesRef.current || []) as typeof garantias
 
     if (registros.length === 0) {
-      Swal.fire('Sin datos', 'No hay garantías visibles para exportar con los filtros actuales', 'info')
+      Alerta.fire('Sin datos', 'No hay garantías visibles para exportar con los filtros actuales', 'info')
       return
     }
 
@@ -1753,7 +1751,7 @@ export function GarantiasTab() {
     }))
 
     await descargarExcel({
-      archivo: `Garantias_${new Date().toISOString().slice(0, 10)}`,
+      archivo: `Garantias_${hoyART()}`,
       titulo: 'Garantías',
       subtitulo: 'Registros visibles con los filtros aplicados',
       hojas: [{
@@ -1782,7 +1780,7 @@ export function GarantiasTab() {
       showError('Error', 'Seleccione una sede')
       return
     }
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: 'Sincronizar garantías',
       html: `
         <p>Se recalcularán las cuotas pagadas de todas las garantías de esta sede a partir de la facturación cerrada.</p>
@@ -1805,7 +1803,7 @@ export function GarantiasTab() {
       const cambios = resultados.filter(r => r.cambio)
 
       if (cambios.length === 0) {
-        Swal.fire('Sin cambios', 'Todas las garantías ya están sincronizadas', 'info')
+        Alerta.fire('Sin cambios', 'Todas las garantías ya están sincronizadas', 'info')
         return
       }
 
@@ -1821,7 +1819,7 @@ export function GarantiasTab() {
         `).join('')
 
       await cargarGarantias()
-      await Swal.fire({
+      await Alerta.fire({
         title: `${cambios.length} garantía${cambios.length === 1 ? '' : 's'} actualizada${cambios.length === 1 ? '' : 's'}`,
         html: `
           <div style="max-height:340px;overflow-y:auto;">
@@ -2017,7 +2015,7 @@ export function GarantiasTab() {
         const u = esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id)) ? null : ultimaSemanaMap.get(row.original.id)
         if (!u) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
         return (
-          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-primary)', fontWeight: 600 }}>
+          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 600 }}>
             S{String(u.semana).padStart(2, '0')} {u.anio}
           </span>
         )
@@ -2623,7 +2621,7 @@ export function GarantiasTab() {
                   </div>
                 </div>
                 <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
                     {[
                       { value: 'todos' as const, label: 'Todos' },
                       { value: 'asignado' as const, label: 'Asignados' },
@@ -2633,7 +2631,7 @@ export function GarantiasTab() {
                         key={opt.value}
                         onClick={() => setAsignadoFilter(opt.value)}
                         style={{
-                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
                           background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
                           color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
                         }}
@@ -2642,7 +2640,7 @@ export function GarantiasTab() {
                       </button>
                     ))}
                   </div>
-                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
                     {[
                       { value: 'todos' as const, label: 'Todos' },
                       { value: 'activo' as const, label: 'Activos' },
@@ -2652,7 +2650,7 @@ export function GarantiasTab() {
                         key={opt.value}
                         onClick={() => setEstadoCondFilter(opt.value)}
                         style={{
-                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
                           background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
                           color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
                         }}
@@ -2938,7 +2936,7 @@ export function GarantiasTab() {
                     {tieneDeuda && (
                       <span style={{
                         fontSize: '10px', fontWeight: 600,
-                        padding: '2px 8px', borderRadius: '4px',
+                        padding: '2px 8px', borderRadius: 'var(--radius-xs)',
                         background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
                       }}>
                         <AlertTriangle size={12} className="ico-inline" />Deuda real ${deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
@@ -2953,25 +2951,25 @@ export function GarantiasTab() {
                 {/* Resumen: total garantía vs total real pagado */}
                 <div style={{
                   display: 'flex', gap: '16px', marginBottom: '12px', padding: '10px 14px',
-                  background: 'var(--bg-secondary)', borderRadius: '6px',
+                  background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-primary)', alignItems: 'center', flexWrap: 'wrap',
                 }}>
                   <div style={{ flex: 1, minWidth: '120px' }}>
                     <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Garantía objetivo</div>
-                    <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)', marginTop: '2px' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', marginTop: '2px' }}>
                       {formatCurrency(Math.round(total))}
                     </div>
                   </div>
                   <div style={{ flex: 1, minWidth: '120px' }}>
                     <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Total real pagado</div>
-                    <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: tieneExcedente ? '#16a34a' : 'var(--text-primary)', marginTop: '2px' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: tieneExcedente ? '#16a34a' : 'var(--text-primary)', marginTop: '2px' }}>
                       {formatCurrency(totalRealPagado)}
                     </div>
                   </div>
                   {kardexModal.devoluciones.length > 0 && (
                     <div style={{ flex: 1, minWidth: '120px' }}>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Devuelto</div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: '#2563eb', marginTop: '2px' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#2563eb', marginTop: '2px' }}>
                         {formatCurrency(kardexModal.devoluciones.reduce((sum, d) => sum + (Number(d.monto) || 0), 0))}
                       </div>
                     </div>
@@ -2979,7 +2977,7 @@ export function GarantiasTab() {
                   {totalDevueltoModal > 0 && (
                     <div style={{ flex: 1, minWidth: '120px' }}>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Pendiente devolución</div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: pendienteDevolucion > 0 ? '#d97706' : 'var(--text-secondary)', marginTop: '2px' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: pendienteDevolucion > 0 ? '#d97706' : 'var(--text-secondary)', marginTop: '2px' }}>
                         {formatCurrency(pendienteDevolucion)}
                       </div>
                     </div>
@@ -2987,7 +2985,7 @@ export function GarantiasTab() {
                   {tieneExcedente && (
                     <div style={{ flex: 1, minWidth: '120px' }}>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Excedente</div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: '#16a34a', marginTop: '2px' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#16a34a', marginTop: '2px' }}>
                         +{formatCurrency(excedente)}
                       </div>
                     </div>
@@ -2995,7 +2993,7 @@ export function GarantiasTab() {
                 </div>
 
                 {/* Pestanas del modal: movimientos del kardex / devoluciones */}
-                <div style={{ display: 'flex', gap: '2px', marginBottom: '12px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '3px' }}>
+                <div style={{ display: 'flex', gap: '2px', marginBottom: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: '3px' }}>
                   {([
                     { value: 'movimientos' as const, label: `Movimientos (${kardexModal.rows.length})` },
                     // Dos secciones independientes: devoluciones comunes (efectivo, transferencia,
@@ -3010,7 +3008,7 @@ export function GarantiasTab() {
                       onClick={() => setKardexModal(prev => ({ ...prev, tab: t.value }))}
                       style={{
                         flex: 1, padding: '6px 12px', fontSize: '11px', fontWeight: 600,
-                        borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
                         background: kardexModal.tab === t.value ? '#ff0033' : 'transparent',
                         color: kardexModal.tab === t.value ? 'white' : 'var(--text-secondary)',
                       }}
@@ -3030,14 +3028,14 @@ export function GarantiasTab() {
                       onChange={e => setKardexModal(prev => ({ ...prev, search: e.target.value }))}
                       style={{
                         flex: 1, minWidth: '180px', padding: '6px 10px', fontSize: '11px',
-                        border: '1px solid var(--border-primary)', borderRadius: '4px',
+                        border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-xs)',
                         background: 'var(--bg-secondary)', color: 'var(--text-primary)',
                       }}
                     />
                     <select
                       value={kardexModal.semanaFilter}
                       onChange={e => setKardexModal(prev => ({ ...prev, semanaFilter: e.target.value }))}
-                      style={{ padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)', borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)' }}
+                      style={{ padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-xs)', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)' }}
                     >
                       <option value="">Todas las semanas</option>
                       {semanasUnicas.map(sem => {
@@ -3055,7 +3053,7 @@ export function GarantiasTab() {
                   <EmptyState size="sm" title="Sin movimientos en el kardex" />
                 ) : (
                   <>
-                    <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
+                    <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)' }}>
                       <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -3113,35 +3111,35 @@ export function GarantiasTab() {
                                 <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                                   {f.anio} S{String(f.semana || '').padStart(2, '0')}
                                   {esExtraFacturacion && (
-                                    <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: '3px', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
+                                    <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
                                       EXTRA
                                     </span>
                                   )}
                                   {esExcedente && (
-                                    <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: '3px', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
+                                    <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
                                       EXTRA
                                     </span>
                                   )}
                                 </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px', fontWeight: 600, color: esExtraFacturacion ? '#b45309' : 'var(--text-primary)' }}>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: esExtraFacturacion ? '#b45309' : 'var(--text-primary)' }}>
                                   {esExtraFacturacion ? '-' : <>{f.cuota_ref}</>}
                                 </td>
                                 <td style={{ padding: '10px 12px', color: esExtraFacturacion ? '#b45309' : 'var(--text-secondary)', fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origenLabel}>
                                   {origenLabel}
                                 </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, fontWeight: 700 }}>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, fontWeight: 700 }}>
                                   {formatCurrency(f.monto_cuota || 0)}
                                 </td>
                                 {(() => {
                                   // Filas EXTRA (excedente) no se comparan contra cuota fija
                                   if (esExtraFacturacion) {
-                                    return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
+                                    return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
                                   }
                                   const diff = (f.monto_cuota || 0) - montoCuotaFijo
-                                  if (Math.abs(diff) < 0.01) return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
+                                  if (Math.abs(diff) < 0.01) return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
                                   const esExcedenteDiff = diff > 0
                                   return (
-                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', fontWeight: 600, color: esExcedenteDiff ? '#16a34a' : '#ef4444' }}>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600, color: esExcedenteDiff ? '#16a34a' : '#ef4444' }}>
                                       {esExcedenteDiff ? '+' : ''}{formatCurrency(diff)}
                                     </td>
                                   )
@@ -3157,7 +3155,7 @@ export function GarantiasTab() {
                     <div style={{
                       display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
                       marginTop: '8px', background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden',
+                      border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
                     }}>
                       {/* Footer: cuotas pagadas = total de filas cuota_facturada (dinamico, no hardcodeado a 20) */}
                       {(() => {
@@ -3169,7 +3167,7 @@ export function GarantiasTab() {
                           <>
                             <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
                               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Pagadas</div>
-                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '4px' }}>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
                                 {cuotasPagadasRef}
                               </div>
                               <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
@@ -3178,7 +3176,7 @@ export function GarantiasTab() {
                             </div>
                             <div style={{ padding: '12px 16px', textAlign: 'center', gridColumn: 'span 3' }}>
                               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Restantes</div>
-                              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '4px' }}>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
                                 {cuotasRestantes}
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 500 }}>
@@ -3217,11 +3215,11 @@ export function GarantiasTab() {
                   ) : (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', fontFamily: 'monospace' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', fontFamily: 'var(--font-mono)' }}>
                           Total devuelto: {formatCurrency(lista.reduce((sum, d) => sum + (Number(d.monto) || 0), 0))}
                         </span>
                       </div>
-                      <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -3235,18 +3233,18 @@ export function GarantiasTab() {
                           <tbody>
                             {lista.map(d => (
                               <tr key={d.id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                                <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                                <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11px', whiteSpace: 'nowrap' }}>
                                   {formatDate(d.created_at)}
                                 </td>
-                                <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}>
                                   {d.semana_facturacion || '-'}
                                 </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#2563eb' }}>
                                   {formatCurrency(Number(d.monto) || 0)}
                                 </td>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
                                   {esDevolucionCambioTarifa(d.referencia) && (
-                                    <span style={{ display: 'inline-block', marginRight: '6px', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 600, background: 'rgba(16,185,129,0.12)', color: '#059669' }}
+                                    <span style={{ display: 'inline-block', marginRight: '6px', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '10px', fontWeight: 600, background: 'rgba(16,185,129,0.12)', color: '#059669' }}
                                       title="Se descuenta del total a pagar en la facturación de esa semana (P028)">
                                       Descontada en facturación
                                     </span>
@@ -3280,9 +3278,9 @@ export function GarantiasTab() {
                           const cambioTotal = h.monto_total_anterior !== h.monto_total_nuevo
                           const cambioEstado = h.estado_anterior !== h.estado_nuevo
                           return (
-                            <div key={h.id} style={{ border: '1px solid var(--border-primary)', borderRadius: '8px', padding: '10px 12px' }}>
+                            <div key={h.id} style={{ border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{formatDate(h.created_at)}</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{formatDate(h.created_at)}</span>
                                 <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>{h.created_by_name || 'Sistema'}</span>
                               </div>
                               {cambioPagado && (
@@ -3290,11 +3288,11 @@ export function GarantiasTab() {
                                   <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>Monto Pagado</div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: 'var(--text-secondary)' }}>Monto Antes:</span>
-                                    <span style={{ fontFamily: 'monospace' }}>{formatCurrency(h.monto_pagado_anterior)}</span>
+                                    <span style={{ fontFamily: 'var(--font-mono)' }}>{formatCurrency(h.monto_pagado_anterior)}</span>
                                   </div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: 'var(--text-secondary)' }}>Monto Modificado:</span>
-                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(h.monto_pagado_nuevo)}</span>
+                                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatCurrency(h.monto_pagado_nuevo)}</span>
                                   </div>
                                 </div>
                               )}
@@ -3303,11 +3301,11 @@ export function GarantiasTab() {
                                   <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>Campo Total</div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: 'var(--text-secondary)' }}>Monto Antes:</span>
-                                    <span style={{ fontFamily: 'monospace' }}>{formatCurrency(h.monto_total_anterior)}</span>
+                                    <span style={{ fontFamily: 'var(--font-mono)' }}>{formatCurrency(h.monto_total_anterior)}</span>
                                   </div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: 'var(--text-secondary)' }}>Monto Modificado:</span>
-                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(h.monto_total_nuevo)}</span>
+                                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatCurrency(h.monto_total_nuevo)}</span>
                                   </div>
                                 </div>
                               )}
@@ -3317,7 +3315,7 @@ export function GarantiasTab() {
                                   <span>{h.estado_anterior} &rarr; <strong>{h.estado_nuevo}</strong></span>
                                 </div>
                               )}
-                              <div style={{ fontSize: '12px', background: '#FEF9C3', padding: '6px 8px', borderRadius: '4px', color: '#854D0E' }}>
+                              <div style={{ fontSize: '12px', background: '#FEF9C3', padding: '6px 8px', borderRadius: 'var(--radius-xs)', color: '#854D0E' }}>
                                 <strong>Motivo:</strong> {h.motivo}
                               </div>
                             </div>
@@ -3336,8 +3334,8 @@ export function GarantiasTab() {
             {alertTip && (
               <div style={{
                 position: 'fixed', left: alertTip.x, top: alertTip.y, transform: 'translateY(-50%)',
-                zIndex: 3000, maxWidth: '260px', background: '#1f2937', color: '#fff',
-                padding: '8px 10px', borderRadius: '6px', fontSize: '11px', lineHeight: 1.35,
+                zIndex: 'var(--z-tooltip)', maxWidth: '260px', background: '#1f2937', color: '#fff',
+                padding: '8px 10px', borderRadius: 'var(--radius-sm)', fontSize: '11px', lineHeight: 1.35,
                 boxShadow: '0 6px 20px rgba(0,0,0,0.28)', pointerEvents: 'none',
               }}>
                 Esta semana aún no está cerrada, por lo tanto el monto aún no se considera en el Total Real Pagado

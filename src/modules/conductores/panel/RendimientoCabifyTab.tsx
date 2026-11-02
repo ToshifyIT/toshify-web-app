@@ -64,7 +64,7 @@ const LBL_MINI: CSSProperties = {
   letterSpacing: '0.3px', color: 'var(--text-secondary, #6b7280)',
 }
 const VAL_MINI: CSSProperties = {
-  fontSize: '15px', fontWeight: 700, fontFamily: 'monospace',
+  fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)',
   color: 'var(--text-primary, #111827)', marginTop: '2px',
 }
 
@@ -124,7 +124,7 @@ export function RendimientoCabifyTab({ data, loading, kmSemanas }: Props) {
       {/* Resumen */}
       <div style={{
         display: 'flex', gap: '16px', marginBottom: '12px', padding: '10px 14px',
-        background: 'var(--bg-secondary, #f9fafb)', borderRadius: '6px',
+        background: 'var(--bg-secondary, #f9fafb)', borderRadius: 'var(--radius-sm)',
         border: '1px solid var(--border-primary, #e5e7eb)', alignItems: 'center', flexWrap: 'wrap',
       }}>
         <div style={{ flex: 1, minWidth: '130px' }}>

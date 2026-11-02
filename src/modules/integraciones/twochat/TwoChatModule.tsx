@@ -14,7 +14,7 @@ import {
   Users, CheckCircle2, Clock, PhoneOff, AlertTriangle, RefreshCw, UploadCloud,
   Phone, PhoneCall, Timer, DollarSign, Download, MessageCircle, UserPlus, ExternalLink, History,
 } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   obtenerContactosTwoChat,
@@ -31,7 +31,7 @@ import type {
   ResultadoLlamada,
 } from '../../../services/twoChatService'
 import { useSede } from '../../../contexts/SedeContext'
-import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
+import { formatFechaHoraART, fechaISOART, hoyART, haceDiasART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
@@ -68,15 +68,6 @@ const ETIQUETA_RESULTADO: Record<ResultadoLlamada, string> = {
 
 /** Una llamada de pocos segundos suele ser buzón o corte: conversación = 30 seg o más */
 const SEGUNDOS_CONVERSACION = 30
-
-function hoyART(): string {
-  return fechaISOART(new Date().toISOString()) ?? new Date().toISOString().slice(0, 10)
-}
-
-function haceDiasART(dias: number): string {
-  const d = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
-  return fechaISOART(d.toISOString()) ?? d.toISOString().slice(0, 10)
-}
 
 function escaparHtml(txt: string): string {
   return txt.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
@@ -206,7 +197,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
     if (aSincronizar.length === 0) return
     const alcance = filtroEstado === 'todos' ? 'conductores' : `conductores (${filtroEstado === 'activo' ? 'activos' : 'de baja'})`
     const total = aSincronizar.length
-    const confirmacion = await Swal.fire({
+    const confirmacion = await Alerta.fire({
       title: 'Sincronizar con 2Chat',
       html: `Hay <b>${total}</b> ${alcance}` +
         (sedeActual ? ` de <b>${sedeActual.nombre}</b>` : '') +
@@ -235,12 +226,12 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
     let creados = 0
     let vinculados = 0
     let errores = 0
-    Swal.fire({
+    Alerta.fire({
       title: 'Sincronizando…',
       html: `<span id="tc-progreso">0 de ${ids.length}</span>`,
       allowOutsideClick: false,
       allowEscapeKey: false,
-      didOpen: () => Swal.showLoading(),
+      didOpen: () => Alerta.showLoading(),
     })
     try {
       for (let i = 0; i < ids.length; i += LOTE_SINCRONIZACION) {
@@ -252,7 +243,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
         const el = document.getElementById('tc-progreso')
         if (el) el.textContent = `${Math.min(i + lote.length, ids.length)} de ${ids.length}`
       }
-      Swal.close()
+      Alerta.close()
       const yaExistian = vinculados > 0 ? `, ${vinculados} ya existían y se vincularon` : ''
       if (errores > 0) {
         showError('Sincronización con errores', `${creados} creados${yaExistian}, ${errores} con error`)
@@ -260,7 +251,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
         showSuccess('Contactos sincronizados', `${creados} creados en 2Chat${yaExistian}`)
       }
     } catch (err) {
-      Swal.close()
+      Alerta.close()
       console.error('Error sincronizando 2Chat:', err)
       showError('Error', err instanceof Error ? err.message : 'No se pudo sincronizar')
     } finally {
@@ -844,7 +835,7 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
   }, [numeros, tipo])
 
   const crearLead = useCallback(async (fila: NumeroRegistro) => {
-    const r = await Swal.fire({
+    const r = await Alerta.fire({
       title: 'Crear lead',
       html:
         `<div style="text-align:left;font-size:13px;color:var(--text-secondary)">` +
@@ -861,19 +852,19 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#ff0033',
       showLoaderOnConfirm: true,
-      allowOutsideClick: () => !Swal.isLoading(),
+      allowOutsideClick: () => !Alerta.isLoading(),
       preConfirm: async (nombre: string) => {
         try {
           return await crearLeadDesdeLlamada({ nombre, telefono: fila.numero, sedeId: sedeActualId })
         } catch (err) {
-          Swal.showValidationMessage(err instanceof Error ? err.message : 'No se pudo crear el lead')
+          Alerta.showValidationMessage(err instanceof Error ? err.message : 'No se pudo crear el lead')
           return false
         }
       },
     })
     if (!r.isConfirmed || !r.value) return
     const { lead_id: leadId, existente } = r.value as { lead_id: string; existente: boolean }
-    const abrir = await Swal.fire({
+    const abrir = await Alerta.fire({
       icon: 'success',
       title: existente ? 'Ese número ya era un lead' : 'Lead creado',
       text: existente

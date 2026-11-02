@@ -8,6 +8,7 @@
 
 import { supabase } from '../../../lib/supabase'
 
+import { numeroSemana } from '../../../utils/semanaISO'
 export interface TelepaseCobroInput {
   id: string
   patente: string
@@ -45,17 +46,6 @@ function normalizeName(value: string | null | undefined): string {
 function getLocalDateString(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function getWeekNumber(dateStr: string): number {
-  if (!dateStr) return 0
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day, 12, 0, 0)
-  const thursday = new Date(date)
-  thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3)
-  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-  return Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
 }
 
 // La tarifa viene como "4.177,59" (formato AR). Convertir a number.
@@ -114,7 +104,7 @@ export async function crearCobroDesdeTelepase(
       .limit(1)
     if (periodos && periodos[0]?.fecha_inicio) fecha = periodos[0].fecha_inicio
   }
-  const semana = getWeekNumber(fecha)
+  const semana = numeroSemana(fecha)
 
   // 2) Tipo "P005 - Peaje"
   const { data: tipos } = await (supabase.from('tipos_cobro_descuento' as any) as any)

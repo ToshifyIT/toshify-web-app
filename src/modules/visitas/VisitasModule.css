@@ -36,7 +36,7 @@
   gap: 2px;
   background: var(--bg-secondary);
   padding: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
 }
 
@@ -50,7 +50,7 @@
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -94,7 +94,7 @@
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -125,7 +125,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
-  z-index: 999;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -134,7 +134,7 @@
 
 .visitas-day-modal {
   background: var(--card-bg, #fff);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
   width: 100%;
   max-width: 480px;
@@ -166,7 +166,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
 }
@@ -196,7 +196,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border-left: 3px solid #3b82f6;
   background: var(--bg-secondary, #f8f8f8);
   cursor: pointer;
@@ -247,7 +247,7 @@
   font-size: 10px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   white-space: nowrap;
   text-transform: uppercase;
 }
@@ -288,11 +288,11 @@
 
 .visita-hover-tooltip {
   position: fixed;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   width: 310px;
   max-height: calc(100vh - 20px);
   background: var(--card-bg, #fff);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   overflow: hidden;
@@ -366,7 +366,7 @@
   font-size: 11px;
   font-weight: 600;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   width: fit-content;
   margin-top: 2px;
 }
@@ -377,7 +377,7 @@
 
 .visitas-calendario-wrapper {
   background: var(--card-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-primary);
   box-shadow: var(--shadow-sm);
   padding: 24px;
@@ -429,7 +429,7 @@
   color: var(--text-secondary);
   border: 1px solid var(--border-primary);
   padding: 6px 16px;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -535,7 +535,7 @@
 /* --- Month view --- */
 .visitas-calendario-wrapper .rbc-month-view {
   border: 1px solid var(--border-secondary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   flex: 1;
   min-height: 0;
@@ -574,7 +574,7 @@
 
 /* Pantallas chicas (<1024px): filas un poco mas bajas para que entre mas mes
    antes de necesitar scroll, pero siguen legibles. */
-@media (max-width: 1023px) {
+@media (max-width: 1024px) {
   .visitas-calendario-wrapper--month .rbc-month-row {
     min-height: 88px;
   }
@@ -632,7 +632,7 @@
   margin: 1px 4px;
   padding: 3px 7px !important;
   font-size: 12px !important;
-  border-radius: 5px !important;
+  border-radius: var(--radius-sm) !important;
   min-height: 22px;
   display: flex;
   align-items: center;
@@ -655,7 +655,7 @@
   margin: 1px 4px;
   cursor: pointer;
   background: var(--bg-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   display: inline-block;
 }
 
@@ -667,7 +667,7 @@
 /* --- Week time view --- */
 .visitas-calendario-wrapper .rbc-time-view {
   border: 1px solid var(--border-secondary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
@@ -690,7 +690,7 @@
 .visitas-calendario-wrapper .rbc-event {
   border: none !important;
   outline: none !important;
-  border-radius: 6px !important;
+  border-radius: var(--radius-sm) !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
@@ -723,12 +723,12 @@
 .visitas-calendario-wrapper .rbc-overlay {
   background: var(--card-bg, #fff);
   border: 1px solid var(--border-primary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   padding: 12px;
   max-height: 300px;
   overflow-y: auto;
-  z-index: 100;
+  z-index: var(--z-dropdown);
 }
 
 .visitas-calendario-wrapper .rbc-overlay-header {
@@ -760,7 +760,7 @@
 .visitas-calendario-wrapper .rbc-slot-selection {
   background: var(--color-primary-light);
   border: 1px dashed var(--color-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 /* --- Current time indicator --- */
@@ -785,13 +785,13 @@
 .visitas-calendario-wrapper .rbc-month-view .rbc-event {
   padding: 2px 6px !important;
   font-size: 11px !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-xs) !important;
 }
 
 /* --- Agenda view --- */
 .visitas-calendario-wrapper .rbc-agenda-view {
   border: 1px solid var(--border-secondary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -875,7 +875,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   border: 1.5px solid var(--border-primary);
   background: var(--bg-primary);
   color: var(--text-secondary);
@@ -930,7 +930,7 @@
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   font-size: 13px;
   color: var(--text-secondary);
@@ -952,7 +952,7 @@
   display: flex;
   align-items: center;
   padding: 7px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #fff8f0;
   border: 1px solid #f0c060;
   font-size: 12px;
@@ -1034,7 +1034,7 @@
 .visita-estado-badge {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   color: #fff;
   font-size: 12px;
   font-weight: 500;
@@ -1044,7 +1044,7 @@
 .visita-categoria-badge {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   color: #fff;
   font-size: 12px;
   font-weight: 500;
@@ -1116,7 +1116,7 @@
 
 /* Sub-modal de visitantes */
 .visita-submodal-overlay {
-  z-index: 1100;
+  z-index: var(--z-modal);
 }
 
 .visita-visitantes-submodal {
@@ -1196,7 +1196,7 @@
 .btn-estado {
   padding: 6px 14px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
@@ -1221,7 +1221,7 @@
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -1240,7 +1240,7 @@
   gap: 4px;
   background: var(--bg-primary);
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
 }
 
@@ -1255,7 +1255,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.15s;
 }
 
@@ -1284,7 +1284,7 @@
   gap: 2px;
   background: var(--bg-secondary);
   padding: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
 }
 
@@ -1298,7 +1298,7 @@
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -1332,13 +1332,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   padding: 20px;
 }
 
 .visitas-modal-content {
   background: var(--bg-primary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
@@ -1358,7 +1358,7 @@
   padding: 20px 20px 0;
   background: var(--bg-primary);
   flex-shrink: 0;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   position: relative;
 }
 
@@ -1383,7 +1383,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .visitas-modal-close:hover {
@@ -1405,7 +1405,7 @@
   padding: 20px;
   background: var(--bg-primary);
   flex-shrink: 0;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 /* Form sections */
@@ -1444,7 +1444,7 @@
 .visitas-form-group textarea {
   padding: 10px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -1493,7 +1493,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1544,7 +1544,7 @@
   gap: 16px;
   padding: 10px 14px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   transition: all 0.15s;
 }
@@ -1582,7 +1582,7 @@
 .visitas-horario-times input[type="time"] {
   padding: 6px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -1663,7 +1663,7 @@
   color: var(--color-primary);
   background: transparent;
   border: 1px solid var(--color-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -1698,7 +1698,7 @@
   flex: 2;
   padding: 8px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -1709,7 +1709,7 @@
   flex: 1;
   padding: 8px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -1732,7 +1732,7 @@
   padding: 0;
   background: transparent;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #ef4444;
   cursor: pointer;
   flex-shrink: 0;
@@ -1762,7 +1762,7 @@
   margin-bottom: 16px;
   padding: 10px 14px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border-left: 3px solid #8b5cf6;
 }
 
@@ -1796,7 +1796,7 @@
   font-size: 14px;
   color: var(--text-primary);
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: background 0.12s;
   user-select: none;
 }
@@ -1820,7 +1820,7 @@
   margin-top: 16px;
   padding: 10px 14px;
   background: #f5f3ff;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 600;
   color: #7c3aed;
@@ -1844,9 +1844,9 @@
 .visitante-sugerencias-dropdown {
   background: #FFFFFF;
   border: 1px solid #E5E7EB;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  z-index: 99999;
+  z-index: var(--z-dropdown);
   max-height: 240px;
   overflow-y: auto;
 }
@@ -2128,7 +2128,7 @@
   color: var(--color-danger);
   border: 1px solid var(--color-danger);
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;

@@ -638,7 +638,7 @@ export function VehiculoWizard({
             {/* Sección Relación Titular */}
             <div style={{
               border: '1px solid var(--border-primary)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               padding: '16px',
               marginTop: '4px',
               background: 'var(--bg-secondary)',
@@ -701,7 +701,7 @@ export function VehiculoWizard({
                         overflowY: 'auto',
                         background: 'var(--bg-primary)',
                         border: '1px solid var(--border-primary)',
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                         zIndex: 50,
                         marginTop: '2px',

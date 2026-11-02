@@ -18,7 +18,7 @@
 
 .leads-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
@@ -48,7 +48,7 @@
 
 .leads-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px;
   border: 1px solid var(--border-primary);
 }
@@ -99,7 +99,7 @@
   gap: 8px;
   padding: 8px 10px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   min-width: 0;
 }
 
@@ -177,15 +177,6 @@
     align-items: center;
   }
 
-  .leads-module .dt-search-wrapper {
-    min-width: 220px;
-  }
-
-  .leads-module .dt-search-input {
-    padding: 6px 12px 6px 36px;
-    font-size: 12.5px;
-    border-radius: 8px;
-  }
 
   .leads-module .dt-header-action {
     flex: 0 1 auto;
@@ -418,7 +409,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -545,9 +536,9 @@
   padding: 4px;
   background: var(--bg-primary, #fff);
   border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  z-index: 99999;
+  z-index: var(--z-dropdown);
   animation: lead-dropdown-in 0.12s ease-out;
 }
 
@@ -572,7 +563,7 @@
   color: var(--text-primary, #1f2937);
   font-size: 12px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.1s;
   white-space: nowrap;
@@ -638,9 +629,9 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
-  z-index: 99999;
+  z-index: var(--z-tooltip);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   pointer-events: none;
   animation: lead-tip-in 0.15s ease-out;
@@ -688,7 +679,7 @@
 .lead-detail-id {
   font-size: 11px;
   color: var(--text-tertiary);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .lead-detail-cards {
@@ -699,7 +690,7 @@
 
 .lead-detail-card {
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
 }
 
@@ -739,7 +730,7 @@
 
 .lead-detail-description {
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   background: var(--bg-secondary);
 }
@@ -787,7 +778,7 @@
   gap: 6px;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: background 0.2s;
 }
 
@@ -879,7 +870,7 @@
 .lead-wizard-field textarea {
   padding: 8px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 13px;
@@ -966,7 +957,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -996,7 +987,7 @@
   gap: 8px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   margin-bottom: 16px;
 }
@@ -1024,7 +1015,7 @@
   gap: 8px;
   padding: 12px;
   background: #FEF3C7;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: #92400E;
   font-size: 13px;
 }
@@ -1064,11 +1055,11 @@
   font-size: 12px;
   line-height: 1.4;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   white-space: normal;
   width: 220px;
   text-align: center;
-  z-index: 999;
+  z-index: var(--z-tooltip);
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -1132,10 +1123,6 @@
   margin-bottom: 8px;
 }
 
-.leads-module .dt-search-input {
-  padding: 8px 12px 8px 40px;
-  font-size: 13px;
-}
 
 .leads-module .dt-pagination {
   padding: 8px 16px;
@@ -1159,7 +1146,7 @@
   height: 36px;
   min-width: 104px;
   padding: 0 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
@@ -1186,7 +1173,7 @@
 
 /* Observaciones como bitácora (wizard del lead) */
 .lead-obs-bitacora { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
-.lead-obs-bitacora li { padding: 8px 10px; border-radius: 8px; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-primary, #e5e7eb); display: flex; flex-direction: column; gap: 2px; }
+.lead-obs-bitacora li { padding: 8px 10px; border-radius: var(--radius-md); background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-primary, #e5e7eb); display: flex; flex-direction: column; gap: 2px; }
 .lead-obs-cab { font-size: 11px; font-weight: 600; color: var(--text-tertiary, #9ca3af); }
 .lead-obs-texto { font-size: 13px; color: var(--text-primary, #111827); white-space: pre-wrap; }
 

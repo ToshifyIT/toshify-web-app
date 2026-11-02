@@ -399,10 +399,10 @@ function MethodBadge({ method }: { method: string }) {
     <span style={{
       display: 'inline-block',
       padding: '2px 8px',
-      borderRadius: '4px',
+      borderRadius: 'var(--radius-xs)',
       fontSize: '11px',
       fontWeight: 700,
-      fontFamily: 'monospace',
+      fontFamily: 'var(--font-mono)',
       background: c.bg,
       color: c.text,
       minWidth: '50px',
@@ -421,7 +421,7 @@ function StatusBadge({ status }: { status: 'active' | 'inactive' }) {
       alignItems: 'center',
       gap: '6px',
       padding: '4px 12px',
-      borderRadius: '20px',
+      borderRadius: 'var(--radius-full)',
       fontSize: '12px',
       fontWeight: 600,
       background: isActive ? 'var(--badge-green-bg)' : 'var(--badge-gray-bg)',
@@ -475,10 +475,10 @@ function CredentialField({ label, value }: { label: string; value: string | null
         <span style={{
           fontSize: '13px',
           color: 'var(--text-primary)',
-          fontFamily: 'monospace',
+          fontFamily: 'var(--font-mono)',
           background: 'var(--bg-tertiary)',
           padding: '4px 8px',
-          borderRadius: '4px',
+          borderRadius: 'var(--radius-xs)',
           wordBreak: 'break-all',
           flex: 1,
           minWidth: 0,
@@ -494,7 +494,7 @@ function CredentialField({ label, value }: { label: string; value: string | null
             color: 'var(--text-tertiary)',
             padding: '4px',
             flexShrink: 0,
-            borderRadius: '4px',
+            borderRadius: 'var(--radius-xs)',
           }}
           title={visible ? 'Ocultar' : 'Mostrar'}
         >
@@ -614,11 +614,11 @@ function ScriptsServidor({ jobs }: { jobs: CronJobRecord[] }) {
         Scripts en el servidor (en vivo)
       </div>
       {jobs.length === 0 ? (
-        <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', background: 'var(--bg-secondary)', borderRadius: '8px', padding: '10px 14px' }}>
+        <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
           No tiene scripts programados en el servidor.
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
           {ordenarJobs(jobs).map((job, i) => {
             const est = estadoJob(job);
             const cfg = ESTADO_JOB[est];
@@ -629,13 +629,13 @@ function ScriptsServidor({ jobs }: { jobs: CronJobRecord[] }) {
                   <div style={{ flex: '1 1 280px', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{job.nombre}</span>
-                      <span title={cfg.ayuda} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
+                      <span title={cfg.ayuda} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
                     </div>
                     {job.descripcion && (
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.45 }}>{job.descripcion}</div>
                     )}
                     {job.comando && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'monospace', marginTop: '3px', wordBreak: 'break-all' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', marginTop: '3px', wordBreak: 'break-all' }}>
                         {job.tipo === 'script' ? `/opt/toshify-sync/${job.comando}` : job.comando.slice(0, 90)}
                       </div>
                     )}
@@ -652,7 +652,7 @@ function ScriptsServidor({ jobs }: { jobs: CronJobRecord[] }) {
                   </div>
                 </div>
                 {job.ultimo_estado === 'error' && job.ultimo_error && (
-                  <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '6px', background: 'rgba(239,68,68,0.06)', fontSize: '11px', color: '#dc2626' }}>{job.ultimo_error}</div>
+                  <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: 'rgba(239,68,68,0.06)', fontSize: '11px', color: '#dc2626' }}>{job.ultimo_error}</div>
                 )}
               </div>
             );
@@ -671,7 +671,7 @@ function CuentaCabifyBloque({ cuenta }: { cuenta: CuentaCabifyInfo | undefined }
     </div>
   );
   return (
-    <div style={{ marginTop: '16px', background: 'var(--bg-secondary)', borderRadius: '8px', padding: '12px 14px' }}>
+    <div style={{ marginTop: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
       <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
         <Car size={14} />
         Cuenta (Parámetros › Grupos de flota)
@@ -710,7 +710,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
     <div style={{
       background: 'var(--card-bg)',
       border: '1px solid var(--border-primary)',
-      borderRadius: '10px',
+      borderRadius: 'var(--radius-lg)',
       marginBottom: '12px',
       overflow: 'hidden',
       transition: 'box-shadow 0.2s',
@@ -733,7 +733,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
         <div style={{
           width: '40px',
           height: '40px',
-          borderRadius: '10px',
+          borderRadius: 'var(--radius-lg)',
           background: `color-mix(in srgb, ${system.color} 15%, transparent)`,
           display: 'flex',
           alignItems: 'center',
@@ -777,7 +777,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
             {/* Autenticacion */}
             <div style={{
               background: 'var(--bg-secondary)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               padding: '14px',
             }}>
               <div style={{
@@ -797,7 +797,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
               <div style={{
                 display: 'inline-block',
                 padding: '3px 10px',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 fontSize: '12px',
                 fontWeight: 600,
                 background: `var(--badge-${system.badgeColor}-bg)`,
@@ -819,7 +819,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
             {/* Token / Credenciales info */}
             <div style={{
               background: 'var(--bg-secondary)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               padding: '14px',
             }}>
               <div style={{
@@ -873,7 +873,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
             {/* Entorno */}
             <div style={{
               background: 'var(--bg-secondary)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               padding: '14px',
             }}>
               <div style={{
@@ -894,7 +894,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
                 <span style={{
                   display: 'inline-block',
                   padding: '3px 10px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   fontSize: '12px',
                   fontWeight: 600,
                   background: system.environment === 'frontend'
@@ -918,7 +918,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
                   fontSize: '12px',
                   background: 'var(--bg-tertiary)',
                   padding: '2px 6px',
-                  borderRadius: '4px',
+                  borderRadius: 'var(--radius-xs)',
                   wordBreak: 'break-all',
                 }}>
                   {system.baseUrl}
@@ -946,7 +946,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
               </div>
               <div style={{
                 background: 'var(--bg-secondary)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
               }}>
                 {system.endpoints.map((ep, i) => (
@@ -1001,7 +1001,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
               </div>
               <div style={{
                 background: 'var(--bg-secondary)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
               }}>
                 {system.cronJobs.map((cron, i) => (
@@ -1018,7 +1018,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
                       color: 'var(--color-primary)',
                       background: 'var(--bg-tertiary)',
                       padding: '3px 8px',
-                      borderRadius: '4px',
+                      borderRadius: 'var(--radius-xs)',
                       minWidth: '120px',
                       textAlign: 'center',
                     }}>
@@ -1028,7 +1028,7 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
                       <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
                         {cron.description}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
                         {cron.script}
                       </div>
                     </div>
@@ -1116,7 +1116,7 @@ function HealthBadge({ status, responseTime }: { status: string; responseTime: n
       alignItems: 'center',
       gap: '6px',
       padding: '3px 10px',
-      borderRadius: '12px',
+      borderRadius: 'var(--radius-lg)',
       fontSize: '11px',
       fontWeight: 600,
       background: c.bg,
@@ -1227,7 +1227,7 @@ function EdgeFunctionsMonitor() {
     <div style={{
       background: 'var(--card-bg)',
       border: '1px solid var(--border-primary)',
-      borderRadius: '10px',
+      borderRadius: 'var(--radius-lg)',
       marginBottom: '20px',
       overflow: 'hidden',
     }}>
@@ -1260,7 +1260,7 @@ function EdgeFunctionsMonitor() {
             padding: '8px 14px',
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-primary)',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             fontSize: '12px',
             fontWeight: 600,
             color: 'var(--text-secondary)',
@@ -1359,7 +1359,7 @@ function EdgeFunctionsMonitor() {
                           fontSize: '10px',
                           fontWeight: 600,
                           padding: '1px 6px',
-                          borderRadius: '4px',
+                          borderRadius: 'var(--radius-xs)',
                           background: 'var(--badge-gray-bg)',
                           color: 'var(--badge-gray-text)',
                           textTransform: 'uppercase',
@@ -1381,7 +1381,7 @@ function EdgeFunctionsMonitor() {
                         responseTime={fn.response_time_ms}
                       />
                     ) : (
-                      <span title="Está publicada pero apagada: nada la ejecuta" style={{ display: 'inline-flex', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: 'var(--badge-gray-bg)', color: 'var(--badge-gray-text)' }}>
+                      <span title="Está publicada pero apagada: nada la ejecuta" style={{ display: 'inline-flex', padding: '3px 10px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600, background: 'var(--badge-gray-bg)', color: 'var(--badge-gray-text)' }}>
                         No se usa
                       </span>
                     )}
@@ -1433,7 +1433,7 @@ function CredencialesTab({ serverTokens, tokensLoading, tokensError }: {
       <div style={{
         background: 'var(--badge-blue-bg)',
         border: '1px solid var(--color-info)',
-        borderRadius: '8px',
+        borderRadius: 'var(--radius-md)',
         padding: '12px 16px',
         marginBottom: '16px',
         display: 'flex',
@@ -1460,7 +1460,7 @@ function CredencialesTab({ serverTokens, tokensLoading, tokensError }: {
           padding: '16px',
           background: 'var(--badge-red-bg)',
           border: '1px solid var(--color-danger)',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           color: 'var(--badge-red-text)',
           display: 'flex',
           alignItems: 'center',
@@ -1480,7 +1480,7 @@ function CredencialesTab({ serverTokens, tokensLoading, tokensError }: {
           <div key={system.id} style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--border-primary)',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             marginBottom: '12px',
             padding: '16px 20px',
           }}>
@@ -1488,7 +1488,7 @@ function CredencialesTab({ serverTokens, tokensLoading, tokensError }: {
               <div style={{
                 width: '36px',
                 height: '36px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 background: `color-mix(in srgb, ${system.color} 15%, transparent)`,
                 display: 'flex',
                 alignItems: 'center',
@@ -1683,7 +1683,7 @@ function McpTab() {
       <div style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border-primary)',
-        borderRadius: '8px',
+        borderRadius: 'var(--radius-md)',
         padding: '16px 20px',
         marginBottom: '16px',
       }}>
@@ -1701,9 +1701,9 @@ function McpTab() {
           <div style={{
             background: 'var(--bg-secondary)',
             padding: '8px 12px',
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-sm)',
             fontSize: '12px',
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
           }}>
             <span style={{ color: 'var(--text-secondary)' }}>Docs: </span>
             <a
@@ -1718,9 +1718,9 @@ function McpTab() {
           <div style={{
             background: 'var(--bg-secondary)',
             padding: '8px 12px',
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-sm)',
             fontSize: '12px',
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
           }}>
             <span style={{ color: 'var(--text-secondary)' }}>SSE: </span>
             <span style={{ color: 'var(--color-primary)' }}>mcp.toshify.com.ar/sse</span>
@@ -1742,7 +1742,7 @@ function McpTab() {
             background: 'var(--color-primary)',
             color: '#fff',
             border: 'none',
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-sm)',
             fontSize: '13px',
             fontWeight: 600,
             cursor: 'pointer',
@@ -1758,7 +1758,7 @@ function McpTab() {
         <div style={{
           background: 'var(--bg-card)',
           border: '1px solid var(--color-primary)',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           padding: '16px 20px',
           marginBottom: '16px',
         }}>
@@ -1778,7 +1778,7 @@ function McpTab() {
                 padding: '8px 12px',
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 color: 'var(--text-primary)',
                 fontSize: '13px',
               }}
@@ -1798,7 +1798,7 @@ function McpTab() {
                     padding: '8px 12px',
                     background: newPermissions.includes(perm.value) ? 'rgba(88, 166, 255, 0.08)' : 'var(--bg-secondary)',
                     border: `1px solid ${newPermissions.includes(perm.value) ? 'var(--color-primary)' : 'var(--border-primary)'}`,
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
                     fontSize: '13px',
                   }}
@@ -1826,7 +1826,7 @@ function McpTab() {
                 background: creating || !newName.trim() || newPermissions.length === 0 ? 'var(--border-primary)' : 'var(--color-primary)',
                 color: '#fff',
                 border: 'none',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: creating || !newName.trim() || newPermissions.length === 0 ? 'not-allowed' : 'pointer',
@@ -1841,7 +1841,7 @@ function McpTab() {
                 background: 'transparent',
                 color: 'var(--text-secondary)',
                 border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 fontSize: '13px',
                 cursor: 'pointer',
               }}
@@ -1861,7 +1861,7 @@ function McpTab() {
           padding: '40px',
           color: 'var(--text-secondary)',
           background: 'var(--bg-card)',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           border: '1px solid var(--border-primary)',
         }}>
           <Bot size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
@@ -1876,7 +1876,7 @@ function McpTab() {
               style={{
                 background: 'var(--bg-card)',
                 border: `1px solid ${key.is_active ? 'var(--border-primary)' : 'var(--color-error)'}`,
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 padding: '16px 20px',
                 opacity: key.is_active ? 1 : 0.6,
               }}
@@ -1889,7 +1889,7 @@ function McpTab() {
                   <span style={{
                     fontSize: '11px',
                     padding: '2px 8px',
-                    borderRadius: '4px',
+                    borderRadius: 'var(--radius-xs)',
                     background: key.is_active ? 'rgba(59, 185, 80, 0.15)' : 'rgba(248, 81, 73, 0.15)',
                     color: key.is_active ? '#3fb950' : '#f85149',
                     fontWeight: 600,
@@ -1903,7 +1903,7 @@ function McpTab() {
                     title={key.is_active ? 'Desactivar' : 'Activar'}
                     style={{
                       padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)',
-                      borderRadius: '4px', cursor: 'pointer', color: 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-xs)', cursor: 'pointer', color: 'var(--text-secondary)',
                     }}
                   >
                     <Power size={14} />
@@ -1913,7 +1913,7 @@ function McpTab() {
                     title="Eliminar"
                     style={{
                       padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)',
-                      borderRadius: '4px', cursor: 'pointer', color: '#f85149',
+                      borderRadius: 'var(--radius-xs)', cursor: 'pointer', color: '#f85149',
                     }}
                   >
                     <Trash2 size={14} />
@@ -1926,9 +1926,9 @@ function McpTab() {
                 display: 'flex', alignItems: 'center', gap: '8px',
                 background: 'var(--bg-secondary)',
                 padding: '8px 12px',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-sm)',
                 marginBottom: '8px',
-                fontFamily: 'monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '12px',
               }}>
                 <span style={{ flex: 1, wordBreak: 'break-all' }}>
@@ -1957,10 +1957,10 @@ function McpTab() {
                       style={{
                         fontSize: '11px',
                         padding: '2px 8px',
-                        borderRadius: '4px',
+                        borderRadius: 'var(--radius-xs)',
                         background: perm.includes('update') ? 'rgba(210, 153, 34, 0.15)' : 'rgba(59, 185, 80, 0.15)',
                         color: perm.includes('update') ? '#d29922' : '#3fb950',
-                        fontFamily: 'monospace',
+                        fontFamily: 'var(--font-mono)',
                       }}
                     >
                       {perm}
@@ -2048,9 +2048,9 @@ function CronJobsTab() {
   useEffect(() => { cargarJobs(); }, [cargarJobs]);
 
   const editarJob = async (job: Partial<CronJobRecord> & { id: string }) => {
-    const { default: Swal } = await import('sweetalert2');
+    const { default: Alerta } = await import('../../components/ui/alertas');
     const isNew = !job.id;
-    const { value } = await Swal.fire({
+    const { value } = await Alerta.fire({
       title: isNew ? 'Nuevo Cron Job' : 'Editar Cron Job',
       html: `
         <div style="text-align:left;display:flex;flex-direction:column;gap:10px;">
@@ -2104,14 +2104,14 @@ function CronJobsTab() {
       }
       cargarJobs();
     } catch {
-      const { default: S } = await import('sweetalert2');
+      const { default: S } = await import('../../components/ui/alertas');
       S.fire('Error', 'No se pudo guardar', 'error');
     }
   };
 
   const eliminarJob = async (job: CronJobRecord) => {
-    const { default: Swal } = await import('sweetalert2');
-    const r = await Swal.fire({ title: '¿Eliminar cron job?', text: job.nombre, icon: 'warning', showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#ef4444' });
+    const { default: Alerta } = await import('../../components/ui/alertas');
+    const r = await Alerta.fire({ title: '¿Eliminar cron job?', text: job.nombre, icon: 'warning', showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#ef4444' });
     if (!r.isConfirmed) return;
     await supabase.from('cron_jobs').delete().eq('id', job.id);
     cargarJobs();
@@ -2129,11 +2129,11 @@ function CronJobsTab() {
           <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}> · estado real según la última corrida registrada</span>
           {sinRefresco ? <div style={{ fontSize: '11px', color: '#b45309', marginTop: '2px' }}>Falta ejecutar sql/cron_jobs_reales.sql en Supabase: hasta entonces esto es el registro manual.</div> : null}
         </div>
-        <button onClick={() => editarJob({ id: '', nombre: '', schedule: '', tipo: 'script' })} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={() => editarJob({ id: '', nombre: '', schedule: '', tipo: 'script' })} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
           <Plus size={14} /> Nuevo Job
         </button>
       </div>
-      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: '8px', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         {jobs.map((job, idx) => {
           const ti = TIPO_LABELS[job.tipo] || { label: job.tipo, color: '#666' };
           return (
@@ -2143,14 +2143,14 @@ function CronJobsTab() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '13px', fontWeight: 600 }}>{job.nombre}</span>
-                    <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px', background: `${ti.color}15`, color: ti.color }}>{ti.label}</span>
-                    {job.integracion && <span style={{ fontSize: '10px', fontWeight: 500, padding: '1px 6px', borderRadius: '4px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{INTEG_LABELS[job.integracion] || job.integracion}</span>}
+                    <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-xs)', background: `${ti.color}15`, color: ti.color }}>{ti.label}</span>
+                    {job.integracion && <span style={{ fontSize: '10px', fontWeight: 500, padding: '1px 6px', borderRadius: 'var(--radius-xs)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{INTEG_LABELS[job.integracion] || job.integracion}</span>}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{job.descripcion || job.comando || '-'}</div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0, width: '140px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 600 }}>{describeCron(job.schedule)}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>{job.schedule}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{job.schedule}</div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0, width: '100px' }}>
                   {job.ultima_ejecucion ? (
@@ -2166,16 +2166,16 @@ function CronJobsTab() {
                     const txt = !medible ? 'Sin registro' : job.activo ? 'Corriendo' : 'Detenido';
                     const color = !medible ? 'var(--text-tertiary)' : job.activo ? '#047857' : '#6b7280';
                     const bg = !medible ? 'var(--bg-secondary)' : job.activo ? 'rgba(16,185,129,0.12)' : 'var(--bg-secondary)';
-                    return <span title={medible ? 'Según la última corrida registrada' : 'Este job no deja registro de sus corridas'} style={{ fontSize: '10px', fontWeight: 600, padding: '3px 8px', borderRadius: '999px', background: bg, color, alignSelf: 'center', minWidth: '62px', textAlign: 'center' }}>{txt}</span>;
+                    return <span title={medible ? 'Según la última corrida registrada' : 'Este job no deja registro de sus corridas'} style={{ fontSize: '10px', fontWeight: 600, padding: '3px 8px', borderRadius: 'var(--radius-full)', background: bg, color, alignSelf: 'center', minWidth: '62px', textAlign: 'center' }}>{txt}</span>;
                   })()}
                   {job.tipo !== 'pg_cron' && (<>
-                  <button onClick={() => editarJob(job)} title="Editar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit2 size={14} /></button>
-                  <button onClick={() => eliminarJob(job)} title="Eliminar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
+                  <button onClick={() => editarJob(job)} title="Editar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit2 size={14} /></button>
+                  <button onClick={() => eliminarJob(job)} title="Eliminar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
                   </>)}
                 </div>
               </div>
               {job.ultimo_estado === 'error' && job.ultimo_error && (
-                <div style={{ marginTop: '8px', padding: '8px 10px', borderRadius: '6px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', fontSize: '11px', color: '#dc2626' }}>{job.ultimo_error}</div>
+                <div style={{ marginTop: '8px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', fontSize: '11px', color: '#dc2626' }}>{job.ultimo_error}</div>
               )}
             </div>
           );

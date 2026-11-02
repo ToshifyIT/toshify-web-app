@@ -64,10 +64,10 @@ export function DiscrepancyBadge({ details, normalizedValue, size = 12 }: Discre
             position: 'absolute',
             top: '100%',
             left: 0,
-            zIndex: 9999,
+            zIndex: 'var(--z-dropdown)',
             background: 'var(--bg-primary)',
             border: '1px solid var(--border-primary)',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-sm)',
             padding: '8px 12px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             minWidth: 220,
@@ -78,7 +78,7 @@ export function DiscrepancyBadge({ details, normalizedValue, size = 12 }: Discre
             Discrepancia de formato
           </div>
           <div style={{ color: 'var(--text-secondary)', marginBottom: 6, fontSize: 10 }}>
-            Normalizado: <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: 3 }}>{normalizedValue}</code>
+            Normalizado: <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: 'var(--radius-xs)' }}>{normalizedValue}</code>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
@@ -89,7 +89,7 @@ export function DiscrepancyBadge({ details, normalizedValue, size = 12 }: Discre
                   </td>
                   <td style={{
                     padding: '2px 0',
-                    fontFamily: 'monospace',
+                    fontFamily: 'var(--font-mono)',
                     color: d.rawValue.trim() === normalizedValue ? 'var(--text-primary)' : 'var(--color-warning-dark)',
                     fontWeight: d.rawValue.trim() === normalizedValue ? 400 : 600,
                   }}>

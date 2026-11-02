@@ -1,3 +1,5 @@
+import { rangoSemanaISOFechas, semanaISO } from '../utils/semanaISO'
+import { hoyART } from '../utils/fechaArgentina'
 // =====================================================
 // TIPOS PARA EL MÓDULO DE FACTURACIÓN
 // =====================================================
@@ -523,33 +525,14 @@ export function formatDate(dateString: string): string {
   })
 }
 
+/** Lunes y domingo de una semana ISO (ver src/utils/semanaISO.ts). */
 export function getWeekDates(semana: number, anio: number): { inicio: Date; fin: Date } {
-  // Calcular el primer día del año
-  const firstDayOfYear = new Date(anio, 0, 1)
-  // Calcular el día de la semana del primer día (0 = domingo)
-  const dayOfWeek = firstDayOfYear.getDay()
-  // Ajustar para que la semana comience en lunes
-  const daysToMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek)
-  // Fecha del primer lunes del año
-  const firstMonday = new Date(anio, 0, 1 + daysToMonday)
-  // Fecha de inicio de la semana solicitada
-  const inicio = new Date(firstMonday)
-  inicio.setDate(inicio.getDate() + (semana - 1) * 7)
-  // Fecha de fin (domingo)
-  const fin = new Date(inicio)
-  fin.setDate(fin.getDate() + 6)
-
-  return { inicio, fin }
+  return rangoSemanaISOFechas(semana, anio)
 }
 
+/** Semana ISO actual en hora Argentina. */
 export function getCurrentWeekNumber(): { semana: number; anio: number } {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), 0, 1)
-  const diff = now.getTime() - start.getTime()
-  const oneWeek = 1000 * 60 * 60 * 24 * 7
-  const semana = Math.ceil((diff + start.getDay() * 24 * 60 * 60 * 1000) / oneWeek)
-
-  return { semana, anio: now.getFullYear() }
+  return semanaISO(hoyART())
 }
 
 // =====================================================

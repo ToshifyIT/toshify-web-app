@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
   ComposedChart
 } from 'recharts'
-import { getWeek } from 'date-fns'
+import { getISOWeek } from 'date-fns'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useFacturadoCobradoData, type Granularity } from '../../../hooks/useFacturadoCobradoData'
@@ -80,7 +80,7 @@ export function FacturadoVsCobrado() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('datos')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
     const now = new Date()
-    const week = getWeek(now, { weekStartsOn: 1 })
+    const week = getISOWeek(now)
     return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
   })
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null)
@@ -117,7 +117,7 @@ export function FacturadoVsCobrado() {
     setSelectedBarIndex(null)
     const now = new Date()
     if (val === 'semana') {
-      const week = getWeek(now, { weekStartsOn: 1 })
+      const week = getISOWeek(now)
       setSelectedPeriod(`Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`)
     } else if (val === 'mes') {
       const monthName = format(now, 'MMM', { locale: es })
@@ -241,13 +241,13 @@ export function FacturadoVsCobrado() {
                               {item.type === 'line' ? (
                                 <svg width="16" height="10"><line x1="0" y1="5" x2="16" y2="5" stroke={item.color} strokeWidth="3" /></svg>
                               ) : (
-                                <span style={{ width: 12, height: 12, background: item.color, borderRadius: 2, display: 'inline-block' }} />
+                                <span style={{ width: 12, height: 12, background: item.color, borderRadius: 'var(--radius-xs)', display: 'inline-block' }} />
                               )}
                               <span style={{ color: 'var(--text-secondary, #374151)', fontWeight: 600, fontSize: 12 }}>{item.label}</span>
                             </span>
                           ))}
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#6b7280', fontWeight: 600, fontSize: 11 }}>
-                            <span style={{ background: '#374151', color: '#fff', borderRadius: 3, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>00%</span>
+                            <span style={{ background: '#374151', color: '#fff', borderRadius: 'var(--radius-xs)', padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>00%</span>
                             = % Cobrado
                           </span>
                         </div>

@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { ArrowDownRight, ArrowUpRight, Minus, Info } from 'lucide-react'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
-import { format, subDays, subWeeks, subMonths, subYears, getWeek } from 'date-fns'
+import { format, subDays, subWeeks, subMonths, subYears, getISOWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getMockPeriodData } from '../mockData'
 import { useMultasStats } from '../../../hooks/useMultasStats'
@@ -35,13 +35,13 @@ export function PeriodComparison() {
   
   const [periodA, setPeriodA] = useState<string>(() => {
     const prevWeekDate = subWeeks(new Date(), 1)
-    const week = getWeek(prevWeekDate, { weekStartsOn: 1 })
+    const week = getISOWeek(prevWeekDate)
     return `Sem ${week.toString().padStart(2, '0')} ${prevWeekDate.getFullYear()}`
   })
   
   const [periodB, setPeriodB] = useState<string>(() => {
     const now = new Date()
-    const week = getWeek(now, { weekStartsOn: 1 })
+    const week = getISOWeek(now)
     return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
   })
 
@@ -458,10 +458,10 @@ export function PeriodComparison() {
         nextB = format(now, 'dd/MM/yyyy')
     } else if (value === 'semana') {
         const prev = subWeeks(now, 1)
-        const prevWeek = getWeek(prev, { weekStartsOn: 1 })
+        const prevWeek = getISOWeek(prev)
         nextA = `Sem ${prevWeek.toString().padStart(2, '0')} ${prev.getFullYear()}`
         
-        const week = getWeek(now, { weekStartsOn: 1 })
+        const week = getISOWeek(now)
         nextB = `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
     } else if (value === 'mes') {
         const prev = subMonths(now, 1)

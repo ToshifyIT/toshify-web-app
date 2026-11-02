@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { Clock, Wrench, Save } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import type { SiniestroReparacion } from '../../../types/siniestros.types'
 
@@ -56,7 +56,7 @@ export function ReparacionTicket({
 
   async function handleSave() {
     if (!formData.taller || !formData.fecha_inicio) {
-      Swal.fire('Error', 'Complete al menos el taller y fecha de inicio', 'warning')
+      Alerta.fire('Error', 'Complete al menos el taller y fecha de inicio', 'warning')
       return
     }
 

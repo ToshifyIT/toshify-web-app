@@ -913,7 +913,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
       <div className="vehicle-status-section" style={{
         background: vehiculoInhabilitado ? 'var(--color-danger-light)' : 'var(--bg-secondary)',
         border: `1px solid ${vehiculoInhabilitado ? 'var(--color-danger)' : 'var(--border-primary)'}`,
-        borderRadius: '8px',
+        borderRadius: 'var(--radius-md)',
         padding: '16px',
         marginBottom: '20px',
         transition: 'all 0.2s ease'
@@ -960,7 +960,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 border: '2px solid var(--color-danger)',
                 background: 'var(--bg-secondary)',
                 fontSize: '14px',
@@ -976,7 +976,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
             <div style={{
               marginTop: '10px',
               padding: '8px 12px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               background: 'rgba(239, 68, 68, 0.1)',
               fontSize: '13px',
               fontWeight: 500,
@@ -1000,7 +1000,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
         <div style={{
           background: 'var(--color-warning-light)',
           border: '1px solid var(--color-warning)',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           padding: '16px',
           marginBottom: '20px'
         }}>
@@ -1020,7 +1020,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
           <div style={{
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-primary)',
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-sm)',
             padding: '12px',
             marginBottom: '12px'
           }}>
@@ -1049,7 +1049,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
             padding: '12px',
             background: finalizarAsignacion ? 'var(--color-danger-light)' : 'var(--bg-secondary)',
             border: `2px solid ${finalizarAsignacion ? 'var(--color-danger)' : 'var(--border-primary)'}`,
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-sm)',
             cursor: 'pointer',
             transition: 'all 0.2s'
           }}>
@@ -1073,7 +1073,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
         <div style={{
           background: 'var(--color-success-light)',
           border: '1px solid var(--color-success)',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           padding: '12px',
           marginBottom: '20px',
           display: 'flex',

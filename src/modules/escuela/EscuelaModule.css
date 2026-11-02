@@ -17,7 +17,7 @@
 
 .escuela-header {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
@@ -47,7 +47,7 @@
 
 .escuela-stats {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
@@ -64,7 +64,7 @@
   gap: 10px;
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .escuela-stats .stat-card .stat-icon {
@@ -178,7 +178,7 @@
   flex-wrap: wrap;
   background-color: var(--bg-secondary);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
 }
 
@@ -186,7 +186,7 @@
   flex: 1;
   height: 36px;
   background: var(--input-bg);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -213,7 +213,7 @@
 .escuela-filter-select {
   padding: 8px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   font-size: 14px;
   color: var(--text-primary);
@@ -227,7 +227,7 @@
 
 /* Table overrides */
 .td-money {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 500;
   text-align: right;
   color: var(--text-primary);
@@ -246,7 +246,7 @@
   display: inline-flex; 
   align-items: center; 
   border: 1.5px solid var(--border-primary); 
-  border-radius: 6px; 
+  border-radius: var(--radius-sm); 
   background-color: var(--input-bg); 
   overflow: hidden; 
   height: 38px; 

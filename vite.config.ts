@@ -213,8 +213,6 @@ export default defineConfig({
             { name: 'vendor-pdf', test: /[\\/]node_modules[\\/](jspdf|html2canvas)[\\/]/ },
             // Excel — solo se usa al exportar
             { name: 'vendor-xlsx', test: /[\\/](node_modules[\\/]xlsx|vendor[\\/]xlsx)/ },
-            // SweetAlert2 — se usa en muchos módulos
-            { name: 'vendor-swal', test: /[\\/]node_modules[\\/]sweetalert2[\\/]/ },
             // TanStack Table — se usa en DataTable
             { name: 'vendor-table', test: /[\\/]node_modules[\\/]@tanstack[\\/]/ },
             // Lucide icons — SVGs cacheables por separado

@@ -131,12 +131,16 @@ try {
   return data;
 } catch (error) {
   console.error('Operation failed:', error);
-  Swal.fire('Error', 'No se pudo completar la operacion', 'error');
+  showError('No se pudo completar la operacion');
   throw error;
 }
 ```
 
-- Use SweetAlert2 (`Swal`) for user-facing error messages
+- User-facing messages use the app's own alerts (`src/components/ui/alertas`), never SweetAlert2:
+  - toasts: `showSuccess` / `showError` / `showWarning` / `showInfo` from `utils/toast`
+  - yes/no: `if (await confirmar({ titulo, texto, peligro: true })) { ... }`
+  - one-button notice: `await avisar(titulo, texto, 'success')`
+  - short HTML form or legacy call: `Alerta.fire({...})` (same options SweetAlert used)
 - Log errors with `console.error()` for debugging
 - Re-throw errors when caller needs to handle them
 
@@ -212,7 +216,7 @@ export const myService = new MyService();
 | Validation | Zod |
 | Icons | Lucide React |
 | HTTP | Axios |
-| Alerts | SweetAlert2 |
+| Alerts | Own (`components/ui/alertas`) |
 
 ## Security Practices
 

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { History, Eye, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
-import Swal from 'sweetalert2'
+import { Alerta } from './alertas'
 
 interface VerLogsButtonProps {
   tablas: string[]
@@ -125,7 +125,7 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
       html = `<div style="text-align:left;max-height:400px;overflow-y:auto"><table style="width:100%;border-collapse:collapse"><tr style="background:#f3f4f6"><th style="padding:6px 8px;text-align:left;border:1px solid #e5e7eb;font-size:12px">Campo</th><th style="padding:6px 8px;text-align:left;border:1px solid #e5e7eb;font-size:12px">Anterior</th><th style="padding:6px 8px;text-align:left;border:1px solid #e5e7eb;font-size:12px">Nuevo</th></tr>${rows}</table></div>`
     }
 
-    Swal.fire({
+    Alerta.fire({
       title: `${ACCION_CONFIG[log.accion]?.label || log.accion} - ${TABLA_LABELS[log.tabla] || log.tabla}`,
       html: `<div style="text-align:left;font-size:13px;color:#666;margin-bottom:12px"><p><strong>ID:</strong> ${log.registro_id || 'N/A'}</p><p><strong>Usuario:</strong> ${log.usuario_nombre || 'Sistema'}</p><p><strong>Fecha:</strong> ${new Date(log.created_at).toLocaleString('es-ES')}</p></div>${html}`,
       width: '650px', confirmButtonText: 'Cerrar', confirmButtonColor: '#ff0033',
@@ -146,7 +146,7 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
         title="Ver logs de auditoría"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: '6px',
-          padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
+          padding: '6px 12px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 500,
           border: '1px solid var(--border-primary)', background: 'var(--bg-primary)',
           color: 'var(--text-secondary)', cursor: 'pointer',
         }}
@@ -159,14 +159,14 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
         <div
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-modal-nested)',
           }}
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
         >
           <div
             ref={modalRef}
             style={{
-              background: 'var(--bg-primary)', borderRadius: '12px', width: '90%', maxWidth: '900px',
+              background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', width: '90%', maxWidth: '900px',
               maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
             }}
           >
@@ -182,7 +182,7 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
                 </span>
                 <span style={{
                   fontSize: '11px', background: 'rgba(255,0,51,0.08)', color: '#ff0033',
-                  padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
+                  padding: '2px 8px', borderRadius: 'var(--radius-lg)', fontWeight: 600,
                 }}>
                   {total.toLocaleString()}
                 </span>
@@ -230,7 +230,7 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
                           )}
                           <td style={{ padding: '8px 12px' }}>
                             <span style={{
-                              display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                              display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontSize: '11px', fontWeight: 600,
                               background: accion.bg, color: accion.color,
                             }}>
                               {accion.label}
@@ -248,7 +248,7 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
                               onClick={() => verDetalle(log)}
                               style={{
                                 background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
-                                color: 'var(--text-secondary)', borderRadius: '4px',
+                                color: 'var(--text-secondary)', borderRadius: 'var(--radius-xs)',
                               }}
                               title="Ver detalle"
                             >
@@ -274,7 +274,7 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
                   onClick={() => handlePageChange(page - 1)}
                   disabled={page === 0}
                   style={{
-                    padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-primary)',
+                    padding: '4px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-primary)',
                     background: 'var(--bg-primary)', cursor: page === 0 ? 'not-allowed' : 'pointer',
                     opacity: page === 0 ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '4px',
                     color: 'var(--text-primary)',
@@ -287,7 +287,7 @@ function VerLogsButtonVisible({ tablas, label }: VerLogsButtonProps) {
                   onClick={() => handlePageChange(page + 1)}
                   disabled={page >= totalPages - 1}
                   style={{
-                    padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-primary)',
+                    padding: '4px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-primary)',
                     background: 'var(--bg-primary)', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer',
                     opacity: page >= totalPages - 1 ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '4px',
                     color: 'var(--text-primary)',

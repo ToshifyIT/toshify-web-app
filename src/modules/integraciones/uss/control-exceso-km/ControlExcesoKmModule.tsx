@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Users, Gauge, DollarSign, ClipboardCheck, AlertCircle } from 'lucide-react'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../../components/ui/alertas'
 import { useSede } from '../../../../contexts/SedeContext'
 import { useAuth } from '../../../../contexts/AuthContext'
 import { useExcesoKmData } from './hooks/useExcesoKmData'
@@ -15,6 +15,7 @@ import { ExcesoKmTable, type ExcesoKmRow } from './components/ExcesoKmTable'
 import { ExcesoKmDetalleDrawer } from './components/ExcesoKmDetalleDrawer'
 import { crearIncidenciaExcesoKm } from './services/crearIncidenciaExcesoKm'
 import { showSuccess, showError } from '../../../../utils/toast'
+import { semanaISO } from '../../../../utils/semanaISO'
 import '../bitacora/styles/bitacora.css'
 import '../styles/uss.css'
 import '../../../vehiculos/VehicleManagement.css'
@@ -32,16 +33,6 @@ function porcentajePorKm(km: number): number {
   return 15
 }
 
-// ISO week (lunes = primer día)
-function getISOWeek(dateStr: string): { semana: number; anio: number } {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const date = new Date(y, m - 1, d, 12, 0, 0)
-  const target = new Date(date)
-  target.setDate(date.getDate() + 4 - (date.getDay() || 7))
-  const yearStart = new Date(target.getFullYear(), 0, 1)
-  const semana = Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
-  return { semana, anio: target.getFullYear() }
-}
 
 function getMarcacionWeekParts(m: {
   fecha: string
@@ -51,7 +42,7 @@ function getMarcacionWeekParts(m: {
   if (m.excesoKmSemana && m.excesoKmAnio) {
     return { semana: m.excesoKmSemana, anio: m.excesoKmAnio }
   }
-  return getISOWeek(m.fecha)
+  return semanaISO(m.fecha)
 }
 
 function getConductorSemanaKey(
@@ -308,7 +299,7 @@ export function ControlExcesoKmModule() {
     }
     const { semana, anio } = row
 
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: 'Crear incidencia de exceso de KM',
       html: `
         <div style="text-align: left; font-size: 14px; line-height: 1.6;">
@@ -367,7 +358,7 @@ export function ControlExcesoKmModule() {
   return (
     <div className="veh-module">
       {error && (
-        <div style={{ padding: 12, background: 'rgba(220, 38, 38, 0.08)', border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: 6, marginBottom: 12, color: '#dc2626', fontSize: 13 }}>
+        <div style={{ padding: 12, background: 'rgba(220, 38, 38, 0.08)', border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: 'var(--radius-sm)', marginBottom: 12, color: '#dc2626', fontSize: 13 }}>
           {error}
         </div>
       )}

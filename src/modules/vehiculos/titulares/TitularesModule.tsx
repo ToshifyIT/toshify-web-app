@@ -8,7 +8,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { ExcelColumnFilter, useExcelFilters } from '../../../components/ui/DataTable/ExcelColumnFilter'
 import { type ColumnDef } from '@tanstack/react-table'
-import Swal from 'sweetalert2'
+import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import type { Titular, TitularFormData, TitularStats, VehiculoTitular } from './types/titulares.types'
 import { EmptyState } from '../../../components/ui/EstadosVista'
@@ -186,15 +186,15 @@ export function TitularesModule() {
   // ---------- CRUD ----------
   const handleCreate = async () => {
     if (!formData.dni_cuit.trim()) {
-      Swal.fire('Campo requerido', 'El DNI/CUIT es obligatorio.', 'warning')
+      Alerta.fire('Campo requerido', 'El DNI/CUIT es obligatorio.', 'warning')
       return
     }
     if (formData.tipo === 'persona' && (!formData.nombres.trim() || !formData.apellidos.trim())) {
-      Swal.fire('Campos requeridos', 'Nombres y Apellidos son obligatorios para tipo Persona.', 'warning')
+      Alerta.fire('Campos requeridos', 'Nombres y Apellidos son obligatorios para tipo Persona.', 'warning')
       return
     }
     if (formData.tipo === 'empresa' && !formData.razon_social.trim()) {
-      Swal.fire('Campo requerido', 'Razón Social es obligatorio para tipo Empresa.', 'warning')
+      Alerta.fire('Campo requerido', 'Razón Social es obligatorio para tipo Empresa.', 'warning')
       return
     }
 
@@ -210,7 +210,7 @@ export function TitularesModule() {
           .limit(1)
         if (existente && existente.length > 0) {
           const nombre = (existente[0] as any).razon_social || `${(existente[0] as any).nombres} ${(existente[0] as any).apellidos}`
-          const { isConfirmed } = await Swal.fire({
+          const { isConfirmed } = await Alerta.fire({
             icon: 'warning',
             title: 'Posible duplicado',
             html: `Ya existe un titular con DNI/CUIT <strong>${dniCuitNorm}</strong>:<br/><strong>${nombre}</strong>.<br/><br/>Desea crear otro de todas formas?`,
@@ -239,7 +239,7 @@ export function TitularesModule() {
           .ilike(campo, valor)
           .limit(1)
         if (existeNombre && existeNombre.length > 0) {
-          const { isConfirmed } = await Swal.fire({
+          const { isConfirmed } = await Alerta.fire({
             icon: 'warning',
             title: 'Posible duplicado',
             html: `Ya existe un titular con nombre similar a <strong>${nombreNorm}</strong>.<br/><br/>Desea crear otro de todas formas?`,
@@ -298,7 +298,7 @@ export function TitularesModule() {
   const handleUpdate = async () => {
     if (!selectedTitular) return
     if (!formData.dni_cuit.trim()) {
-      Swal.fire('Campo requerido', 'El DNI/CUIT es obligatorio.', 'warning')
+      Alerta.fire('Campo requerido', 'El DNI/CUIT es obligatorio.', 'warning')
       return
     }
 
@@ -417,7 +417,7 @@ export function TitularesModule() {
       mensajeHtml += `<br><br><span style="color:#dc2626;font-weight:600;">Este titular tiene ${ofertas!.length} oferta(s) de locacion asociada(s) (${listaOfertas}) que tambien seran eliminadas.</span>`
     }
 
-    const confirm = await Swal.fire({
+    const confirm = await Alerta.fire({
       title: 'Eliminar titular',
       html: mensajeHtml,
       icon: 'warning',
@@ -532,7 +532,7 @@ export function TitularesModule() {
     if (!vt.vehiculos?.modelo) camposFaltantes.push('Modelo del vehiculo')
 
     if (camposFaltantes.length > 0) {
-      Swal.fire('Datos incompletos', `Faltan los siguientes datos para crear la oferta:\n\n- ${camposFaltantes.join('\n- ')}`, 'warning')
+      Alerta.fire('Datos incompletos', `Faltan los siguientes datos para crear la oferta:\n\n- ${camposFaltantes.join('\n- ')}`, 'warning')
       return
     }
 
@@ -547,7 +547,7 @@ export function TitularesModule() {
         .limit(1)
 
       if (existente && existente.length > 0) {
-        Swal.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular. Editalo desde el modulo de Oferta Locacion.', 'info')
+        Alerta.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular. Editalo desde el modulo de Oferta Locacion.', 'info')
         return
       }
 
@@ -594,7 +594,7 @@ export function TitularesModule() {
 
       if (error) {
         if (error.code === '23505') {
-          Swal.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular.', 'info')
+          Alerta.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular.', 'info')
           return
         }
         throw error
@@ -658,7 +658,7 @@ export function TitularesModule() {
         return (
           <span style={{
             padding: '2px 8px',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-lg)',
             fontSize: '12px',
             fontWeight: 500,
             background: isPers ? '#dbeafe' : '#fef3c7',
@@ -708,7 +708,7 @@ export function TitularesModule() {
         return (
           <span style={{
             padding: '2px 8px',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-lg)',
             fontSize: '12px',
             fontWeight: 500,
             background: isActivo ? '#d1fae5' : '#fee2e2',
@@ -774,7 +774,7 @@ export function TitularesModule() {
     const inputStyle: React.CSSProperties = {
       width: '100%',
       padding: '8px 12px',
-      borderRadius: '6px',
+      borderRadius: 'var(--radius-sm)',
       border: '1px solid var(--border-primary)',
       background: 'var(--bg-primary)',
       color: 'var(--text-primary)',
@@ -1179,7 +1179,7 @@ export function TitularesModule() {
                           {vt.fecha_hasta
                             ? new Date(vt.fecha_hasta).toLocaleDateString('es-AR')
                             : (
-                              <span style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                              <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
                                 Vigente
                               </span>
                             )}
@@ -1193,7 +1193,7 @@ export function TitularesModule() {
                               <span style={{
                                 display: 'inline-block',
                                 padding: '3px 10px',
-                                borderRadius: '999px',
+                                borderRadius: 'var(--radius-full)',
                                 fontSize: '11px',
                                 fontWeight: 600,
                                 whiteSpace: 'nowrap',
@@ -1215,7 +1215,7 @@ export function TitularesModule() {
                             style={{
                               background: 'none',
                               border: '1px solid var(--border-primary)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '4px 8px',
                               cursor: 'pointer',
                               display: 'inline-flex',

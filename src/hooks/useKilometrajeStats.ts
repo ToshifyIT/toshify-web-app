@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
 
+import { fechaLocalISO } from '../utils/fechaArgentina'
 const CACHE_NS = 'useKilometrajeStats-v2-uss-geotab'
 
 export function useKilometrajeStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
@@ -41,8 +42,8 @@ export function useKilometrajeStats(granularity: Granularity, periodA: string, p
         // Km = USS (histórico, sum_kilometraje_range) + Geotab (bitácora, dashboard_km_geotab).
         // Si dashboard_km_geotab no está instalada (sql/dashboard_km_geotab.sql) se toma 0.
         const params = (r: { start: Date; end: Date }) => ({
-          p_start: r.start.toISOString().split('T')[0],
-          p_end: r.end.toISOString().split('T')[0],
+          p_start: fechaLocalISO(r.start),
+          p_end: fechaLocalISO(r.end),
           p_sede_id: sedeId || null,
         })
         const [ussA, ussB, geoA, geoB] = await Promise.all([

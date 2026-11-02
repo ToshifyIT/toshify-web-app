@@ -1,0 +1,40 @@
+/* =====================================================
+   TOKENS DE DISEÑO
+   Valores únicos del sistema. Ningún módulo escribe un radio, una capa
+   (z-index) o una fuente monoespaciada a mano: usa estas variables.
+   ===================================================== */
+:root {
+  /* Tamaños de letra */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+
+  /* Bordes redondeados */
+  --radius-xs: 4px;     /* checkboxes, chips chicos, barras */
+  --radius-sm: 6px;     /* botones, inputs, badges */
+  --radius-md: 8px;     /* tarjetas chicas, menús desplegables */
+  --radius-lg: 12px;    /* tarjetas, paneles, ventanas */
+  --radius-full: 999px; /* píldoras e interruptores */
+
+  /* Capas (de abajo hacia arriba). Los valores bajos (1–60) que quedan en los
+     módulos son locales a cada componente y no compiten con estos. */
+  --z-sidebar: 900;
+  --z-modal: 1000;          /* ventana y su fondo oscuro */
+  --z-modal-nested: 10000;  /* ventana abierta sobre otra ventana */
+  --z-dropdown: 10100;      /* menús, filtros, autocompletar (también dentro de ventanas) */
+  --z-tooltip: 10200;
+  --z-loading: 10300;       /* pantalla de carga */
+  --z-alert: 10400;         /* ventanas de alerta y confirmación */
+  --z-toast: 10500;
+
+  /* Fuente monoespaciada (montos, patentes, códigos) */
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* Breakpoints (no pueden ser variables dentro de @media; usar solo estos):
+   480px  teléfono chico
+   768px  teléfono / tablet
+   1024px tablet / notebook
+   1280px escritorio */

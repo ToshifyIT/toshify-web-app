@@ -15,6 +15,7 @@ import type {
   ConductorSimple
 } from '../../types/incidencias.types'
 
+import { numeroSemana } from '../../utils/semanaISO'
 interface ConductorAsignado {
   id: string
   nombre_completo: string
@@ -127,22 +128,7 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
     setConductoresAsignados([])
   }
 
-  const getWeekNumber = (dateStr: string): number => {
-    if (!dateStr) return 0
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const date = new Date(year, month - 1, day, 12, 0, 0)
-
-    const thursday = new Date(date)
-    thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3)
-
-    const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-    firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-
-    const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-    return weekNumber
-  }
-
-  const semanaCalculada = getWeekNumber(formData.fecha)
+  const semanaCalculada = numeroSemana(formData.fecha)
 
   const filteredConductores = conductores.filter(c => {
     return c.nombre_completo.toLowerCase().includes(conductorSearch.toLowerCase())
@@ -183,7 +169,7 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
           marginBottom: '16px', 
           padding: '12px', 
           backgroundColor: '#f0fdf4', 
-          borderRadius: '6px',
+          borderRadius: 'var(--radius-sm)',
           border: '1px solid #86efac'
         }}>
           <div style={{ fontSize: '13px', color: '#166534', fontWeight: 600 }}>

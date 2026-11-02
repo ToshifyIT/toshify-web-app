@@ -116,7 +116,7 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 'var(--z-modal)' }}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
         <div className="modal-header">
           <h2 style={{ fontSize: '16px' }}>Historial — {conductorNombre}</h2>
@@ -152,7 +152,7 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                     key={item.id}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-                      padding: '10px 14px', borderRadius: '10px',
+                      padding: '10px 14px', borderRadius: 'var(--radius-lg)',
                       border: `1px solid ${isActiva ? 'rgba(34,197,94,0.45)' : 'var(--border-color, #e5e7eb)'}`,
                       background: isActiva ? 'rgba(34,197,94,0.05)' : 'var(--bg-secondary)',
                     }}
@@ -167,10 +167,10 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                         </div>
                       )}
                     </div>
-                    <span style={{ background: tb.bg, color: tb.color, fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px' }}>
+                    <span style={{ background: tb.bg, color: tb.color, fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)' }}>
                       {tb.label}
                     </span>
-                    <span style={{ background: eb.bg, color: eb.color, fontSize: '11px', fontWeight: 600, padding: '3px 8px', borderRadius: '6px' }}>
+                    <span style={{ background: eb.bg, color: eb.color, fontSize: '11px', fontWeight: 600, padding: '3px 8px', borderRadius: 'var(--radius-sm)' }}>
                       {eb.label}
                     </span>
                     <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
@@ -205,9 +205,9 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                   ? new Date(b.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })
                   : '—';
                 return (
-                  <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: '8px', padding: '10px 12px' }}>
+                  <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ background: color, color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px' }}>
+                      <span style={{ background: color, color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
                         {esBaja ? 'Baja' : 'Reactivación'}
                       </span>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>

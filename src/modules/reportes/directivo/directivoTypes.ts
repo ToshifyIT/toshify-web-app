@@ -1,7 +1,7 @@
 // src/modules/reportes/directivo/directivoTypes.ts
 // Forma del JSON que devuelve get_dashboard_directivo (sql/dashboard_directivo.sql)
 // y helpers puros para presentarlo (período, variaciones y lecturas).
-import { getWeek, getWeekYear } from 'date-fns'
+import { getISOWeek, getISOWeekYear } from 'date-fns'
 
 
 export interface RetencionHito {
@@ -191,14 +191,13 @@ export function mesAnio(d: string): string {
   return `${MESES[m - 1]} ${y}`
 }
 
-// Numeración de semanas: la misma que Facturación (date-fns getWeek, semana de
-// lunes a domingo; la semana 1 es la que contiene el 1 de enero).
-const OPC_SEMANA = { weekStartsOn: 1 as const }
+// Numeración de semanas: ISO, la misma que Facturación (lunes a domingo; la semana 1
+// es la que contiene el primer jueves del año). Ver src/utils/semanaISO.ts
 
 /** 'YYYY-MM-DD' -> { numero: 40, anio: 2026 } (año de la semana, no del día) */
 export function numeroSemana(d: string): { numero: number; anio: number } {
   const fecha = new Date(`${d}T12:00:00`)
-  return { numero: getWeek(fecha, OPC_SEMANA), anio: getWeekYear(fecha, OPC_SEMANA) }
+  return { numero: getISOWeek(fecha), anio: getISOWeekYear(fecha) }
 }
 
 /** 'YYYY-MM-DD' -> 'Semana 40-26' */

@@ -22,7 +22,7 @@
 .cabify-header-compact {
   background-color: var(--card-bg);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
 }
 
@@ -62,7 +62,7 @@
 .cabify-week-selector select {
   padding: 6px 10px;
   border: 1px solid var(--input-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
   font-weight: 500;
   background-color: var(--input-bg);
@@ -82,7 +82,7 @@
   gap: 8px;
   padding: 6px 12px;
   background: var(--bg-tertiary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--text-secondary);
   animation: pulse 1.5s ease-in-out infinite;
@@ -101,7 +101,7 @@
   padding: 6px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-secondary);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
@@ -123,7 +123,7 @@
   padding: 6px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
@@ -158,10 +158,10 @@
   right: 0;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 12px;
-  z-index: 900;
+  z-index: var(--z-dropdown);
   min-width: 200px;
 }
 
@@ -185,7 +185,7 @@
 .cabify-date-input {
   padding: 8px 10px;
   border: 1px solid var(--input-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
   font-weight: 500;
   background-color: var(--input-bg);
@@ -220,7 +220,7 @@
   padding: 8px 14px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
@@ -253,10 +253,10 @@
   position: fixed;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   padding: 16px;
-  z-index: 9999;
+  z-index: var(--z-dropdown);
   min-width: 280px;
 }
 
@@ -428,7 +428,7 @@
   gap: 5px;
   padding: 6px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
@@ -458,12 +458,12 @@
   line-height: 1.5;
   white-space: pre-line;
   text-align: left;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   pointer-events: none;
 }
 
@@ -477,7 +477,7 @@
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.15s ease;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
 }
 
 .cabify-help-icon:hover::after,
@@ -513,7 +513,7 @@
   padding: 8px 12px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   color: var(--color-primary);
   text-align: left;
@@ -538,7 +538,7 @@
   padding: 6px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-secondary);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
@@ -582,7 +582,7 @@
 .cabify-progress-banner {
   background-color: var(--badge-blue-bg);
   border: 1px solid var(--color-info-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   margin-bottom: 10px;
   color: var(--badge-blue-text);
@@ -596,7 +596,7 @@
 .cabify-error {
   background-color: var(--badge-red-bg);
   border: 1px solid var(--color-danger-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 32px 20px;
   text-align: center;
 }
@@ -754,7 +754,7 @@
 
 .cabify-top-card {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -851,7 +851,7 @@
   font-size: 10px;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .cabify-top-badge.cargo {
@@ -894,7 +894,7 @@
 
 .cabify-accordion-card {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -956,7 +956,12 @@
    ========================================== */
 
 .cabify-stats {
-  margin-bottom: 16px;
+  /* Misma caja blanca de indicadores que el resto de los módulos */
+  margin-bottom: 12px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
 }
 
 .cabify-stats-grid {
@@ -971,7 +976,7 @@
   gap: 12px;
   padding: 14px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .cabify-stats .stat-icon {
@@ -1224,7 +1229,7 @@
 .cabify-unassigned-section {
   margin-top: 16px;
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-primary);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -1265,7 +1270,7 @@
   font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .cabify-unassigned-summary {
@@ -1442,7 +1447,7 @@
   width: 36px;
   height: 36px;
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   color: var(--text-primary);
   cursor: pointer;
@@ -1466,7 +1471,7 @@
 .cabify-semana-hoy {
   padding: 6px 10px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-primary);
   color: var(--color-primary);
   font-size: 12px;

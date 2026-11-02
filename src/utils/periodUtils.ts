@@ -1,4 +1,4 @@
-import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, parse, subYears, setWeek } from 'date-fns'
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, parse, subYears, setISOWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export type Granularity = 'dia' | 'semana' | 'mes' | 'ano'
@@ -47,7 +47,7 @@ export function getPeriodRange(granularity: Granularity, label: string): PeriodR
         if (yearMatch) {
           const weekNumber = parseInt(yearMatch[1], 10)
           const year = parseInt(yearMatch[2], 10)
-          const date = setWeek(new Date(year, 0, 4), weekNumber, { weekStartsOn: 1 })
+          const date = setISOWeek(new Date(year, 0, 4), weekNumber)
           return {
             start: startOfWeek(date, { weekStartsOn: 1 }),
             end: endOfWeek(date, { weekStartsOn: 1 })
@@ -60,7 +60,7 @@ export function getPeriodRange(granularity: Granularity, label: string): PeriodR
         // Create a date in the current year
         // We use date-fns setWeek to find the week in current year
         // Assuming ISO weeks starting on Monday (weekStartsOn: 1)
-        const date = setWeek(new Date(CURRENT_YEAR, 0, 4), weekNumber, { weekStartsOn: 1 })
+        const date = setISOWeek(new Date(CURRENT_YEAR, 0, 4), weekNumber)
         
         return {
           start: startOfWeek(date, { weekStartsOn: 1 }),

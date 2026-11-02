@@ -11,7 +11,7 @@ import '../LeadsModule.css'
 const detailMapStyle = {
   width: '100%',
   height: '220px',
-  borderRadius: '8px',
+  borderRadius: 'var(--radius-md)',
 }
 
 function loadGoogleMapsAPI(): Promise<void> {
@@ -304,7 +304,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
                     type="button"
                     onClick={handleRecalcular}
                     disabled={recalculando}
-                    style={{ fontSize: '11px', color: 'var(--color-primary)', background: 'none', border: '1px solid var(--color-primary)', borderRadius: '6px', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{ fontSize: '11px', color: 'var(--color-primary)', background: 'none', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
                   >
                     <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Recalcular ubicación'}
                   </button>
@@ -316,12 +316,12 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             </>
           )}
           {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado !== 'sin_resultado' && (
-            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: '6px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: 'var(--radius-sm)', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <MapPin size={12} /> Geocodificando dirección...
             </div>
           )}
           {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado === 'sin_resultado' && (
-            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: '6px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: 'var(--radius-sm)', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <MapPin size={12} /> No se pudo ubicar la dirección
               </span>
@@ -330,7 +330,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
                   type="button"
                   onClick={handleRecalcular}
                   disabled={recalculando}
-                  style={{ fontSize: '11px', color: '#92400E', background: 'none', border: '1px solid #92400E', borderRadius: '6px', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ fontSize: '11px', color: '#92400E', background: 'none', border: '1px solid #92400E', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
                 >
                   <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Reintentar'}
                 </button>
@@ -439,7 +439,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">CBU</span>
-            <span className="lead-detail-item-value" style={{ fontSize: '11px', fontFamily: 'monospace' }}>{lead.cbu || '-'}</span>
+            <span className="lead-detail-item-value" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{lead.cbu || '-'}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Cta. Cabify</span>
@@ -498,7 +498,7 @@ function LeadDetailMap({ lat, lng, zonasRestringidas, enZonaRestringida, nombreZ
 
   if (!mapsReady) {
     return (
-      <div style={{ marginTop: '8px', height: '220px', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
+      <div style={{ marginTop: '8px', height: '220px', borderRadius: 'var(--radius-md)', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Cargando mapa...</span>
       </div>
     )
@@ -507,11 +507,11 @@ function LeadDetailMap({ lat, lng, zonasRestringidas, enZonaRestringida, nombreZ
   return (
     <div style={{ marginTop: '8px' }}>
       {enZonaRestringida && nombreZona && (
-        <div style={{ marginBottom: '6px', padding: '6px 10px', background: 'var(--badge-red-bg)', borderRadius: '6px', border: '1px solid var(--badge-red-text)', fontSize: '12px', color: 'var(--badge-red-text)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ marginBottom: '6px', padding: '6px 10px', background: 'var(--badge-red-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--badge-red-text)', fontSize: '12px', color: 'var(--badge-red-text)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
           <AlertTriangle size={14} /> Zona Restringida: {nombreZona}
         </div>
       )}
-      <div style={{ borderRadius: '8px', overflow: 'hidden', border: `2px solid ${enZonaRestringida ? 'var(--color-primary)' : 'var(--badge-green-text)'}` }}>
+      <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', border: `2px solid ${enZonaRestringida ? 'var(--color-primary)' : 'var(--badge-green-text)'}` }}>
         <GoogleMap
           mapContainerStyle={detailMapStyle}
           center={{ lat, lng }}
