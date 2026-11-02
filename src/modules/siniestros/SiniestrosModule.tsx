@@ -26,7 +26,6 @@ import {
   History
 } from 'lucide-react'
 import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
-import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -51,6 +50,7 @@ import { ReparacionTicket } from './components/ReparacionTicket'
 import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
 
 import { hoyART } from '../../utils/fechaArgentina'
+import { formatFecha, formatPlata } from '../../utils/format'
 function toISODateLocal(date: Date) {
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -946,26 +946,9 @@ export function SiniestrosModule() {
     }
   }
 
-  function formatMoney(value: number | undefined | null) {
-    if (!value) return '-'
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+  function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
 
-  function formatDate(dateStr: string | undefined | null) {
-    if (!dateStr) return '-'
-    // Extraer solo la parte de fecha (YYYY-MM-DD) y usar mediodía para evitar bugs de timezone
-    const datePart = dateStr.split('T')[0]
-    return new Date(`${datePart}T12:00:00`).toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      timeZone: 'America/Argentina/Buenos_Aires'
-    })
-  }
+  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
 
   // Montos del período elegido en el selector (con "Todo el historial" = todos).
   // Mismas fórmulas que calcularStats, pero sobre los siniestros del período, así las
@@ -993,7 +976,8 @@ export function SiniestrosModule() {
     return `${value} ${value === 1 ? 'día' : 'días'}`
   }
 
-  function handleExportarExcel() {
+  async function handleExportarExcel() {
+    const XLSX = await import('xlsx')
     if (siniestrosFiltrados.length === 0) {
       Alerta.fire('Sin datos', 'No hay siniestros para exportar', 'info')
       return
@@ -1789,26 +1773,9 @@ interface SiniestroDetailViewProps {
 function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'reparacion'>('info')
 
-  function formatMoney(value: number | undefined | null) {
-    if (!value) return '-'
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+  function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
 
-  function formatDate(dateStr: string | undefined | null) {
-    if (!dateStr) return '-'
-    // Extraer solo la parte de fecha (YYYY-MM-DD) y usar mediodía para evitar bugs de timezone
-    const datePart = dateStr.split('T')[0]
-    return new Date(`${datePart}T12:00:00`).toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      timeZone: 'America/Argentina/Buenos_Aires'
-    })
-  }
+  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
 
   const respLabels: Record<string, string> = { tercero: 'Tercero', conductor: 'Conductor', compartida: 'Compartida', sin_info: 'Sin info' }
   const vehiculoTexto = [siniestro.vehiculo_marca, siniestro.vehiculo_modelo].filter(Boolean).join(' ')

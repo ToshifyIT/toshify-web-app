@@ -35,7 +35,6 @@ import {
   Ban
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
-import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -61,6 +60,7 @@ import { StatsGrid } from '../../components/ui/StatsGrid'
 
 import { hoyART } from '../../utils/fechaArgentina'
 import { semanaISO, numeroSemana, sumarSemanasISO } from '../../utils/semanaISO'
+import { formatFecha, formatPlata } from '../../utils/format'
 type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas' | 'rechazados'
 
 // Helper para mapear rol de usuario a área (para incidencias)
@@ -115,7 +115,7 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
 
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab, isAdmin: esAdmin } = usePermissions()
   const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -124,9 +124,8 @@ export function IncidenciasModule() {
   const [busquedaIncidencia, setBusquedaIncidencia] = useState<string | undefined>(undefined)
 
   // Permisos específicos para el menú de incidencias
-  // Solo admin/superadmin puede editar incidencias y aplicar/rechazar
-  const roleName = ((profile as any)?.roles?.name || '').toLowerCase()
-  const isAdmin = roleName === 'admin' || roleName === 'superadmin' || roleName === 'administrador' || roleName === 'administrativo'
+  // Admin puede todo; el resto según los permisos de su rol en Incidencias
+  const isAdmin = esAdmin()
   const canCreate = canCreateInMenu('incidencias')
   const canEdit = isAdmin || canEditInMenu('incidencias')
   const canDelete = isAdmin || canDeleteInMenu('incidencias')
@@ -3013,21 +3012,9 @@ export function IncidenciasModule() {
   }
 
   // Formatters
-  function formatMoney(value: number | undefined | null) {
-    if (!value) return '-'
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+  function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
 
-  function formatDate(dateStr: string | undefined | null) {
-    if (!dateStr) return '-'
-    // Parsear como fecha local para evitar problemas de timezone
-    const [year, month, day] = dateStr.split('T')[0].split('-')
-    return `${day}/${month}/${year}`
-  }
+  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
 
   // FIX 2026-05-20: helper para mostrar created_at (fecha + hora real de envio)
   function formatCreatedAt(dateStr: string | undefined | null): { date: string; time: string } {
@@ -3039,7 +3026,8 @@ export function IncidenciasModule() {
     return { date, time }
   }
 
-  function handleExportarIncidencias() {
+  async function handleExportarIncidencias() {
+    const XLSX = await import('xlsx')
     const filas = incidenciasVisiblesRef.current.length > 0 ? incidenciasVisiblesRef.current : incidenciasFiltradas
     if (filas.length === 0) {
       Alerta.fire('Sin datos', 'No hay incidencias para exportar', 'info')
@@ -3078,7 +3066,8 @@ export function IncidenciasModule() {
     XLSX.writeFile(wb, `Incidencias_${fecha}.xlsx`)
   }
 
-  function handleExportarPenalidades() {
+  async function handleExportarPenalidades() {
+    const XLSX = await import('xlsx')
     const filas = penalidadesVisiblesRef.current.length > 0 ? penalidadesVisiblesRef.current : penalidadesFiltradas
     if (filas.length === 0) {
       Alerta.fire('Sin datos', 'No hay penalidades para exportar', 'info')
@@ -5272,11 +5261,7 @@ interface IncidenciaDetailViewProps {
 }
 
 function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalidadVinculada }: IncidenciaDetailViewProps) {
-  function formatDate(dateStr: string | undefined | null) {
-    if (!dateStr) return '-'
-    const [year, month, day] = dateStr.split('T')[0].split('-')
-    return `${day}/${month}/${year}`
-  }
+  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
 
   function formatMoney(amount: number | undefined | null) {
     if (!amount) return '-'
@@ -5408,11 +5393,7 @@ interface PenalidadDetailViewProps {
 }
 
 function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadingHistorial = false, tiposCobroDescuentoMap }: PenalidadDetailViewProps) {
-  function formatDate(dateStr: string | undefined | null) {
-    if (!dateStr) return '-'
-    const [year, month, day] = dateStr.split('T')[0].split('-')
-    return `${day}/${month}/${year}`
-  }
+  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
   
   function formatDateTime(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
@@ -5422,10 +5403,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
     })
   }
 
-  function formatMoney(value: number | undefined | null) {
-    if (!value) return '-'
-    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
-  }
+  function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
   
   const esRechazado = penalidad.rechazado
   const tipoObj = penalidad.tipo_cobro_descuento_id && tiposCobroDescuentoMap ? tiposCobroDescuentoMap.get(penalidad.tipo_cobro_descuento_id) : null

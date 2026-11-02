@@ -3,7 +3,6 @@
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
 import { patronIlikeSinAcentos } from '../../utils/nombreMatch'
 import { idsAportesEnFraccionamiento, cargarDesgloseFraccionamiento, type DesgloseFraccionamiento } from '../../utils/aportesFraccionados'
-import { jsPDF } from 'jspdf'
 import { format, parseISO, differenceInCalendarDays, subDays } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../../lib/supabase'
@@ -1574,6 +1573,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   // =====================================================
 
   async function exportarPDF() {
+    const { jsPDF: jsPDF } = await import('jspdf')
     if (!selectedFactura) return
 
     const periodo = selectedFactura.periodos_facturacion

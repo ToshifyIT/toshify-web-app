@@ -12,8 +12,6 @@ import { acumularCuentaCabify, elegirCuentaCabify, type CuentasCabifyPorConducto
 import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
 import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
-import jsPDF from 'jspdf'
-import * as XLSX from 'xlsx'
 import {
   Users,
   DollarSign,
@@ -7052,6 +7050,7 @@ export function ReporteFacturacionTab() {
   // CARGAR PAGOS CABIFY DESDE EXCEL
   // ==========================================
   async function handleCabifyFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const XLSX = await import('xlsx')
     const file = e.target.files?.[0]
     if (!file) return
     // Reset input para poder subir el mismo archivo de nuevo
@@ -7579,6 +7578,7 @@ export function ReporteFacturacionTab() {
 
   // Exportar a PDF
   async function exportarPDF() {
+    const { default: jsPDF } = await import('jspdf')
     if (!detalleFacturacion) return
 
     // Usar periodo si existe, o generar datos desde infoSemana para Vista Previa
@@ -7775,6 +7775,7 @@ export function ReporteFacturacionTab() {
 
   // Exportar a Excel
   async function exportarExcel() {
+    const XLSX = await import('xlsx')
     if (!periodo) return
 
     setExportingExcel(true)
@@ -8322,6 +8323,7 @@ export function ReporteFacturacionTab() {
 
   // Exportar a Excel Facturación (desde el preview)
   async function exportarSiFacturaExcel(filteredRows?: FacturacionPreviewRow[]) {
+    const XLSX = await import('xlsx')
     const dataToExport = filteredRows && filteredRows.length > 0 ? filteredRows : siFacturaPreviewData
     if (dataToExport.length === 0) return
 
@@ -10139,7 +10141,8 @@ export function ReporteFacturacionTab() {
   }
 
   // Exportar Facturación Cabify desde el Preview
-  function exportarCabifyExcel(filtered?: CabifyPreviewRow[]) {
+  async function exportarCabifyExcel(filtered?: CabifyPreviewRow[]) {
+    const XLSX = await import('xlsx')
     const dataToExport = (filtered && filtered.length > 0) ? filtered : cabifyPreviewData
     if (dataToExport.length === 0) return
 

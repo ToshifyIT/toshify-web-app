@@ -5,7 +5,6 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { ArrowLeft, Loader2, Search, RotateCcw, Filter, X, RefreshCw, Download } from 'lucide-react'
-import * as XLSX from 'xlsx'
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
@@ -257,6 +256,7 @@ export function RITPreviewTable({
 
   // Exportar a Excel
   const exportarExcel = useCallback(async () => {
+    const XLSX = await import('xlsx')
     setExporting(true)
     try {
       const wb = XLSX.utils.book_new()

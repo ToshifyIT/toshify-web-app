@@ -11,7 +11,6 @@ import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
 import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Download, ChevronDown, X } from 'lucide-react';
 import type { USSHistoricoRegistro } from '../../../../../services/ussHistoricoService';
-import * as XLSX from 'xlsx';
 
 interface HistoricoTableProps {
   registros: USSHistoricoRegistro[];
@@ -281,7 +280,8 @@ export function HistoricoTable({
     });
   }
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import('xlsx')
     const data = getExportData();
     if (data.length === 0) return;
     const ws = XLSX.utils.json_to_sheet(data);
@@ -292,7 +292,8 @@ export function HistoricoTable({
     setShowExportMenu(false);
   }
 
-  function exportarCSV() {
+  async function exportarCSV() {
+    const XLSX = await import('xlsx')
     const data = getExportData();
     if (data.length === 0) return;
     const ws = XLSX.utils.json_to_sheet(data);

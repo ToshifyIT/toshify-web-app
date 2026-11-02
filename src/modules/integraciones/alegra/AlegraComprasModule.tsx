@@ -717,16 +717,16 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       enableSorting: false,
       cell: ({ row }) => {
         const c = row.original
         if (!puedeEditar) return null
         return (
-          <div className="cr-acciones-fila">
+          <div className="dt-actions">
             {c.estado !== 'ignorado' && !c.drive_link && (
               <button
-                className="btn-secondary cr-btn-mini"
+                className="dt-accion-icono"
                 onClick={() => elegirAdjunto(c)}
                 title="Adjuntar la factura (se guarda en la carpeta del proveedor en Drive)"
               >
@@ -734,12 +734,12 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
               </button>
             )}
             {(c.estado === 'pendiente' || c.estado === 'error') && (
-              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(c, 'ignorar')} title="Desestimar (no se carga en Alegra)">
+              <button className="dt-accion-icono" onClick={() => void marcar(c, 'ignorar')} title="Desestimar (no se carga en Alegra)">
                 <EyeOff size={14} />
               </button>
             )}
             {c.estado === 'ignorado' && (
-              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(c, 'pendiente')} title="Restaurar (deja de estar desestimada)">
+              <button className="dt-accion-icono" onClick={() => void marcar(c, 'pendiente')} title="Restaurar (deja de estar desestimada)">
                 <Undo2 size={14} />
               </button>
             )}

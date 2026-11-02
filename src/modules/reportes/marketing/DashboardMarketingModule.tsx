@@ -15,13 +15,14 @@ import {
   fmtInt,
   fmtPct,
   hoyArgentina,
-  rangoDePreset,
+  lunesDe,
+  sumarDias,
   ratio,
   variacion,
 } from '../directivo/directivoTypes'
 import type { Variacion } from '../directivo/directivoTypes'
-import { DateRangeSelector } from '../../../components/ui/DateRangeSelector'
-import type { DateRange } from '../../../components/ui/DateRangeSelector'
+import { NavegadorPeriodo, SelectorGranularidad } from '../../../components/ui/NavegadorPeriodo'
+import type { Granularidad, PeriodoOpcion } from '../../../components/ui/NavegadorPeriodo'
 import {
   FILTROS_SEGMENTO,
   enSegmento,
@@ -64,16 +65,15 @@ function Kpi({ label, value, subtitle, variacion: v, info }: {
   info: string
 }) {
   return (
-    <div className="stat-card">
-      <div className="stat-content">
-        <span className="stat-value">{value}</span>
-        <span className="stat-label">
-          <span className="stat-label-text">{label}</span>
-          <InfoIcon text={info} />
-        </span>
-        {v ? <span className={`stat-subtitle mkt-var mkt-var--${v.tono}`}>{v.texto}</span> : null}
-        {subtitle ? <span className="stat-subtitle">{subtitle}</span> : null}
-      </div>
+    // Misma tarjeta que el Dashboard Directivo: etiqueta arriba, número, variación y detalle
+    <div className="ddir-kpi">
+      <span className="ddir-kpi-label">
+        <span>{label}</span>
+        <InfoIcon text={info} />
+      </span>
+      <span className="ddir-kpi-value">{value}</span>
+      {v ? <span className={`ddir-kpi-var ddir-kpi-var--${v.tono}`}>{v.texto}</span> : null}
+      {subtitle ? <span className="ddir-kpi-subtitle">{subtitle}</span> : null}
     </div>
   )
 }
@@ -114,62 +114,75 @@ function BarraPerfiles({ perfiles, total }: { perfiles: Record<Perfil, number>; 
 
 // ───────────── Selector de período y segmento ─────────────
 
-function rangoUltimasSemanas(semanas: number): DateRange {
-  const r = rangoDePreset(semanas === 12 ? 'ultimas_12' : 'ultimas_4', hoyArgentina())
-  return { startDate: r.desde, endDate: r.hasta, label: `Últimas ${semanas} semanas`, type: 'custom' }
+const MESES_LARGOS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+type PeriodoMkt = PeriodoOpcion & { desde: string; hasta: string }
+
+/** Semanas (lunes a domingo, las últimas 52) o meses (los últimos 24), del más viejo al más nuevo. */
+function periodosMarketing(g: Granularidad, hoy: string): PeriodoMkt[] {
+  const out: PeriodoMkt[] = []
+  if (g === 'semana') {
+    const lunes = lunesDe(hoy)
+    for (let i = 0; i < 52; i++) {
+      const desde = sumarDias(lunes, -7 * i)
+      const hasta = sumarDias(desde, 6)
+      out.unshift({ key: desde, desde, hasta, enCurso: i === 0, label: `${etiquetaSemana(desde)} · ${fechaCorta(desde)} al ${fechaCorta(hasta)}` })
+    }
+  } else {
+    const [y, m] = hoy.split('-').map(Number)
+    for (let i = 0; i < 24; i++) {
+      const t = new Date(Date.UTC(y, m - 1 - i, 1))
+      const anio = t.getUTCFullYear()
+      const mes = t.getUTCMonth() + 1
+      const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
+      const hasta = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10)
+      out.unshift({ key: desde, desde, hasta, enCurso: i === 0, label: `${MESES_LARGOS[mes - 1]} ${anio}` })
+    }
+  }
+  return out
 }
 
-/**
- * Último mes: del mismo día del mes pasado a hoy (hora Argentina). Si ese día no
- * existe en el mes pasado (31/03 → febrero), se usa el último día de ese mes.
- * Es el período por defecto del dashboard.
- */
-function rangoUltimoMes(): DateRange {
-  const hoy = hoyArgentina()
-  const [y, m, d] = hoy.split('-').map(Number)
-  const anio = m === 1 ? y - 1 : y
-  const mes = m === 1 ? 12 : m - 1
-  const diasMes = new Date(Date.UTC(anio, mes, 0)).getUTCDate()
-  const desde = `${anio}-${String(mes).padStart(2, '0')}-${String(Math.min(d, diasMes)).padStart(2, '0')}`
-  return { startDate: desde, endDate: hoy, label: 'Último mes', type: 'custom' }
-}
-
-function Filtros({ rango, d, filtro, cargando, onRango, onFiltro }: {
-  rango: DateRange
+function Filtros({ periodos, periodo, granularidad, keyActual, d, filtro, cargando, onPeriodo, onGranularidad, onFiltro }: {
+  periodos: PeriodoMkt[]
+  periodo: PeriodoMkt
+  granularidad: Granularidad
+  keyActual: string
   d: MarketingRaw | null
   filtro: FiltroSegmento
   cargando: boolean
-  onRango: (r: DateRange) => void
+  onPeriodo: (key: string) => void
+  onGranularidad: (g: Granularidad) => void
   onFiltro: (f: FiltroSegmento) => void
 }) {
   const hoy = hoyArgentina()
-  const atajos = useMemo(() => [
-    { id: 'ultimo-mes', label: 'Último mes', range: rangoUltimoMes() },
-    ...[4, 12].map(n => {
-      const r = rangoUltimasSemanas(n)
-      return { id: `ultimas-${n}`, label: r.label, range: r }
-    }),
-  ], [])
-  const desde = rango.startDate
-  const hasta = rango.endDate > hoy ? hoy : rango.endDate
+  const desde = periodo.desde
+  const hasta = periodo.hasta > hoy ? hoy : periodo.hasta
   return (
     <div className="ddir-periodo mkt-periodo">
       <div className="ddir-periodo-controles">
-        <DateRangeSelector
-          selectedRange={rango}
-          onRangeChange={onRango}
+        <NavegadorPeriodo
+          periodos={periodos}
+          valor={periodo.key}
+          onCambio={onPeriodo}
+          granularidad={granularidad}
+          keyActual={keyActual}
           disabled={cargando}
-          showAllOption={false}
-          placeholder="Elegir período"
-          allowMonthYear
-          extraShortcuts={atajos}
         />
-        <div className="mkt-chips" role="group" aria-label="Origen de los leads">
+      </div>
+      <div className="ddir-periodo-info">
+        <span
+          className="mkt-periodo-texto"
+          title={d ? `Leads creados del ${fechaCorta(desde)} al ${fechaCorta(hasta)}, comparado con ${fechaCorta(d.periodo.anterior.desde)} – ${fechaCorta(d.periodo.anterior.hasta)}` : undefined}
+        >
+          Leads del <strong>{fechaCorta(desde)}</strong> al <strong>{fechaCorta(hasta)}</strong>
+          {d ? <span className="ddir-muted"> · vs {fechaCorta(d.periodo.anterior.desde)} – {fechaCorta(d.periodo.anterior.hasta)}</span> : null}
+        </span>
+        <div className="segmentado" role="group" aria-label="Origen de los leads">
           {FILTROS_SEGMENTO.map(f => (
             <AdaptiveTooltip key={f.id} content={f.info} width={250} variant="dark">
               <button
                 type="button"
-                className={`mkt-chip${filtro === f.id ? ' mkt-chip--activo' : ''}`}
+                className={`segmentado-btn${filtro === f.id ? ' is-active' : ''}`}
                 aria-pressed={filtro === f.id}
                 onClick={() => onFiltro(f.id)}
               >
@@ -178,13 +191,7 @@ function Filtros({ rango, d, filtro, cargando, onRango, onFiltro }: {
             </AdaptiveTooltip>
           ))}
         </div>
-      </div>
-      <div className="ddir-periodo-info">
-        <span className="mkt-periodo-texto">
-          Leads creados del <strong>{fechaCorta(desde)}</strong> al <strong>{fechaCorta(hasta)}</strong>
-          {d ? <span className="ddir-muted"> · comparado con {fechaCorta(d.periodo.anterior.desde)} – {fechaCorta(d.periodo.anterior.hasta)}</span> : null}
-        </span>
-        <span className="ddir-semana-hoy">Hoy: {etiquetaSemana(hoy)}</span>
+        <SelectorGranularidad valor={granularidad} onCambio={onGranularidad} disabled={cargando} />
       </div>
     </div>
   )
@@ -215,8 +222,7 @@ function Kpis({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
   const totalCal = PERFILES.reduce((s, p) => s + cal[p], 0)
   const ttd = timeToDriver(d.nuevos_conductores, filtro)
   return (
-    <div className="dkpis-stats">
-    <div className="dkpis-stats-grid mkt-kpis">
+    <div className="ddir-kpis mkt-kpis">
       <Kpi
         label="LEADS"
         value={fmtInt(a.leads)}
@@ -257,7 +263,6 @@ function Kpis({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
         variacion={variacion(a.nuevos, b.nuevos, 'num', true)}
         info="Leads creados en el período que ya recibieron su primer auto. Conversión = conductores nuevos ÷ leads del período (los dos sobre los mismos leads). Los que recibieron auto en el período pero entraron antes se informan aparte como fuera de rango."
       />
-    </div>
     </div>
   )
 }
@@ -796,10 +801,18 @@ function Glosario() {
 // ───────────── Módulo ─────────────
 
 export function DashboardMarketingModule() {
-  // Por defecto, el último mes (pedido 2026-10-22; antes: últimas 4 semanas)
-  const [rango, setRango] = useState<DateRange>(rangoUltimoMes)
+  // Mismo navegador que Dashboard KPI's: Semanal / Mensual con flechas.
+  // Por defecto, el último mes completo (antes: "último mes" corrido).
+  const hoy = useMemo(() => hoyArgentina(), [])
+  const [granularidad, setGranularidad] = useState<Granularidad>('mes')
+  const periodos = useMemo(() => periodosMarketing(granularidad, hoy), [granularidad, hoy])
+  const keyActual = periodos[periodos.length - 1].key
+  const [elegido, setElegido] = useState<string | null>(null)
+  const periodo = periodos.find(p => p.key === elegido)
+    ?? (granularidad === 'mes' ? periodos[periodos.length - 2] : periodos[periodos.length - 1])
+  const cambiarGranularidad = (g: Granularidad) => { setGranularidad(g); setElegido(null) }
   const [filtro, setFiltro] = useState<FiltroSegmento>('Pauta redes')
-  const { data, isLoading, error } = useMarketingData(rango.startDate, rango.endDate)
+  const { data, isLoading, error } = useMarketingData(periodo.desde, periodo.hasta)
 
   const contenido = useMemo(() => {
     if (!data) return null
@@ -828,11 +841,15 @@ export function DashboardMarketingModule() {
     <div className="ddir-module mkt-module">
       <LoadingOverlay show={isLoading} message="Cargando indicadores de marketing..." size="lg" />
       <Filtros
-        rango={rango}
+        periodos={periodos}
+        periodo={periodo}
+        granularidad={granularidad}
+        keyActual={keyActual}
         d={data}
         filtro={filtro}
         cargando={isLoading}
-        onRango={setRango}
+        onPeriodo={setElegido}
+        onGranularidad={cambiarGranularidad}
         onFiltro={setFiltro}
       />
       {error ? <div className="ddir-error" role="alert">{error}</div> : null}
