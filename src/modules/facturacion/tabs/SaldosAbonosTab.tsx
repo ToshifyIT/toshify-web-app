@@ -6,7 +6,6 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
-import * as XLSX from 'xlsx'
 import {
   Wallet,
   Users,
@@ -1614,7 +1613,8 @@ export function SaldosAbonosTab() {
   editarMoraAcumulada - fin */
 
   // ====== EXPORTAR SALDOS A EXCEL ======
-  function exportarSaldos() {
+  async function exportarSaldos() {
+    const XLSX = await import('xlsx')
     if (saldos.length === 0) {
       Alerta.fire('Sin datos', 'No hay saldos para exportar', 'info')
       return
@@ -1669,6 +1669,7 @@ export function SaldosAbonosTab() {
 
   // ====== IMPORTAR SALDOS DESDE EXCEL ======
   async function importarSaldos(file: File) {
+    const XLSX = await import('xlsx')
     try {
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })

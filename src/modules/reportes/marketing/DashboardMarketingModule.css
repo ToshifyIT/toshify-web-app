@@ -256,10 +256,7 @@
   font-size: 12px;
 }
 
-.mkt-module .ddir-semana-hoy {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-}
+/* "Hoy" usa el mismo color que en el Dashboard Directivo */
 
 .mkt-module .ddir-periodo-rango {
   font-size: 12px;
@@ -584,3 +581,8 @@
   padding: 16px 20px 20px;
   overflow-y: auto;
 }
+
+/* Barra de período en una sola línea: navegador a la izquierda; texto, origen y
+   Semanal / Mensual a la derecha (como Dashboard KPI's) */
+.mkt-periodo .ddir-periodo-info { margin-left: auto; gap: 8px; }
+.mkt-periodo .mkt-periodo-texto { white-space: nowrap; }

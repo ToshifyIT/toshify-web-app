@@ -13,7 +13,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { desestimarTelepase, reactivarTelepase, eliminarTelepase } from './services/desestimarTelepase'
 import { type ColumnDef } from '@tanstack/react-table'
-import * as XLSX from 'xlsx'
 import { CrearCobroTelepaseModal } from './components/CrearCobroTelepaseModal'
 import { crearCobroDesdeTelepase } from './services/crearCobroDesdeTelepase'
 import { hoyART } from '../../utils/fechaArgentina'
@@ -77,9 +76,8 @@ export default function TelepaseHistoricoModule() {
   // Permisos God Mode (mismo criterio que MultasModule)
   // Borrar y reactivar todo: admin, o un rol con permiso de ELIMINAR en el submenú
   // telepase-historico (Configuración > Roles). Antes había una lista de correos.
-  const userRole = (profile?.roles?.name || '').toLowerCase()
-  const { canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
-  const isGodMode = userRole === 'admin' || canDeleteInSubmenu('telepase-historico')
+  const { canEditInSubmenu, canDeleteInSubmenu, isAdmin } = usePermissions()
+  const isGodMode = isAdmin() || canDeleteInSubmenu('telepase-historico')
   // Reactivar: además, cualquier rol con permiso de edición en el submenú.
   const canReactivar = isGodMode || canEditInSubmenu('telepase-historico')
   const canBorrar = isGodMode
@@ -831,7 +829,8 @@ export default function TelepaseHistoricoModule() {
   ], [patentesUnicas, patenteFilter, concesionariosUnicos, concesionarioFilter, conductoresUnicos, conductorFilter, observacionesOpciones, observacionesFilter, openFilterId, semanasUnicas, semanaFilter, fechaDesde, fechaHasta, tarifasUnicas, tarifaFilter, ibuttonsUnicos, ibuttonFilter, canReactivar, canBorrar])
 
   // Exportar a Excel
-  function handleExportar() {
+  async function handleExportar() {
+    const XLSX = await import('xlsx')
     const dataExport = registrosFiltrados.map(r => ({
       'Fecha Carga': formatDateTime(r.created_at),
       'Sem. Facturación': r.created_at ? numeroSemana(r.created_at) : '',

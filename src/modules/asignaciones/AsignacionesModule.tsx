@@ -10,7 +10,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
-// KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
+// KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion-v2
 import { Alerta } from '../../components/ui/alertas'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showError, showSuccess } from '../../utils/toast'
@@ -312,7 +312,7 @@ function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) 
 }
 
 export function AsignacionesModule() {
-  const { canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { canEditInMenu, canDeleteInMenu, isAdmin: esAdmin } = usePermissions()
   const { profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedes } = useSede()
   const canEdit = canEditInMenu('asignaciones')
@@ -321,12 +321,11 @@ export function AsignacionesModule() {
   // Crear asignación manual, regularizar y borrar: admin, o un rol con permiso de
   // ELIMINAR en el menú Asignaciones (Configuración > Roles). Antes había una lista
   // de correos en el código; ahora el acceso se da desde los permisos del rol.
-  const userRole = profile?.roles?.name || ''
-  const canCreateManualAssignment = userRole === 'admin' || canDelete
+  const canCreateManualAssignment = esAdmin() || canDelete
 
   // El botón "Nueva Asignación" se restringe a admin (independiente de las
   // acciones "Regularizar" / "Eliminar" del menú de filas).
-  const isAdmin = userRole === 'admin'
+  const isAdmin = esAdmin()
 
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -760,7 +759,7 @@ export function AsignacionesModule() {
   const [conductoresData, setConductoresData] = useState<Array<{ id: string; estadoCodigo?: string }>>([])
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   
-  // Programacion de entregas movida a /onboarding/programacion
+  // Programacion de entregas movida a /onboarding/programacion-v2
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 14+ queries)
   const calculatedStats = useMemo(() => {
@@ -1536,7 +1535,7 @@ export function AsignacionesModule() {
     }
   }
 
-  // Programacion de entregas movida a /onboarding/programacion
+  // Programacion de entregas movida a /onboarding/programacion-v2
 
   // Filtrar solo por stat cards - los filtros de columna los maneja DataTable automáticamente
   // IMPORTANTE: Los filtros deben coincidir EXACTAMENTE con lo que cuentan los stats
@@ -3880,7 +3879,7 @@ export function AsignacionesModule() {
               Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
           },
-          // Eliminar (solo admin / administrativo / fullstack.senior, igual que Nueva Asignación)
+          // Eliminar: admin o rol con permiso de eliminar en Asignaciones (igual que Nueva Asignación)
           {
             icon: <Trash2 size={15} />,
             label: 'Eliminar',

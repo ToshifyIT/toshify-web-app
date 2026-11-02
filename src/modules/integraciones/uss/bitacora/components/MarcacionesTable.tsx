@@ -14,7 +14,6 @@ import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import { partesART, hoyART } from '../../../../../utils/fechaArgentina';
 import { claveChecklist } from '../utils/marcacionesPorDia';
 import { getEstadoConductorBadgeStyle, getEstadoConductorDisplay } from '../../../../../utils/conductorUtils';
-import * as XLSX from 'xlsx';
 import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
 import { ConductorHistorialModal } from './ConductorHistorialModal';
 import { RangoFilter } from './RangoFilter';
@@ -897,7 +896,8 @@ export function MarcacionesTable({
     }));
   }
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import('xlsx')
     const data = getExportData();
     if (data.length === 0) return;
     const ws = XLSX.utils.json_to_sheet(data);
@@ -912,7 +912,8 @@ export function MarcacionesTable({
     setShowExportMenu(false);
   }
 
-  function exportarCSV() {
+  async function exportarCSV() {
+    const XLSX = await import('xlsx')
     const data = getExportData();
     if (data.length === 0) return;
     const ws = XLSX.utils.json_to_sheet(data);

@@ -652,25 +652,25 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       enableSorting: false,
       cell: ({ row }) => {
         const m = row.original
         if (!puedeCargar) return null
         return (
-          <div className="cr-acciones-fila">
+          <div className="dt-actions">
             {m.posible_duplicado && (m.alegra_estado === 'pendiente' || m.alegra_estado === 'error') && (
-              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(m, 'vincular')} title="Marcar como ya cargado en Alegra">
+              <button className="dt-accion-icono" onClick={() => void marcar(m, 'vincular')} title="Marcar como ya cargado en Alegra">
                 <Link2 size={14} />
               </button>
             )}
             {(m.alegra_estado === 'pendiente' || m.alegra_estado === 'error') && (
-              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(m, 'ignorar')} title="No cargar en Alegra">
+              <button className="dt-accion-icono" onClick={() => void marcar(m, 'ignorar')} title="No cargar en Alegra">
                 <EyeOff size={14} />
               </button>
             )}
             {m.alegra_estado === 'ignorado' && (
-              <button className="btn-secondary cr-btn-mini" onClick={() => void marcar(m, 'pendiente')} title="Volver a pendiente">
+              <button className="dt-accion-icono" onClick={() => void marcar(m, 'pendiente')} title="Volver a pendiente">
                 <Undo2 size={14} />
               </button>
             )}

@@ -10,7 +10,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw } from 'lucide-react'
-import * as XLSX from 'xlsx'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -218,7 +217,8 @@ export function ConductoresPanelModule() {
   // pasan los filtros.
   const filasAExportar = visibles ?? filteredRows
 
-  const handleExportar = () => {
+  const handleExportar = async () => {
+    const XLSX = await import('xlsx')
     if (filasAExportar.length === 0) return
 
     // Los importes van como NÚMERO (no con formatCurrency) para que Excel pueda
