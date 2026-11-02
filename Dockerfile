@@ -78,3 +78,4 @@ EXPOSE 80
 
 # Start the server
 CMD ["node", "server.js"]
+COPY server-cabify.js ./
