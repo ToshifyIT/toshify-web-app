@@ -431,7 +431,6 @@ function leadToFormData(lead: Lead): LeadFormData {
     apellido: lead.apellido || '',
     email: lead.email || '',
     phone: lead.phone || '',
-    whatsapp_number: lead.whatsapp_number || '',
     // Solo si la columna existe (sql/telefono_secundario.sql): si no, no se manda al guardar
     ...('telefono_secundario' in lead ? { telefono_secundario: lead.telefono_secundario || '' } : {}),
     dni: lead.dni || '',
@@ -1679,7 +1678,7 @@ export function LeadsModule() {
    */
   function prepararTelefonos(fields: Record<string, unknown>, original: Lead | null): boolean {
     const errores: Record<string, string> = {}
-    for (const campo of ['phone', 'whatsapp_number', 'telefono_secundario'] as const) {
+    for (const campo of ['phone', 'telefono_secundario'] as const) {
       const valor = String(fields[campo] ?? '').trim()
       if (!valor) continue
       if (original && valor === String(original[campo] || '').trim()) continue
@@ -1689,7 +1688,7 @@ export function LeadsModule() {
     }
     setEditErrors(errores)
     if (Object.keys(errores).length === 0) return true
-    const etiquetas: Record<string, string> = { phone: 'Teléfono', whatsapp_number: 'WhatsApp', telefono_secundario: 'Teléfono secundario' }
+    const etiquetas: Record<string, string> = { phone: 'Teléfono (WhatsApp)', telefono_secundario: 'Teléfono secundario' }
     Swal.fire(
       'Celular inválido',
       Object.entries(errores).map(([campo, msg]) => `${etiquetas[campo]}: ${msg}`).join('<br>'),
@@ -1995,7 +1994,6 @@ export function LeadsModule() {
           'BCRA': l.bcra || '',
 
           // --- Contacto y direccion (detalle) ---
-          'WhatsApp': l.whatsapp_number || '',
           'Teléfono secundario': l.telefono_secundario || '',
           'Dirección': l.direccion || '',
           'Zona Restringida': tieneCoordenadas ? (zonaRestringida ? 'Sí' : 'No') : '',
@@ -2426,9 +2424,6 @@ export function LeadsModule() {
           // Formatear teléfono con prefijo argentino +549
           if (dbRow.phone) {
             dbRow.phone = formatPhoneAR(dbRow.phone)
-          }
-          if (dbRow.whatsapp_number) {
-            dbRow.whatsapp_number = formatPhoneAR(dbRow.whatsapp_number)
           }
 
           return dbRow

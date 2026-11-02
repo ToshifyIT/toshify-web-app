@@ -69,6 +69,36 @@ function adminIntegracionesDevApi(): Plugin {
 }
 
 /**
+ * Monta /api/cabify (token de Cabify pedido desde el servidor) dentro del dev server.
+ * En producción la sirve server.js.
+ */
+function cabifyDevApi(): Plugin {
+  return {
+    name: 'toshify-cabify-dev-api',
+    apply: 'serve',
+    async configureServer(server) {
+      try {
+        const rutaModulo = path.resolve(server.config.root, 'server-cabify.js')
+        const { mtimeMs } = await stat(rutaModulo)
+        const modulo = `${pathToFileURL(rutaModulo).href}?v=${mtimeMs}`
+        const { cabifyRouter } = await import(/* @vite-ignore */ modulo)
+        server.middlewares.use('/api/cabify', cabifyRouter)
+        server.watcher.add(rutaModulo)
+        server.watcher.on('change', (archivo) => {
+          if (path.resolve(archivo) !== rutaModulo) return
+          void server.restart()
+        })
+      } catch (err) {
+        server.config.logger.warn(
+          '  [cabify] No se pudo montar /api/cabify: ' +
+            (err instanceof Error ? err.message : String(err)),
+        )
+      }
+    },
+  }
+}
+
+/**
  * Monta la API de la integración 2Chat (/api/2chat) dentro del dev server de
  * Vite, igual que insightsDirectivoDevApi. En producción la sirve server.js.
  */
@@ -160,7 +190,7 @@ function alegraDevApi(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), insightsDirectivoDevApi(), twoChatDevApi(), cresiumDevApi(), alegraDevApi(), adminIntegracionesDevApi()],
+  plugins: [react(), insightsDirectivoDevApi(), twoChatDevApi(), cresiumDevApi(), alegraDevApi(), adminIntegracionesDevApi(), cabifyDevApi()],
   esbuild: {
     drop: ['console', 'debugger'],
   },
@@ -203,11 +233,6 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
-      },
-      '/cabify-auth': {
-        target: 'https://cabify.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/cabify-auth/, '/auth/api/authorization'),
       },
       '/cabify-graphql': {
         target: 'https://partners.cabify.com',

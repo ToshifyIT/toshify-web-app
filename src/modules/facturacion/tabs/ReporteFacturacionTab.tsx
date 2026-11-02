@@ -5686,9 +5686,10 @@ export function ReporteFacturacionTab() {
     try {
       Swal.fire({ title: `${nuevaAccion === 'desactivar' ? 'Desactivando' : 'Activando'} efectivo...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() })
 
+      const { data: { session: sesionEfectivo } } = await supabase.auth.getSession()
       const resp = await fetch('/api/cabify-efectivo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sesionEfectivo?.access_token || ''}` },
         body: JSON.stringify({
           cabify_driver_id,
           cabify_company_id,

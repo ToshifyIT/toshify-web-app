@@ -58,14 +58,8 @@ export function VisitasModule() {
   const { sedeActualId, sedeUsuario } = useSede();
   const canCreate = isAdmin() || canCreateInMenu('visitas');
   const canEdit = isAdmin() || canEditInMenu('visitas');
-  // Whitelist explicita de emails autorizados a eliminar visitas (ademas de roles admin)
-  const EMAILS_PUEDEN_ELIMINAR = [
-    'admin@toshify.com.ar',
-    'archspec@toshify.com.ar',
-    'fullstack@toshify.com.ar',
-    'techspec@toshify.com.ar', // Maria Flores
-  ];
-  const canDelete = isAdmin() || canDeleteInMenu('visitas') || EMAILS_PUEDEN_ELIMINAR.includes((user?.email || '').toLowerCase());
+  // Eliminar: admin o un rol con permiso de eliminar en Visitas (antes, lista de correos)
+  const canDelete = isAdmin() || canDeleteInMenu('visitas');
 
   // === STATE: tabs ===
   const [mainTab, setMainTab] = useState<MainTab>('calendario');

@@ -50,10 +50,6 @@ export interface CabifyDriverEnriched extends CabifyDriver {
 
 // Configuración de Cabify
 export interface CabifyConfig {
-  username: string
-  password: string
-  clientId: string
-  clientSecret: string
   companyId: string
   authUrl: string
   graphqlUrl: string

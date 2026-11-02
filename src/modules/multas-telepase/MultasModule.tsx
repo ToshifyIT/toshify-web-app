@@ -184,22 +184,12 @@ export default function MultasModule() {
 
   // Permisos por rol + whitelist por email — solo god mode puede reactivar/borrar.
   // El resto (incluido data entry) solo puede desestimar.
+  // Borrar y reactivar todo: admin, o un rol con permiso de ELIMINAR en el submenú
+  // Multas (Configuración > Roles). Antes había una lista de correos en el código.
   const userRole = (profile?.roles?.name || '').toLowerCase()
-  const userEmail = (profile?.email || '').toLowerCase()
-  // Emails de god mode (acceso total a borrar/reactivar más allá del rol).
-  // Christiam y Esau ya son admin por rol, pero los incluimos por defensa en profundidad.
-  const GOD_MODE_EMAILS = new Set<string>([
-    'techspec@toshify.com.ar',    // Maria Flores
-    'archspec@toshify.com.ar',    // Christiam Mendoza
-    'fullstack@toshify.com.ar',   // Esau Pretell
-  ])
-  const isGodMode =
-    userRole === 'admin' ||
-    userRole === 'fullstack.senior' ||
-    GOD_MODE_EMAILS.has(userEmail)
-  // Reactivar: god mode o cualquier rol con permiso de edición en el submenú 'multas'.
-  // Borrar sigue restringido a god mode.
-  const { canEditInSubmenu } = usePermissions()
+  const { canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+  const isGodMode = userRole === 'admin' || canDeleteInSubmenu('multas')
+  // Reactivar: además, cualquier rol con permiso de edición en el submenú 'multas'.
   const canReactivar = isGodMode || canEditInSubmenu('multas')
   const canBorrar = isGodMode
 

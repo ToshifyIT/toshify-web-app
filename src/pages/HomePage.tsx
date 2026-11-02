@@ -12,6 +12,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useSede } from '../contexts/SedeContext'
 import { useNavigate, Routes, Route, useLocation, Navigate, Link } from 'react-router-dom'
+import NotFoundPage from './NotFoundPage'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 import { useTheme } from '../contexts/ThemeContext'
 import logoToshify from '../assets/logo-toshify.png'
@@ -2388,6 +2389,9 @@ export function HomePage() {
               {/* Ruta por defecto - redirige a Estado de Flota */}
               {/* Aterrizaje: Estado de Flota si lo tiene; si no, su primer modulo. */}
               <Route path="/" element={<LandingRedirect />} />
+
+              {/* Cualquier otra dirección: página 404 (antes quedaba en blanco) */}
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </div>
         </main>
