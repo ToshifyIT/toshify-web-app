@@ -1,5 +1,6 @@
 // src/services/cabifyService.ts
 import type { CabifyConfig, CabifyAuthResponse, CabifyDriver, CabifyPeriod } from '../types/cabify.types'
+import { supabase } from '../lib/supabase'
 
 /**
  * Servicio para interactuar con la API de Cabify
@@ -12,15 +13,12 @@ class CabifyService {
   private assetsCache: Map<string, any> = new Map()
 
   constructor() {
-    // Credenciales desde env vars (VITE_ prefix para acceso desde frontend)
-    // Las URLs usan proxy paths que funcionan tanto en dev (Vite proxy) como prod (server.js proxy)
+    // Las credenciales de Cabify viven SOLO en el servidor: la web pide el token a
+    // /api/cabify/token con la sesión de Toshify (server-cabify.js). El GraphQL sigue
+    // pasando por el proxy /cabify-graphql (Vite en dev, server.js en prod).
     this.config = {
-      username: import.meta.env.VITE_CABIFY_USERNAME || '',
-      password: import.meta.env.VITE_CABIFY_PASSWORD || '',
-      clientId: import.meta.env.VITE_CABIFY_CLIENT_ID || '',
-      clientSecret: import.meta.env.VITE_CABIFY_CLIENT_SECRET || '',
       companyId: import.meta.env.VITE_CABIFY_COMPANY_ID || '',
-      authUrl: '/cabify-auth',
+      authUrl: '/api/cabify/token',
       graphqlUrl: '/cabify-graphql'
     }
   }
@@ -35,18 +33,11 @@ class CabifyService {
         return this.accessToken
       }
 
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Sin sesión activa')
       const response = await fetch(this.config.authUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'password',
-          client_id: this.config.clientId,
-          client_secret: this.config.clientSecret,
-          username: this.config.username,
-          password: this.config.password,
-        }),
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
       })
 
       if (!response.ok) {

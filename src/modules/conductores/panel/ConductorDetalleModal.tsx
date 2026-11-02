@@ -477,13 +477,13 @@ export function ConductorDetalleModal({
         <div className="cdet-tabs">
           <button className={tab === 'calificacion' ? 'active' : ''} onClick={() => setTab('calificacion')}>Calificación</button>
           <button className={tab === 'facturacion' ? 'active' : ''} onClick={() => setTab('facturacion')}>Facturación</button>
-          <button className={tab === 'saldo' ? 'active' : ''} onClick={() => setTab('saldo')}>Historial de saldo</button>
-          <button className={tab === 'garantia' ? 'active' : ''} onClick={() => setTab('garantia')}>Historial de garantía</button>
+          <button className={tab === 'saldo' ? 'active' : ''} onClick={() => setTab('saldo')}>Saldo</button>
+          <button className={tab === 'garantia' ? 'active' : ''} onClick={() => setTab('garantia')}>Garantía</button>
           <button className={tab === 'multas' ? 'active' : ''} onClick={() => setTab('multas')}>Multas</button>
           <button className={tab === 'km' ? 'active' : ''} onClick={() => setTab('km')}>Km recorridos</button>
           <button className={tab === 'cabify' ? 'active' : ''} onClick={() => setTab('cabify')}>Rendimiento Cabify</button>
-          <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Historial de asignaciones</button>
-          <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Historial de bajas</button>
+          <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Asignaciones</button>
+          <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Bajas</button>
           <button className={tab === 'incidencias' ? 'active' : ''} onClick={() => setTab('incidencias')}>Incidencias</button>
         </div>
 

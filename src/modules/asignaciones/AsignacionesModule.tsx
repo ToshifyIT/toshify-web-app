@@ -316,19 +316,11 @@ export function AsignacionesModule() {
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
   
-  // Permisos para crear nueva asignación y borrar:
-  //  - admin (Esau, Christiam, Karen, Gandhy, etc.)
-  //  - fullstack.senior (legacy)
-  //  - whitelist por email de personas puntuales (Maria Flores)
+  // Crear asignación manual, regularizar y borrar: admin, o un rol con permiso de
+  // ELIMINAR en el menú Asignaciones (Configuración > Roles). Antes había una lista
+  // de correos en el código; ahora el acceso se da desde los permisos del rol.
   const userRole = profile?.roles?.name || ''
-  const userEmail = (profile?.email || '').toLowerCase()
-  const WHITELIST_EMAILS = new Set<string>([
-    'techspec@toshify.com.ar',   // Maria Flores
-  ])
-  const canCreateManualAssignment =
-    userRole === 'admin' ||
-    userRole === 'fullstack.senior' ||
-    WHITELIST_EMAILS.has(userEmail)
+  const canCreateManualAssignment = userRole === 'admin' || canDelete
 
   // El botón "Nueva Asignación" se restringe a admin (independiente de las
   // acciones "Regularizar" / "Eliminar" del menú de filas).

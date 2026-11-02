@@ -16,6 +16,7 @@ import crypto from 'node:crypto'
 import { insightsDirectivoRouter } from './server-insights-directivo.js'
 // Integración 2Chat: contactos para llamadas + historial de llamadas (clave solo en el servidor)
 import { twoChatRouter } from './server-2chat.js'
+import { cabifyRouter, obtenerTokenCabify, requireUsuario } from './server-cabify.js'
 // Integración Cresium -> Alegra: movimientos bancarios y carga en Alegra (claves solo en el servidor)
 import { cresiumRouter } from './server-cresium.js'
 // Integraciones > Alegra: Excel de ARCA (comprobantes recibidos) -> Alegra (token solo en el servidor)
@@ -55,6 +56,8 @@ app.use('/api/insights-directivo', insightsDirectivoRouter)
 
 // Rutas /api/2chat (Integraciones > 2Chat, archivo aparte)
 app.use('/api/2chat', twoChatRouter)
+// Token de Cabify pedido desde el servidor (las credenciales no van al navegador)
+app.use('/api/cabify', cabifyRouter)
 
 // Rutas /api/cresium (Integraciones > Cresium, archivo aparte)
 app.use('/api/cresium', cresiumRouter)
@@ -356,20 +359,8 @@ app.post('/api/create-lead-drive-folder', async (req, res) => {
   }
 })
 
-// Cabify auth proxy (for production - in dev Vite proxy handles this)
-app.post('/cabify-auth', async (req, res) => {
-  try {
-    const response = await fetch('https://cabify.com/auth/api/authorization', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(req.body),
-    })
-    const data = await response.json()
-    res.status(response.status).json(data)
-  } catch (error) {
-    res.status(500).json({ error: error.message })
-  }
-})
+// El token de Cabify ahora lo entrega /api/cabify/token (server-cabify.js).
+// Se quitó /cabify-auth: recibía usuario y contraseña desde el navegador.
 
 // Cabify GraphQL proxy (for production - in dev Vite proxy handles this)
 app.post('/cabify-graphql', async (req, res) => {
@@ -403,26 +394,16 @@ app.post('/api/cabify-efectivo', async (req, res) => {
       return res.status(400).json({ error: 'accion debe ser "activar" o "desactivar"' })
     }
 
-    // 1. Autenticar con Cabify
-    const authResponse = await fetch('https://cabify.com/auth/api/authorization', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'password',
-        client_id: process.env.CABIFY_CLIENT_ID || process.env.VITE_CABIFY_CLIENT_ID || 'd14cdae660ad4817a6b20542a61cf5b1',
-        client_secret: process.env.CABIFY_CLIENT_SECRET || process.env.VITE_CABIFY_CLIENT_SECRET || 'ebZ45Oj3ln9W5tFC',
-        username: process.env.CABIFY_USERNAME || process.env.VITE_CABIFY_USERNAME || 'admin.log2@toshify.com.ar',
-        password: process.env.CABIFY_PASSWORD || process.env.VITE_CABIFY_PASSWORD || 'tOSHIBASE2026.',
-      }),
-    })
-
-    if (!authResponse.ok) {
-      const authErrorDetail = await authResponse.text()
-      return res.status(401).json({ error: 'Error de autenticación con Cabify', detail: authErrorDetail })
+    // 1. Solo usuarios con sesión en Toshify, y token de Cabify pedido desde el servidor
+    //    (las credenciales salen únicamente del .env: ver server-cabify.js)
+    const usuario = await requireUsuario(req, res)
+    if (!usuario) return
+    let token
+    try {
+      token = (await obtenerTokenCabify()).access_token
+    } catch (authError) {
+      return res.status(401).json({ error: 'Error de autenticación con Cabify', detail: authError.message })
     }
-
-    const authData = await authResponse.json()
-    const token = authData.access_token
 
     // 2. Ejecutar mutation GraphQL
     const enabled = accion === 'activar'

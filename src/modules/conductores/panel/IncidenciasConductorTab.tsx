@@ -5,6 +5,7 @@
 //  - Siniestros: vista v_siniestros_completos (la misma del módulo Siniestros).
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
+import '../../../components/ui/DataTable/DataTable.css'
 
 type Tipo = 'logistica' | 'cobro' | 'siniestro'
 
@@ -147,9 +148,12 @@ export function IncidenciasConductorTab({ conductorId }: { conductorId: string }
               </td>
               <td style={{ whiteSpace: 'nowrap' }}>{f.patente}</td>
               <td>
-                <span className="inc-cond-estado" style={f.estadoColor ? { background: `${f.estadoColor}22`, color: f.estadoColor } : undefined}>
-                  {f.estado}
-                </span>
+                {/* estado_color viene como nombre ('yellow', 'green'…): mismo badge que en Incidencias/Siniestros */}
+                {f.estadoColor?.startsWith('#') ? (
+                  <span className="inc-cond-estado" style={{ background: `${f.estadoColor}22`, color: f.estadoColor }}>{f.estado}</span>
+                ) : (
+                  <span className={`dt-badge dt-badge-${f.estadoColor || 'gray'}`}>{f.estado}</span>
+                )}
               </td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtMonto(f.monto)}</td>
             </tr>

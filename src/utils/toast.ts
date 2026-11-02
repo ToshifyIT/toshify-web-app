@@ -11,7 +11,22 @@ const ICONS: Record<string, string> = {
   info: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
 }
 
-function fireToast(type: string, title: string, text?: string) {
+/**
+ * El título y el texto se muestran como TEXTO, nunca como HTML: si traen datos
+ * cargados por usuarios (un nombre con etiquetas, por ejemplo) no se interpretan.
+ */
+function escaparHtml(valor: unknown): string {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function fireToast(type: string, tituloOriginal: string, textoOriginal?: string) {
+  const title = escaparHtml(tituloOriginal)
+  const text = textoOriginal ? escaparHtml(textoOriginal) : ''
   const subtitle = text ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${text}</div>` : ''
   return Swal.fire({
     toast: true,

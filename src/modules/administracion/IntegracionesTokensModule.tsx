@@ -89,8 +89,8 @@ const INTEGRATIONS: IntegrationSystem[] = [
   },
   {
     id: 'cabify-ba',
-    name: 'Cabify (Buenos Aires)',
-    description: 'Integracion con Cabify para obtener viajes, facturacion y peajes de conductores en Buenos Aires.',
+    name: 'Cabify Grupo CG',
+    description: 'Cuenta de Cabify de Grupo CG (admin.log2@toshify.com.ar): viajes, facturación y peajes de los conductores.',
     icon: Car,
     color: 'var(--color-purple)',
     badgeColor: 'purple',
@@ -131,41 +131,37 @@ const INTEGRATIONS: IntegrationSystem[] = [
     },
   },
   {
-    id: 'cabify-bari',
-    name: 'Cabify (Bariloche)',
-    description: 'Integracion con Cabify para conductores en Bariloche. Misma API que Buenos Aires pero con credenciales y company IDs distintos.',
+    id: 'cabify-44',
+    name: 'Cabify 44 Dreams',
+    description: 'Cuenta de Cabify de 44 Dreams. Todavía no tiene credenciales cargadas en el servidor: hasta cargarlas, sus viajes no se sincronizan.',
     icon: Car,
     color: '#8B5CF6',
     badgeColor: 'purple',
     authType: 'OAuth2 (Resource Owner Password)',
-    authDescription: 'Misma mecanica que Cabify BA. Credenciales diferentes (usuario info@toshify.com.ar). Mismo client_id/client_secret.',
+    authDescription: 'Misma mecánica que la cuenta de Grupo CG, con el usuario y la empresa de 44 Dreams.',
     baseUrl: 'https://partners.cabify.com/api/graphql',
     environment: 'server',
-    status: 'active',
+    status: 'inactive',
     endpoints: [
       { method: 'POST', path: '/auth/api/authorization', description: 'Obtener access_token' },
       { method: 'POST', path: '/api/graphql', description: 'Consultar viajes via GraphQL' },
     ],
-    cronJobs: [
-      { schedule: '*/5 * * * *', description: 'Sync real-time de viajes Bariloche', script: 'run-cabify-realtime-bari.sh' },
-      { schedule: '30 23 * * 0', description: 'Sync semanal historico Bariloche', script: 'run-cabify-weekly-bari.sh' },
-    ],
+    cronJobs: [],
     notes: [
-      '3 empresas/conductores configurados en Bariloche',
-      'Scripts independientes de los de BA — archivos separados',
-      'Las credenciales solo estan en env.sh del servidor (NO en .env del repo)',
+      'Pendiente: cargar CABIFY_44_USERNAME, CABIFY_44_PASSWORD y CABIFY_44_COMPANY_ID en el .env del servidor',
+      'Pendiente: que los scripts de sincronización de Cabify también lean esta cuenta',
     ],
     tokenInfo: {
       type: 'OAuth2 Access Token (efimero)',
-      location: 'env.sh en servidor unicamente',
+      location: '.env del servidor (pendiente de cargar)',
       rotation: 'Automatica — se regenera en cada ejecucion',
     },
     credentialKeys: {
-      systemKey: 'cabify_bari',
+      systemKey: 'cabify_44',
       fields: [
         { key: 'username', label: 'Username' },
         { key: 'password', label: 'Password' },
-        { key: 'company_ids', label: 'Company IDs' },
+        { key: 'company_id', label: 'Company ID' },
       ],
     },
   },
@@ -966,6 +962,9 @@ function EdgeFunctionsMonitor() {
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  // Primero la lista con el último estado guardado (inmediato) y después el chequeo
+  // real en segundo plano: así la pestaña no queda en "Cargando..." hasta que
+  // responde la función más lenta.
   const fetchHealth = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -975,17 +974,23 @@ function EdgeFunctionsMonitor() {
         setError('Sin sesion activa');
         return;
       }
+      const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
-      const res = await fetch('/api/admin/function-health', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-      });
+      const lista = await fetch('/api/admin/function-health?ping=0', { headers });
+      if (!lista.ok) {
+        const err = await lista.json().catch(() => ({ error: 'No responde el servidor de la API. En local, reiniciá npm run dev' }));
+        setError(err.error || `Error ${lista.status}`);
+        return;
+      }
+      const dataLista = await lista.json();
+      if (dataLista.success) setFunctions(dataLista.functions);
 
+      const res = await fetch('/api/admin/function-health', { headers });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'No responde el servidor de la API. En local, reiniciá npm run dev' }));
+        const err = await res.json().catch(() => ({ error: `Error ${res.status}` }));
         setError(err.error || `Error ${res.status}`);
         return;
       }
-
       const data = await res.json();
       if (data.success) {
         setFunctions(data.functions);
