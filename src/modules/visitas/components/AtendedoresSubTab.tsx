@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Check, Loader2, Users, Clock, Tag } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { showSuccess } from '../../../utils/toast';
+import { showError, showSuccess } from '../../../utils/toast';
 import { useSede } from '../../../contexts/SedeContext';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -77,7 +77,7 @@ export function AtendedoresSubTab() {
     try {
       setData(await fetchAllAtendedores(sedeActualId));
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los anfitriones', 'error');
+      showError('Error', 'No se pudieron cargar los anfitriones');
     } finally {
       setLoading(false);
     }
@@ -118,17 +118,17 @@ export function AtendedoresSubTab() {
       showSuccess('Anfitrión desactivado');
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo desactivar el anfitrión', 'error');
+      showError('Error', 'No se pudo desactivar el anfitrión');
     }
   }
 
   async function handleSave() {
     if (!form.nombre.trim()) {
-      Swal.fire('Error', 'El nombre es requerido', 'error');
+      showError('Error', 'El nombre es requerido');
       return;
     }
     if (!sedeActualId) {
-      Swal.fire('Error', 'No se pudo determinar la sede', 'error');
+      showError('Error', 'No se pudo determinar la sede');
       return;
     }
     setSaving(true);
@@ -152,7 +152,7 @@ export function AtendedoresSubTab() {
       setShowModal(false);
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo guardar el anfitrión', 'error');
+      showError('Error', 'No se pudo guardar el anfitrión');
     } finally {
       setSaving(false);
     }
@@ -179,7 +179,7 @@ export function AtendedoresSubTab() {
       setSelectedMotivos(new Set(asignados));
       setShowMotivosModal(true);
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los motivos', 'error');
+      showError('Error', 'No se pudieron cargar los motivos');
     }
   }
 
@@ -200,7 +200,7 @@ export function AtendedoresSubTab() {
       showSuccess('Motivos actualizados');
       setShowMotivosModal(false);
     } catch {
-      Swal.fire('Error', 'No se pudieron guardar los motivos', 'error');
+      showError('Error', 'No se pudieron guardar los motivos');
     } finally {
       setSavingMotivos(false);
     }
@@ -232,7 +232,7 @@ export function AtendedoresSubTab() {
       }
       setShowHorariosModal(true);
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los horarios', 'error');
+      showError('Error', 'No se pudieron cargar los horarios');
     }
   }
 
@@ -253,7 +253,7 @@ export function AtendedoresSubTab() {
       showSuccess('Horarios actualizados');
       setShowHorariosModal(false);
     } catch {
-      Swal.fire('Error', 'No se pudieron guardar los horarios', 'error');
+      showError('Error', 'No se pudieron guardar los horarios');
     } finally {
       setSavingHorarios(false);
     }

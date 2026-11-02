@@ -725,6 +725,17 @@
   flex-wrap: wrap;
 }
 
+/* Filtros/acciones en la misma línea que el buscador (headerAction del DataTable):
+   sin caja propia, alineados a la derecha. */
+.fact-header.fact-header-inline {
+  background: transparent;
+  border: none;
+  padding: 0;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.fact-header.fact-header-inline .fact-header-left:empty { display: none; }
+
 .fact-header-left {
   display: flex;
   align-items: center;

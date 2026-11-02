@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Check, Loader2, FileText } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { showSuccess } from '../../../utils/toast';
+import { showError, showSuccess } from '../../../utils/toast';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { VisitaCategoria, VisitaMotivoConCategoria } from '../../../types/visitas.types';
@@ -49,7 +49,7 @@ export function MotivosSubTab() {
       setData(mots);
       setCategorias(cats);
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los motivos', 'error');
+      showError('Error', 'No se pudieron cargar los motivos');
     } finally {
       setLoading(false);
     }
@@ -90,17 +90,17 @@ export function MotivosSubTab() {
       showSuccess('Motivo eliminado');
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar. Verifique que no tenga citas asociadas.', 'error');
+      showError('Error', 'No se pudo eliminar. Verifique que no tenga citas asociadas.');
     }
   }
 
   async function handleSave() {
     if (!form.nombre.trim()) {
-      Swal.fire('Error', 'El nombre es requerido', 'error');
+      showError('Error', 'El nombre es requerido');
       return;
     }
     if (!form.categoria_id) {
-      Swal.fire('Error', 'Seleccione una categoría', 'error');
+      showError('Error', 'Seleccione una categoría');
       return;
     }
     setSaving(true);
@@ -123,7 +123,7 @@ export function MotivosSubTab() {
       setShowModal(false);
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo guardar el motivo', 'error');
+      showError('Error', 'No se pudo guardar el motivo');
     } finally {
       setSaving(false);
     }

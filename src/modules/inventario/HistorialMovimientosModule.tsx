@@ -528,54 +528,6 @@ export function HistorialMovimientosModule() {
         </div>
       </div>
 
-      {/* Filtro de tipo (adicional al buscador del DataTable) */}
-      <div className="hist-filters">
-        <select
-          className="hist-type-select"
-          value={tipoFilter}
-          onChange={(e) => setTipoFilter(e.target.value)}
-        >
-          <option value="all">Todos los tipos</option>
-          <option value="entrada">Entrada</option>
-          <option value="salida">Salida</option>
-          <option value="asignacion">Uso</option>
-          <option value="devolucion">Devolución</option>
-          <option value="daño">Daño</option>
-          <option value="perdida">Pérdida</option>
-        </select>
-        <input
-          className="hist-date-filter"
-          type="date"
-          value={fechaDesde}
-          onChange={(e) => setFechaDesde(e.target.value)}
-          aria-label="Fecha desde"
-        />
-        <input
-          className="hist-date-filter"
-          type="date"
-          value={fechaHasta}
-          onChange={(e) => setFechaHasta(e.target.value)}
-          aria-label="Fecha hasta"
-        />
-        <button
-          type="button"
-          className="hist-action-btn"
-          onClick={loadMovimientos}
-          disabled={loading}
-        >
-          <RefreshCw size={14} />
-          Actualizar
-        </button>
-        <button
-          type="button"
-          className="hist-action-btn"
-          onClick={exportarCsv}
-          disabled={filteredData.length === 0}
-        >
-          <Download size={14} />
-          Exportar
-        </button>
-      </div>
 
       {/* DataTable */}
       <DataTable
@@ -590,6 +542,56 @@ export function HistorialMovimientosModule() {
         emptyDescription="No se encontraron movimientos en el historial"
 pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
+        headerAction={
+          /* Tipo, fechas y acciones en la misma línea que el buscador */
+          <div className="hist-filters header-controls-inline">
+            <select
+              className="hist-type-select"
+              value={tipoFilter}
+              onChange={(e) => setTipoFilter(e.target.value)}
+            >
+              <option value="all">Todos los tipos</option>
+              <option value="entrada">Entrada</option>
+              <option value="salida">Salida</option>
+              <option value="asignacion">Uso</option>
+              <option value="devolucion">Devolución</option>
+              <option value="daño">Daño</option>
+              <option value="perdida">Pérdida</option>
+            </select>
+            <input
+              className="hist-date-filter"
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+              aria-label="Fecha desde"
+            />
+            <input
+              className="hist-date-filter"
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
+              aria-label="Fecha hasta"
+            />
+            <button
+              type="button"
+              className="hist-action-btn"
+              onClick={loadMovimientos}
+              disabled={loading}
+            >
+              <RefreshCw size={14} />
+              Actualizar
+            </button>
+            <button
+              type="button"
+              className="hist-action-btn"
+              onClick={exportarCsv}
+              disabled={filteredData.length === 0}
+            >
+              <Download size={14} />
+              Exportar
+            </button>
+          </div>
+        }
       />
     </div>
   )

@@ -45,7 +45,7 @@ import type {
   RevisionResponse,
 } from '../../../services/alegraComprasService'
 import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
-import { showSuccess, showError } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import '../cresium/CresiumModule.css'
 import './AlegraComprasModule.css'
@@ -267,7 +267,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
     try {
       datos = await leerExcelArca(archivo)
     } catch (err) {
-      Swal.fire('No se pudo leer el Excel', err instanceof Error ? err.message : 'Error', 'error')
+      showError('No se pudo leer el Excel', err instanceof Error ? err.message : 'Error')
       return
     }
     Swal.fire({
@@ -296,7 +296,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       })
     } catch (err) {
       Swal.close()
-      Swal.fire('No se pudo subir', err instanceof Error ? err.message : 'Error', 'error')
+      showError('No se pudo subir', err instanceof Error ? err.message : 'Error')
     }
   }
 
@@ -366,7 +366,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       }
     } catch (err) {
       Swal.close()
-      Swal.fire('Error', err instanceof Error ? err.message : 'No se pudo cargar en Alegra', 'error')
+      showError('Error', err instanceof Error ? err.message : 'No se pudo cargar en Alegra')
     }
     setSeleccion(new Set())
     await leerFilas(mes)
@@ -429,7 +429,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       sug = await obtenerCarpetaSugerida(empresa, c.id)
     } catch (err) {
       Swal.close()
-      Swal.fire('No se pudo leer el Drive', err instanceof Error ? err.message : 'Error', 'error')
+      showError('No se pudo leer el Drive', err instanceof Error ? err.message : 'Error')
       return
     }
     Swal.close()
@@ -475,7 +475,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       showSuccess('Factura guardada en el Drive', `${res.drive_ruta}/${res.drive_nombre}`)
     } catch (err) {
       Swal.close()
-      Swal.fire('No se pudo subir', err instanceof Error ? err.message : 'Error', 'error')
+      showError('No se pudo subir', err instanceof Error ? err.message : 'Error')
     }
   }
 

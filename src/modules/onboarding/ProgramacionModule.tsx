@@ -21,7 +21,7 @@ import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmen
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../types/onboarding.types'
 import { cargarConceptosTarifa, getEtiquetaTarifa, validarPreciosSemanales, type MapaConceptosTarifa, type TarifaRequerida } from './tarifaConceptos'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { generateContracts } from '../../services/contractService'
 import type { GeneratedDocument } from '../../services/contractService'
 import './ProgramacionModule.css'
@@ -721,7 +721,7 @@ export function ProgramacionModule() {
       setEditingProgramacion(null)
       showSuccess('Guardado', 'Programación actualizada correctamente')
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al guardar', 'error')
+      showError('Error', err.message || 'Error al guardar')
     } finally {
       setSavingQuickEdit(false)
     }
@@ -770,7 +770,7 @@ export function ProgramacionModule() {
       setProgramaciones(prev => prev.filter(p => p.id !== id))
       showSuccess('Eliminado', 'La programacion fue eliminada')
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al eliminar', 'error')
+      showError('Error', err.message || 'Error al eliminar')
     }
   }
 
@@ -808,7 +808,7 @@ export function ProgramacionModule() {
         p.id === id ? { ...p, [field]: value } : p
       ))
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al actualizar', 'error')
+      showError('Error', err.message || 'Error al actualizar')
     }
   }
 
@@ -816,7 +816,7 @@ export function ProgramacionModule() {
   // No se pregunta quién devuelve: eso se define al confirmar en Asignaciones
   const handleEnviarDevolucion = async (prog: ProgramacionOnboardingCompleta) => {
     if (!prog.vehiculo_entregar_id) {
-      Swal.fire('Error', 'La programación no tiene vehículo asignado', 'error')
+      showError('Error', 'La programación no tiene vehículo asignado')
       return
     }
 
@@ -1007,7 +1007,7 @@ export function ProgramacionModule() {
       setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
       showSuccess('Devolución Creada', `${prog.vehiculo_entregar_patente}`)
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al crear devolución', 'error')
+      showError('Error', err.message || 'Error al crear devolución')
     }
   }
 
@@ -1040,7 +1040,7 @@ export function ProgramacionModule() {
 
     // Validar que tenga los datos minimos
     if (!prog.vehiculo_entregar_id && !prog.vehiculo_entregar_patente) {
-      Swal.fire('Error', 'La programacion no tiene vehiculo asignado', 'error')
+      showError('Error', 'La programacion no tiene vehiculo asignado')
       return
     }
 
@@ -1050,7 +1050,7 @@ export function ProgramacionModule() {
     const tieneConductorNocturno = prog.conductor_nocturno_id || prog.conductor_nocturno_nombre
 
     if (!tieneConductorLegacy && !tieneConductorDiurno && !tieneConductorNocturno) {
-      Swal.fire('Error', 'La programacion no tiene conductor asignado', 'error')
+      showError('Error', 'La programacion no tiene conductor asignado')
       return
     }
 
@@ -1597,7 +1597,7 @@ export function ProgramacionModule() {
       showSuccess('Asignación Creada', `Código: ${asignacion.codigo}`)
 
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al crear asignacion', 'error')
+      showError('Error', err.message || 'Error al crear asignacion')
     }
   }
 

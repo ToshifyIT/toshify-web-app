@@ -39,6 +39,7 @@ import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { analizarRegimenToshipass, CODIGO_TOSHIPASS, TOSHIPASS_VIGENCIA_DESDE } from '../utils/toshipass'
+import { showError } from '../../../utils/toast'
 
 const LOTE_IDS = 200
 const PAGINA = 1000
@@ -286,7 +287,7 @@ export function ToshipassTab() {
       setBase(filas)
     } catch (error) {
       console.error('Error cargando Toshipass:', error)
-      Swal.fire('Error', 'No se pudo cargar el seguimiento de Toshipass', 'error')
+      showError('Error', 'No se pudo cargar el seguimiento de Toshipass')
     } finally {
       setLoading(false)
     }
@@ -575,42 +576,6 @@ export function ToshipassTab() {
     <>
       <LoadingOverlay show={loading} message="Cargando Toshipass..." size="lg" />
 
-      <div className="fact-header">
-        <div className="fact-header-left" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="fact-btn fact-btn-secondary" onClick={exportarVisibles}
-            title="Exportar a Excel los conductores visibles, respetando todos los filtros">
-            <Download size={14} /> Exportar
-          </button>
-        </div>
-        <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
-            {([
-              { value: 'todos', label: 'Todos' },
-              { value: 'nuevo', label: 'Nuevos' },
-              { value: 'cambio', label: 'Cambio tarifa' },
-            ] as const).map(opt => (
-              <button key={opt.value} onClick={() => setTipoFilter(opt.value)} style={botonToggle(tipoFilter === opt.value)}>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
-            {([
-              { value: 'todos', label: 'Todos' },
-              { value: 'activo', label: 'Activos' },
-              { value: 'baja', label: 'Baja' },
-            ] as const).map(opt => (
-              <button key={opt.value} onClick={() => setEstadoCondFilter(opt.value)} style={botonToggle(estadoCondFilter === opt.value)}>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <button className="fact-btn fact-btn-secondary" onClick={cargarDatos} title="Volver a cargar los datos">
-            <RefreshCw size={14} /> Actualizar
-          </button>
-        </div>
-      </div>
-
       {/* Métricas: se recalculan con cada filtro (tipo, estado, columnas y búsqueda) */}
       <div className="fact-stats">
         <div className="fact-stats-grid">
@@ -683,6 +648,43 @@ export function ToshipassTab() {
         emptyDescription="No hay conductores en régimen Toshipass para los filtros elegidos"
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
+        headerAction={
+          <div className="fact-header fact-header-inline">
+            <div className="fact-header-left" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="fact-btn fact-btn-secondary" onClick={exportarVisibles}
+                title="Exportar a Excel los conductores visibles, respetando todos los filtros">
+                <Download size={14} /> Exportar
+              </button>
+            </div>
+            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                {([
+                  { value: 'todos', label: 'Todos' },
+                  { value: 'nuevo', label: 'Nuevos' },
+                  { value: 'cambio', label: 'Cambio tarifa' },
+                ] as const).map(opt => (
+                  <button key={opt.value} onClick={() => setTipoFilter(opt.value)} style={botonToggle(tipoFilter === opt.value)}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                {([
+                  { value: 'todos', label: 'Todos' },
+                  { value: 'activo', label: 'Activos' },
+                  { value: 'baja', label: 'Baja' },
+                ] as const).map(opt => (
+                  <button key={opt.value} onClick={() => setEstadoCondFilter(opt.value)} style={botonToggle(estadoCondFilter === opt.value)}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <button className="fact-btn fact-btn-secondary" onClick={cargarDatos} title="Volver a cargar los datos">
+                <RefreshCw size={14} /> Actualizar
+              </button>
+            </div>
+          </div>
+        }
       />
     </>
   )

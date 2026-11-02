@@ -14,7 +14,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import type {
   VehiculoWithRelations,
@@ -624,12 +624,7 @@ export function VehicleManagement() {
 
   const handleCreate = async () => {
     if (!canCreate) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para crear vehículos',
-        confirmButtonColor: '#ff0033'
-      })
+      showError('Sin permisos', 'No tienes permisos para crear vehículos')
       return
     }
 
@@ -888,14 +883,9 @@ export function VehicleManagement() {
       const isDuplicatePatente =
         err?.code === '23505' ||
         (typeof err?.message === 'string' && err.message.includes('vehiculos_patente_key'))
-      Swal.fire({
-        icon: 'error',
-        title: isDuplicatePatente ? 'Patente duplicada' : 'Error',
-        text: isDuplicatePatente
+      showError(isDuplicatePatente ? 'Patente duplicada' : 'Error', isDuplicatePatente
           ? `Ya existe un vehículo registrado con la patente ${formData.patente.toUpperCase()}.`
-          : err.message,
-        confirmButtonColor: '#ff0033'
-      })
+          : err.message)
     } finally {
       setSaving(false)
     }
@@ -903,12 +893,7 @@ export function VehicleManagement() {
 
   const handleUpdate = async () => {
     if (!canUpdate) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para editar vehículos',
-        confirmButtonColor: '#ff0033'
-      })
+      showError('Sin permisos', 'No tienes permisos para editar vehículos')
       return
     }
 
@@ -1229,14 +1214,9 @@ export function VehicleManagement() {
       const isDuplicatePatente =
         err?.code === '23505' ||
         (typeof err?.message === 'string' && err.message.includes('vehiculos_patente_key'))
-      Swal.fire({
-        icon: 'error',
-        title: isDuplicatePatente ? 'Patente duplicada' : 'Error',
-        text: isDuplicatePatente
+      showError(isDuplicatePatente ? 'Patente duplicada' : 'Error', isDuplicatePatente
           ? `Ya existe un vehículo registrado con la patente ${formData.patente.toUpperCase()}.`
-          : err.message,
-        confirmButtonColor: '#ff0033'
-      })
+          : err.message)
     } finally {
       setSaving(false)
     }
@@ -1244,12 +1224,7 @@ export function VehicleManagement() {
 
   const handleDelete = async () => {
     if (!canDelete) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para eliminar vehículos',
-        confirmButtonColor: '#ff0033'
-      })
+      showError('Sin permisos', 'No tienes permisos para eliminar vehículos')
       return
     }
 
@@ -1304,12 +1279,7 @@ export function VehicleManagement() {
       await loadVehiculos(true)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: msg,
-        confirmButtonColor: '#ff0033'
-      })
+      showError('Error', msg)
     } finally {
       setSaving(false)
     }
@@ -2500,7 +2470,7 @@ export function VehicleManagement() {
       const fecha = new Date().toISOString().split('T')[0]
       XLSX.writeFile(wb, `Vehiculos_${fecha}.xlsx`)
     } catch (err: any) {
-      Swal.fire('Error', err?.message || 'No se pudo exportar', 'error')
+      showError('Error', err?.message || 'No se pudo exportar')
     }
   }
 

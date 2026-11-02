@@ -3,7 +3,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box, AlertTriangle, CheckCircle } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
@@ -310,11 +310,7 @@ export function ProductosModule() {
 
       setProductos(productosConStock)
     } catch {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'No se pudieron cargar los productos',
-      })
+      showError('Error', 'No se pudieron cargar los productos')
     } finally {
       setLoading(false)
     }
@@ -349,11 +345,7 @@ export function ProductosModule() {
 
   const handleCreate = async () => {
     if (!canCreate) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para crear productos'
-      })
+      showError('Sin permisos', 'No tienes permisos para crear productos')
       return
     }
 
@@ -386,21 +378,13 @@ export function ProductosModule() {
       resetForm()
       loadProductos()
     } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudo crear el producto',
-      })
+      showError('Error', err.message || 'No se pudo crear el producto')
     }
   }
 
   const handleEdit = async () => {
     if (!canEdit || !selectedProducto) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para editar productos'
-      })
+      showError('Sin permisos', 'No tienes permisos para editar productos')
       return
     }
 
@@ -434,21 +418,13 @@ export function ProductosModule() {
       resetForm()
       loadProductos()
     } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudo actualizar el producto',
-      })
+      showError('Error', err.message || 'No se pudo actualizar el producto')
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!canDelete) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para eliminar productos'
-      })
+      showError('Sin permisos', 'No tienes permisos para eliminar productos')
       return
     }
 
@@ -513,11 +489,7 @@ export function ProductosModule() {
         if (err.message?.includes('foreign key constraint')) {
           errorMessage = 'No se puede eliminar el producto porque está siendo utilizado en otras tablas (inventario, pedidos, etc.)'
         }
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: errorMessage,
-        })
+        showError('Error', errorMessage)
       }
     }
   }
@@ -932,14 +904,6 @@ export function ProductosModule() {
   return (
     <div className="prod-module">
       <LoadingOverlay show={loading} message="Cargando productos..." size="lg" />
-      <div className="prod-header">
-        <div className="prod-header-title">
-          <h1>Productos</h1>
-          <span className="prod-header-subtitle">
-            Catálogo de repuestos, herramientas e insumos usados en stock, pedidos y movimientos.
-          </span>
-        </div>
-      </div>
       {/* Stats Cards - Estilo Bitacora (clickeables como filtros) */}
       <div className="prod-stats">
         <div className="prod-stats-grid">
@@ -1026,7 +990,7 @@ export function ProductosModule() {
       />}
         emptyTitle="No hay productos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Producto".' : ''}
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         headerAction={
           canCreate ? (

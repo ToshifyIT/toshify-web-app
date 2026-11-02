@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import {
   Gauge,
   Users,
@@ -372,7 +372,7 @@ export function ExcesosKmTab() {
 
       const resultado = calcularExcesoKm(formValues.km, valorAlquiler)
       if (!resultado) {
-        Swal.fire('Error', 'No se pudo calcular el exceso', 'error')
+        showError('Error', 'No se pudo calcular el exceso')
         return
       }
 
@@ -399,7 +399,7 @@ export function ExcesosKmTab() {
 
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar el exceso', 'error')
+      showError('Error', error.message || 'No se pudo registrar el exceso')
     }
   }
 
@@ -441,7 +441,7 @@ export function ExcesosKmTab() {
     try {
       const resultado = calcularExcesoKm(nuevoKm, exceso.valor_alquiler)
       if (!resultado) {
-        Swal.fire('Error', 'No se pudo recalcular', 'error')
+        showError('Error', 'No se pudo recalcular')
         return
       }
 
@@ -464,7 +464,7 @@ export function ExcesosKmTab() {
 
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar', 'error')
+      showError('Error', error.message || 'No se pudo actualizar')
     }
   }
 
@@ -498,7 +498,7 @@ export function ExcesosKmTab() {
 
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
+      showError('Error', error.message || 'No se pudo eliminar')
     }
   }
 
@@ -820,40 +820,6 @@ export function ExcesosKmTab() {
   return (
     <>
       {/* Header con filtros */}
-      <div className="fact-header">
-        <div className="fact-header-left">
-          <span className="fact-label">Estado:</span>
-          <select
-            className="fact-select"
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
-          >
-            <option value="todos">Todos</option>
-            <option value="pendiente">Pendientes</option>
-            <option value="aplicado">Aplicados</option>
-          </select>
-
-          <span className="fact-label" style={{ marginLeft: '16px' }}>Período:</span>
-          <select
-            className="fact-select"
-            value={filtroPeriodo}
-            onChange={(e) => setFiltroPeriodo(e.target.value)}
-          >
-            <option value="todos">Todos</option>
-            {periodos.map(p => (
-              <option key={p.id} value={p.id}>
-                Semana {p.semana} / {p.anio}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="fact-header-right">
-          <button className="fact-btn-primary" onClick={crearExceso}>
-            <Plus size={14} />
-            Registrar Exceso
-          </button>
-        </div>
-      </div>
 
       {/* Stats */}
       <div className="fact-stats">
@@ -915,6 +881,42 @@ export function ExcesosKmTab() {
         emptyDescription="No hay excesos registrados. Use el botón 'Registrar Exceso' para agregar uno."
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
+        headerAction={
+          <div className="fact-header fact-header-inline">
+            <div className="fact-header-left">
+              <span className="fact-label">Estado:</span>
+              <select
+                className="fact-select"
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+              >
+                <option value="todos">Todos</option>
+                <option value="pendiente">Pendientes</option>
+                <option value="aplicado">Aplicados</option>
+              </select>
+
+              <span className="fact-label" style={{ marginLeft: '16px' }}>Período:</span>
+              <select
+                className="fact-select"
+                value={filtroPeriodo}
+                onChange={(e) => setFiltroPeriodo(e.target.value)}
+              >
+                <option value="todos">Todos</option>
+                {periodos.map(p => (
+                  <option key={p.id} value={p.id}>
+                    Semana {p.semana} / {p.anio}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="fact-header-right">
+              <button className="fact-btn-primary" onClick={crearExceso}>
+                <Plus size={14} />
+                Registrar Exceso
+              </button>
+            </div>
+          </div>
+        }
       />
     </>
   )

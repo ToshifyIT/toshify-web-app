@@ -14,12 +14,12 @@ import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import { partesART } from '../../../../../utils/fechaArgentina';
 import { claveChecklist } from '../utils/marcacionesPorDia';
 import { getEstadoConductorBadgeStyle, getEstadoConductorDisplay } from '../../../../../utils/conductorUtils';
-import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
 import { ConductorHistorialModal } from './ConductorHistorialModal';
 import { RangoFilter } from './RangoFilter';
 import { parseDecimal } from '../utils/parseDecimal';
+import { showError } from '../../../../../utils/toast'
 
 // Conductor malformado de Wialon: iButton sin nombre (ej: "81-", "142-").
 // Lo mostramos como "Sin conductor" para que no aparezca como basura en el filtro.
@@ -806,7 +806,7 @@ export function MarcacionesTable({
         const marcar = (updates: Parameters<typeof onUpdateChecklist>[1]) => {
           onUpdateChecklist(m.id, updates).catch((err) => {
             console.error('Error guardando checklist:', err);
-            Swal.fire('Error', 'No se pudo guardar el checklist', 'error');
+            showError('Error', 'No se pudo guardar el checklist');
           });
         };
         return (

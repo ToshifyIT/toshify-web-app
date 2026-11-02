@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Download, Calendar as CalendarIcon, List, Eye, Settings } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths } from 'date-fns';
 import Swal from 'sweetalert2';
-import { showSuccess } from '../../utils/toast';
+import { showError, showSuccess } from '../../utils/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../contexts/PermissionsContext';
 import { useSede } from '../../contexts/SedeContext';
@@ -153,7 +153,7 @@ export function VisitasModule() {
         await cargarCatalogos();
         if (!cancelled) await cargarVisitas();
       } catch {
-        Swal.fire('Error', 'No se pudieron cargar los datos', 'error');
+        showError('Error', 'No se pudieron cargar los datos');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -201,7 +201,7 @@ export function VisitasModule() {
   async function handleSaveVisita(formData: VisitaFormData) {
     const sedeId = sedeActualId ?? sedeUsuario?.id;
     if (!sedeId || !user?.id) {
-      Swal.fire('Error', 'No se pudo determinar la sede o el usuario', 'error');
+      showError('Error', 'No se pudo determinar la sede o el usuario');
       return;
     }
 
@@ -251,7 +251,7 @@ export function VisitasModule() {
         setShowDetalleModal(false);
         await cargarVisitas();
       } catch {
-        Swal.fire('Error', 'No se pudo cancelar la cita', 'error');
+        showError('Error', 'No se pudo cancelar la cita');
       }
     } else {
       const result = await Swal.fire({
@@ -270,7 +270,7 @@ export function VisitasModule() {
         setShowDetalleModal(false);
         await cargarVisitas();
       } catch {
-        Swal.fire('Error', 'No se pudo cambiar el estado', 'error');
+        showError('Error', 'No se pudo cambiar el estado');
       }
     }
   }
@@ -297,7 +297,7 @@ export function VisitasModule() {
       setShowDetalleModal(false);
       await cargarVisitas();
     } catch {
-      Swal.fire('Error', 'No se pudo completar la cita', 'error');
+      showError('Error', 'No se pudo completar la cita');
     }
   }
 
@@ -320,7 +320,7 @@ export function VisitasModule() {
       setShowDetalleModal(false);
       await cargarVisitas();
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar la cita', 'error');
+      showError('Error', 'No se pudo eliminar la cita');
     }
   }
 

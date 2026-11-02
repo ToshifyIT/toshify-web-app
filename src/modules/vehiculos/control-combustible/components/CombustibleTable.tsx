@@ -267,7 +267,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
       headerAction={headerAction}
       emptyTitle="Sin datos de combustible"
       emptyDescription="No hay datos sincronizados de Geotab. El sync corre cada hora."
-      pageSize={50}
+      pageSize={100}
     />
   )
 }

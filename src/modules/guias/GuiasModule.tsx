@@ -45,6 +45,7 @@ import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
 import { getEstadoConductorDisplay } from '../../utils/conductorUtils'
 import { normalizeDni } from '../../utils/normalizeDocuments'
+import { showError } from '../../utils/toast'
 
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
@@ -471,7 +472,7 @@ export function GuiasModule() {
       setHistoryNotesModalOpen(true);
 
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar las notas históricas', 'error');
+      showError('Error', 'No se pudieron cargar las notas históricas');
     }
   };
 
@@ -499,7 +500,7 @@ export function GuiasModule() {
       }));
       
     } catch (error) {
-      Swal.fire('Error', 'No se pudieron guardar las anotaciones', 'error');
+      showError('Error', 'No se pudieron guardar las anotaciones');
       throw error;
     }
   };
@@ -538,7 +539,7 @@ export function GuiasModule() {
       loadDrivers(selectedGuiaId);
       loadCurrentWeekMetrics(selectedGuiaId);
     } catch {
-      Swal.fire('Error', 'No se pudo completar la reasignación', 'error');
+      showError('Error', 'No se pudo completar la reasignación');
     }
   };
 
@@ -642,7 +643,7 @@ export function GuiasModule() {
       });
       setHistoryRows(rows);
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el historial', 'error');
+      showError('Error', 'No se pudo cargar el historial');
     }
   };
 

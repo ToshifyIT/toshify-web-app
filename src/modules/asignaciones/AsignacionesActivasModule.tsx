@@ -10,6 +10,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { cargarConceptosTarifa, getPeriodoTarifa } from '../onboarding/tarifaConceptos'
 import { useFlotaSemanaAnterior } from './useFlotaSemanaAnterior'
+import { showError } from '../../utils/toast'
 import './AsignacionesModule.css'
 
 interface AsignacionActiva {
@@ -258,12 +259,7 @@ export function AsignacionesActivasModule() {
         setTodosVehiculosPkgOn(todosLosPkgOn)
       }
     } catch {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'No se pudieron cargar los datos',
-        confirmButtonColor: 'var(--color-primary)'
-      })
+      showError('Error', 'No se pudieron cargar los datos')
     } finally {
       setLoading(false)
     }

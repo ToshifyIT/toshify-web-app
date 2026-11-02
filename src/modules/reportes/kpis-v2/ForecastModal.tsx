@@ -17,6 +17,7 @@ import {
   sumarDias,
 } from './kpisV2Types'
 import { fetchForecastDesde, guardarForecast } from './kpisV2Service'
+import { showError } from '../../../utils/toast'
 
 interface ForecastModalProps {
   sedeId: string | null
@@ -70,7 +71,7 @@ export function ForecastModal({ sedeId, sedeNombre, hoy, onClose, onSaved }: For
       XLSX.writeFile(libro, `forecast-kpis-${sufijo}-${desde}.xlsx`)
     } catch (err) {
       console.error('[DashboardKpisV2] No se pudo generar la plantilla', err)
-      Swal.fire('Error', 'No se pudo generar la plantilla.', 'error')
+      showError('Error', 'No se pudo generar la plantilla.')
     } finally {
       setDescargando(false)
     }
@@ -117,7 +118,7 @@ export function ForecastModal({ sedeId, sedeNombre, hoy, onClose, onSaved }: For
       onClose()
     } catch (err) {
       console.error('[DashboardKpisV2] No se pudo guardar el forecast', err)
-      Swal.fire('Error', 'No se pudo guardar el forecast. No se cambió nada.', 'error')
+      showError('Error', 'No se pudo guardar el forecast. No se cambió nada.')
     } finally {
       setGuardando(false)
     }

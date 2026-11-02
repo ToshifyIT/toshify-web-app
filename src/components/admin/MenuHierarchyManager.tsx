@@ -7,7 +7,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { Menu as MenuIcon, ChevronRight } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import './MenuHierarchyManager.css'
 import './AdminStyles.css'
 
@@ -124,7 +124,7 @@ export function MenuHierarchyManager() {
 
   const handleCreateMenu = async () => {
     if (!menuForm.name || !menuForm.label) {
-      Swal.fire('Error', 'Nombre y etiqueta son requeridos', 'error')
+      showError('Error', 'Nombre y etiqueta son requeridos')
       return
     }
 
@@ -144,7 +144,7 @@ export function MenuHierarchyManager() {
       resetMenuForm()
       await loadData()
     } catch (err: any) {
-      Swal.fire('Error', err.message, 'error')
+      showError('Error', err.message)
     } finally {
       setSaving(false)
     }
@@ -173,7 +173,7 @@ export function MenuHierarchyManager() {
       resetMenuForm()
       await loadData()
     } catch (err: any) {
-      Swal.fire('Error', err.message, 'error')
+      showError('Error', err.message)
     } finally {
       setSaving(false)
     }
@@ -200,7 +200,7 @@ export function MenuHierarchyManager() {
       showSuccess('¡Eliminado!', 'Menú eliminado exitosamente')
       await loadData()
     } catch (err: any) {
-      Swal.fire('Error', err.message, 'error')
+      showError('Error', err.message)
     }
   }
 
@@ -241,7 +241,7 @@ export function MenuHierarchyManager() {
 
   const handleCreateSubmenu = async () => {
     if (!submenuForm.name || !submenuForm.label || !submenuForm.menu_id) {
-      Swal.fire('Error', 'Completa todos los campos requeridos', 'error')
+      showError('Error', 'Completa todos los campos requeridos')
       return
     }
 
@@ -280,7 +280,7 @@ export function MenuHierarchyManager() {
       resetSubmenuForm()
       await loadData()
     } catch (err: any) {
-      Swal.fire('Error', err.message, 'error')
+      showError('Error', err.message)
     } finally {
       setSaving(false)
     }
@@ -343,7 +343,7 @@ export function MenuHierarchyManager() {
       resetSubmenuForm()
       await loadData()
     } catch (err: any) {
-      Swal.fire('Error', err.message, 'error')
+      showError('Error', err.message)
     } finally {
       setSaving(false)
     }
@@ -370,7 +370,7 @@ export function MenuHierarchyManager() {
       showSuccess('¡Eliminado!', 'Submenú eliminado exitosamente')
       await loadData()
     } catch (err: any) {
-      Swal.fire('Error', err.message, 'error')
+      showError('Error', err.message)
     }
   }
 

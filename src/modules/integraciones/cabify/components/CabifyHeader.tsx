@@ -65,7 +65,7 @@ export function CabifyHeader({
   const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
   return (
-    <div className="cabify-header cabify-header-compact">
+    <div className="cabify-header cabify-header-inline">
       <div className="cabify-controls">
         <div className="cabify-semana-nav" role="group" aria-label="Cambiar de semana">
           <button
@@ -129,8 +129,8 @@ export function CabifyHeader({
         )}
       </div>
       {lastUpdate && (
-        <span className="cabify-last-update-compact">
-          Última sync: {formatDateTimeAR(lastUpdate)}
+        <span className="cabify-last-update-compact" title={`Última sincronización: ${formatDateTimeAR(lastUpdate)}`}>
+          Sync {formatDateTimeAR(lastUpdate)}
         </span>
       )}
     </div>

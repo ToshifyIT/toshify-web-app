@@ -24,7 +24,7 @@ import { useConductoresEmbajador } from '../../hooks/useConductoresEmbajador'
 import Swal from 'sweetalert2'
 import { ESTADO_DESCARTADO, lineaDescarte, pedirMotivoDescarte } from './motivoDescarte'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import type { Lead, LeadFormData } from '../../types/leads.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -816,7 +816,7 @@ export function LeadsModule() {
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updateData } as Lead : l))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
-      Swal.fire('Error', `No se pudo actualizar: ${msg}`, 'error')
+      showError('Error', `No se pudo actualizar: ${msg}`)
     }
   }
 
@@ -844,7 +844,7 @@ export function LeadsModule() {
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado, estado_manual_at: now, updated_at: now, ...extra } : l))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
-      Swal.fire('Error', `No se pudo cambiar el estado: ${msg}`, 'error')
+      showError('Error', `No se pudo cambiar el estado: ${msg}`)
     }
   }
 
@@ -1735,7 +1735,7 @@ export function LeadsModule() {
       if (recalcular && creado?.id) void ubicarLeadGuardado({ ...(fields as Partial<Lead>), id: creado.id } as Lead)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo crear el lead'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     } finally {
       setSaving(false)
     }
@@ -1766,7 +1766,7 @@ export function LeadsModule() {
       if (recalcular) void ubicarLeadGuardado({ ...selectedLead, ...(fields as Partial<Lead>) } as Lead)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo actualizar'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     } finally {
       setSaving(false)
     }
@@ -1784,7 +1784,7 @@ export function LeadsModule() {
       loadLeads()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo eliminar'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     } finally {
       setSaving(false)
     }
@@ -1888,7 +1888,7 @@ export function LeadsModule() {
     } catch (err) {
       if (esFusion) Swal.close()
       const msg = err instanceof Error ? err.message : 'No se pudo convertir el lead a conductor'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     } finally {
       setSaving(false)
     }
@@ -1904,7 +1904,7 @@ export function LeadsModule() {
     const { data: conductor, error: errC } = await supabase
       .from('conductores').select('*').eq('id', previo.conductor.id).maybeSingle()
     if (errC || !conductor) {
-      Swal.fire('Error', 'No se encontró el conductor', 'error')
+      showError('Error', 'No se encontró el conductor')
       return
     }
     const c = conductor as Record<string, unknown>
@@ -1940,7 +1940,7 @@ export function LeadsModule() {
       showSuccess('Conductor reactivado', `${lead.nombre_completo || 'El lead'} quedó como Reingreso`)
       loadLeads()
     } catch (err) {
-      Swal.fire('Error', err instanceof Error ? err.message : 'No se pudo reactivar', 'error')
+      showError('Error', err instanceof Error ? err.message : 'No se pudo reactivar')
     } finally {
       setSaving(false)
     }
@@ -2035,7 +2035,7 @@ export function LeadsModule() {
       XLSX.writeFile(wb, `leads_export_${new Date().toISOString().split('T')[0]}.xlsx`)
       Swal.close()
     } catch {
-      Swal.fire('Error', 'No se pudo exportar', 'error')
+      showError('Error', 'No se pudo exportar')
     }
   }
 
@@ -2230,7 +2230,7 @@ export function LeadsModule() {
       let jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
 
       if (jsonData.length === 0) {
-        Swal.fire('Error', 'El archivo está vacío o no tiene datos.', 'error')
+        showError('Error', 'El archivo está vacío o no tiene datos.')
         return
       }
 
@@ -2241,7 +2241,7 @@ export function LeadsModule() {
       if (allEmpty && jsonData.length > 1) {
         jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null, range: 1 })
         if (jsonData.length === 0) {
-          Swal.fire('Error', 'El archivo está vacío o no tiene datos.', 'error')
+          showError('Error', 'El archivo está vacío o no tiene datos.')
           return
         }
       }
@@ -2294,7 +2294,7 @@ export function LeadsModule() {
         const tieneNombre = headersNorm.includes('NOMBRE')
         const tieneDni = headersNorm.includes('DNI')
         if (!tieneNombre && !tieneDni) {
-          Swal.fire('Error', 'El archivo formato Damaro debe tener al menos la columna NOMBRE o DNI.', 'error')
+          showError('Error', 'El archivo formato Damaro debe tener al menos la columna NOMBRE o DNI.')
           return
         }
       } else {
@@ -2433,7 +2433,7 @@ export function LeadsModule() {
         })
 
       if (dbRows.length === 0) {
-        Swal.fire('Error', 'No se encontraron filas con datos válidos en el archivo.', 'error')
+        showError('Error', 'No se encontraron filas con datos válidos en el archivo.')
         return
       }
 
@@ -2683,7 +2683,7 @@ export function LeadsModule() {
     } catch (err) {
       Swal.close()
       const msg = err instanceof Error ? err.message : 'Error al procesar el archivo'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     }
   }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { Plus, Edit2, Trash2, Filter } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -361,7 +361,7 @@ export function ConceptosFacturacionTab() {
       showSuccess('Concepto creado')
       cargarConceptos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo crear el concepto', 'error')
+      showError('Error', error.message || 'No se pudo crear el concepto')
     }
   }
 
@@ -611,7 +611,7 @@ export function ConceptosFacturacionTab() {
       showSuccess('Concepto actualizado')
       cargarConceptos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar', 'error')
+      showError('Error', error.message || 'No se pudo actualizar')
     }
   }
 
@@ -634,7 +634,7 @@ export function ConceptosFacturacionTab() {
       showSuccess('Eliminado')
       cargarConceptos(true)
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
+      showError('Error', error.message || 'No se pudo eliminar')
     }
   }
 
