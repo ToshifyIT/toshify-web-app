@@ -4,8 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
-import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { Plus, Clock, FileText, DollarSign, AlertTriangle, X, ExternalLink } from 'lucide-react'
 import type { SiniestroSeguimientoConEstados, SiniestroCompleto } from '../../../types/siniestros.types'
 import type { VehiculoSimple, ConductorSimple } from '../../../types/incidencias.types'
@@ -291,22 +290,22 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
 
   async function handleGuardar() {
     if (!formData.descripcion.trim()) {
-      Swal.fire('Error', 'La descripcion es requerida', 'error')
+      showError('Error', 'La descripcion es requerida')
       return
     }
 
     if (formData.cobrar_conductor && (!formData.monto || formData.monto <= 0)) {
-      Swal.fire('Error', 'Debe ingresar un monto para cobrar al conductor', 'error')
+      showError('Error', 'Debe ingresar un monto para cobrar al conductor')
       return
     }
 
     if (formData.cobrar_conductor && !siniestro.conductor_id) {
-      Swal.fire('Error', 'El siniestro debe tener un conductor asignado para generar el cobro', 'error')
+      showError('Error', 'El siniestro debe tener un conductor asignado para generar el cobro')
       return
     }
 
     if (formData.cobrar_conductor && !siniestro.vehiculo_id) {
-      Swal.fire('Error', 'El siniestro debe tener un vehiculo asignado para generar el cobro', 'error')
+      showError('Error', 'El siniestro debe tener un vehiculo asignado para generar el cobro')
       return
     }
 
@@ -338,7 +337,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
       cargarSeguimientos()
       onReload()
     } catch (error: any) {
-      Swal.fire('Error', error?.message || 'No se pudo guardar el seguimiento', 'error')
+      showError('Error', error?.message || 'No se pudo guardar el seguimiento')
     } finally {
       setSaving(false)
     }
@@ -346,23 +345,23 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
 
   async function handleGuardarIncidencia() {
     if (!incidenciaForm.conductor_id) {
-      Swal.fire('Error', 'Debe seleccionar un conductor', 'error')
+      showError('Error', 'Debe seleccionar un conductor')
       return
     }
     if (!incidenciaForm.fecha) {
-      Swal.fire('Error', 'La fecha es requerida', 'error')
+      showError('Error', 'La fecha es requerida')
       return
     }
     if (!incidenciaForm.estado_id) {
-      Swal.fire('Error', 'Debe seleccionar un estado', 'error')
+      showError('Error', 'Debe seleccionar un estado')
       return
     }
     if (!incidenciaForm.tipo_cobro_descuento_id) {
-      Swal.fire('Error', 'Debe seleccionar un tipo de incidencia', 'error')
+      showError('Error', 'Debe seleccionar un tipo de incidencia')
       return
     }
     if (!incidenciaForm.turno) {
-      Swal.fire('Error', 'Debe seleccionar una modalidad (turno)', 'error')
+      showError('Error', 'Debe seleccionar una modalidad (turno)')
       return
     }
 
@@ -457,7 +456,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
       cargarSeguimientos()
       onReload()
     } catch (error: any) {
-      Swal.fire('Error', error?.message || 'No se pudo guardar la incidencia', 'error')
+      showError('Error', error?.message || 'No se pudo guardar la incidencia')
     } finally {
       setSavingIncidencia(false)
     }

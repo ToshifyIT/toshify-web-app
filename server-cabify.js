@@ -104,6 +104,104 @@ export async function obtenerTokenCabify() {
   return tokenCache
 }
 
+/* ------------------------- Token según la cuenta (flota) ------------------------- */
+// Cada flota tiene su propia cuenta de Cabify (tabla cabify_cuentas: CG, 44dreams...).
+// Para actuar sobre un conductor (ej. activar/desactivar efectivo) hay que usar el token
+// de la cuenta donde ese conductor existe: se elige por su cabify_company_id, igual que el
+// RPA py-cabify-efectivo. Las claves se leen del .env con los nombres guardados en la tabla.
+
+const cacheCuentas = new Map() // codigo -> { access_token, expires_at, companies: Set, companies_at }
+const UNA_HORA = 60 * 60 * 1000
+
+async function cuentasCabifyActivas() {
+  const url = process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return []
+  const res = await fetch(
+    `${url}/rest/v1/cabify_cuentas?select=codigo,nombre,env_usuario,env_password,orden&activa=eq.true&order=orden.asc`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } },
+  )
+  if (!res.ok) return []
+  return res.json()
+}
+
+async function tokenDeCuenta(cuenta) {
+  const previo = cacheCuentas.get(cuenta.codigo)
+  if (previo && Date.now() < previo.expires_at) return previo
+  const env = process.env
+  const base = credencialesCabify() // client_id / client_secret son compartidos
+  // Acepta también la forma CABIFY_44_USERNAME para CABIFY_USERNAME_44
+  const variante = (n) => n.replace(/^CABIFY_(USERNAME|PASSWORD)_(\w+)$/, 'CABIFY_$2_$1')
+  const username = env[cuenta.env_usuario] || env[variante(cuenta.env_usuario)] || env['VITE_' + cuenta.env_usuario]
+  const password = env[cuenta.env_password] || env[variante(cuenta.env_password)] || env['VITE_' + cuenta.env_password]
+  if (!username || !password) {
+    throw new Error(`Faltan ${cuenta.env_usuario} / ${cuenta.env_password} en el .env del servidor web`)
+  }
+  const res = await fetch('https://cabify.com/auth/api/authorization', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'password',
+      client_id: base.client_id,
+      client_secret: base.client_secret,
+      username,
+      password,
+    }),
+  })
+  if (!res.ok) throw new Error(`Cabify rechazó la cuenta ${cuenta.nombre} (${res.status})`)
+  const data = await res.json()
+  const expiresIn = Number(data.expires_in) || 3600
+  const entrada = {
+    access_token: data.access_token,
+    expires_at: Date.now() + (expiresIn - 300) * 1000,
+    companies: previo?.companies ?? null,
+    companies_at: previo?.companies_at ?? 0,
+  }
+  cacheCuentas.set(cuenta.codigo, entrada)
+  return entrada
+}
+
+async function companiesDeCuenta(cuenta, entrada) {
+  if (entrada.companies && Date.now() - entrada.companies_at < UNA_HORA) return entrada.companies
+  const res = await fetch('https://partners.cabify.com/api/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${entrada.access_token}` },
+    body: JSON.stringify({ query: 'query { metafleetCompanies { companyIds } }' }),
+  })
+  const data = await res.json().catch(() => ({}))
+  entrada.companies = new Set(data?.data?.metafleetCompanies?.companyIds || [])
+  entrada.companies_at = Date.now()
+  return entrada.companies
+}
+
+/**
+ * Token de la cuenta de Cabify a la que pertenece la company del conductor.
+ * Devuelve { access_token, cuenta } o lanza un error que se puede mostrar al usuario.
+ */
+export async function obtenerTokenCabifyParaCompany(companyId) {
+  const cuentas = await cuentasCabifyActivas()
+  if (cuentas.length === 0) {
+    // Sin tabla o sin service key: comportamiento anterior (cuenta principal)
+    const t = await obtenerTokenCabify()
+    return { access_token: t.access_token, cuenta: 'principal' }
+  }
+  const errores = []
+  for (const cuenta of cuentas) {
+    try {
+      const entrada = await tokenDeCuenta(cuenta)
+      const companies = await companiesDeCuenta(cuenta, entrada)
+      if (companies.has(companyId)) return { access_token: entrada.access_token, cuenta: cuenta.nombre }
+    } catch (err) {
+      errores.push(err instanceof Error ? err.message : String(err))
+    }
+  }
+  throw new Error(
+    errores.length
+      ? `Ninguna cuenta de Cabify disponible contiene a este conductor. ${errores.join(' · ')}`
+      : 'El conductor no pertenece a ninguna cuenta de Cabify activa (Parámetros › Grupos de flota › Cuentas de Cabify).',
+  )
+}
+
 /** Exige una sesión válida de Toshify (cualquier usuario). Devuelve el usuario o null. */
 export async function requireUsuario(req, res) {
   const url = process.env.VITE_SUPABASE_URL

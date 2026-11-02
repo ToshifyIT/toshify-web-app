@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import {
   Ticket,
   CheckCircle,
@@ -275,7 +275,7 @@ export function TicketsFavorTab() {
       showSuccess('Ticket Creado')
       cargarTickets()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo crear el ticket', 'error')
+      showError('Error', error.message || 'No se pudo crear el ticket')
     }
   }
 
@@ -302,7 +302,7 @@ export function TicketsFavorTab() {
       showSuccess('Ticket Aprobado')
       cargarTickets()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo aprobar', 'error')
+      showError('Error', error.message || 'No se pudo aprobar')
     }
   }
 
@@ -330,7 +330,7 @@ export function TicketsFavorTab() {
       showSuccess('Ticket Rechazado')
       cargarTickets()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
+      showError('Error', error.message || 'No se pudo rechazar')
     }
   }
 
@@ -373,7 +373,7 @@ export function TicketsFavorTab() {
       showSuccess('Ticket Aplicado')
       cargarTickets()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo aplicar', 'error')
+      showError('Error', error.message || 'No se pudo aplicar')
     }
   }
 
@@ -572,31 +572,6 @@ export function TicketsFavorTab() {
   return (
     <>
       {/* Header con filtros */}
-      <div className="fact-header">
-        <div className="fact-header-left">
-          <span className="fact-label">Estado:</span>
-          <select className="fact-select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
-            <option value="todos">Todos</option>
-            <option value="pendiente">Pendientes</option>
-            <option value="aprobado">Aprobados</option>
-            <option value="aplicado">Aplicados</option>
-            <option value="rechazado">Rechazados</option>
-          </select>
-          <span className="fact-label" style={{ marginLeft: '16px' }}>Tipo:</span>
-          <select className="fact-select" value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
-            <option value="todos">Todos</option>
-            {TIPOS_TICKET_FAVOR.map(t => (
-              <option key={t.codigo} value={t.codigo}>{t.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div className="fact-header-right">
-          <button className="fact-btn fact-btn-primary" onClick={crearTicket}>
-            <Plus size={14} />
-            Nuevo Ticket
-          </button>
-        </div>
-      </div>
 
       {/* Stats */}
       <div className="fact-stats">
@@ -651,6 +626,33 @@ export function TicketsFavorTab() {
         emptyDescription="No hay tickets registrados"
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
+        headerAction={
+          <div className="fact-header fact-header-inline">
+            <div className="fact-header-left">
+              <span className="fact-label">Estado:</span>
+              <select className="fact-select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
+                <option value="todos">Todos</option>
+                <option value="pendiente">Pendientes</option>
+                <option value="aprobado">Aprobados</option>
+                <option value="aplicado">Aplicados</option>
+                <option value="rechazado">Rechazados</option>
+              </select>
+              <span className="fact-label" style={{ marginLeft: '16px' }}>Tipo:</span>
+              <select className="fact-select" value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
+                <option value="todos">Todos</option>
+                {TIPOS_TICKET_FAVOR.map(t => (
+                  <option key={t.codigo} value={t.codigo}>{t.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div className="fact-header-right">
+              <button className="fact-btn fact-btn-primary" onClick={crearTicket}>
+                <Plus size={14} />
+                Nuevo Ticket
+              </button>
+            </div>
+          </div>
+        }
       />
     </>
   )

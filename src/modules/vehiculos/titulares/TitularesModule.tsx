@@ -9,7 +9,7 @@ import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { ExcelColumnFilter, useExcelFilters } from '../../../components/ui/DataTable/ExcelColumnFilter'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import type { Titular, TitularFormData, TitularStats, VehiculoTitular } from './types/titulares.types'
 import '../VehicleManagement.css'
 
@@ -288,7 +288,7 @@ export function TitularesModule() {
       setFormData({ ...EMPTY_FORM })
       loadTitulares()
     } catch (e: any) {
-      Swal.fire('Error', e.message, 'error')
+      showError('Error', e.message)
     } finally {
       setSaving(false)
     }
@@ -392,7 +392,7 @@ export function TitularesModule() {
       loadTitulares()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error desconocido'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     } finally {
       setSaving(false)
     }
@@ -464,7 +464,7 @@ export function TitularesModule() {
       loadTitulares()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error desconocido'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     }
   }
 
@@ -602,7 +602,7 @@ export function TitularesModule() {
       showSuccess('Oferta de locacion creada. Completa los datos desde el modulo Oferta Locacion.')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     } finally {
       setCreatingOferta(null)
     }

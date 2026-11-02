@@ -10,7 +10,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react'
-import { Users, UserX, ChevronDown, ChevronUp, Database } from 'lucide-react'
+import { Users, UserX, ChevronDown, ChevronUp } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
 
@@ -221,7 +221,6 @@ import {
   OCCUPATION_RATE_THRESHOLDS,
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
-  DATA_SOURCE_LABELS,
   UI_TEXT,
 } from './constants/cabify.constants'
 
@@ -253,7 +252,6 @@ export function CabifyModule() {
     drivers,
     queryState,
     loadingProgress,
-    dataSource,
     asignaciones,
     availableWeeks,
     selectedWeek,
@@ -360,13 +358,10 @@ export function CabifyModule() {
 
   return (
     <div className="module-container">
-      <CabifyHeader
-        lastUpdate={queryState.lastUpdate}
-        isLoading={isLoading}
-        availableWeeks={availableWeeks}
-        selectedWeek={selectedWeek}
-        onWeekChange={setSelectedWeek}
-      />
+      {/* Orden estándar de los módulos: indicadores arriba, después buscador + filtros en una línea */}
+      {!isLoading && hasHistoricalDrivers && (
+        <StatsAccordion estadisticas={estadisticas} />
+      )}
 
       <ProgressBanner
         isVisible={isLoading && hasHistoricalDrivers}
@@ -378,17 +373,6 @@ export function CabifyModule() {
         error={queryState.error}
         onRetry={refreshData}
       />
-
-      <DataSourceInfo
-        isVisible={!hasError && hasHistoricalDrivers}
-        dataSource={dataSource}
-        driverCount={activeAssignedDrivers.length}
-        periodLabel={periodLabel}
-      />
-
-      {!isLoading && hasHistoricalDrivers && (
-        <StatsAccordion estadisticas={estadisticas} />
-      )}
 
       <div className="cabify-table-container">
         <DataTable
@@ -405,6 +389,15 @@ export function CabifyModule() {
           pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
           stickyLeftColumns={2}
           externalFilters={externalFilters}
+          headerAction={
+            <CabifyHeader
+              lastUpdate={queryState.lastUpdate}
+              isLoading={isLoading}
+              availableWeeks={availableWeeks}
+              selectedWeek={selectedWeek}
+              onWeekChange={setSelectedWeek}
+            />
+          }
         />
       </div>
 
@@ -466,26 +459,6 @@ function ErrorState({ isVisible, error, onRetry }: ErrorStateProps) {
       <button onClick={onRetry} className="btn-secondary">
         {UI_TEXT.RETRY}
       </button>
-    </div>
-  )
-}
-
-interface DataSourceInfoProps {
-  readonly isVisible: boolean
-  readonly dataSource: string
-  readonly driverCount: number
-  readonly periodLabel: string
-}
-
-function DataSourceInfo({ isVisible, dataSource, driverCount, periodLabel }: DataSourceInfoProps) {
-  if (!isVisible) return null
-
-  return (
-    <div className={`cabify-info-card ${dataSource}`}>
-      <Database size={14} />
-      <span>
-        <strong>{DATA_SOURCE_LABELS[dataSource]}</strong> {driverCount} conductores - {periodLabel}
-      </span>
     </div>
   )
 }

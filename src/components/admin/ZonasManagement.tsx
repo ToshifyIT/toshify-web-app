@@ -9,8 +9,7 @@ import { DataTable } from '../ui/DataTable/DataTable'
 import { ExcelColumnFilter, useExcelFilters } from '../ui/DataTable/ExcelColumnFilter'
 import { ActionsMenu } from '../ui/ActionsMenu'
 import type { ColumnDef } from '@tanstack/react-table'
-import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { ZonaTiposManager } from './ZonaTiposManager'
 import { useAuth } from '../../contexts/AuthContext'
 import {
@@ -256,19 +255,19 @@ export function ZonasManagement() {
   // CRUD handlers
   const handleCreate = async () => {
     if (!formData.nombre.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El nombre es requerido' })
+      showError('Error', 'El nombre es requerido')
       return
     }
     if (!formData.tipo_id) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'Selecciona un tipo de zona' })
+      showError('Error', 'Selecciona un tipo de zona')
       return
     }
     if (formData.poligono.length < 3) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'Dibuja un poligono con al menos 3 puntos' })
+      showError('Error', 'Dibuja un poligono con al menos 3 puntos')
       return
     }
     if (formData.mostrar_advertencia && !formData.mensaje_advertencia.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El mensaje de advertencia es requerido' })
+      showError('Error', 'El mensaje de advertencia es requerido')
       return
     }
 
@@ -294,7 +293,7 @@ export function ZonasManagement() {
       setFormData(initialFormData)
       await loadZonas()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      showError('Error', err.message)
     } finally {
       setCreating(false)
     }
@@ -304,19 +303,19 @@ export function ZonasManagement() {
     if (!selectedZona) return
 
     if (!formData.nombre.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El nombre es requerido' })
+      showError('Error', 'El nombre es requerido')
       return
     }
     if (!formData.tipo_id) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'Selecciona un tipo de zona' })
+      showError('Error', 'Selecciona un tipo de zona')
       return
     }
     if (formData.poligono.length < 3) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El poligono debe tener al menos 3 puntos' })
+      showError('Error', 'El poligono debe tener al menos 3 puntos')
       return
     }
     if (formData.mostrar_advertencia && !formData.mensaje_advertencia.trim()) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'El mensaje de advertencia es requerido' })
+      showError('Error', 'El mensaje de advertencia es requerido')
       return
     }
 
@@ -344,7 +343,7 @@ export function ZonasManagement() {
       setFormData(initialFormData)
       await loadZonas()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      showError('Error', err.message)
     } finally {
       setCreating(false)
     }
@@ -367,7 +366,7 @@ export function ZonasManagement() {
       setSelectedZona(null)
       await loadZonas()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      showError('Error', err.message)
     } finally {
       setCreating(false)
     }
@@ -391,7 +390,7 @@ export function ZonasManagement() {
       )
       await loadZonas()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      showError('Error', err.message)
     }
   }
 

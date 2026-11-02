@@ -2,8 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import Swal from 'sweetalert2'
-import { showSuccess } from '../utils/toast'
+import { showError, showSuccess } from '../utils/toast'
 
 interface Props {
   onSuccess: () => void
@@ -67,12 +66,7 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
 
       onSuccess()
     } catch (error: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'No se pudo cambiar la contraseña',
-        confirmButtonColor: '#FF0033'
-      })
+      showError('Error', error.message || 'No se pudo cambiar la contraseña')
     } finally {
       setLoading(false)
     }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } fr
 import { createPortal } from 'react-dom'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { type ColumnDef, type Table, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -307,7 +307,7 @@ export function RangoSeguimientoPage() {
       showSuccess('Rango creado correctamente')
       cargarRangos()
     } catch {
-      Swal.fire('Error', 'No se pudo crear el rango', 'error')
+      showError('Error', 'No se pudo crear el rango')
     }
   }
 
@@ -399,7 +399,7 @@ export function RangoSeguimientoPage() {
       showSuccess('Rango actualizado correctamente')
       cargarRangos()
     } catch {
-      Swal.fire('Error', 'No se pudo actualizar el rango', 'error')
+      showError('Error', 'No se pudo actualizar el rango')
     }
   }
 
@@ -420,7 +420,7 @@ export function RangoSeguimientoPage() {
       showSuccess('Rango eliminado')
       cargarRangos()
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar el rango', 'error')
+      showError('Error', 'No se pudo eliminar el rango')
     }
   }
 

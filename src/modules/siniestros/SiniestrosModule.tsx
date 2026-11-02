@@ -7,7 +7,7 @@ import { useSede } from '../../contexts/SedeContext'
 import { TimeInput24h } from '../../components/ui/TimeInput24h'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import {
   Plus,
   Eye,
@@ -206,7 +206,7 @@ export function SiniestrosModule() {
         }
       }
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
+      showError('Error', 'No se pudieron cargar los datos')
     } finally {
       setLoading(false)
     }
@@ -297,7 +297,6 @@ export function SiniestrosModule() {
     })
   }
 
-
   // Listas de valores únicos para filtros
   const patentesUnicas = useMemo(() =>
     [...new Set(siniestros.map(s => s.vehiculo_patente).filter(Boolean))].sort() as string[]
@@ -314,7 +313,6 @@ export function SiniestrosModule() {
   const estadosUnicos = useMemo(() =>
     [...new Set(siniestros.map(s => s.estado_nombre).filter(Boolean))].sort() as string[]
   , [siniestros])
-
 
   const customGlobalFilter = useMemo<FilterFn<SiniestroCompleto>>(() => {
     return (row, _columnId, filterValue) => {
@@ -352,7 +350,6 @@ export function SiniestrosModule() {
       return false
     }
   }, [])
-
 
   const siniestrosSemana = useMemo(() => {
     if (!dateRangeSemana || dateRangeSemana.type === 'all') {
@@ -643,7 +640,7 @@ export function SiniestrosModule() {
 
   async function handleGuardar() {
     if (!formData.categoria_id || !formData.estado_id || !formData.fecha_siniestro) {
-      Swal.fire('Error', 'Complete los campos requeridos', 'error')
+      showError('Error', 'Complete los campos requeridos')
       return
     }
 
@@ -884,7 +881,7 @@ export function SiniestrosModule() {
       cargarDatos()
     } catch (error: any) {
       const errorMsg = error?.message || error?.details || error?.hint || 'Error desconocido'
-      Swal.fire('Error', `No se pudo guardar: ${errorMsg}`, 'error')
+      showError('Error', `No se pudo guardar: ${errorMsg}`)
     } finally {
       setSaving(false)
     }
@@ -899,7 +896,7 @@ export function SiniestrosModule() {
   // Habilitar vehículo: cambiar estado a PKG_ON_BASE
   async function handleHabilitarVehiculo(siniestro: SiniestroCompleto) {
     if (!siniestro.vehiculo_id) {
-      Swal.fire('Error', 'Este siniestro no tiene vehículo asociado', 'error')
+      showError('Error', 'Este siniestro no tiene vehículo asociado')
       return
     }
 
@@ -944,7 +941,7 @@ export function SiniestrosModule() {
 
       cargarDatos()
     } catch {
-      Swal.fire('Error', 'No se pudo habilitar el vehículo', 'error')
+      showError('Error', 'No se pudo habilitar el vehículo')
     }
   }
 
@@ -1124,31 +1121,6 @@ export function SiniestrosModule() {
         </div>
       </div>
 
-      {/* Período + acciones (sin pestañas: el módulo tiene una sola vista) */}
-      <div className="siniestros-tabs-row">
-        <div className="siniestros-periodo">
-          <DateRangeSelector
-            selectedRange={dateRangeSemana}
-            onRangeChange={setDateRangeSemana}
-            showAllOption
-            placeholder="Semana actual"
-          />
-        </div>
-        <div className="tabs-actions">
-          <VerLogsButton tablas={['siniestros', 'siniestros_seguimientos']} label="Siniestros" />
-          <button className="btn-secondary" onClick={handleExportarExcel} title="Exportar a Excel">
-            <Download size={16} />
-            Exportar
-          </button>
-          <button
-            className="btn-primary"
-            onClick={handleNuevoSiniestro}
-          >
-            <Plus size={16} />
-            Nuevo Siniestro
-          </button>
-        </div>
-      </div>
 
       {/* Tabla de siniestros */}
       <DataTable
@@ -1163,6 +1135,33 @@ export function SiniestrosModule() {
         globalFilterFn={customGlobalFilter}
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
+        headerAction={
+          /* Período + acciones, en la misma línea que el buscador */
+          <div className="siniestros-tabs-row header-controls-inline">
+            <div className="siniestros-periodo">
+              <DateRangeSelector
+                selectedRange={dateRangeSemana}
+                onRangeChange={setDateRangeSemana}
+                showAllOption
+                placeholder="Semana actual"
+              />
+            </div>
+            <div className="tabs-actions">
+              <VerLogsButton tablas={['siniestros', 'siniestros_seguimientos']} label="Siniestros" />
+              <button className="btn-secondary" onClick={handleExportarExcel} title="Exportar a Excel">
+                <Download size={16} />
+                Exportar
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleNuevoSiniestro}
+              >
+                <Plus size={16} />
+                Nuevo Siniestro
+              </button>
+            </div>
+          </div>
+        }
       />
 
       {/* Modal */}

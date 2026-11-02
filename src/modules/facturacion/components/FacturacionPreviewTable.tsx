@@ -12,7 +12,7 @@ import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 
 // Tipo para conceptos pendientes de enlazar
 export interface ConceptoPendiente {
@@ -736,7 +736,7 @@ export function FacturacionPreviewTable({
         showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
       }
     } catch {
-      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+      showError('Error', 'No se pudieron guardar los cambios')
     } finally {
       setSyncing(false)
     }

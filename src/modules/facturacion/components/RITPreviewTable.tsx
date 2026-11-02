@@ -7,7 +7,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { ArrowLeft, Loader2, Search, RotateCcw, Filter, X, RefreshCw, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 
 // Tipo para cada fila del preview
@@ -249,7 +249,7 @@ export function RITPreviewTable({
         showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
       }
     } catch {
-      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+      showError('Error', 'No se pudieron guardar los cambios')
     } finally {
       setSyncing(false)
     }
@@ -449,7 +449,7 @@ export function RITPreviewTable({
 
       showSuccess('Exportación exitosa', `Se descargó: ${nombreArchivo}`)
     } catch {
-      Swal.fire('Error', 'No se pudo exportar el archivo', 'error')
+      showError('Error', 'No se pudo exportar el archivo')
     } finally {
       setExporting(false)
     }

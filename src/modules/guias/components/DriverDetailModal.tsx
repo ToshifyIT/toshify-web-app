@@ -6,6 +6,7 @@ import './DriverDetailModal.css';
 import Swal from 'sweetalert2';
 import { IncidentsHistory } from './IncidentsHistory';
 import { AnotacionesEditorModal, type Nota } from './AnotacionesEditorModal';
+import { showError } from '../../../utils/toast'
 
 interface DriverDetailModalProps {
   driver: ConductorWithRelations & {
@@ -264,7 +265,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       onClose();
 
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo guardar', 'error');
+      showError('Error', error.message || 'No se pudo guardar');
     } finally {
       setIsSaving(false);
     }
@@ -272,7 +273,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
 
   const handleSaveAnotaciones = async (nuevasAnotaciones: Nota[]) => {
     if (!driver.historial_id) {
-      Swal.fire('Error', 'Este registro no tiene historial asociado.', 'error');
+      showError('Error', 'Este registro no tiene historial asociado.');
       return;
     }
 
@@ -289,7 +290,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       setEditingNoteIndex(null); // Reset editing index
       
     } catch (error) {
-      Swal.fire('Error', 'No se pudieron guardar las anotaciones', 'error');
+      showError('Error', 'No se pudieron guardar las anotaciones');
       throw error;
     }
   };

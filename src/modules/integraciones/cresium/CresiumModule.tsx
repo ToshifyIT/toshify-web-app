@@ -39,7 +39,7 @@ import type {
   PropuestasAlegraResponse,
 } from '../../../services/cresiumService'
 import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
-import { showSuccess, showError } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import './CresiumModule.css'
 
@@ -275,7 +275,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       await cargar()
     } catch (err) {
       Swal.close()
-      Swal.fire('Error', err instanceof Error ? err.message : 'No se pudo actualizar', 'error')
+      showError('Error', err instanceof Error ? err.message : 'No se pudo actualizar')
     }
   }
 
@@ -345,7 +345,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       }
     } catch (err) {
       Swal.close()
-      Swal.fire('Error', err instanceof Error ? err.message : 'No se pudo cargar en Alegra', 'error')
+      showError('Error', err instanceof Error ? err.message : 'No se pudo cargar en Alegra')
     }
     setElecciones({})
     await cargar(true)
@@ -402,7 +402,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       await cargar()
     } catch (err) {
       Swal.close()
-      Swal.fire('No se pudo conciliar', err instanceof Error ? err.message : 'Error', 'error')
+      showError('No se pudo conciliar', err instanceof Error ? err.message : 'Error')
     }
   }
 

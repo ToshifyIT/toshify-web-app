@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Check, Loader2, Tag } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { showSuccess } from '../../../utils/toast';
+import { showError, showSuccess } from '../../../utils/toast';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { VisitaCategoria, TipoVisita } from '../../../types/visitas.types';
@@ -57,7 +57,7 @@ export function CategoriasSubTab() {
     try {
       setData(await fetchAllCategorias());
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar las categorías', 'error');
+      showError('Error', 'No se pudieron cargar las categorías');
     } finally {
       setLoading(false);
     }
@@ -104,13 +104,13 @@ export function CategoriasSubTab() {
       showSuccess('Categoría eliminada');
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar. Verifique que no tenga motivos o citas asociadas.', 'error');
+      showError('Error', 'No se pudo eliminar. Verifique que no tenga motivos o citas asociadas.');
     }
   }
 
   async function handleSave() {
     if (!form.nombre.trim()) {
-      Swal.fire('Error', 'El nombre es requerido', 'error');
+      showError('Error', 'El nombre es requerido');
       return;
     }
     setSaving(true);
@@ -145,7 +145,7 @@ export function CategoriasSubTab() {
       setShowModal(false);
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo guardar la categoría', 'error');
+      showError('Error', 'No se pudo guardar la categoría');
     } finally {
       setSaving(false);
     }

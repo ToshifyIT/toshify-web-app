@@ -32,7 +32,7 @@ import type {
 } from '../../../services/twoChatService'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatFechaHoraART, fechaISOART } from '../../../utils/fechaArgentina'
-import { showSuccess, showError } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import './TwoChatModule.css'
 
@@ -261,7 +261,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
     } catch (err) {
       Swal.close()
       console.error('Error sincronizando 2Chat:', err)
-      Swal.fire('Error', err instanceof Error ? err.message : 'No se pudo sincronizar', 'error')
+      showError('Error', err instanceof Error ? err.message : 'No se pudo sincronizar')
     } finally {
       await cargar()
     }
@@ -358,7 +358,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
         columns={columnas}
         loading={loading}
         error={error}
-        pageSize={20}
+        pageSize={100}
         searchPlaceholder="Buscar conductor, DNI o teléfono..."
         emptyIcon={<Users size={48} />}
         emptyTitle="No hay conductores"
@@ -528,7 +528,7 @@ function LlamadasTab() {
       XLSX.writeFile(wb, `llamadas_2chat_${desde}_a_${hasta}${tipo === 'todos' ? '' : `_${tipo}`}.xlsx`)
     } catch (err) {
       console.error('Error exportando llamadas:', err)
-      Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
+      showError('Error', 'No se pudo exportar el reporte')
     }
   }
 
@@ -728,7 +728,7 @@ function LlamadasTab() {
           columns={columnasDetalle}
           loading={loading}
           error={error}
-          pageSize={20}
+          pageSize={100}
           searchPlaceholder="Buscar conductor, lead o número..."
           emptyIcon={<Phone size={40} />}
           emptyTitle="Sin llamadas"
@@ -1029,7 +1029,7 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
         columns={columnas}
         loading={loading}
         error={error}
-        pageSize={20}
+        pageSize={100}
         searchPlaceholder="Buscar nombre o número..."
         emptyIcon={<History size={48} />}
         emptyTitle="Sin llamadas en el rango"

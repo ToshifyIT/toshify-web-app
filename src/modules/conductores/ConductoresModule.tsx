@@ -13,7 +13,7 @@ import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSede } from "../../contexts/SedeContext";
 import Swal from "sweetalert2";
-import { showSuccess } from "../../utils/toast";
+import { showError, showSuccess } from '../../utils/toast';
 import { createIntercomContact } from "../../services/intercomService";
 
 import type {
@@ -2447,7 +2447,7 @@ export function ConductoresModule() {
         "sede_id"
       );
       if (error) {
-        Swal.fire("Error", `No se pudieron leer los conductores pendientes. ¿Se corrió sql/conductores_pais_ciudad.sql? (${error.message})`, "error");
+        showError("Error", `No se pudieron leer los conductores pendientes. ¿Se corrió sql/conductores_pais_ciudad.sql? (${error.message})`);
         return;
       }
       pendientes.push(...((data || []) as any[]));
@@ -2475,7 +2475,7 @@ export function ConductoresModule() {
     try {
       await cargarGoogleMaps();
     } catch {
-      Swal.fire("Error", "No se pudo cargar Google Maps. Reintentá en un momento.", "error");
+      showError("Error", "No se pudo cargar Google Maps. Reintentá en un momento.");
       return;
     }
 
@@ -2534,7 +2534,7 @@ export function ConductoresModule() {
     terminado = true;
     loadConductores(true);
     if (errorGuardado) {
-      Swal.fire("Error", `Se detuvo el proceso al guardar: ${errorGuardado}`, "error");
+      showError("Error", `Se detuvo el proceso al guardar: ${errorGuardado}`);
       return;
     }
     Swal.fire({
@@ -2625,17 +2625,17 @@ export function ConductoresModule() {
         .eq('id', conductor.id)
         .single()
       if (condErr) {
-        Swal.fire('Error BD', `Error al consultar conductor: ${condErr.message}`, 'error')
+        showError('Error BD', `Error al consultar conductor: ${condErr.message}`)
         return
       }
       condFull = data
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      Swal.fire('Error', `Excepción al consultar conductor: ${msg}`, 'error')
+      showError('Error', `Excepción al consultar conductor: ${msg}`)
       return
     }
     if (!condFull) {
-      Swal.fire('Error', 'No se encontró el conductor en la base de datos', 'error')
+      showError('Error', 'No se encontró el conductor en la base de datos')
       return
     }
 
@@ -2653,11 +2653,11 @@ export function ConductoresModule() {
     // 3. Validar campos mínimos
     const dniLimpio = String(condFull.numero_dni || '').replace(/[^0-9]/g, '')
     if (!dniLimpio) {
-      Swal.fire('Error', 'El conductor no tiene DNI registrado', 'error')
+      showError('Error', 'El conductor no tiene DNI registrado')
       return
     }
     if (!condFull.telefono_contacto) {
-      Swal.fire('Error', 'El conductor no tiene teléfono registrado', 'error')
+      showError('Error', 'El conductor no tiene teléfono registrado')
       return
     }
 
@@ -2791,7 +2791,7 @@ export function ConductoresModule() {
     Swal.close()
 
     if (!result.success) {
-      Swal.fire('Error', result.error || 'Error desconocido', 'error')
+      showError('Error', result.error || 'Error desconocido')
       return
     }
 
@@ -3232,7 +3232,7 @@ export function ConductoresModule() {
 
       showSuccess(`${dataExport.length} conductores exportados`);
     } catch (err: any) {
-      Swal.fire("Error", err?.message || "No se pudo generar el archivo", "error");
+      showError("Error", err?.message || "No se pudo generar el archivo");
     } finally {
       setExportando(false);
     }
@@ -3970,7 +3970,7 @@ export function ConductoresModule() {
                         })
                         loadConductores(true)
                       } catch (err: any) {
-                        Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
+                        showError('Error', err.message || 'No se pudo sincronizar')
                       }
                     }}
                     style={{
@@ -4106,7 +4106,7 @@ export function ConductoresModule() {
                         if (result.isConfirmed) await verResumen()
                         loadConductores(true)
                       } catch (err: any) {
-                        Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
+                        showError('Error', err.message || 'No se pudo sincronizar')
                       }
                     }}
                     style={{
@@ -4570,12 +4570,7 @@ function ModalEditar({
       showSuccess('Email sincronizado', email);
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err);
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al sincronizar email: ' + message,
-        confirmButtonColor: '#FF0033',
-      });
+      showError('Error', 'Error al sincronizar email: ' + message);
     } finally {
       setSyncingEmail(false);
     }
@@ -5545,7 +5540,7 @@ function ModalDetalles({
       setEditingEmail(false);
       showSuccess('Email Actualizado', conductorEmail || 'Email eliminado');
     } catch {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar el email', confirmButtonColor: '#FF0033' });
+      showError('Error', 'No se pudo guardar el email');
     } finally {
       setSavingEmail(false);
     }
@@ -5612,12 +5607,7 @@ function ModalDetalles({
       showSuccess('Email Actualizado', `Email sincronizado: ${email}`);
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err);
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al sincronizar email: ' + message,
-        confirmButtonColor: '#FF0033',
-      });
+      showError('Error', 'Error al sincronizar email: ' + message);
     } finally {
       setSyncingEmail(false);
     }

@@ -358,23 +358,16 @@ class CabifyHistoricalService {
     return [SOURCE_BUENOS_AIRES]
   }
 
+  /**
+   * Antes, para Buenos Aires se consultaba también la tabla de Bariloche solo para
+   * DESCARTAR las compañías que aparecían en las dos. Como el sync de Bariloche
+   * también entra con la cuenta de 44 Dreams, eso ocultaba conductores reales de
+   * Buenos Aires. Ahora cada sede lee solo su tabla; la separación por sede ya la
+   * hace el sync (cabify-sede-gate) y acá se valida contra conductores/vehículos
+   * de la sede (recordMatchesSede).
+   */
   private getQuerySources(sedeId?: string | null): HistoricalSourceConfig[] {
-    const sourceConfigs = this.getSourceConfigs(sedeId)
-    const needsBarilocheExclusion = sourceConfigs.some(
-      source => source.sourceAccount === 'buenos_aires_44dreams'
-    )
-    const alreadyQueriesBariloche = sourceConfigs.some(
-      source => source.sourceAccount === 'bariloche'
-    )
-
-    if (!needsBarilocheExclusion || alreadyQueriesBariloche) {
-      return sourceConfigs
-    }
-
-    return [
-      ...sourceConfigs,
-      { ...SOURCE_BARILOCHE, includeInResults: false },
-    ]
+    return this.getSourceConfigs(sedeId)
   }
 
   /**
@@ -519,26 +512,12 @@ class CabifyHistoricalService {
       rows,
     }))
 
-    const barilocheCompanyIds = new Set(
-      dataBySource
-        .filter(({ source }) => source.sourceAccount === 'bariloche')
-        .flatMap(({ rows }) => rows.map(row => row.cabify_company_id).filter(Boolean))
-    )
-
-    // Combinar datos de todas las fuentes visibles y excluir de BA las compañías
-    // que también llegan por la cuenta/tabla de Bariloche.
+    // Combinar datos de todas las fuentes visibles
     const allData: HistoricalRecord[] = []
     for (const { source, rows } of dataBySource) {
       if (!source.includeInResults) continue
 
       for (const row of rows) {
-        if (
-          source.sourceAccount === 'buenos_aires_44dreams' &&
-          row.cabify_company_id &&
-          barilocheCompanyIds.has(row.cabify_company_id)
-        ) {
-          continue
-        }
 
         const record: HistoricalRecord = {
           ...row,

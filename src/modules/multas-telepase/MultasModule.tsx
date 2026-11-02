@@ -12,7 +12,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
-import { showSuccess, showError } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -387,7 +387,7 @@ export default function MultasModule() {
       }
       setMultaCobroEstado(cobroEstadoMap)
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar las multas', 'error')
+      showError('Error', 'No se pudieron cargar las multas')
     } finally {
       setLoading(false)
     }
@@ -755,7 +755,7 @@ export default function MultasModule() {
       showSuccess('Multa Registrada')
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
+      showError('Error', error.message || 'No se pudo registrar')
     }
   }
 
@@ -804,7 +804,7 @@ export default function MultasModule() {
       setVista('activas')
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo crear la copia', 'error')
+      showError('Error', error.message || 'No se pudo crear la copia')
     }
   }
 
@@ -898,7 +898,7 @@ export default function MultasModule() {
         : 'El cobro se rechazó. Recordá crear el descuento a favor del conductor si ya se había cobrado.')
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo rechazar la multa', 'error')
+      showError('Error', error.message || 'No se pudo rechazar la multa')
     }
   }
 
@@ -965,7 +965,7 @@ export default function MultasModule() {
       setEditingMulta(null)
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar', 'error')
+      showError('Error', error.message || 'No se pudo actualizar')
     }
   }
 
@@ -1080,7 +1080,7 @@ export default function MultasModule() {
       setShowModal(false)
       cargarDatos()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
+      showError('Error', error.message || 'No se pudo eliminar')
     }
   }
 
@@ -1196,7 +1196,7 @@ export default function MultasModule() {
       })
       return
     }
-    Swal.fire('Error', result.error, 'error')
+    showError('Error', result.error)
     } finally {
       enviandoRef.current.delete(multa.id)
     }

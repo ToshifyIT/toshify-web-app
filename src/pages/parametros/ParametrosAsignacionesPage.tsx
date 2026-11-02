@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { Edit2, Trash2 } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -117,7 +117,7 @@ export function ParametrosAsignacionesPage() {
       showSuccess('Parametro actualizado')
       cargarParametros()
     } catch {
-      Swal.fire('Error', 'No se pudo guardar', 'error')
+      showError('Error', 'No se pudo guardar')
     }
   }
 
@@ -147,7 +147,7 @@ export function ParametrosAsignacionesPage() {
       showSuccess('Parametro eliminado')
       cargarParametros()
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar', 'error')
+      showError('Error', 'No se pudo eliminar')
     }
   }
 
@@ -211,7 +211,7 @@ export function ParametrosAsignacionesPage() {
       searchPlaceholder="Buscar parametro..."
       emptyTitle="Sin parametros"
       emptyDescription="No se encontraron parametros de asignacion"
-      pageSize={10}
+      pageSize={100}
 />
   )
 }

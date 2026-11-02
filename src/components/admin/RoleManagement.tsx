@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { Role } from '../../types/database.types'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import './AdminStyles.css'
 
 // @ts-nocheck en operaciones de base de datos por problemas de tipos generados
@@ -54,11 +54,7 @@ export function RoleManagement() {
 
   const handleCreateRole = async () => {
     if (!newRole.name.trim()) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Campo Requerido',
-        text: 'El nombre del rol es requerido'
-      })
+      showError('Campo Requerido', 'El nombre del rol es requerido')
       return
     }
 
@@ -84,11 +80,7 @@ export function RoleManagement() {
       setNewRole({ name: '', description: '', icon: '' })
       await loadRoles()
     } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message
-      })
+      showError('Error', err.message)
     } finally {
       setCreating(false)
     }
@@ -96,11 +88,7 @@ export function RoleManagement() {
 
   const handleEditRole = async () => {
     if (!selectedRole || !editRole.name.trim()) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Campo Requerido',
-        text: 'El nombre del rol es requerido'
-      })
+      showError('Campo Requerido', 'El nombre del rol es requerido')
       return
     }
 
@@ -121,11 +109,7 @@ export function RoleManagement() {
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message
-      })
+      showError('Error', err.message)
     } finally {
       setCreating(false)
     }
@@ -173,11 +157,7 @@ export function RoleManagement() {
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message
-      })
+      showError('Error', err.message)
     } finally {
       setCreating(false)
     }

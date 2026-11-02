@@ -7,7 +7,7 @@ import type { SearchableSelectOption } from '../../components/ui/SearchableSelec
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import {
   RotateCcw,
   Truck,
@@ -380,7 +380,7 @@ export function MovimientosModule() {
       if (provRes.data) setProveedores(provRes.data)
       if (vehRes.data) setVehiculos(vehRes.data)
     } catch {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los datos necesarios' })
+      showError('Error', 'No se pudieron cargar los datos necesarios')
     } finally {
       setLoading(false)
     }
@@ -629,7 +629,7 @@ export function MovimientosModule() {
     if (tipoMovimiento === 'asignacion') {
       const producto = productos.find(p => p.id === productoId)
       if (!producto?.es_retornable) {
-        Swal.fire({ icon: 'error', title: 'Operación no permitida', text: 'Solo las herramientas pueden ser asignadas' })
+        showError('Operación no permitida', 'Solo las herramientas pueden ser asignadas')
         return false
       }
       if (!vehiculoId) { showIncompleteWarning('Debes seleccionar un vehículo'); return false }
@@ -650,11 +650,7 @@ export function MovimientosModule() {
     if (tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion') {
       const stockProveedor = stockPorProveedor.find(s => s.proveedor_id === proveedorId)
       if (!stockProveedor || stockProveedor.cantidad < cantidad) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Stock insuficiente',
-          text: `No hay suficiente stock. Disponible: ${stockProveedor?.cantidad || 0}`
-        })
+        showError('Stock insuficiente', `No hay suficiente stock. Disponible: ${stockProveedor?.cantidad || 0}`)
         return false
       }
     }
@@ -750,7 +746,7 @@ export function MovimientosModule() {
       }
       navigate('/logistica/inventario/pedidos')
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo confirmar la recepción' })
+      showError('Error', error.message || 'No se pudo confirmar la recepción')
     }
   }
 
@@ -809,7 +805,7 @@ export function MovimientosModule() {
 
       resetForm()
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar la lista de productos' })
+      showError('Error', error.message || 'No se pudo procesar la lista de productos')
     }
   }
 
@@ -845,7 +841,7 @@ export function MovimientosModule() {
       resetForm()
       loadData()
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar la lista de productos a retirar' })
+      showError('Error', error.message || 'No se pudo procesar la lista de productos a retirar')
     }
   }
 
@@ -928,7 +924,7 @@ export function MovimientosModule() {
       resetForm()
       loadData()
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar el movimiento' })
+      showError('Error', err.message || 'No se pudo procesar el movimiento')
     }
   }
 
@@ -937,7 +933,7 @@ export function MovimientosModule() {
   // =====================================================
   const handleMovimiento = async () => {
     if (!canCreate) {
-      Swal.fire('Sin permisos', 'No tienes permisos para registrar movimientos', 'error')
+      showError('Sin permisos', 'No tienes permisos para registrar movimientos')
       return
     }
 
@@ -1001,11 +997,7 @@ export function MovimientosModule() {
       .order('cantidad', { ascending: false })
 
     if (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo validar el stock',
-        text: 'Intenta nuevamente antes de agregar el producto.'
-      })
+      showError('No se pudo validar el stock', 'Intenta nuevamente antes de agregar el producto.')
       return
     }
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import {
   Ban,
   Users,
@@ -227,7 +227,7 @@ export function BloqueosConductoresTab() {
 
       cargarConductores()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo bloquear el conductor', 'error')
+      showError('Error', error.message || 'No se pudo bloquear el conductor')
     }
   }
 
@@ -280,7 +280,7 @@ export function BloqueosConductoresTab() {
 
       cargarConductores()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo desbloquear', 'error')
+      showError('Error', error.message || 'No se pudo desbloquear')
     }
   }
 
@@ -403,7 +403,7 @@ export function BloqueosConductoresTab() {
 
       showSuccess('Parámetros Actualizados')
     } catch (error: any) {
-      Swal.fire('Error', error.message, 'error')
+      showError('Error', error.message)
     }
   }
 
@@ -611,34 +611,6 @@ export function BloqueosConductoresTab() {
   return (
     <>
       {/* Header */}
-      <div className="fact-header">
-        <div className="fact-header-left">
-          <span className="fact-label">Ver:</span>
-          <select
-            className="fact-select"
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value as any)}
-          >
-            <option value="candidatos">Candidatos a Bloqueo</option>
-            <option value="bloqueados">Bloqueados</option>
-            <option value="todos">Todos</option>
-          </select>
-
-          <span className="fact-label" style={{ marginLeft: '16px' }}>
-            Límite: {formatCurrency(montoLimite)} / {diasMoraLimite} días
-          </span>
-        </div>
-        <div className="fact-header-right">
-          <button className="fact-btn-secondary" onClick={() => cargarConductores()}>
-            <RefreshCw size={14} />
-            Actualizar
-          </button>
-          <button className="fact-btn-secondary" onClick={configurarParametros}>
-            <Settings size={14} />
-            Configurar Límites
-          </button>
-        </div>
-      </div>
 
       {/* Stats */}
       <div className="fact-stats">
@@ -701,6 +673,36 @@ export function BloqueosConductoresTab() {
         }
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
+        headerAction={
+          <div className="fact-header fact-header-inline">
+            <div className="fact-header-left">
+              <span className="fact-label">Ver:</span>
+              <select
+                className="fact-select"
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value as any)}
+              >
+                <option value="candidatos">Candidatos a Bloqueo</option>
+                <option value="bloqueados">Bloqueados</option>
+                <option value="todos">Todos</option>
+              </select>
+
+              <span className="fact-label" style={{ marginLeft: '16px' }}>
+                Límite: {formatCurrency(montoLimite)} / {diasMoraLimite} días
+              </span>
+            </div>
+            <div className="fact-header-right">
+              <button className="fact-btn-secondary" onClick={() => cargarConductores()}>
+                <RefreshCw size={14} />
+                Actualizar
+              </button>
+              <button className="fact-btn-secondary" onClick={configurarParametros}>
+                <Settings size={14} />
+                Configurar Límites
+              </button>
+            </div>
+          </div>
+        }
       />
     </>
   )

@@ -7,7 +7,7 @@ import ExcelDateRangeFilter from '../../components/ui/DataTable/ExcelDateRangeFi
 import { DataTable } from '../../components/ui/DataTable'
 import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign, SendHorizonal, Archive, RotateCcw, Trash2 } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { showSuccess, showError } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -398,7 +398,7 @@ export default function TelepaseHistoricoModule() {
     )
 
     if (result.ok) {
-      Swal.fire({ icon: 'success', title: 'Incidencia creada', text: 'El cobro de peaje fue registrado correctamente', timer: 2000, showConfirmButton: false })
+      showSuccess('Incidencia creada', 'El cobro de peaje fue registrado correctamente')
       cargarDatos()
     } else if ('alreadyExists' in result) {
       Swal.fire({ icon: 'info', title: 'Ya enviado', text: result.reason, timer: 1800, showConfirmButton: false })
@@ -406,7 +406,7 @@ export default function TelepaseHistoricoModule() {
     } else if ('needsManualInput' in result) {
       Swal.fire('No se pudo enviar automáticamente', result.reason, 'warning')
     } else {
-      Swal.fire('Error', result.error || 'No se pudo crear la incidencia', 'error')
+      showError('Error', result.error || 'No se pudo crear la incidencia')
     }
   }
 
@@ -527,7 +527,7 @@ export default function TelepaseHistoricoModule() {
       cargarDatos()
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Error al guardar'
-      Swal.fire('Error', msg, 'error')
+      showError('Error', msg)
     }
   }
 

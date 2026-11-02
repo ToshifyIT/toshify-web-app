@@ -5,7 +5,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../../utils/toast'
+import { showError, showSuccess } from '../../../utils/toast'
 import {
   Shield,
   Users,
@@ -952,7 +952,7 @@ export function GarantiasTab() {
 
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo agregar la garantía', 'error')
+      showError('Error', error.message || 'No se pudo agregar la garantía')
     }
   }
 
@@ -1083,7 +1083,7 @@ export function GarantiasTab() {
 
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar', 'error')
+      showError('Error', error.message || 'No se pudo actualizar')
     }
   }
 
@@ -1118,7 +1118,7 @@ export function GarantiasTab() {
 
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
+      showError('Error', error.message || 'No se pudo eliminar')
     }
   }
 
@@ -1239,7 +1239,7 @@ export function GarantiasTab() {
 
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
+      showError('Error', error.message || 'No se pudo registrar el pago')
     }
   }
 
@@ -1331,7 +1331,7 @@ export function GarantiasTab() {
       showSuccess('Saldo actualizado', `Nuevo saldo de ${garantia.conductor_nombre}: ${formatCurrency(nuevoSaldo)}`)
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
+      showError('Error', error.message || 'No se pudo actualizar el saldo')
     }
   }
 
@@ -1466,7 +1466,7 @@ export function GarantiasTab() {
       showSuccess('Devolución Registrada', `Se devolvieron ${formatCurrency(formValues.monto)} a ${garantia.conductor_nombre}`)
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar la devolución', 'error')
+      showError('Error', error.message || 'No se pudo registrar la devolución')
     }
   }
 
@@ -1545,7 +1545,7 @@ export function GarantiasTab() {
 
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo actualizar', 'error')
+      showError('Error', error.message || 'No se pudo actualizar')
     }
   }
 
@@ -1654,7 +1654,7 @@ export function GarantiasTab() {
       ])
     } catch (error) {
       console.error('Error cargando datos de deudores:', error)
-      Swal.fire('Error', 'No se pudieron cargar los datos para el reporte de deudores', 'error')
+      showError('Error', 'No se pudieron cargar los datos para el reporte de deudores')
       return
     }
 
@@ -1719,7 +1719,7 @@ export function GarantiasTab() {
       contactos = await cargarContactosPorDni()
     } catch (error) {
       console.error('Error cargando datos de contacto:', error)
-      Swal.fire('Error', 'No se pudieron cargar los datos de contacto para el reporte', 'error')
+      showError('Error', 'No se pudieron cargar los datos de contacto para el reporte')
       return
     }
 
@@ -1777,7 +1777,7 @@ export function GarantiasTab() {
   // (ej. sedes donde el equipo no usaba la vista previa RIT).
   async function sincronizarGarantias() {
     if (!sedeActualId) {
-      Swal.fire('Error', 'Seleccione una sede', 'error')
+      showError('Error', 'Seleccione una sede')
       return
     }
     const confirm = await Swal.fire({
@@ -1840,7 +1840,7 @@ export function GarantiasTab() {
         icon: 'success'
       })
     } catch (err: any) {
-      Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
+      showError('Error', err.message || 'No se pudo sincronizar')
     } finally {
       setLoading(false)
     }
@@ -2500,75 +2500,6 @@ export function GarantiasTab() {
       {/* Contenido Garantías (sub-tab Movimientos removido - no se usa) */}
       {activeSubTab === 'garantias' && (
         <>
-          {/* Header (filtro removido - se usan los filtros de columna) */}
-          <div className="fact-header">
-            <div className="fact-header-left">
-              {/* Descargas disponibles para cualquier usuario con acceso. */}
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  className="fact-btn fact-btn-secondary"
-                  onClick={exportarRegistrosVisibles}
-                  title="Exportar a Excel solo las garantías visibles en la tabla, respetando todos los filtros aplicados"
-                >
-                  <Download size={14} /> Exportar
-                </button>
-                <button
-                  className="fact-btn fact-btn-secondary"
-                  onClick={exportarDeudores}
-                  title="Exportar a Excel los conductores de baja que nos deben, con sus datos de contacto y la empresa con la que firmaron contrato"
-                >
-                  <Download size={14} /> Exportar deudores
-                </button>
-                {/* Sincronizar oculto: la garantía se recalcula automáticamente al cerrar período */}
-              </div>
-            </div>
-            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
-                {[
-                  { value: 'todos' as const, label: 'Todos' },
-                  { value: 'asignado' as const, label: 'Asignados' },
-                  { value: 'no_asignado' as const, label: 'No asignados' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setAsignadoFilter(opt.value)}
-                    style={{
-                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
-                      background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
-                      color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
-                {[
-                  { value: 'todos' as const, label: 'Todos' },
-                  { value: 'activo' as const, label: 'Activos' },
-                  { value: 'baja' as const, label: 'Baja' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setEstadoCondFilter(opt.value)}
-                    style={{
-                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
-                      background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
-                      color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos', 'garantias_devoluciones']} label="Garantías" />
-              <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
-                <UserPlus size={16} />
-                Agregar Garantía
-              </button>
-            </div>
-          </div>
-
           {/* Stats */}
           <div className="fact-stats">
             <div className="fact-stats-grid fact-stats-grid-garantias">
@@ -2667,6 +2598,75 @@ export function GarantiasTab() {
             emptyDescription="No hay garantías registradas"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            headerAction={
+              <div className="fact-header fact-header-inline">
+                <div className="fact-header-left">
+                  {/* Descargas disponibles para cualquier usuario con acceso. */}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className="fact-btn fact-btn-secondary"
+                      onClick={exportarRegistrosVisibles}
+                      title="Exportar a Excel solo las garantías visibles en la tabla, respetando todos los filtros aplicados"
+                    >
+                      <Download size={14} /> Exportar
+                    </button>
+                    <button
+                      className="fact-btn fact-btn-secondary"
+                      onClick={exportarDeudores}
+                      title="Exportar a Excel los conductores de baja que nos deben, con sus datos de contacto y la empresa con la que firmaron contrato"
+                    >
+                      <Download size={14} /> Exportar deudores
+                    </button>
+                    {/* Sincronizar oculto: la garantía se recalcula automáticamente al cerrar período */}
+                  </div>
+                </div>
+                <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                    {[
+                      { value: 'todos' as const, label: 'Todos' },
+                      { value: 'asignado' as const, label: 'Asignados' },
+                      { value: 'no_asignado' as const, label: 'No asignados' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setAsignadoFilter(opt.value)}
+                        style={{
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
+                          color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                    {[
+                      { value: 'todos' as const, label: 'Todos' },
+                      { value: 'activo' as const, label: 'Activos' },
+                      { value: 'baja' as const, label: 'Baja' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setEstadoCondFilter(opt.value)}
+                        style={{
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
+                          color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos', 'garantias_devoluciones']} label="Garantías" />
+                  <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
+                    <UserPlus size={16} />
+                    Agregar Garantía
+                  </button>
+                </div>
+              </div>
+            }
           />
           </div>
         </>
@@ -2674,15 +2674,6 @@ export function GarantiasTab() {
 
       {activeSubTab === 'movimientos' && (
         <>
-          {/* Header movimientos */}
-          <div className="fact-header">
-            <div className="fact-header-left">
-              <span className="fact-label" style={{ fontSize: '13px', color: '#6B7280' }}>
-                Historial de pagos de garantía
-              </span>
-            </div>
-          </div>
-
           {/* Stats movimientos */}
           <div className="fact-stats">
             <div className="fact-stats-grid">
@@ -2715,7 +2706,7 @@ export function GarantiasTab() {
           />}
             emptyTitle="Sin movimientos"
             emptyDescription="No hay pagos de garantía registrados"
-            pageSize={50}
+            pageSize={100}
             pageSizeOptions={[20, 50, 100]}
           />
         </>

@@ -3,7 +3,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
@@ -250,11 +250,7 @@ export function ProveedoresModule() {
 
       setProveedores(proveedoresConOperacion)
     } catch {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'No se pudieron cargar los proveedores',
-      })
+      showError('Error', 'No se pudieron cargar los proveedores')
     } finally {
       setLoading(false)
     }
@@ -262,11 +258,7 @@ export function ProveedoresModule() {
 
   const handleCreate = async () => {
     if (!canCreate) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para crear proveedores'
-      })
+      showError('Sin permisos', 'No tienes permisos para crear proveedores')
       return
     }
 
@@ -296,21 +288,13 @@ export function ProveedoresModule() {
       resetForm()
       loadProveedores()
     } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudo crear el proveedor',
-      })
+      showError('Error', err.message || 'No se pudo crear el proveedor')
     }
   }
 
   const handleEdit = async () => {
     if (!canEdit || !selectedProveedor) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para editar proveedores'
-      })
+      showError('Sin permisos', 'No tienes permisos para editar proveedores')
       return
     }
 
@@ -341,21 +325,13 @@ export function ProveedoresModule() {
       resetForm()
       loadProveedores()
     } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudo actualizar el proveedor',
-      })
+      showError('Error', err.message || 'No se pudo actualizar el proveedor')
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!canDelete) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para desactivar proveedores'
-      })
+      showError('Sin permisos', 'No tienes permisos para desactivar proveedores')
       return
     }
 
@@ -388,22 +364,14 @@ export function ProveedoresModule() {
 
         loadProveedores()
       } catch (err: any) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: err.message || 'No se pudo desactivar el proveedor',
-        })
+        showError('Error', err.message || 'No se pudo desactivar el proveedor')
       }
     }
   }
 
   const handleReactivar = async (id: string) => {
     if (!canEdit) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para reactivar proveedores'
-      })
+      showError('Sin permisos', 'No tienes permisos para reactivar proveedores')
       return
     }
 
@@ -434,11 +402,7 @@ export function ProveedoresModule() {
 
         loadProveedores()
       } catch (err: any) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: err.message || 'No se pudo reactivar el proveedor',
-        })
+        showError('Error', err.message || 'No se pudo reactivar el proveedor')
       }
     }
   }
@@ -781,14 +745,6 @@ export function ProveedoresModule() {
   return (
     <div className="prov-module">
       <LoadingOverlay show={loading} message="Cargando proveedores..." size="lg" />
-      <div className="prov-header">
-        <div className="prov-header-title">
-          <h1>Proveedores</h1>
-          <span className="prov-header-subtitle">
-            Gestiona los proveedores usados en pedidos e ingresos manuales de stock.
-          </span>
-        </div>
-      </div>
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
         <div className="prov-stats-grid">
@@ -865,7 +821,7 @@ export function ProveedoresModule() {
       />}
         emptyTitle="No hay proveedores registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Proveedor".' : ''}
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         headerAction={
           canCreate ? (

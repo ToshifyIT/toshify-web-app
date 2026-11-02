@@ -32,7 +32,9 @@ function fireToast(type: string, tituloOriginal: string, textoOriginal?: string)
     toast: true,
     position: 'top',
     showConfirmButton: false,
-    timer: 2500,
+    // Los errores y advertencias quedan más tiempo para poder leerlos (y se pausan
+    // al pasar el mouse); los éxitos se van rápido.
+    timer: type === 'error' ? 6000 : type === 'warning' ? 5000 : 2500,
     timerProgressBar: true,
     iconHtml: ICONS[type] || ICONS.info,
     title: `<div style="display:flex;flex-direction:column;"><span>${title}</span>${subtitle}</div>`,

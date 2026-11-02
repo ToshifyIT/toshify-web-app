@@ -292,7 +292,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
       searchPlaceholder="Buscar patente, modelo o falla..."
       emptyTitle="Sin alertas"
       emptyDescription="No hay alertas registradas. La sincronización corre cada 1 minuto."
-      pageSize={50}
+      pageSize={100}
     />
   )
 }

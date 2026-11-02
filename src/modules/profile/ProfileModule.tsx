@@ -10,7 +10,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { AvatarUploadModal } from '../../components/ui/AvatarUploadModal'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showError, showSuccess } from '../../utils/toast'
 import './ProfileModule.css'
 
 interface ProfileFormData {
@@ -100,11 +100,7 @@ export function ProfileModule() {
 
       showSuccess('Perfil actualizado', 'Los cambios han sido guardados correctamente')
     } catch (error: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'No se pudo actualizar el perfil',
-      })
+      showError('Error', error.message || 'No se pudo actualizar el perfil')
     } finally {
       setSaving(false)
     }
@@ -194,11 +190,7 @@ export function ProfileModule() {
 
       showSuccess('Contraseña actualizada', 'Tu contraseña ha sido cambiada correctamente')
     } catch (error: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'No se pudo cambiar la contraseña',
-      })
+      showError('Error', error.message || 'No se pudo cambiar la contraseña')
     } finally {
       setChangingPassword(false)
     }
