@@ -61,15 +61,11 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY --from=builder /app/dist ./dist
 
 # Copy server files
-# OJO: la etapa final copia los archivos del servidor uno por uno. Todo modulo
-# local que server.js importe tiene que estar listado aca, o Node falla con
-# ERR_MODULE_NOT_FOUND al arrancar y el contenedor queda sin escuchar (502).
-COPY server.js ./
-COPY server-insights-directivo.js ./
-COPY server-2chat.js ./
-COPY server-cresium.js ./
-COPY server-alegra.js ./
-COPY server-admin-integraciones.js ./
+# Se copian todos los server*.js con un patrón: así un módulo nuevo del servidor
+# (server-xxx.js) entra solo a la imagen. Antes se listaban uno por uno y al
+# faltar server-cabify.js Node falló con ERR_MODULE_NOT_FOUND (502 del 02/11).
+# Si server.js importa un archivo local que NO se llama server*.js, agregarlo abajo.
+COPY server*.js ./
 # server-2chat.js importa el normalizador de celulares de la API (misma regla en todo el sistema)
 COPY mcp/lib/telefono.js ./mcp/lib/telefono.js
 
