@@ -109,3 +109,53 @@
   background: var(--color-primary);
   color: #fff;
 }
+
+/* =====================================================
+   PESTAÑAS DE EDICIÓN POR CATEGORÍA (Editar vehículo, …)
+   Mismo diseño que Editar conductor: la ventana mantiene el
+   tamaño y cada pestaña se desplaza por dentro.
+   ===================================================== */
+.edit-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 16px 20px 0;
+  border-radius: 8px;
+  background: var(--bg-secondary, #f3f4f6);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.edit-tab {
+  flex: 1 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #4b5563);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.edit-tab:hover { color: var(--text-primary, #111827); }
+.edit-tab.is-activa {
+  background: var(--bg-primary, #fff);
+  color: var(--color-primary, #ff0033);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.modal-content.edit-tabs-modal {
+  height: min(760px, 90vh);
+}
+.edit-tabs-modal .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}

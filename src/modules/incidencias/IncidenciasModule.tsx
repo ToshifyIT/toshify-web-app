@@ -162,6 +162,7 @@ export function IncidenciasModule() {
 
   // Filtros - Incidencias
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [semIncFilter, setSemIncFilter] = useState<string[]>([])
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
@@ -186,11 +187,12 @@ export function IncidenciasModule() {
   const [dateRangePenalidades, setDateRangePenalidades] = useState<DateRange | null>(defaultYearRange)
 
   // Helper: ¿Hay filtros activos en incidencias?
-  const hayFiltrosIncidenciasActivos = patenteFilter.length > 0 || conductorFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || areaFilter.length > 0 || tipoIncFilter.length > 0 || soloPendientesEnviar
+  const hayFiltrosIncidenciasActivos = semIncFilter.length > 0 || patenteFilter.length > 0 || conductorFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || areaFilter.length > 0 || tipoIncFilter.length > 0 || soloPendientesEnviar
 
   // Limpiar todos los filtros de incidencias
   function limpiarFiltrosIncidencias() {
     setPatenteFilter([])
+    setSemIncFilter([])
     setConductorFilter([])
     setEstadoFilter([])
     setTurnoFilter([])
@@ -568,6 +570,12 @@ export function IncidenciasModule() {
 
 
   // Listas de valores únicos para filtros - Incidencias
+  // Semanas para el filtro de la columna Sem (de la más nueva a la más vieja)
+  const semanasIncUnicas = useMemo(() =>
+    [...new Set(incidencias.map(i => i.semana).filter(v => v !== null && v !== undefined).map(String))]
+      .sort((a, b) => Number(b) - Number(a))
+  , [incidencias])
+
   const patentesUnicas = useMemo(() =>
     [...new Set(incidencias.map(i => i.patente_display).filter(Boolean))].sort() as string[]
   , [incidencias])
@@ -628,6 +636,9 @@ export function IncidenciasModule() {
       })
     }
 
+    if (semIncFilter.length > 0) {
+      filtered = filtered.filter(i => semIncFilter.includes(String(i.semana ?? '')))
+    }
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(i => patenteFilter.includes(i.patente_display || ''))
     }
@@ -645,7 +656,7 @@ export function IncidenciasModule() {
     }
 
     return filtered
-  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, dateRangeLogistica])
+  }, [incidencias, semIncFilter, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, dateRangeLogistica])
 
   // Maps para O(1) lookup — evitan .find() O(n) dentro de useMemos que se recalculan seguido
   const penalidadesPorIncidencia = useMemo(
@@ -702,6 +713,9 @@ export function IncidenciasModule() {
       filtered = filtered.filter(i => !penalidadesPorIncidencia.has(i.id))
     }
 
+    if (semIncFilter.length > 0) {
+      filtered = filtered.filter(i => semIncFilter.includes(String(i.semana ?? '')))
+    }
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(i => patenteFilter.includes(i.patente_display || ''))
     }
@@ -734,7 +748,7 @@ export function IncidenciasModule() {
     }
 
     return filtered
-  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, tipoIncFilter, quickCategoriaFilter, dateRangeCobro, soloPendientesEnviar, penalidadesPorIncidencia, tiposCobroDescuentoMap])
+  }, [incidencias, semIncFilter, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, tipoIncFilter, quickCategoriaFilter, dateRangeCobro, soloPendientesEnviar, penalidadesPorIncidencia, tiposCobroDescuentoMap])
 
   // Incidencias que pueden enviarse a facturación (no tienen penalidad y tienen monto)
   const incidenciasEnviables = useMemo(() => {
@@ -1267,7 +1281,20 @@ export function IncidenciasModule() {
     },
     {
       accessorKey: 'semana',
-      header: 'Sem',
+      // Mismo filtro que las demás columnas (antes usaba el filtro por defecto de la tabla)
+      header: () => (
+        <ExcelColumnFilter
+          label="Sem"
+          options={semanasIncUnicas}
+          selectedValues={semIncFilter}
+          onSelectionChange={setSemIncFilter}
+          filterId="inc_sem"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      enableColumnFilter: false,
+      size: 70,
       cell: ({ row }) => row.original.semana || '-'
     },
     {
@@ -1404,7 +1431,7 @@ export function IncidenciasModule() {
         />
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, tiposCobroDescuento, penalidadesPorIncidencia])
+  ], [semanasIncUnicas, semIncFilter, patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, tiposCobroDescuento, penalidadesPorIncidencia])
 
   // Columnas específicas para incidencias de COBRO (incluye botón generar cobro/descuento)
   const incidenciasCobroColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => {
@@ -1449,7 +1476,20 @@ export function IncidenciasModule() {
     },
     {
       accessorKey: 'semana',
-      header: 'Sem',
+      // Mismo filtro que las demás columnas (antes usaba el filtro por defecto de la tabla)
+      header: () => (
+        <ExcelColumnFilter
+          label="Sem"
+          options={semanasIncUnicas}
+          selectedValues={semIncFilter}
+          onSelectionChange={setSemIncFilter}
+          filterId="inc_sem"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      enableColumnFilter: false,
+      size: 70,
       cell: ({ row }) => row.original.semana || '-'
     },
     {
@@ -1649,7 +1689,7 @@ export function IncidenciasModule() {
     })
     
     return cols
-  }, [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, modoSeleccionMasiva, incidenciasSeleccionadas, incidenciasEnviables, penalidades, tiposCobroDescuento])
+  }, [semanasIncUnicas, semIncFilter, patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, modoSeleccionMasiva, incidenciasSeleccionadas, incidenciasEnviables, penalidades, tiposCobroDescuento])
 
   // Columnas para tabla de penalidades
   const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => {
@@ -3274,27 +3314,10 @@ export function IncidenciasModule() {
             </button>
           )}
         </div>
+        {/* Logística y Facturación llevan el selector de fecha junto al buscador
+            (headerAction de la tabla); acá solo quedan las pestañas de penalidades. */}
+        {(activeTab === 'por_aplicar' || activeTab === 'aplicadas' || activeTab === 'rechazados') && (
         <div className="tabs-actions">
-          {/* Selector de fecha para tab Logística */}
-          {activeTab === 'logistica' && (
-            <DateRangeSelector
-              selectedRange={dateRangeLogistica}
-              onRangeChange={setDateRangeLogistica}
-              showAllOption={true}
-              placeholder="Filtrar por fecha"
-            />
-          )}
-          {/* Filtros especiales para tab Cobro */}
-          {activeTab === 'cobro' && (
-            <>
-              <DateRangeSelector
-                selectedRange={dateRangeCobro}
-                onRangeChange={setDateRangeCobro}
-                showAllOption={true}
-                placeholder="Filtrar por fecha"
-              />
-            </>
-          )}
           {/* Selector de fecha para tabs de Penalidades */}
           {(activeTab === 'por_aplicar' || activeTab === 'aplicadas' || activeTab === 'rechazados') && (
             <DateRangeSelector
@@ -3311,6 +3334,7 @@ export function IncidenciasModule() {
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* Incidencias Logística Tab */}
@@ -3324,6 +3348,19 @@ export function IncidenciasModule() {
                 <span>Filtros activos</span>
               </div>
               <div className="dt-active-filters-list">
+                {semIncFilter.map(val => (
+                  <div key={`sem-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Sem:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setSemIncFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
                 {patenteFilter.map(val => (
                   <div key={`patente-${val}`} className="dt-active-filter-chip">
                     <span className="dt-chip-label">Patente:</span>
@@ -3412,7 +3449,13 @@ export function IncidenciasModule() {
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
             headerAction={
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <DateRangeSelector
+                  selectedRange={dateRangeLogistica}
+                  onRangeChange={setDateRangeLogistica}
+                  showAllOption={true}
+                  placeholder="Filtrar por fecha"
+                />
                 <button className="btn-secondary" onClick={handleExportarIncidencias} title="Exportar" style={{ padding: '7px 10px', fontSize: '12px' }}>
                   <Download size={14} /> Exportar
                 </button>
@@ -3528,6 +3571,19 @@ export function IncidenciasModule() {
                 <span>Filtros activos</span>
               </div>
               <div className="dt-active-filters-list">
+                {semIncFilter.map(val => (
+                  <div key={`sem-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Sem:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setSemIncFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
                 {patenteFilter.map(val => (
                   <div key={`patente-${val}`} className="dt-active-filter-chip">
                     <span className="dt-chip-label">Patente:</span>
@@ -3655,7 +3711,13 @@ export function IncidenciasModule() {
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
             headerAction={
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <DateRangeSelector
+                  selectedRange={dateRangeCobro}
+                  onRangeChange={setDateRangeCobro}
+                  showAllOption={true}
+                  placeholder="Filtrar por fecha"
+                />
                 <button className="btn-secondary" onClick={handleExportarIncidencias} title="Exportar" style={{ padding: '7px 10px', fontSize: '12px' }}>
                   <Download size={14} /> Exportar
                 </button>

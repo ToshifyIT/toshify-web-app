@@ -1747,3 +1747,65 @@ tr:hover .pen-check-cell,
   background: var(--table-header-bg);
   z-index: 5;
 }
+
+/* =====================================================
+   Pestañas con el mismo estilo que Programación / Facturación (2026-11-02):
+   repartidas en el ancho, subrayado rojo en la activa. Las acciones (fecha,
+   año, logs) van a la derecha en la misma fila; en celular pasan abajo.
+   ===================================================== */
+.incidencias-tabs-row {
+  /* Pestañas y acciones (año / fecha, Ver Logs) en la misma fila: sin hueco vacío */
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 12px;
+}
+.incidencias-tabs-row .tabs-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+.incidencias-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border-primary);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.incidencias-tab {
+  flex: 1 1 0;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: 13px;
+}
+.incidencias-tab:hover {
+  background: transparent;
+  color: var(--text-primary);
+}
+.incidencias-tab.active {
+  background: transparent;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+.incidencias-tab .tab-badge {
+  padding: 1px 6px;
+}
+.incidencias-tab.active .tab-badge {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+@media (max-width: 1100px) {
+  .incidencias-tabs-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

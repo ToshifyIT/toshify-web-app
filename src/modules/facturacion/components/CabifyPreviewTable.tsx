@@ -4,18 +4,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import {
-  ArrowLeft,
-  FileSpreadsheet,
-  Loader2,
-  Search,
-  X,
-  Save,
-  RotateCcw,
-  UserPlus,
-  Info,
-  Eye
-} from 'lucide-react'
+import { ArrowLeft, Loader2, Search, X, Save, RotateCcw, UserPlus, Info, Eye, Download } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
@@ -911,8 +900,8 @@ export function CabifyPreviewTable({
           disabled={exporting}
           style={{ backgroundColor: '#7C3AED', whiteSpace: 'nowrap' }}
         >
-          {exporting ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
-          {exporting ? 'Exportando...' : 'Exportar Excel'}
+          {exporting ? <Loader2 size={14} className="spinning" /> : <Download size={14} />}
+          {exporting ? 'Exportando...' : 'Exportar'}
         </button>
         <span className="fact-preview-count" style={{ marginLeft: 'auto' }}>
           {filteredData.length} de {data.length} conductores

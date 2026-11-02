@@ -1418,3 +1418,54 @@
     min-width: 80px;
   }
 }
+
+/* Navegación de semanas: flechas a los lados del selector (como Dashboard General) */
+.cabify-semana-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cabify-semana-flecha {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.cabify-semana-flecha:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.cabify-semana-flecha:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cabify-semana-rango {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.cabify-semana-hoy {
+  padding: 6px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cabify-controls {
+  align-items: center;
+}

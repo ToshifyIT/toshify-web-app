@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Eye } from 'lucide-react'
@@ -10,6 +11,8 @@ interface Props {
   onRowClick: (v: FuelRow) => void
   /** Filas visibles tras búsqueda y filtros de columna (para los indicadores). */
   onFilteredRowsChange?: (rows: FuelRow[]) => void
+  /** Controles a la derecha del buscador (selector de semana). */
+  headerAction?: ReactNode
 }
 
 const guion = <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
@@ -29,7 +32,7 @@ function claseEstadoVehiculo(codigo: string | null): string {
  * 1 fila por vehículo: métricas de la semana elegida (distancia, consumo, rendimiento,
  * llenados), ralentí de los últimos 30 días, nivel actual del tanque, estado y conductores.
  */
-export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChange }: Props) {
+export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChange, headerAction }: Props) {
   const columns = useMemo<ColumnDef<FuelRow>[]>(() => [
     {
       accessorKey: 'patente',
@@ -261,6 +264,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
       onFilteredDataChange={onFilteredRowsChange}
       stickyLeftColumns={4}
       searchPlaceholder="Buscar patente o modelo..."
+      headerAction={headerAction}
       emptyTitle="Sin datos de combustible"
       emptyDescription="No hay datos sincronizados de Geotab. El sync corre cada hora."
       pageSize={50}

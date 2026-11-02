@@ -44,24 +44,8 @@ export function ControlCombustibleModule() {
 
   return (
     <div className="veh-module">
-      {/* Semana */}
-      <div className="combustible-toolbar">
-        <DateRangeSelector
-          selectedRange={semana}
-          onRangeChange={setSemana}
-          disabled={loading}
-          showAllOption={false}
-          placeholder="Seleccionar semana"
-          weekOnly
-        />
-        <span className="combustible-toolbar-nota">
-          {filtrado ? `Indicadores de ${visibles?.length} de ${rows.length} vehículos (según los filtros de la tabla)` : `${rows.length} vehículos`}
-          {' · '}Ralentí: últimos 30 días
-        </span>
-      </div>
-
-      {/* Stats */}
-      <div className="veh-stats">
+      {/* Indicadores arriba */}
+      <div className="veh-stats" title={`${filtrado ? `Indicadores de ${visibles?.length} de ${rows.length} vehículos (según los filtros de la tabla)` : `${rows.length} vehículos`} · Ralentí: últimos 30 días`}>
         <div className="veh-stats-grid combustible-stats-grid">
           <div className="stat-card" title="Combustible usado en los tramos entre cargas de la semana (aproximado)">
             <Fuel size={18} className="stat-icon" />
@@ -103,15 +87,25 @@ export function ControlCombustibleModule() {
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="veh-stats">
-        <CombustibleTable
-          rows={rows}
-          loading={loading}
-          onRowClick={setSelected}
-          onFilteredRowsChange={onFilteredRowsChange}
-        />
-      </div>
+      {/* Tabla: la semana va al lado del buscador (como en los demás módulos) */}
+      <CombustibleTable
+        rows={rows}
+        loading={loading}
+        onRowClick={setSelected}
+        onFilteredRowsChange={onFilteredRowsChange}
+        headerAction={
+          <div className="combustible-toolbar">
+            <DateRangeSelector
+              selectedRange={semana}
+              onRangeChange={setSemana}
+              disabled={loading}
+              showAllOption={false}
+              placeholder="Seleccionar semana"
+              weekOnly
+            />
+          </div>
+        }
+      />
 
       {/* Drawer detalle */}
       <CombustibleDetalleDrawer

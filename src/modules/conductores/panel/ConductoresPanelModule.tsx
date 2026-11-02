@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge } from 'lucide-react'
+import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency } from '../../../types/facturacion.types'
@@ -17,9 +17,9 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { cabifyService } from '../../../services/cabifyService'
 import { cargarPanelConductores, type ConductorPanelRow } from './conductoresPanelService'
 import { ConductorDetalleModal } from './ConductorDetalleModal'
-import { calificarConductor, referenciaIngresos, type Calificacion } from './calificacionConductor'
-import { CalificacionCelda, CalificacionModal } from './CalificacionEstrellas'
-import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes } from './calificacionesHistorial'
+import { calificacionDesdeGuardada, calificarConductor, referenciaIngresos, type Calificacion, type ExtrasCalificacion } from './calificacionConductor'
+import { CalificacionCelda } from './CalificacionEstrellas'
+import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes, cargarExtrasCalificacion, cargarSemanaCerradaGuardada, lunesSemanaCerrada, type CalificacionSemana } from './calificacionesHistorial'
 import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
 
@@ -105,8 +105,7 @@ export function ConductoresPanelModule() {
   // Por defecto: solo conductores con auto asignado ahora mismo.
   const [activeCard, setActiveCard] = useState<CardKey | null>('conAuto')
   const [reloadKey, setReloadKey] = useState(0)
-  const [detalle, setDetalle] = useState<ConductorPanelRow | null>(null)
-  const [verCalificacion, setVerCalificacion] = useState<ConductorPanelRow | null>(null)
+  const [detalle, setDetalle] = useState<{ fila: ConductorPanelRow; tab: 'facturacion' | 'calificacion' } | null>(null)
   // Calificación 1-5 de cada conductor (ver calificacionConductor.ts)
   // Excesos de km de las últimas 4 semanas (Facturación), para el factor "Límite de km"
   const [excesosKm, setExcesosKm] = useState<Awaited<ReturnType<typeof cargarExcesosRecientes>>>(null)
@@ -116,17 +115,46 @@ export function ConductoresPanelModule() {
     cargarExcesosRecientes(rows.map(r => r.id)).then(e => { if (activo) setExcesosKm(e) })
     return () => { activo = false }
   }, [rows])
-  const calificaciones = useMemo(() => {
+  // Semana en curso (avance parcial): se ve dentro del detalle, pestaña Calificación
+  const [extrasCal, setExtrasCal] = useState<ExtrasCalificacion | null>(null)
+  useEffect(() => {
+    if (!rows.length) return
+    let activo = true
+    cargarExtrasCalificacion(rows.map(r => r.id)).then(e => { if (activo) setExtrasCal(e) })
+    return () => { activo = false }
+  }, [rows])
+  const calificacionesEnCurso = useMemo(() => {
     const ref = referenciaIngresos(rows)
     const m = new Map<string, Calificacion>()
-    for (const r of rows) m.set(r.id, calificarConductor(r, ref, excesosKm))
+    for (const r of rows) m.set(r.id, calificarConductor(r, ref, excesosKm, extrasCal))
     return m
-  }, [rows, excesosKm])
+  }, [rows, excesosKm, extrasCal])
+  // La tabla muestra la ÚLTIMA SEMANA CERRADA (la guardada cada lunes): la semana en
+  // curso arranca en cero el lunes y bajaba a todos. Si un conductor no tiene la
+  // semana guardada todavía, se usa el avance de la semana en curso.
+  const [cerradas, setCerradas] = useState<Map<string, CalificacionSemana> | null>(null)
+  const [recargarCerradas, setRecargarCerradas] = useState(0)
+  useEffect(() => {
+    let activo = true
+    cargarSemanaCerradaGuardada()
+      .then(m => { if (activo) setCerradas(m) })
+      .catch(() => { if (activo) setCerradas(new Map()) })
+    return () => { activo = false }
+  }, [recargarCerradas, reloadKey])
+  const calificaciones = useMemo(() => {
+    const m = new Map<string, Calificacion>()
+    for (const r of rows) {
+      const g = cerradas?.get(r.id)
+      m.set(r.id, g ? calificacionDesdeGuardada(g) : (calificacionesEnCurso.get(r.id) as Calificacion))
+    }
+    return m
+  }, [rows, cerradas, calificacionesEnCurso])
   // Historial: la primera vez que se abre el panel desde el lunes se calcula y guarda
   // la calificación de la semana que terminó (en segundo plano, sin trabar la pantalla).
   useEffect(() => {
     if (loading || !rows.length) return
     void guardarSemanaCerradaSiFalta(sedeActualId ?? null, rows.map(r => r.id))
+      .then(guardo => { if (guardo) setRecargarCerradas(k => k + 1) })
   }, [loading, rows, sedeActualId])
   // Filas realmente visibles en la tabla: el DataTable las reporta ya pasadas por
   // TODOS sus filtros internos (columna, rangos numéricos, búsqueda global).
@@ -153,6 +181,7 @@ export function ConductoresPanelModule() {
     setError('')
     cargarPanelConductores(sedeActualId, {
       cabify: { startDate: semanaCabify.startDate, endDate: semanaCabify.endDate },
+      appsSemanaCerrada: cabifyService.getWeekRange(1),
     })
       .then(data => { if (activo) setRows(data) })
       .catch(e => { if (activo) setError(e?.message || 'Error al cargar el panel') })
@@ -198,6 +227,7 @@ export function ConductoresPanelModule() {
       'DNI': c.dni || '',
       'CUIT': c.ruc || '',
       'Guía': c.guia || '',
+      'App (semana cerrada)': c.apps?.join(' + ') || '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
       'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
       'Grupo de Flota': grupoFlotaLabel(c.grupoFlotaAsignado),
@@ -238,6 +268,7 @@ export function ConductoresPanelModule() {
       { wch: 12 }, // DNI
       { wch: 14 }, // CUIT
       { wch: 18 }, // Guía
+      { wch: 14 }, // App
       { wch: 12 }, // Estado
       { wch: 16 }, // Patente Asignada
       { wch: 14 }, // Grupo de Flota
@@ -311,13 +342,32 @@ export function ConductoresPanelModule() {
     {
       id: 'calificacion',
       accessorFn: (r) => calificaciones.get(r.id)?.puntaje ?? -1,
-      header: 'Calificación',
+      header: () => {
+        const l = lunesSemanaCerrada()
+        return <span title={`Última semana cerrada (desde el ${l.slice(8, 10)}/${l.slice(5, 7)}). La semana en curso se ve en el detalle.`}>Calificación</span>
+      },
       enableColumnFilter: false,
       sortingFn: (a, b) => (calificaciones.get(a.original.id)?.puntaje ?? -1) - (calificaciones.get(b.original.id)?.puntaje ?? -1),
       cell: ({ row }) => {
         const c = calificaciones.get(row.original.id)
         if (!c) return null
-        return <CalificacionCelda calificacion={c} onClick={() => setVerCalificacion(row.original)} />
+        return <CalificacionCelda calificacion={c} onClick={() => setDetalle({ fila: row.original, tab: 'calificacion' })} />
+      },
+    },
+    {
+      // App con la que trabajó la última semana cerrada (Cabify; DiDi más adelante)
+      id: 'apps',
+      accessorFn: (r) => (r.apps && r.apps.length ? r.apps.join(' + ') : 'Sin app'),
+      header: () => <span title="Apps con las que trabajó la última semana cerrada">App</span>,
+      cell: ({ row }) => {
+        const apps = row.original.apps
+        if (apps === undefined) return <span className="cpanel-num cpanel-nulo">…</span>
+        if (!apps.length) return <span className="cpanel-num cpanel-nulo">—</span>
+        return (
+          <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+            {apps.map(a => <span key={a} className={`cpanel-app cpanel-app--${a.toLowerCase()}`}>{a}</span>)}
+          </span>
+        )
       },
     },
     {
@@ -640,7 +690,7 @@ export function ConductoresPanelModule() {
       header: 'Acciones',
       enableSorting: false,
       cell: ({ row }) => (
-        <button className="cpanel-ver" onClick={() => setDetalle(row.original)}>
+        <button className="cpanel-ver" onClick={() => setDetalle({ fila: row.original, tab: 'calificacion' })}>
           <Eye size={14} /> Ver detalle
         </button>
       ),
@@ -711,12 +761,6 @@ export function ConductoresPanelModule() {
         onFilteredDataChange={setVisibles}
         headerAction={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span
-              style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)', whiteSpace: 'nowrap' }}
-              title="Las columnas de Cabify muestran el acumulado de la semana en curso (lunes a hoy) y se actualizan con cada sincronización"
-            >
-              Cabify: {rangoCabifyLabel}
-            </span>
             <button
               className="btn-secondary"
               onClick={handleExportar}
@@ -729,26 +773,24 @@ export function ConductoresPanelModule() {
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <Download size={16} />
-              Exportar Excel{filasAExportar.length > 0 ? ` (${filasAExportar.length})` : ''}
+              Exportar
             </button>
             <button className="btn-secondary" onClick={() => setReloadKey(k => k + 1)} disabled={loading}
+              title="Recargar" aria-label="Recargar"
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              Recargar
+              <RefreshCw size={16} />
             </button>
           </div>
         }
       />
 
-      {verCalificacion && calificaciones.get(verCalificacion.id) && (
-        <CalificacionModal
-          conductorId={verCalificacion.id}
-          nombre={verCalificacion.nombre || 'Conductor'}
-          calificacion={calificaciones.get(verCalificacion.id)!}
-          onClose={() => setVerCalificacion(null)}
-        />
-      )}
       {detalle && (
-        <ConductorDetalleModal conductor={detalle} onClose={() => setDetalle(null)} tabInicial="facturacion" />
+        <ConductorDetalleModal
+          conductor={detalle.fila}
+          onClose={() => setDetalle(null)}
+          tabInicial={detalle.tab}
+          calificacion={calificacionesEnCurso.get(detalle.fila.id) ?? null}
+        />
       )}
     </div>
   )

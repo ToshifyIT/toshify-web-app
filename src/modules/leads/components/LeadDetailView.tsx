@@ -256,20 +256,20 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
         <div className="lead-detail-card">
           <div className="lead-detail-card-title">Contacto y Dirección</div>
           <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Teléfono</span>
-            <span className="lead-detail-item-value">{lead.phone || '-'}</span>
+            <span className="lead-detail-item-label">Teléfono (WhatsApp)</span>
+            <span className="lead-detail-item-value">{lead.phone || lead.whatsapp_number || '-'}</span>
           </div>
           <div className="lead-detail-item">
-            <span className="lead-detail-item-label">WhatsApp</span>
-            <span className="lead-detail-item-value">{lead.whatsapp_number || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Teléfono secundario</span>
+            <span className="lead-detail-item-label">Teléfono secundario (personal / otra app)</span>
             <span className="lead-detail-item-value">{lead.telefono_secundario || '-'}</span>
           </div>
           <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Email</span>
+            <span className="lead-detail-item-label">Email app móvil (Cabify)</span>
             <span className="lead-detail-item-value">{lead.email || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Mail personal / respaldo</span>
+            <span className="lead-detail-item-value">{lead.mail_de_respaldo || '-'}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Zona</span>

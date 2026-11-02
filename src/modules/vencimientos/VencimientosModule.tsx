@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Eye, Edit2, Trash2, FileText, AlertTriangle, Plus, Shield } from 'lucide-react'
+import { Eye, Edit2, Trash2, FileText, AlertTriangle, Plus, Shield, Download } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { supabase } from '../../lib/supabase'
 import { useSede } from '../../contexts/SedeContext'
@@ -910,7 +910,7 @@ export function VencimientosModule() {
             className="btn-secondary"
             onClick={exportToExcel}
           >
-            <FileText size={16} />
+            <Download size={16} />
             Exportar
           </button>
           <button
