@@ -6,6 +6,7 @@ import { showError, showSuccess } from '../../utils/toast'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { type ColumnDef, type Table, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { formatPlata } from '../../utils/format'
 
 interface RangoSeguimiento {
   id: number
@@ -163,7 +164,7 @@ const getColorHex = (color: string): string =>
 
 const formatCurrency = (value: number | null): string => {
   if (value === null || value === undefined) return 'Sin límite'
-  return `$ ${value.toLocaleString('es-AR')}`
+  return formatPlata(value)
 }
 
 // FilterFn para columnas numéricas con rango

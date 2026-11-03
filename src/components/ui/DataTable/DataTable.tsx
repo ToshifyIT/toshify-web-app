@@ -35,6 +35,7 @@ const FilterIcon = ({ size = 8 }: { size?: number }) => (
 import { Spinner } from "../LoadingOverlay";
 import { AdaptiveTooltip } from "../AdaptiveTooltip";
 import { numeroSemana } from '../../../utils/semanaISO'
+import { formatPlata } from '../../../utils/format'
 import "./DataTable.css";
 import "../DateRangeSelector/DateRangeSelector.css";
 
@@ -46,7 +47,7 @@ const MAX_OPCIONES_NUMERICAS = 3;
 const formatoMontoOpcion = (v: string): string => {
   const n = Number(v);
   return Number.isFinite(n)
-    ? `$ ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    ? formatPlata(n, { decimales: Number.isInteger(n) ? 0 : 2 })
     : v;
 };
 type DateFilters = Record<string, { from?: string; to?: string }>;
@@ -807,7 +808,8 @@ export function DataTable<T>({
       const el = tableWrapperRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      const RESERVE = 100; // paginación (~60) + padding/buffer (~40)
+      // Paginación (~42) + margen inferior de la página (16). Antes 100: quedaba una franja vacía abajo.
+      const RESERVE = 62;
       const available = window.innerHeight - top - RESERVE;
       const newHeight = available > 200 ? Math.floor(available) : 200;
       setDynamicMaxHeight(prev => (prev !== null && Math.abs(prev - newHeight) < 2) ? prev : newHeight);

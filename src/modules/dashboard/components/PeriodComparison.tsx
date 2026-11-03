@@ -16,6 +16,7 @@ import { useIncobrabilidadStats } from '../../../hooks/useIncobrabilidadStats'
 import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './PeriodComparison.css'
+import { formatPlata, formatNumero } from '../../../utils/format'
 
 type Granularity = 'dia' | 'semana' | 'mes' | 'ano'
 
@@ -75,7 +76,7 @@ export function PeriodComparison() {
         return `$ ${(value / 1000).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}K`
       }
     }
-    return `$ ${value.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return formatPlata(value)
   }
 
   const currencyFormatter = useMemo(
@@ -127,7 +128,7 @@ export function PeriodComparison() {
       const isPositive = percentage >= 0
       
       return {
-        label: `${isPositive ? '+' : ''}${percentage.toFixed(0)}%`,
+        label: `${isPositive ? '+' : ''}${formatNumero(percentage)}%`,
         sign: isPositive ? 'positive' : 'negative'
       }
     }

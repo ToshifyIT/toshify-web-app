@@ -46,6 +46,9 @@ import { VisitasFormModal } from './components/VisitasFormModal';
 import { VisitaDetalleModal } from './components/VisitaDetalleModal';
 import { VisitasParametrosTab } from './components/VisitasParametrosTab';
 import './VisitasModule.css';
+import { PatenteBadge } from '../../components/ui/PatenteBadge';
+import { TabsBar } from '../../components/ui/TabsBar';
+import { formatFechaHora } from '../../utils/format'
 
 type MainTab = 'calendario' | 'parametros';
 type ViewMode = 'calendario' | 'tabla';
@@ -384,8 +387,7 @@ export function VisitasModule() {
       accessorKey: 'fecha_hora',
       header: 'Fecha/Hora',
       cell: ({ getValue, row }) => {
-        const dt = new Date(getValue() as string);
-        const text = `${format(dt, 'dd/MM/yyyy')} ${format(dt, 'HH:mm')}`;
+        const text = formatFechaHora(getValue() as string);
         if (isMasked(row.original)) return <span style={{ color: '#9ca3af' }}>{text}</span>;
         return text;
       },
@@ -444,7 +446,7 @@ export function VisitasModule() {
       header: 'Patente',
       cell: ({ getValue, row }) => {
         if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
-        return (getValue() as string) || '-';
+        return <PatenteBadge patente={getValue() as string} size="sm" />;
       },
     },
     {
@@ -523,22 +525,14 @@ export function VisitasModule() {
   return (
     <div className="visitas-module">
       {/* Main Tabs */}
-      <div className="visitas-tabs">
-        <button
-          className={`visitas-tab ${mainTab === 'calendario' ? 'active' : ''}`}
-          onClick={() => setMainTab('calendario')}
-        >
-          <CalendarIcon size={16} />
-          Calendario
-        </button>
-        <button
-          className={`visitas-tab ${mainTab === 'parametros' ? 'active' : ''}`}
-          onClick={() => setMainTab('parametros')}
-        >
-          <Settings size={16} />
-          Parámetros
-        </button>
-      </div>
+      <TabsBar
+        tabs={[
+          { id: 'calendario' as MainTab, label: 'Calendario', icon: CalendarIcon },
+          { id: 'parametros' as MainTab, label: 'Parámetros', icon: Settings },
+        ]}
+        active={mainTab}
+        onChange={setMainTab}
+      />
 
       {/* Tab content */}
       {mainTab === 'calendario' && (

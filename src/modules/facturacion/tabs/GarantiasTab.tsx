@@ -29,7 +29,6 @@ import {
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
 import { DataTable } from '../../../components/ui/DataTable'
-import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay, Spinner } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
@@ -46,6 +45,7 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 
 import { hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
+import { formatFecha } from '../../../utils/format'
 interface ConductorBasico {
   id: string
   nombres: string
@@ -1957,7 +1957,7 @@ export function GarantiasTab() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
             title={`Pasó de tarifa ${etiquetasTarifa.antigua} a ${etiquetasTarifa.nueva}: desde esa semana paga Toshipass en lugar de garantía`}>
             <span className="fact-badge fact-badge-blue" style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{etiquetasTarifa.antigua} → {etiquetasTarifa.nueva}</span>
-            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>desde {ct.desde.split('-').reverse().join('/')}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>desde {formatFecha(ct.desde)}</span>
           </div>
         )
       }
@@ -2659,7 +2659,6 @@ export function GarantiasTab() {
                       </button>
                     ))}
                   </div>
-                  <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos', 'garantias_devoluciones']} label="Garantías" />
                   <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
                     <UserPlus size={16} />
                     Agregar Garantía
@@ -2939,7 +2938,7 @@ export function GarantiasTab() {
                         padding: '2px 8px', borderRadius: 'var(--radius-xs)',
                         background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
                       }}>
-                        <AlertTriangle size={12} className="ico-inline" />Deuda real ${deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                        <AlertTriangle size={12} className="ico-inline" />Deuda real {formatCurrency(deudaReal)}
                       </span>
                     )}
                   </div>
@@ -3081,7 +3080,7 @@ export function GarantiasTab() {
                             // fecha_cierre del período. Semana en curso (abierta) → vacío.
                             const cerrada = semanaCerrada(f.anio, f.semana)
                             const fechaBase = cerrada ? (fechaCierreSemana(f.anio, f.semana) || f.fecha) : ''
-                            const fecha = fechaBase ? new Date(fechaBase).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : ''
+                            const fecha = fechaBase ? formatFecha(fechaBase) : ''
                             const esExtraFacturacion = f.tipo_movimiento === 'facturacion'
                             const esExcedente = !esExtraFacturacion && !!f.esExcedenteReal
                             const montoColor = esExtraFacturacion ? '#b45309' : esExcedente ? '#b45309' : 'var(--text-primary)'

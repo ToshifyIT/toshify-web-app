@@ -97,6 +97,7 @@ import { SugerenciasDrawer } from './components/SugerenciasDrawer'
 import { IconoEntidad } from './components/iconos'
 import { Chip } from './components/ui'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 
 // Cache perezoso del panel de conductores (consulta pesada). Se reusa para las
 // fichas y se invalida al cambiar de sede. Mismo patrón que el v1.
@@ -2017,20 +2018,7 @@ function FilaLista({
       <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 21, flexWrap: 'wrap' }}>
         {/* El tipo (conductor / lead) ya lo dice el ícono: no se repite en texto. */}
         {e.tipo === 'conductor' && e.tieneAsignacionActiva && e.patenteAsignacion && (
-          <span
-            title="Vehículo asignado"
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-xs)',
-              padding: '0 4px',
-              letterSpacing: '.3px',
-            }}
-          >
-            {e.patenteAsignacion}
-          </span>
+          <PatenteBadge patente={e.patenteAsignacion} size="sm" title="Vehículo asignado" />
         )}
         {e.tipo === 'conductor' && e.tieneAsignacionActiva && e.tarifaAsignacion && (
           <span title="Tarifa de la asignación activa" style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)' }}>

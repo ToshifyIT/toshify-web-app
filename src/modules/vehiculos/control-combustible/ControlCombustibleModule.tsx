@@ -11,6 +11,7 @@ import type { FuelRow, RangoSemana } from './types/combustible.types'
 import '../VehicleManagement.css'
 import '../alertas-mantenimiento/AlertasMantenimientoModule.css'
 import './ControlCombustibleModule.css'
+import { formatNumero } from '../../../utils/format'
 
 function formatN(n: number): string {
   return n.toLocaleString('es-AR')
@@ -64,7 +65,7 @@ export function ControlCombustibleModule() {
           <div className="stat-card">
             <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.rendimientoSemana > 0 ? `${stats.rendimientoSemana.toFixed(1)}` : '—'}</span>
+              <span className="stat-value">{stats.rendimientoSemana > 0 ? `${formatNumero(stats.rendimientoSemana, 1)}` : '—'}</span>
               <span className="stat-label">Rendimiento km/L (semana)</span>
             </div>
           </div>
@@ -72,7 +73,7 @@ export function ControlCombustibleModule() {
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.ralentiTotal > 0 ? `${formatN(stats.ralentiTotal)} L` : '—'}</span>
-              <span className="stat-label">Ralentí 30 días ({stats.ralentiPct.toFixed(0)}% del consumo)</span>
+              <span className="stat-label">Ralentí 30 días ({formatNumero(stats.ralentiPct)}% del consumo)</span>
             </div>
           </div>
           <div className="stat-card">
@@ -106,6 +107,15 @@ export function ControlCombustibleModule() {
           </div>
         }
       />
+
+      {/* Qué significa la columna Estado (abajo y chico, para no tapar la tabla) */}
+      <p className="combustible-leyenda">
+        <strong>Estado</strong> (datos de Geotab):{' '}
+        <span className="cl-dot cl-dot--verde" />Normal: 7 km/L o más ·{' '}
+        <span className="cl-dot cl-dot--rojo" />Consumo alto: menos de 7 km/L en la semana ·{' '}
+        <span className="cl-dot cl-dot--naranja" />Ralentí alto: más del 25% del combustible de 30 días con el auto parado ·{' '}
+        <span className="cl-dot cl-dot--gris" />Sin OBD: el GPS no lee el motor. Pasá el mouse sobre cada estado para ver el número.
+      </p>
 
       {/* Drawer detalle */}
       <CombustibleDetalleDrawer

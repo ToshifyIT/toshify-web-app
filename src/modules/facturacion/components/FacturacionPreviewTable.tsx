@@ -7,12 +7,13 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { ArrowLeft, Loader2, Search, Filter, X, AlertTriangle, Save, RotateCcw, Link2, Plus, Trash2, Eye, Download } from 'lucide-react'
-import { format } from 'date-fns'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
+import { formatNumero } from '../../../utils/format'
+import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 // Tipo para conceptos pendientes de enlazar
 export interface ConceptoPendiente {
@@ -151,7 +152,7 @@ export function FacturacionPreviewTable({
   const [mostrarProyectado, setMostrarProyectado] = useState(false)
 
   // Formateador de números: separador de miles y 2 decimales
-  const fmtNum = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+  const fmtNum = (n: number) => formatNumero(n, 2)
 
   // Campos editables
   const editableFields = ['total', 'netoGravado', 'ivaAmount', 'exento', 'descripcionAdicional']
@@ -950,14 +951,14 @@ export function FacturacionPreviewTable({
                                   
                                   ${p.fechaPenalidad ? `
                                     <strong>Fecha penalidad:</strong>
-                                    <span>${new Date(p.fechaPenalidad).toLocaleDateString('es-AR')}</span>
+                                    <span>${formatFecha(p.fechaPenalidad)}</span>
                                   ` : ''}
                                   
                                   <strong style="border-top: 1px solid #e5e7eb; padding-top: 8px;">Registrado por:</strong>
                                   <span style="border-top: 1px solid #e5e7eb; padding-top: 8px;">${p.creadoPor || '-'}</span>
                                   
                                   <strong>Fecha registro:</strong>
-                                  <span>${p.fechaCreacion ? new Date(p.fechaCreacion).toLocaleString('es-AR') : '-'}</span>
+                                  <span>${formatFechaHora(p.fechaCreacion)}</span>
                                 </div>
                               </div>
                             `,
@@ -1113,8 +1114,8 @@ export function FacturacionPreviewTable({
               return (
                 <tr key={`${row.numero}-${row.codigoProducto}-${idx}`} className={rowClasses}>
                   <td>{row.isNew ? <span className="badge-new">NUEVO</span> : row.numero}</td>
-                  <td>{format(row.fechaEmision, 'dd/MM')}</td>
-                  <td>{format(row.fechaVencimiento, 'dd/MM')}</td>
+                  <td>{formatFecha(row.fechaEmision.toISOString())}</td>
+                  <td>{formatFecha(row.fechaVencimiento.toISOString())}</td>
                   <td>{row.puntoVenta}</td>
                   <td><span className={`badge-tipo ${row.tipoFactura === 'FACTURA_A' ? 'tipo-a' : 'tipo-b'}`}>{row.tipoFactura === 'FACTURA_A' ? 'A' : 'B'}</span></td>
                   <td>{row.tipoDocumento}</td>

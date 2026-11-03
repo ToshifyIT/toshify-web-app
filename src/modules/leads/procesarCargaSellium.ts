@@ -23,6 +23,7 @@ import {
 } from './cargaMasivaSellium'
 
 import { hoyART } from '../../utils/fechaArgentina'
+import { formatFechaHora } from '../../utils/format'
 interface OpcionesCargaSellium {
   filas: Record<string, unknown>[]
   headers: string[]
@@ -236,8 +237,8 @@ function fechaLegible(v: unknown): string {
   if (v == null || v === '') return '(vacío)'
   const d = new Date(String(v))
   if (isNaN(d.getTime())) return String(v)
-  const opciones: Intl.DateTimeFormatOptions = { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }
-  return d.toLocaleString('es-AR', opciones)
+  const txt = formatFechaHora(String(v))
+  return txt === '-' ? String(v) : txt
 }
 
 /** Fecha sin hora (fecha_carga se guarda a las 00:00 UTC): se muestra el día tal cual. */

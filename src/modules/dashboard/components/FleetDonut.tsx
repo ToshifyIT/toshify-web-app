@@ -9,6 +9,7 @@ import {
 } from 'recharts'
 import { useVehicleStatusStats } from '../../../hooks/useVehicleStatusStats'
 import './FleetDonut.css'
+import { formatNumero } from '../../../utils/format'
 
 const COLORS = [
   '#10B981', // Emerald 500
@@ -52,7 +53,7 @@ export function FleetDonut() {
               Cantidad: <span className="font-bold text-gray-900">{data.value}</span>
             </span>
             <span className="text-gray-500">
-              Porcentaje: <span className="font-medium">{data.percentage.toFixed(1)}%</span>
+              Porcentaje: <span className="font-medium">{formatNumero(data.percentage, 1)}%</span>
             </span>
           </div>
         </div>

@@ -53,7 +53,7 @@ export async function fetchAlertaDetalle(id: string): Promise<AlertaMantenimient
   return data as unknown as AlertaMantenimiento
 }
 
-export async function marcarAtendida(faultId: string, userName: string): Promise<void> {
+export async function marcarAtendida(faultId: string | string[], userName: string): Promise<void> {
   const { error } = await supabase
     .from('geotab_fault_data')
     .update({
@@ -62,11 +62,11 @@ export async function marcarAtendida(faultId: string, userName: string): Promise
       dismiss_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', faultId)
+    .in('id', Array.isArray(faultId) ? faultId : [faultId])
   if (error) throw error
 }
 
-export async function descartarAlerta(faultId: string, userName: string): Promise<void> {
+export async function descartarAlerta(faultId: string | string[], userName: string): Promise<void> {
   const { error } = await supabase
     .from('geotab_fault_data')
     .update({
@@ -75,11 +75,11 @@ export async function descartarAlerta(faultId: string, userName: string): Promis
       dismiss_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', faultId)
+    .in('id', Array.isArray(faultId) ? faultId : [faultId])
   if (error) throw error
 }
 
-export async function reactivarAlerta(faultId: string): Promise<void> {
+export async function reactivarAlerta(faultId: string | string[]): Promise<void> {
   const { error } = await supabase
     .from('geotab_fault_data')
     .update({
@@ -88,6 +88,6 @@ export async function reactivarAlerta(faultId: string): Promise<void> {
       dismiss_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', faultId)
+    .in('id', Array.isArray(faultId) ? faultId : [faultId])
   if (error) throw error
 }

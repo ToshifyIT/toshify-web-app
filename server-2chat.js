@@ -901,9 +901,9 @@ twoChatRouter.get('/llamadas', async (req, res) => {
 /* Actualización automática de llamadas                                       */
 /* -------------------------------------------------------------------------- */
 
-// Todos los días, a cada hora en punto entre estas horas de Argentina (inclusive)
-const SYNC_AUTO_HORA_DESDE = 9
-const SYNC_AUTO_HORA_HASTA = 17
+// Todos los días, a cada hora en punto (las 24 horas, hora Argentina)
+const SYNC_AUTO_HORA_DESDE = 0
+const SYNC_AUTO_HORA_HASTA = 23
 
 /** Hora y minuto actuales en Argentina (UTC-3, sin horario de verano) */
 function horaArgentina() {

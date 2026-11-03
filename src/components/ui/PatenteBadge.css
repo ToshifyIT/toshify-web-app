@@ -1,0 +1,37 @@
+/* PatenteBadge: badge unificado de patente (misma estética que .patente-badge de Vehículos).
+   Usa variables del theme, así que se invierte correctamente en modo oscuro. */
+.patente-badge-ui {
+  display: inline-block;
+  background: var(--color-gray-800);
+  color: var(--text-inverse);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.patente-badge-ui--sm {
+  padding: 2px 6px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.patente-badge-ui--empty {
+  background: transparent;
+  color: var(--text-tertiary);
+  padding-left: 0;
+  padding-right: 0;
+  letter-spacing: 0;
+}
+
+@media (max-width: 768px) {
+  .patente-badge-ui:not(.patente-badge-ui--sm) {
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+}

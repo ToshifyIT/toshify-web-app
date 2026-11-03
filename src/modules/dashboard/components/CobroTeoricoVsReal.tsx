@@ -20,6 +20,7 @@ import { CobroComparativo } from './CobroComparativo'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { fechaLocalISO } from '../../../utils/fechaArgentina'
 import './CobroTeoricoVsReal.css'
+import { formatPlata, formatNumero } from '../../../utils/format'
 
 // Cache para evitar consultas repetidas a la BD
 const cabifyTableCache = new Map<string, string>()
@@ -90,14 +91,7 @@ const formatCurrencyK = (value: number) => {
   return `$${Math.round(value / 1000)}K`
 }
 
-const formatCurrencyFull = (value: number) => {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value)
-}
+const formatCurrencyFull = (value: number) => formatPlata(value)
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -109,7 +103,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     let variationElement = null;
     if (teorico > 0) {
       const diff = real - teorico;
-      const percentage = Math.abs((diff / teorico) * 100).toFixed(1);
+      const percentage = formatNumero(Math.abs((diff / teorico) * 100), 1);
       const direction = diff >= 0 ? 'mayor' : 'menor';
       
       variationElement = (

@@ -6,6 +6,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import type { SiniestroFormData, SiniestroCategoria, SiniestroEstado, VehiculoSimple, ConductorSimple } from '../../../types/siniestros.types'
 import type { VehiculoEstado } from '../../../types/database.types'
+import { formatFecha } from '../../../utils/format'
 
 // =====================================================
 // TIPOS
@@ -1031,7 +1032,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
               </div>
               <div>
                 <span style={{ color: 'var(--text-secondary)' }}>Desde:</span>{' '}
-                <strong style={{ color: 'var(--text-primary)' }}>{new Date(asignacionActiva.fecha_inicio).toLocaleDateString('es-AR')}</strong>
+                <strong style={{ color: 'var(--text-primary)' }}>{formatFecha(asignacionActiva.fecha_inicio)}</strong>
               </div>
               {asignacionActiva.conductores.length > 0 && (
                 <div style={{ gridColumn: '1 / -1' }}>

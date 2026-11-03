@@ -33,6 +33,8 @@ import {
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
 interface Asignacion {
   id: string
@@ -1939,9 +1941,7 @@ export function AsignacionesModule() {
               '<th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280;">Cambio</th>' +
             '</tr></thead><tbody>' +
             cambios.map((r: any) => {
-              const fecha = new Date(r.created_at).toLocaleString('es-AR', {
-                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-              })
+              const fecha = formatFechaHora(r.created_at)
               return '<tr style="border-top:1px solid #e5e7eb;">' +
                 `<td style="padding:8px 10px;white-space:nowrap;font-family:monospace;">${fecha}</td>` +
                 `<td style="padding:8px 10px;color:#374151;">${r.usuario}</td>` +
@@ -3472,7 +3472,7 @@ export function AsignacionesModule() {
       header: 'Vehículo',
       cell: ({ row }) => (
         <div>
-          <div><span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span></div>
+          <div><PatenteBadge patente={row.original.vehiculos?.patente} size="sm" /></div>
           <span className={getHorarioBadgeClass(row.original.horario)} style={{ fontSize: '10px', padding: '1px 6px' }}>
             {row.original.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
           </span>
@@ -3631,9 +3631,8 @@ export function AsignacionesModule() {
       cell: ({ row }) => {
         const fechaProg = row.original.fecha_programada
         if (!fechaProg) return <span className="text-muted">-</span>
-        const fecha = new Date(fechaProg)
-        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
-        const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+        const fechaStr = formatFecha(fechaProg)
+        const horaStr = formatHora(fechaProg)
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
             <div>{fechaStr}</div>
@@ -3657,9 +3656,8 @@ export function AsignacionesModule() {
         const fechaRef = fechaInicio || row.original.fecha_programada
         if (!fechaRef) return <span className="text-muted">-</span>
         const esFechaProgramada = !fechaInicio
-        const fecha = new Date(fechaRef)
-        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
-        const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+        const fechaStr = formatFecha(fechaRef)
+        const horaStr = formatHora(fechaRef)
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
             <div style={{ color: esFechaProgramada ? 'var(--text-tertiary)' : 'var(--color-success)' }}>{fechaStr}</div>
@@ -3737,12 +3735,12 @@ export function AsignacionesModule() {
       },
       cell: ({ row }) => {
         if (!row.original.fecha_fin) return <span style={{ fontSize: '11px' }}>-</span>
-        const d = new Date(row.original.fecha_fin)
+        const fechaFin = row.original.fecha_fin
         return (
           <span style={{ fontSize: '11px' }}>
-            {d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}
+            {formatFecha(fechaFin)}
             <span style={{ display: 'block', fontSize: '9px', color: 'var(--text-tertiary)' }}>
-              {d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}
+              {formatHora(fechaFin)}
             </span>
           </span>
         )
@@ -4073,9 +4071,9 @@ export function AsignacionesModule() {
         <div className="asig-modal-overlay">
           <div className="asig-modal-content">
             <h2 className="asig-modal-title">Confirmar Programación</h2>
-            <p>Vehículo: <strong>{selectedAsignacion.vehiculos?.patente}</strong></p>
+            <p>Vehículo: <PatenteBadge patente={selectedAsignacion.vehiculos?.patente} size="sm" /></p>
             <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '16px' }}>
-              Fecha de entrega: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'N/A'}</strong>
+              Fecha de entrega: <strong>{selectedAsignacion.fecha_programada ? formatFecha(selectedAsignacion.fecha_programada) : 'N/A'}</strong>
             </p>
 
             <div style={{ marginBottom: '20px' }}>
@@ -4109,14 +4107,7 @@ export function AsignacionesModule() {
                               <CheckCircle size={14} /> Ya confirmado
                               {ac.fecha_confirmacion && (
                                 <span style={{ marginLeft: '8px', fontWeight: 400, opacity: 0.85 }}>
-                                  ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    timeZone: 'America/Argentina/Buenos_Aires'
-                                  })})
+                                  ({formatFechaHora(ac.fecha_confirmacion)})
                                 </span>
                               )}
                             </span>
@@ -4237,12 +4228,12 @@ export function AsignacionesModule() {
                     const cancelada = c.estado === 'cancelado'
                     const nombre = `${c.conductores?.nombres || ''} ${c.conductores?.apellidos || ''}`.trim() || '-'
                     const turno = c.horario === 'todo_dia' ? 'A cargo' : c.horario === 'diurno' ? 'Diurno' : c.horario === 'nocturno' ? 'Nocturno' : (c.horario || '-')
-                    const fmt = (s: any) => s ? new Date(s).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : null
+                    const fmt = (s: any) => s ? formatFecha(s) : null
                     const ini = fmt(c.fecha_inicio); const fin = fmt(c.fecha_fin)
                     const estadoCond = (c.conductores?.conductores_estados?.codigo || '').toUpperCase()
                     const deBaja = estadoCond.includes('BAJA')
                     const estadoTramo = cancelada ? 'Cancelada' : c.estado === 'completado' ? 'Finalizada' : (c.estado || '-')
-                    const fmtConf = (s: any) => s ? new Date(s).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : ''
+                    const fmtConf = (s: any) => s ? formatFecha(s) : ''
                     const confirmadoTxt = c.confirmado ? `Sí${c.fecha_confirmacion ? ` · ${fmtConf(c.fecha_confirmacion)}` : ''}` : 'No'
                     return (
                       <div key={c.id} className={`asig-hist-item ${cancelada ? 'cancel' : ''}`}>
@@ -4288,7 +4279,7 @@ export function AsignacionesModule() {
                     <div>
                       <label className="asig-detail-label">Vehículo</label>
                       <p className="asig-detail-value">
-                        <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
+                        <PatenteBadge patente={viewAsignacion.vehiculos?.patente} size="sm" /> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
                       </p>
                     </div>
                     <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)' }}>
@@ -4368,13 +4359,13 @@ export function AsignacionesModule() {
                     <div>
                       <label className="asig-detail-label">Fecha Creación</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {new Date(viewAsignacion.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {formatFecha(viewAsignacion.created_at)}
                       </p>
                     </div>
                     <div>
                       <label className="asig-detail-label">Fecha Devolución</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_inicio ? new Date(viewAsignacion.fecha_inicio).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No definida'}
+                        {viewAsignacion.fecha_inicio ? formatFechaHora(viewAsignacion.fecha_inicio) : 'No definida'}
                       </p>
                     </div>
                   </div>
@@ -4417,13 +4408,13 @@ export function AsignacionesModule() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
                         <div style={{ flex: 1, padding: '10px 14px', background: '#FEF3C7', borderRadius: 'var(--radius-md)', border: '1px solid #FDE68A' }}>
                           <div style={{ fontSize: '10px', color: '#92400E', fontWeight: 600, marginBottom: '2px' }}>VEHÍCULO A CAMBIAR</div>
-                          <div style={{ fontWeight: 700, fontSize: '14px' }}>{viewAsignacion?.motivoDetalle?.vehiculoCambioPatente}</div>
+                          <div><PatenteBadge patente={viewAsignacion?.motivoDetalle?.vehiculoCambioPatente} /></div>
                           <div style={{ fontSize: '11px', color: '#6B7280' }}>{viewAsignacion?.motivoDetalle?.vehiculoCambioModelo}</div>
                         </div>
                         <ArrowLeftRight size={20} style={{ color: '#9CA3AF', flexShrink: 0 }} />
                         <div style={{ flex: 1, padding: '10px 14px', background: '#D1FAE5', borderRadius: 'var(--radius-md)', border: '1px solid #A7F3D0' }}>
                           <div style={{ fontSize: '10px', color: '#065F46', fontWeight: 600, marginBottom: '2px' }}>VEHÍCULO NUEVO</div>
-                          <div style={{ fontWeight: 700, fontSize: '14px' }}>{viewAsignacion.vehiculos?.patente}</div>
+                          <div><PatenteBadge patente={viewAsignacion.vehiculos?.patente} /></div>
                           <div style={{ fontSize: '11px', color: '#6B7280' }}>{viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}</div>
                         </div>
                       </div>
@@ -4432,7 +4423,7 @@ export function AsignacionesModule() {
                     <div>
                       <label className="asig-detail-label">Vehículo</label>
                       <p className="asig-detail-value">
-                        <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
+                        <PatenteBadge patente={viewAsignacion.vehiculos?.patente} size="sm" /> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
                       </p>
                     </div>
                   )}
@@ -4563,14 +4554,7 @@ export function AsignacionesModule() {
                                       <CheckCircle size={14} /> Confirmado
                                       {ac.fecha_confirmacion && (
                                         <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px', opacity: 0.85 }}>
-                                          ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            timeZone: 'America/Argentina/Buenos_Aires'
-                                          })})
+                                          ({formatFechaHora(ac.fecha_confirmacion)})
                                         </span>
                                       )}
                                     </span>
@@ -4720,25 +4704,25 @@ export function AsignacionesModule() {
                     <div>
                       <label className="asig-detail-label">Fecha Creación</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {new Date(viewAsignacion.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {formatFecha(viewAsignacion.created_at)}
                       </p>
                     </div>
                     <div>
                       <label className="asig-detail-label">Fecha Entrega</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_programada ? new Date(viewAsignacion.fecha_programada).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No definida'}
+                        {viewAsignacion.fecha_programada ? formatFechaHora(viewAsignacion.fecha_programada) : 'No definida'}
                       </p>
                     </div>
                     <div>
                       <label className="asig-detail-label">Fecha Activación</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_inicio ? new Date(viewAsignacion.fecha_inicio).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No activada'}
+                        {viewAsignacion.fecha_inicio ? formatFechaHora(viewAsignacion.fecha_inicio) : 'No activada'}
                       </p>
                     </div>
                     <div>
                       <label className="asig-detail-label">Fecha Fin</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_fin ? new Date(viewAsignacion.fecha_fin).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'Sin definir'}
+                        {viewAsignacion.fecha_fin ? formatFechaHora(viewAsignacion.fecha_fin) : 'Sin definir'}
                       </p>
                     </div>
                   </div>

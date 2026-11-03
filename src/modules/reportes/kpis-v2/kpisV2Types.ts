@@ -11,6 +11,7 @@
 // - Objetivo (forecast semanal): se reparte igual que lo real y SOLO sobre los
 //   días que tienen dato real, para comparar lo mismo contra lo mismo.
 import { getISOWeek, getISOWeekYear } from 'date-fns'
+import { formatPlata } from '../../../utils/format'
 
 // ───────────── Datos crudos ─────────────
 
@@ -562,7 +563,7 @@ export function fmtInt(v: number | null): string {
 }
 
 export function fmtMoneda(v: number | null): string {
-  return v === null ? '—' : `$ ${nf0.format(v)}`
+  return v === null ? '—' : formatPlata(v)
 }
 
 /** "$ 23,4 M" */

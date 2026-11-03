@@ -18,13 +18,16 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { crearCobroDesdeMulta, sincronizarCobroPorAplicar } from './services/crearCobroDesdeMulta'
 import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMulta } from './services/desestimarMulta'
 import { withAudit, logMultaAudit } from './services/auditMulta'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import { hoyART } from '../../utils/fechaArgentina'
+import { formatFecha as formatFechaUnica, formatFechaHora, formatHora } from '../../utils/format'
 import { numeroSemana } from '../../utils/semanaISO'
 import './MultasTelepase.css'
+import { formatPlata } from '../../utils/format'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 
 interface Multa {
   id: number
@@ -86,16 +89,11 @@ function parseImporte(importe: string | number | null | undefined): number {
 
 function formatMoney(value: string | number | null | undefined): string {
   const num = parseImporte(value)
-  return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  return formatPlata(num)
 }
 
 function formatFecha(fecha: string | null): string {
-  if (!fecha) return '-'
-  try {
-    return format(new Date(fecha), 'dd/MM/yyyy', { locale: es })
-  } catch {
-    return fecha
-  }
+  return formatFechaUnica(fecha)
 }
 
 // Fecha local de hoy en formato YYYY-MM-DD. No usamos toISOString() porque
@@ -108,10 +106,9 @@ function getHoyLocal(): string {
 function splitDateTime(dateStr: string | null): { date: string; time: string } {
   if (!dateStr) return { date: '-', time: '' }
   try {
-    const d = new Date(dateStr)
-    const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-    return { date, time }
+    const date = formatFechaUnica(dateStr)
+    const time = formatHora(dateStr)
+    return { date, time: time === '-' ? '' : time }
   } catch {
     return { date: '-', time: '' }
   }
@@ -553,10 +550,10 @@ export default function MultasModule() {
   , [multas, fueEnviadaAFacturacion])
   const totalDesestimadas = useMemo(() => multas.filter(m => !!m.desestimada_at && !tieneConductorConComa(m)).length, [multas])
 
-  const vistaOptions = useMemo<Array<{ id: VistaMultas; label: string; count: number }>>(() => [
-    { id: 'activas', label: 'Activas', count: totalActivas },
-    { id: 'enviadas', label: 'Enviadas a facturación', count: totalEnviadas },
-    { id: 'desestimadas', label: 'Desestimadas', count: totalDesestimadas },
+  const vistaOptions = useMemo<TabsBarItem<VistaMultas>[]>(() => [
+    { id: 'activas', label: 'Activas', icon: FileText, count: totalActivas },
+    { id: 'enviadas', label: 'Enviadas a facturación', icon: SendHorizonal, count: totalEnviadas },
+    { id: 'desestimadas', label: 'Desestimadas', icon: Archive, count: totalDesestimadas },
   ], [totalActivas, totalEnviadas, totalDesestimadas])
 
   // Estadisticas
@@ -1374,7 +1371,7 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => (
-        <span className="patente-badge">{row.original.patente || '-'}</span>
+        <PatenteBadge patente={row.original.patente} />
       )
     },
     {
@@ -1460,7 +1457,7 @@ export default function MultasModule() {
       ),
       cell: ({ row }: { row: { original: Multa } }) => (
         <span className="font-medium text-orange-500" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-          {row.original.importe}
+          {formatMoney(row.original.importe)}
         </span>
       ),
     }] as ColumnDef<Multa>[])),
@@ -1527,7 +1524,7 @@ export default function MultasModule() {
         if (!v) return <span style={{ color: '#9ca3af' }}>—</span>
         return (
           <span className="font-medium" style={{ whiteSpace: 'nowrap', color: '#10b981' }}>
-            {v}
+            {formatMoney(v)}
           </span>
         )
       },
@@ -1547,7 +1544,7 @@ export default function MultasModule() {
         const vencido = ymd <= getHoyLocal()
         return (
           <span style={{ whiteSpace: 'nowrap', color: vencido ? '#ef4444' : '#374151', fontWeight: vencido ? 600 : 400 }}>
-            {ymd}
+            {formatFecha(ymd)}
           </span>
         )
       }
@@ -1630,7 +1627,7 @@ export default function MultasModule() {
     },
     {
       id: 'acciones',
-      size: 220,
+      size: 200,
       header: 'Acciones',
       cell: ({ row }) => {
         const yaEnviada = multasEnviadas.has(row.original.id)
@@ -1643,116 +1640,73 @@ export default function MultasModule() {
             : 'Enviar a facturación'
         const estaDesestimada = !!row.original.desestimada_at
 
-        // Estilo común para botones icono+label (mismo patrón que Bitacora/Marcaciones)
-        const btnBase = (color: string, opacity = 1, disabled = false): React.CSSProperties => ({
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1px',
-          background: 'none',
-          border: 'none',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          padding: '2px',
-          color,
-          opacity,
-        })
-        const labelStyle: React.CSSProperties = { fontSize: '9px', fontWeight: 600, lineHeight: 1 }
+        const editable = multaEsEditable(row.original.id)
 
+        // Orden: Ver · Editar · (otras) · Eliminar — iconos con tooltip
         return (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              title="Ver detalle"
-              onClick={() => handleVerDetalle(row.original)}
-              style={btnBase('var(--text-secondary)')}
-            >
-              <Eye size={14} />
-              <span style={labelStyle}>Ver</span>
-            </button>
-            {(row.original.multa_origen_id != null || idsConCopias.has(row.original.id)) && (
-              <button
-                title="Historial: ver la multa de origen o las copias creadas desde esta multa"
-                onClick={() => handleVerHistorial(row.original)}
-                style={btnBase('#7c3aed')}
-              >
-                <History size={14} />
-                <span style={labelStyle}>Historial</span>
-              </button>
-            )}
-            {!estaDesestimada && (
-              <>
-                <button
-                  title={multaEsEditable(row.original.id) ? 'Editar multa' : 'No editable: la multa ya está en facturación o fue rechazada'}
-                  onClick={() => editarMulta(row.original)}
-                  disabled={!multaEsEditable(row.original.id)}
-                  style={{ ...btnBase('#2563eb'), ...(multaEsEditable(row.original.id) ? {} : { opacity: 0.4, cursor: 'not-allowed' }) }}
-                >
-                  <Edit2 size={14} />
-                  <span style={labelStyle}>Editar</span>
-                </button>
-                <button
-                  title={tooltipEnvio}
-                  onClick={() => { if (!deshabilitarEnvio) handleCrearCobroDirecto(row.original) }}
-                  disabled={deshabilitarEnvio}
-                  style={btnBase(
-                    deshabilitarEnvio ? 'var(--text-tertiary)' : '#16a34a',
-                    deshabilitarEnvio ? 0.4 : 1,
-                    deshabilitarEnvio,
-                  )}
-                >
-                  <SendHorizonal size={14} />
-                  <span style={labelStyle}>Enviar</span>
-                </button>
-                <button
-                  title="Desestimar (ocultar sin borrar de la base)"
-                  onClick={() => desestimarMulta(row.original)}
-                  style={btnBase('#f59e0b')}
-                >
-                  <Archive size={14} />
-                  <span style={labelStyle}>Desestimar</span>
-                </button>
-                {multasEstadoPago.get(row.original.id)?.estado === 'pagada' && (
-                  <button
-                    title="Rechazar el cobro de esta multa pagada"
-                    onClick={() => handleRechazarMulta(row.original)}
-                    style={btnBase('#ef4444')}
-                  >
-                    <X size={14} />
-                    <span style={labelStyle}>Rechazar</span>
-                  </button>
-                )}
-                {multaCobroEstado.get(row.original.id) === 'rechazada' && (
-                  <button
-                    title="Crear una copia de esta multa rechazada (arranca en Activas para reenviar a facturación)"
-                    onClick={() => handleCrearCopia(row.original)}
-                    style={btnBase('#0ea5e9')}
-                  >
-                    <Copy size={14} />
-                    <span style={labelStyle}>Copiar</span>
-                  </button>
-                )}
-              </>
-            )}
-            {estaDesestimada && canReactivar && (
-              <button
-                title="Reactivar multa"
-                onClick={() => reactivarMulta(row.original)}
-                style={btnBase('#7c3aed')}
-              >
-                <RotateCcw size={14} />
-                <span style={labelStyle}>Reactivar</span>
-              </button>
-            )}
-            {canBorrar && (
-              <button
-                title="Eliminar definitivo"
-                onClick={() => eliminarMulta(row.original)}
-                style={btnBase('#dc2626')}
-              >
-                <Trash2 size={14} />
-                <span style={labelStyle}>Borrar</span>
-              </button>
-            )}
-          </div>
+          <ActionsMenu
+            maxVisible={5}
+            actions={[
+              { icon: <Eye size={15} />, label: 'Ver detalle', onClick: () => handleVerDetalle(row.original) },
+              {
+                icon: <Edit2 size={15} />,
+                label: editable ? 'Editar multa' : 'No editable: la multa ya está en facturación o fue rechazada',
+                onClick: () => editarMulta(row.original),
+                disabled: !editable,
+                hidden: estaDesestimada,
+                variant: 'info',
+              },
+              {
+                icon: <History size={15} />,
+                label: 'Historial: ver la multa de origen o las copias creadas desde esta multa',
+                onClick: () => handleVerHistorial(row.original),
+                hidden: !(row.original.multa_origen_id != null || idsConCopias.has(row.original.id)),
+              },
+              {
+                icon: <SendHorizonal size={15} />,
+                label: tooltipEnvio,
+                onClick: () => { if (!deshabilitarEnvio) handleCrearCobroDirecto(row.original) },
+                disabled: deshabilitarEnvio,
+                hidden: estaDesestimada,
+                variant: 'success',
+              },
+              {
+                icon: <Archive size={15} />,
+                label: 'Desestimar (ocultar sin borrar de la base)',
+                onClick: () => desestimarMulta(row.original),
+                hidden: estaDesestimada,
+                variant: 'warning',
+              },
+              {
+                icon: <X size={15} />,
+                label: 'Rechazar el cobro de esta multa pagada',
+                onClick: () => handleRechazarMulta(row.original),
+                hidden: estaDesestimada || multasEstadoPago.get(row.original.id)?.estado !== 'pagada',
+                variant: 'danger',
+              },
+              {
+                icon: <Copy size={15} />,
+                label: 'Crear una copia de esta multa rechazada (arranca en Activas para reenviar a facturación)',
+                onClick: () => handleCrearCopia(row.original),
+                hidden: estaDesestimada || multaCobroEstado.get(row.original.id) !== 'rechazada',
+                variant: 'info',
+              },
+              {
+                icon: <RotateCcw size={15} />,
+                label: 'Reactivar multa',
+                onClick: () => reactivarMulta(row.original),
+                hidden: !(estaDesestimada && canReactivar),
+                variant: 'info',
+              },
+              {
+                icon: <Trash2 size={15} />,
+                label: 'Eliminar definitivo',
+                onClick: () => eliminarMulta(row.original),
+                hidden: !canBorrar,
+                variant: 'danger',
+              },
+            ]}
+          />
         )
       }
     }
@@ -1862,6 +1816,9 @@ export default function MultasModule() {
         </StatsGrid>
       </div>
 
+      {/* Pestañas de vista: Activas / Enviadas a facturación / Desestimadas */}
+      <TabsBar tabs={vistaOptions} active={vista} onChange={setVista} />
+
       {/* Banner cuando se está mirando desestimadas */}
       {vista === 'desestimadas' && (
         <div style={{
@@ -1893,50 +1850,6 @@ export default function MultasModule() {
         globalFilterFn={(row, _c, val) => matchBusqueda(row.original as Multa, String(val ?? ''))}
         headerAction={
           <div className="multas-header-actions">
-            {/* Toggle vista activas / enviadas / desestimadas */}
-            <div className="multas-vista-switch" style={{
-              display: 'inline-flex',
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-sm)',
-              overflow: 'hidden',
-            }}>
-              {vistaOptions.map((option, index) => {
-                const isActive = vista === option.id
-                return (
-                  <button
-                    key={option.id}
-                    onClick={() => setVista(option.id)}
-                    style={{
-                      border: 'none',
-                      background: isActive ? 'var(--text-primary)' : 'var(--bg-primary)',
-                      color: isActive ? '#fff' : 'var(--text-secondary)',
-                      padding: '6px 12px',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      borderRight: index < vistaOptions.length - 1 ? '1px solid var(--border-primary)' : 'none',
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {option.label}
-                    <span style={{
-                      background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
-                      color: isActive ? '#fff' : 'var(--text-tertiary)',
-                      padding: '1px 6px',
-                      borderRadius: 'var(--radius-lg)',
-                      fontSize: 10,
-                      fontWeight: 600,
-                    }}>
-                      {option.count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
             <button className="btn-secondary" onClick={handleExportar}>
               <Download size={16}
             />
@@ -1962,7 +1875,7 @@ export default function MultasModule() {
               <tr>
                 <td className="multas-detail-label">Patente</td>
                 <td className="multas-detail-value">
-                  <span className="patente-badge">{selectedMulta.patente || '-'}</span>
+                  <PatenteBadge patente={selectedMulta.patente} />
                 </td>
               </tr>
               {(() => {
@@ -2490,7 +2403,7 @@ export default function MultasModule() {
         const esCopia = historialMulta.multa_origen_id != null
         const parent = esCopia ? multas.find(m => m.id === historialMulta.multa_origen_id) : null
         const copias = multas.filter(m => m.multa_origen_id === historialMulta.id)
-        const fmtFecha = (s?: string | null) => s ? new Date(s).toLocaleString('es-AR') : '—'
+        const fmtFecha = (s?: string | null) => s ? formatFechaHora(s) : '—'
         const th = { padding: '6px 8px', borderBottom: '1px solid #eef0f2', textAlign: 'left' as const }
         const td = { padding: '6px 8px', borderBottom: '1px solid #f6f7f8' }
         return (
@@ -2507,7 +2420,7 @@ export default function MultasModule() {
                     {parent ? (
                       <div style={{ border: '1px solid #e5e7eb', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 13, lineHeight: 1.7 }}>
                         <div><strong>Multa #{parent.id}</strong> · Acta {parent.infraccion || '—'} · <span style={{ fontWeight: 700, color: multaCobroEstado.get(parent.id) === 'rechazada' ? '#b91c1c' : '#6b7280' }}>{multaCobroEstado.get(parent.id) === 'rechazada' ? 'Rechazada' : 'Original'}</span></div>
-                        <div>Patente: {parent.patente || '—'} · Importe: {formatMoney(parent.importe)}</div>
+                        <div>Patente: <PatenteBadge patente={parent.patente} size="sm" /> · Importe: {formatMoney(parent.importe)}</div>
                         <div>Conductor: {parent.conductor_responsable || '—'}</div>
                         <div>Lugar: {parent.lugar || '—'}</div>
                         <div>Fecha infracción: {(() => { const { date, time } = splitDateTime(parent.fecha_infraccion); return `${date}${time ? ' ' + time : ''}` })()}</div>
@@ -2528,7 +2441,7 @@ export default function MultasModule() {
                         {copias.map(c => (
                           <tr key={c.id}>
                             <td style={td}>#{c.id}</td>
-                            <td style={td}>{c.patente || '—'}</td>
+                            <td style={td}><PatenteBadge patente={c.patente} size="sm" /></td>
                             <td style={td}>{formatMoney(c.importe)}</td>
                             <td style={td}>{c.conductor_responsable || '—'}</td>
                             <td style={td}>{c.updated_by_name || '—'}</td>
@@ -2591,8 +2504,8 @@ export default function MultasModule() {
                       : 'N/A'
                     return (
                       <tr key={multa.id}>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.fecha_infraccion ? new Date(multa.fecha_infraccion).toLocaleDateString('es-AR') : '-'}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', fontWeight: 600 }}>{multa.patente || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.fecha_infraccion ? formatFechaUnica(multa.fecha_infraccion) : '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}><PatenteBadge patente={multa.patente} size="sm" /></td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>
                           <span className="multa-detalle">
                             <span className="multa-detalle-txt">{multa.detalle || '-'}</span>
@@ -2689,8 +2602,8 @@ export default function MultasModule() {
                         return (
                           <Fragment key={multa.id}>
                             <tr>
-                              <td style={{ padding: '8px 10px', borderBottom: bb }}>{multa.fecha_infraccion ? new Date(multa.fecha_infraccion).toLocaleDateString('es-AR') : '-'}</td>
-                              <td style={{ padding: '8px 10px', borderBottom: bb, fontWeight: 600 }}>{multa.patente || '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: bb }}>{multa.fecha_infraccion ? formatFechaUnica(multa.fecha_infraccion) : '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: bb }}><PatenteBadge patente={multa.patente} size="sm" /></td>
                               <td style={{ padding: '8px 10px', borderBottom: bb }}>
                                 <span className="multa-detalle">
                                   <span className="multa-detalle-txt">{multa.detalle || '-'}</span>

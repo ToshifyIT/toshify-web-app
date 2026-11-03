@@ -5,6 +5,8 @@ import { X, TrendingUp, Clock, DollarSign, Car } from 'lucide-react'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import './CabifyHistoricoModal.css'
+import { formatPlata, formatNumero } from '../../../utils/format'
+import { formatFecha } from '../../../utils/format'
 
 interface CabifyHistoricoModalProps {
   isOpen: boolean
@@ -41,16 +43,11 @@ interface CabifyRecord {
 }
 
 const formatCurrency = (val: number): string => {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(val)
+  return formatPlata(val)
 }
 
 const formatPercent = (val: number): string => {
-  return `${val.toFixed(2)}%`
+  return `${formatNumero(val, 2)}%`
 }
 
 /**
@@ -229,7 +226,7 @@ export function CabifyHistoricoModal({
       const [y, m, d] = dateStr.split('-').map(Number)
       // Crear fecha en hora local mediodía para evitar cambios de día
       const localDate = new Date(y, m - 1, d, 12, 0, 0)
-      return localDate.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit' })
+      return `${localDate.toLocaleDateString('es-AR', { weekday: 'short' })} ${formatFecha(dateStr)}`
     } catch {
       return fecha
     }
@@ -293,7 +290,7 @@ export function CabifyHistoricoModal({
                 <div className="cabify-summary-card">
                   <Clock size={16} className="text-orange-500" />
                   <div>
-                    <span className="cabify-summary-value">{totals.horas_conectadas.toFixed(1)}h</span>
+                    <span className="cabify-summary-value">{formatNumero(totals.horas_conectadas, 1)}h</span>
                     <span className="cabify-summary-label">Horas</span>
                   </div>
                 </div>
@@ -341,7 +338,7 @@ export function CabifyHistoricoModal({
                         <td>{r.viajes_perdidos}</td>
                         <td>{formatPercent(r.tasa_aceptacion)}</td>
                         <td>{formatPercent(r.tasa_ocupacion)}</td>
-                        <td>{r.score.toFixed(2)}</td>
+                        <td>{formatNumero(r.score, 2)}</td>
                         <td>{formatCurrency(r.peajes)}</td>
                         <td className="cabify-td-vehicle">{r.vehiculo_completo}</td>
                       </tr>
@@ -354,7 +351,7 @@ export function CabifyHistoricoModal({
                       <td className="cabify-td-currency"><strong>{formatCurrency(totals.cobro_efectivo)}</strong></td>
                       <td className="cabify-td-currency cabify-td-bold"><strong>{formatCurrency(totals.ganancia_total)}</strong></td>
                       <td>-</td>
-                      <td><strong>{totals.horas_conectadas.toFixed(1)}h</strong></td>
+                      <td><strong>{formatNumero(totals.horas_conectadas, 1)}h</strong></td>
                       <td><strong>{totals.viajes_finalizados}</strong></td>
                       <td><strong>{totals.viajes_rechazados}</strong></td>
                       <td><strong>{totals.viajes_perdidos}</strong></td>

@@ -36,6 +36,9 @@ import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import './TwoChatModule.css'
+import { formatMoneda, formatNumero } from '../../../utils/format'
+import { TabsBar } from '../../../components/ui/TabsBar'
+import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 
 type TabContactos = 'contactos' | 'registro'
 type FiltroSync = 'todos' | EstadoSync2Chat
@@ -426,6 +429,11 @@ function LlamadasTab() {
   }, [desde, hasta, direccion])
 
   useEffect(() => { void consultar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // El servidor trae lo nuevo de 2Chat cada hora; la pantalla abierta relee la base cada 15 min
+  useEffect(() => {
+    const id = setInterval(() => { void consultar() }, 15 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [consultar])
 
   // El filtro de tipo (lead / conductor / sin coincidencia) aplica a todo: tarjetas,
   // reporte por agente, por día, detalle y Excel
@@ -530,15 +538,15 @@ function LlamadasTab() {
     { accessorKey: 'atendidas', header: 'Atendidas' },
     { accessorKey: 'noAtendidas', header: 'No atendidas' },
     { accessorKey: 'conversaciones', header: `+${SEGUNDOS_CONVERSACION} seg` },
-    { accessorKey: 'segundos', header: 'Minutos', cell: ({ getValue }) => ((getValue() as number) / 60).toFixed(1) },
+    { accessorKey: 'segundos', header: 'Minutos', cell: ({ getValue }) => formatNumero((getValue() as number) / 60, 1) },
     { accessorKey: 'promedioAtendidas', header: 'Promedio', cell: ({ getValue }) => mmss(getValue() as number) },
     // Todo en números distintos, para que se pueda comparar: conductores + leads
     // + sin identificar = números distintos. Las llamadas a cada uno van en el Excel.
     { accessorKey: 'conductores', header: 'Números distintos' },
     { accessorKey: 'conductoresDistintos', header: 'Conductores' },
     { accessorKey: 'leadsDistintos', header: 'Leads' },
-    { accessorKey: 'pctAtendidas', header: '% atendidas', cell: ({ getValue }) => `${((getValue() as number) * 100).toFixed(0)}%` },
-    { accessorKey: 'costo', header: 'Costo USD', cell: ({ getValue }) => (getValue() as number).toFixed(2) },
+    { accessorKey: 'pctAtendidas', header: '% atendidas', cell: ({ getValue }) => `${formatNumero((getValue() as number) * 100)}%` },
+    { accessorKey: 'costo', header: 'Costo USD', cell: ({ getValue }) => formatMoneda(getValue() as number, 'USD') },
   ], [])
 
   const columnasDetalle = useMemo<ColumnDef<LlamadaTwoChat, unknown>[]>(() => [
@@ -568,11 +576,6 @@ function LlamadasTab() {
           </div>
         )
       },
-    },
-    {
-      id: 'tipo',
-      header: 'Tipo',
-      accessorFn: (r) => (r.tipo_contacto === 'conductor' ? 'Conductor' : r.tipo_contacto === 'lead' ? 'Lead' : 'Sin coincidencia'),
     },
     {
       accessorKey: 'direccion',
@@ -635,14 +638,14 @@ function LlamadasTab() {
           <div className="stat-card">
             <Timer size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{totales.minutos.toFixed(1)}</span>
+              <span className="stat-value">{formatNumero(totales.minutos, 1)}</span>
               <span className="stat-label">Minutos</span>
             </div>
           </div>
           <div className="stat-card">
             <DollarSign size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{totales.costo.toFixed(2)}</span>
+              <span className="stat-value">{formatMoneda(totales.costo, 'USD')}</span>
               <span className="stat-label">Costo USD</span>
             </div>
           </div>
@@ -685,6 +688,9 @@ function LlamadasTab() {
           <RefreshCw size={16} className={loading ? 'tc-girando' : undefined} />
           Consultar
         </button>
+        <span className="tc-actualizado">
+          {actualizadoEn ? `Actualizado ${formatFechaHoraART(actualizadoEn)}` : 'Sin actualizar aún'} · se actualiza solo cada hora
+        </span>
         <button className="btn-secondary" onClick={() => void exportar()} disabled={loading || porTipo.length === 0}>
           <Download size={16} />
           Exportar
@@ -724,14 +730,6 @@ function LlamadasTab() {
           searchPlaceholder="Buscar conductor, lead o número..."
           emptyIcon={<Phone size={40} />}
           emptyTitle="Sin llamadas"
-          headerAction={
-            agentes.length > 1 ? (
-              <select className="tc-select" value={agente} onChange={(e) => setAgente(e.target.value)} aria-label="Agente">
-                <option value="todos">Todos los agentes</option>
-                {agentes.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            ) : undefined
-          }
         />
       </section>
     </>
@@ -800,6 +798,7 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
   const [llamadas, setLlamadas] = useState<LlamadaTwoChat[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [actualizadoEn, setActualizadoEn] = useState<string | null>(null)
 
   const consultar = useCallback(async (actualizar = false) => {
     if (desde > hasta) {
@@ -811,6 +810,7 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
     try {
       const r = await obtenerLlamadasTwoChat({ desde, hasta, direccion: 'todas', actualizar })
       setLlamadas(r.llamadas)
+      setActualizadoEn(r.actualizado_en)
     } catch (err) {
       console.error('Error cargando registro de llamadas 2Chat:', err)
       setError(err instanceof Error ? err.message : 'No se pudo cargar el registro')
@@ -820,6 +820,11 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
   }, [desde, hasta])
 
   useEffect(() => { void consultar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // El servidor trae lo nuevo de 2Chat cada hora; la pantalla abierta relee la base cada 15 min
+  useEffect(() => {
+    const id = setInterval(() => { void consultar() }, 15 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [consultar])
 
   const numeros = useMemo(() => agruparPorNumero(llamadas), [llamadas])
   const conteoTipo = useMemo(() => ({
@@ -929,25 +934,15 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
     },
     {
       id: 'accion',
-      header: 'Acción',
+      header: 'Acciones',
       enableSorting: false,
       cell: ({ row }) => {
         const n = row.original
         if (n.tipo === 'lead' && n.lead_id) {
-          return (
-            <button className="btn-secondary tc-btn-accion" onClick={() => abrirLeadEnPestana(n.lead_id as string)}>
-              <ExternalLink size={14} />
-              Ver lead
-            </button>
-          )
+          return <ActionsMenu actions={[{ icon: <ExternalLink size={15} />, label: 'Ver lead', onClick: () => abrirLeadEnPestana(n.lead_id as string) }]} />
         }
-        if (n.tipo === 'conductor') return <span className="tc-muted">Conductor</span>
-        return (
-          <button className="btn-primary tc-btn-accion" onClick={() => void crearLead(n)}>
-            <UserPlus size={14} />
-            Crear lead
-          </button>
-        )
+        if (n.tipo === 'conductor') return <span className="tc-muted">—</span>
+        return <ActionsMenu actions={[{ icon: <UserPlus size={15} />, label: 'Crear lead', onClick: () => void crearLead(n), variant: 'success' }]} />
       },
     },
   ], [crearLead])
@@ -993,29 +988,6 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
 
       {pestanas}
 
-      <div className="tc-filtros tc-filtros--registro">
-        <label className="tc-campo">
-          <span>Desde</span>
-          <input type="date" className="form-input" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} />
-        </label>
-        <label className="tc-campo">
-          <span>Hasta</span>
-          <input type="date" className="form-input" value={hasta} min={desde} onChange={(e) => setHasta(e.target.value)} />
-        </label>
-        <label className="tc-campo">
-          <span>Contacto</span>
-          <select className="form-input" value={tipo} onChange={(e) => setTipo(e.target.value as FiltroTipo)}>
-            {(Object.keys(ETIQUETA_TIPO) as FiltroTipo[]).map((t) => (
-              <option key={t} value={t}>{ETIQUETA_TIPO[t]} ({conteoTipo[t]})</option>
-            ))}
-          </select>
-        </label>
-        <button className="btn-primary" onClick={() => void consultar(true)} disabled={loading}>
-          <RefreshCw size={16} className={loading ? 'tc-girando' : undefined} />
-          Consultar
-        </button>
-      </div>
-
       <DataTable
         data={visibles}
         columns={columnas}
@@ -1026,7 +998,34 @@ function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
         emptyIcon={<History size={48} />}
         emptyTitle="Sin llamadas en el rango"
         emptyDescription="Probá ampliar las fechas"
+        headerAction={
+          <div className="tc-filtros-linea">
+            <label className="tc-campo">
+              <span>Desde</span>
+              <input type="date" className="form-input" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} />
+            </label>
+            <label className="tc-campo">
+              <span>Hasta</span>
+              <input type="date" className="form-input" value={hasta} min={desde} onChange={(e) => setHasta(e.target.value)} />
+            </label>
+            <label className="tc-campo">
+              <span>Contacto</span>
+              <select className="form-input" value={tipo} onChange={(e) => setTipo(e.target.value as FiltroTipo)}>
+                {(Object.keys(ETIQUETA_TIPO) as FiltroTipo[]).map((t) => (
+                  <option key={t} value={t}>{ETIQUETA_TIPO[t]} ({conteoTipo[t]})</option>
+                ))}
+              </select>
+            </label>
+            <button className="btn-primary" onClick={() => void consultar(true)} disabled={loading}>
+              <RefreshCw size={16} className={loading ? 'tc-girando' : undefined} />
+              Consultar
+            </button>
+          </div>
+        }
       />
+      <p className="tc-actualizado tc-actualizado--pie">
+        {actualizadoEn ? `Actualizado ${formatFechaHoraART(actualizadoEn)}` : 'Sin actualizar aún'} · se actualiza solo cada hora; «Consultar» trae lo nuevo de 2Chat sin esperar.
+      </p>
     </>
   )
 }
@@ -1050,26 +1049,14 @@ export function TwoChatContactosModule() {
 
   // Orden de Toshibase: métricas arriba, debajo las pestañas, después filtros y tabla
   const pestanas = (
-    <div className="tc-tabs" role="tablist">
-      <button
-        role="tab"
-        aria-selected={tab === 'contactos'}
-        className={`tc-tab ${tab === 'contactos' ? 'active' : ''}`}
-        onClick={() => setTab('contactos')}
-      >
-        <Users size={16} />
-        Contactos
-      </button>
-      <button
-        role="tab"
-        aria-selected={tab === 'registro'}
-        className={`tc-tab ${tab === 'registro' ? 'active' : ''}`}
-        onClick={() => setTab('registro')}
-      >
-        <History size={16} />
-        Registro de llamadas
-      </button>
-    </div>
+    <TabsBar
+      tabs={[
+        { id: 'contactos' as TabContactos, label: 'Contactos', icon: Users },
+        { id: 'registro' as TabContactos, label: 'Registro de llamadas', icon: History },
+      ]}
+      active={tab}
+      onChange={setTab}
+    />
   )
 
   return (

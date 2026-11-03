@@ -9,7 +9,7 @@ import type { Calificacion } from './calificacionConductor'
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { X, AlertTriangle, Wallet, Gauge, Receipt, Info, ShieldCheck, BadgeCheck, CalendarDays, Hash, Scale, PiggyBank, ChevronDown, MessageSquare } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { formatCurrency } from '../../../types/facturacion.types'
+import { formatPlata, formatNumero } from '../../../utils/format'
 import { calcularKmSemanasConductor, type KmSemanaConductor } from '../../portal/kmRecorridos'
 import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, cargarAsignacionesConductor, cargarHistorialBajasConductor, cargarGarantiaConductor, cargarKardexSaldoConductor, cargarRendimientoCabifyConductor, calcularResumenGarantia, saldoActualKardex, ESTADO_GARANTIA_UI, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor, type AsignacionHist, type BajaHist, type GarantiaKardex, type SaldoKardex, type CabifySemanaRend } from './conductorDetalleService'
 import type { ConductorPanelRow } from './conductoresPanelService'
@@ -22,6 +22,8 @@ import { analizarRegimenToshipass, CODIGO_TOSHIPASS, type RegimenToshipass } fro
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import './ConductorDetalleModal.css'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../utils/format'
 
 // Orden de las pestañas tal como se muestran en la barra (izq -> der).
 export type Tab = 'facturacion' | 'saldo' | 'garantia' | 'multas' | 'km' | 'cabify' | 'asignaciones' | 'bajas' | 'calificacion' | 'incidencias'
@@ -33,28 +35,19 @@ function horarioLabel(h: string | null): string {
   if (h === 'todo_dia') return 'A cargo'
   return h || '—'
 }
-// Parseo tolerante: un string 'yyyy-MM-dd' (sin hora) se interpreta como fecha
-// LOCAL, no como UTC. Con `new Date('2026-08-31')` el navegador asume UTC y en
-// Argentina (UTC-3) se mostraba 30/08 — de ahi que el panel listara las semanas
-// corridas un dia respecto del portal. Los timestamps completos siguen su curso
-// normal (se convierten a hora local, que es lo correcto para ellos).
-function parseFechaFlexible(s: string): Date | null {
-  const soloFecha = parseFechaDia(s)
-  if (soloFecha) return soloFecha
-  const d = new Date(s)
-  return isNaN(d.getTime()) ? null : d
-}
+// Fechas: formatFecha (utils/format) toma un 'yyyy-MM-dd' como dia de calendario
+// (sin corrimiento por UTC) y convierte los timestamps a hora Argentina.
 
 function fmtFechaCorta(s: string | null): string {
   if (!s) return '—'
-  const d = parseFechaFlexible(s)
-  return d ? d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+  const txt = formatFecha(s)
+  return txt === '-' ? '—' : txt
 }
 
 function fmtFecha(s: string | null): string {
   if (!s) return '—'
-  const d = parseFechaFlexible(s)
-  return d ? d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+  const txt = formatFecha(s)
+  return txt === '-' ? '—' : txt
 }
 
 // Fechas 'yyyy-MM-dd' del desglose diario de km: se parsean como fecha LOCAL.
@@ -67,7 +60,7 @@ function parseFechaDia(s: string): Date | null {
 }
 function fmtFechaDia(s: string): string {
   const d = parseFechaDia(s)
-  return d ? d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'
+  return d ? formatFecha(s) : '—'
 }
 function diaSemanaLabel(s: string): string {
   const d = parseFechaDia(s)
@@ -339,7 +332,7 @@ export function ConductorDetalleModal({
             <div className="cdet-name">{conductor.nombre || '—'}</div>
             <div className="cdet-meta">
               DNI {conductor.dni || '—'}
-              {conductor.vehiculoAsignado && <> · <span className="cdet-chip">{conductor.vehiculoAsignado}</span></>}
+              {conductor.vehiculoAsignado && <> · <PatenteBadge patente={conductor.vehiculoAsignado} size="sm" /></>}
               {' · '}<span className={conductor.activo ? 'cdet-ok' : 'cdet-off'}>{conductor.activo ? 'Activo' : (conductor.estadoCodigo || 'Inactivo')}</span>
             </div>
           </div>
@@ -363,7 +356,7 @@ export function ConductorDetalleModal({
           <div className="cdet-kpi">
             <span className="cdet-kpi-ico"><Wallet size={15} /></span>
             <div>
-              <div className="cdet-kpi-val danger">{formatCurrency(kpis.deuda)}</div>
+              <div className="cdet-kpi-val danger">{formatPlata(kpis.deuda)}</div>
               <div className="cdet-kpi-lbl">Deuda pendiente</div>
             </div>
             <button className="cdet-kpi-detalle" onClick={() => setDeudaOpen(true)} title="Ver detalle del cálculo">
@@ -371,7 +364,7 @@ export function ConductorDetalleModal({
             </button>
           </div>
           <div className="cdet-kpi"><span className="cdet-kpi-ico"><Gauge size={15} /></span><div><div className="cdet-kpi-val">{kmLoading ? '…' : `${Math.round(kpis.kmUltima).toLocaleString('es-AR')} km`}</div><div className="cdet-kpi-lbl">Km última semana <ComparacionSemana actual={kpis.kmUltima} anterior={km[1]?.km} etiqueta="" /></div></div></div>
-          <div className="cdet-kpi"><span className="cdet-kpi-ico"><Receipt size={15} /></span><div><div className="cdet-kpi-val">{formatCurrency(kpis.factUltima)}</div><div className="cdet-kpi-lbl">Facturación última semana <ComparacionSemana actual={kpis.factUltima} anterior={facturacion[1]?.proforma} moneda invertido etiqueta="" /></div></div></div>
+          <div className="cdet-kpi"><span className="cdet-kpi-ico"><Receipt size={15} /></span><div><div className="cdet-kpi-val">{formatPlata(kpis.factUltima)}</div><div className="cdet-kpi-lbl">Facturación última semana <ComparacionSemana actual={kpis.factUltima} anterior={facturacion[1]?.proforma} moneda invertido etiqueta="" /></div></div></div>
 
           {/* Saldo del último movimiento del kardex (mismo número que el hero de
               la pestaña "Historial de saldo") y su diferencia contra la garantía. */}
@@ -379,7 +372,7 @@ export function ConductorDetalleModal({
             <span className="cdet-kpi-ico"><Scale size={15} /></span>
             <div>
               <div className={`cdet-kpi-val ${saldoKpis.pendiente > 0 ? 'danger' : saldoKpis.aFavor > 0 ? 'ok' : ''}`}>
-                {saldoLoading ? '…' : formatCurrency(saldoKpis.pendiente > 0 ? saldoKpis.pendiente : saldoKpis.aFavor)}
+                {saldoLoading ? '…' : formatPlata(saldoKpis.pendiente > 0 ? saldoKpis.pendiente : saldoKpis.aFavor)}
               </div>
               <div className="cdet-kpi-lbl">
                 {saldoKpis.pendiente > 0 ? 'Saldo pendiente' : saldoKpis.aFavor > 0 ? 'Saldo a favor' : 'Saldo pendiente'}
@@ -390,7 +383,7 @@ export function ConductorDetalleModal({
             <span className="cdet-kpi-ico"><PiggyBank size={15} /></span>
             <div>
               <div className={`cdet-kpi-val ${saldoKpis.diferencia > 0 ? 'danger' : 'ok'}`}>
-                {saldoLoading || garantiaLoading ? '…' : formatCurrency(saldoKpis.diferencia)}
+                {saldoLoading || garantiaLoading ? '…' : formatPlata(saldoKpis.diferencia)}
               </div>
               <div className="cdet-kpi-lbl">
                 Saldo − garantía · {saldoKpis.diferencia > 0 ? 'sin cubrir' : 'cubierto'}
@@ -398,9 +391,9 @@ export function ConductorDetalleModal({
               {/* Operandos a la vista: de dónde sale la resta. */}
               <div
                 className="cdet-kpi-sub"
-                title={`Saldo pendiente ${formatCurrency(saldoKpis.pendiente)} − garantía pagada ${formatCurrency(saldoKpis.garantiaPagada)}`}
+                title={`Saldo pendiente ${formatPlata(saldoKpis.pendiente)} − garantía pagada ${formatPlata(saldoKpis.garantiaPagada)}`}
               >
-                {formatCurrency(saldoKpis.pendiente)} − {formatCurrency(saldoKpis.garantiaPagada)}
+                {formatPlata(saldoKpis.pendiente)} − {formatPlata(saldoKpis.garantiaPagada)}
               </div>
             </div>
           </div>
@@ -411,19 +404,19 @@ export function ConductorDetalleModal({
             <span className="cdet-kpi-ico"><ShieldCheck size={15} /></span>
             {toshipass ? (
               <div>
-                <div className="cdet-kpi-val">{toshipassCobro ? formatCurrency(Math.round(toshipassCobro.cobrado)) : '…'}</div>
+                <div className="cdet-kpi-val">{toshipassCobro ? formatPlata(Math.round(toshipassCobro.cobrado)) : '…'}</div>
                 <div className="cdet-kpi-lbl">
-                  {toshipassCobro ? `Toshipass cobrado · de ${formatCurrency(Math.round(toshipassCobro.facturado))}` : 'Toshipass cobrado'}
+                  {toshipassCobro ? `Toshipass cobrado · de ${formatPlata(Math.round(toshipassCobro.facturado))}` : 'Toshipass cobrado'}
                 </div>
               </div>
             ) : (
               <div>
                 <div className="cdet-kpi-val">
-                  {garantiaLoading ? '…' : garantiaResumen ? formatCurrency(garantiaResumen.totalRealPagado) : '—'}
+                  {garantiaLoading ? '…' : garantiaResumen ? formatPlata(garantiaResumen.totalRealPagado) : '—'}
                 </div>
                 <div className="cdet-kpi-lbl">
                   {garantiaResumen
-                    ? `Garantía pagada · de ${formatCurrency(Math.round(garantiaResumen.montoTotal))}`
+                    ? `Garantía pagada · de ${formatPlata(Math.round(garantiaResumen.montoTotal))}`
                     : 'Garantía pagada'}
                 </div>
               </div>
@@ -544,10 +537,10 @@ export function ConductorDetalleModal({
                       <tr key={m.id}>
                         <td>{fmtFecha(m.fecha)}</td>
                         <td className="cdet-trunc" title={m.infraccion || ''}>{m.infraccion || '—'}</td>
-                        <td>{m.patente || '—'}</td>
+                        <td><PatenteBadge patente={m.patente} size="sm" /></td>
                         <td><span className={`cdet-tag ${m.estado === 'pagada' ? 'ok' : 'pend'}`}>{m.estado === 'pagada' ? 'Pagada' : 'Pendiente'}</span></td>
-                        <td className={`r ${aplicaImporte ? 'cdet-aplica' : ''}`}>{formatCurrency(m.importe)}</td>
-                        <td className={`r ${aplicaDesc ? 'cdet-aplica' : ''}`}>{m.importeDescuento > 0 ? formatCurrency(m.importeDescuento) : '—'}</td>
+                        <td className={`r ${aplicaImporte ? 'cdet-aplica' : ''}`}>{formatPlata(m.importe)}</td>
+                        <td className={`r ${aplicaDesc ? 'cdet-aplica' : ''}`}>{m.importeDescuento > 0 ? formatPlata(m.importeDescuento) : '—'}</td>
                         <td>
                           {m.fechaVencDescuento
                             ? <span className={m.descuentoVigente ? 'cdet-venc-ok' : 'cdet-venc-off'}>
@@ -562,12 +555,12 @@ export function ConductorDetalleModal({
                                     <div className="cdet-cuotas-head" aria-hidden="true">&nbsp;</div>
                                     <div className="cdet-cuotas-list right">
                                       {m.cuotas.map(c => (
-                                        <span key={c.numero} className={c.aplicado ? 'cuota-ok' : 'cuota-no'}>{formatCurrency(c.monto)}</span>
+                                        <span key={c.numero} className={c.aplicado ? 'cuota-ok' : 'cuota-no'}>{formatPlata(c.monto)}</span>
                                       ))}
                                     </div>
                                   </div>
                                 : <b>—</b>)
-                            : <b>{formatCurrency(m.monto)}</b>}
+                            : <b>{formatPlata(m.monto)}</b>}
                         </td>
                         <td>
                           {tieneCuotas
@@ -601,27 +594,27 @@ export function ConductorDetalleModal({
               <div className="cdet-fac-stats">
                 <div className="cdet-fac-stat">
                   <div className="cdet-fac-stat-lbl">Última semana</div>
-                  <div className="cdet-fac-stat-val danger">{formatCurrency(factStats.ultima)}</div>
+                  <div className="cdet-fac-stat-val danger">{formatPlata(factStats.ultima)}</div>
                   {factStats.variacion !== 0 && (
                     <div className={`cdet-fac-stat-sub ${factStats.variacion > 0 ? 'up' : 'down'}`}>
-                      {factStats.variacion > 0 ? '↑' : '↓'} {Math.abs(factStats.variacion).toFixed(1)}%
+                      {factStats.variacion > 0 ? '↑' : '↓'} {formatNumero(Math.abs(factStats.variacion), 1)}%
                     </div>
                   )}
                 </div>
                 <div className="cdet-fac-stat">
                   <div className="cdet-fac-stat-lbl">Promedio semanal</div>
-                  <div className="cdet-fac-stat-val">{formatCurrency(factStats.promedio)}</div>
+                  <div className="cdet-fac-stat-val">{formatPlata(factStats.promedio)}</div>
                   <div className="cdet-fac-stat-sub muted">{factStats.totalSemanas} semanas</div>
                 </div>
                 <div className="cdet-fac-stat">
                   <div className="cdet-fac-stat-lbl">Ganancia Cabify</div>
-                  <div className="cdet-fac-stat-val ok">{formatCurrency(resumen.gananciaCabify)}</div>
+                  <div className="cdet-fac-stat-val ok">{formatPlata(resumen.gananciaCabify)}</div>
                   <div className="cdet-fac-stat-sub muted">última semana</div>
                 </div>
                 <div className="cdet-fac-stat">
                   <div className="cdet-fac-stat-lbl">Saldo actual</div>
                   <div className={`cdet-fac-stat-val ${factStats.saldoNet > 1 ? 'danger' : 'ok'}`}>
-                    {formatCurrency(Math.abs(factStats.saldoNet) < 1 ? 0 : Math.abs(factStats.saldoNet))}
+                    {formatPlata(Math.abs(factStats.saldoNet) < 1 ? 0 : Math.abs(factStats.saldoNet))}
                   </div>
                   <div className="cdet-fac-stat-sub muted">
                     {factStats.saldoNet > 1 ? 'Pendiente' : factStats.saldoNet < -1 ? 'A favor' : 'Sin saldo'}
@@ -632,18 +625,18 @@ export function ConductorDetalleModal({
               <div className="cdet-fac-list">
                 {facturacion.map(f => {
                   const estadoTexto = f.estado === 'pendiente'
-                    ? `Pendiente ${formatCurrency(f.saldo)}`
+                    ? `Pendiente ${formatPlata(f.saldo)}`
                     : f.estado === 'favor'
-                      ? `A favor ${formatCurrency(Math.abs(f.saldo))}`
+                      ? `A favor ${formatPlata(Math.abs(f.saldo))}`
                       : 'Cubierto'
                   return (
                     <div key={f.id} className={`cdet-fac-card clickable ${f.estado === 'pendiente' ? 'pend' : ''}`} onClick={() => setSemanaSel(f)}>
                       <div className="cdet-fac-top">
                         <span className="cdet-fac-sem">Semana {f.semana} / {f.anio}</span>
-                        <span className="cdet-fac-monto">{formatCurrency(f.proforma)}</span>
+                        <span className="cdet-fac-monto">{formatPlata(f.proforma)}</span>
                       </div>
                       <div className="cdet-fac-sub">
-                        {fmtFecha(f.fechaInicio)} - {fmtFecha(f.fechaFin)} · {f.patente || '-'} · {f.turnosCobrados}/{f.turnosBase} turnos
+                        {fmtFecha(f.fechaInicio)} - {fmtFecha(f.fechaFin)} · <PatenteBadge patente={f.patente} size="sm" /> · {f.turnosCobrados}/{f.turnosBase} turnos
                       </div>
                       <div className="cdet-fac-cov">
                         <span className="cdet-fac-cov-lbl">Cobertura {Math.round(f.cobertura)}%</span>
@@ -688,7 +681,7 @@ export function ConductorDetalleModal({
                         <td className={`r ${hayExceso ? 'danger' : ''}`}>{ex ? Math.round(ex.kmExceso).toLocaleString('es-AR') : '—'}</td>
                         <td>{!hayExceso ? 'N/A' : <span className={`cdet-tag ${excesoPagado ? 'ok' : 'impaga'}`}>{excesoPagado ? 'Pagado' : 'Pendiente'}</span>}</td>
                         <td>{turnoKmLabel(k.modalidad, k.horario)}</td>
-                        <td className={`r ${monto != null && monto > 0 ? 'danger' : ''}`}>{monto != null ? formatCurrency(monto) : 'N/A'}</td>
+                        <td className={`r ${monto != null && monto > 0 ? 'danger' : ''}`}>{monto != null ? formatPlata(monto) : 'N/A'}</td>
                         <td>
                           {!hayExceso
                             ? '—'
@@ -739,7 +732,7 @@ export function ConductorDetalleModal({
                                         <td>{fmtFechaDia(d.fecha)}</td>
                                         <td className="r"><b>{Math.round(d.km).toLocaleString('es-AR')}</b></td>
                                         <td className="r">{d.viajes || '—'}</td>
-                                        <td className="r">{d.km > 0 ? `${pct.toFixed(1)}%` : '—'}</td>
+                                        <td className="r">{d.km > 0 ? `${formatNumero(pct, 1)}%` : '—'}</td>
                                       </tr>
                                     )
                                   })}
@@ -772,7 +765,7 @@ export function ConductorDetalleModal({
                     const activa = a.estadoAsig === 'activa'
                     return (
                       <tr key={a.id}>
-                        <td><b>{a.patente || '—'}</b></td>
+                        <td><PatenteBadge patente={a.patente} size="sm" /></td>
                         <td className="cdet-trunc" title={a.vehiculo || ''}>{a.vehiculo || '—'}</td>
                         <td>{a.modalidad === 'a_cargo' ? 'A cargo' : horarioLabel(a.horario)}</td>
                         <td><span className={`cdet-tag ${activa ? 'ok' : 'pend'}`}>{activa ? 'Activa' : (a.estadoAsig || a.estado || '—')}</span></td>
@@ -829,33 +822,33 @@ export function ConductorDetalleModal({
                 <div className="cdet-deuda-lbl">Multas pendientes de pago</div>
                 <div className="cdet-deuda-hint">Multas en estado Pendiente (con descuento si sigue vigente)</div>
               </div>
-              <span className="cdet-deuda-amt">{formatCurrency(kpis.multasPendientes)}</span>
+              <span className="cdet-deuda-amt">{formatPlata(kpis.multasPendientes)}</span>
             </div>
             <div className="cdet-deuda-row">
               <div>
                 <div className="cdet-deuda-lbl">Saldo semana anterior</div>
                 <div className="cdet-deuda-hint">Arrastre pendiente de semanas previas</div>
               </div>
-              <span className="cdet-deuda-amt">{formatCurrency(kpis.saldoAnterior)}</span>
+              <span className="cdet-deuda-amt">{formatPlata(kpis.saldoAnterior)}</span>
             </div>
             <div className="cdet-deuda-row">
               <div>
                 <div className="cdet-deuda-lbl">Saldo actual</div>
                 <div className="cdet-deuda-hint">Lo que se le va a cobrar en la última semana</div>
               </div>
-              <span className="cdet-deuda-amt">{formatCurrency(kpis.saldoActualSemana)}</span>
+              <span className="cdet-deuda-amt">{formatPlata(kpis.saldoActualSemana)}</span>
             </div>
             <div className="cdet-deuda-row">
               <div>
                 <div className="cdet-deuda-lbl">Exceso de KM pendiente</div>
                 <div className="cdet-deuda-hint">Penalidades de exceso de km por aplicar (aún no facturadas)</div>
               </div>
-              <span className="cdet-deuda-amt">{formatCurrency(kpis.excesoPendiente)}</span>
+              <span className="cdet-deuda-amt">{formatPlata(kpis.excesoPendiente)}</span>
             </div>
 
             <div className="cdet-deuda-total">
               <span>Deuda pendiente</span>
-              <span className="danger">{formatCurrency(kpis.deuda)}</span>
+              <span className="danger">{formatPlata(kpis.deuda)}</span>
             </div>
           </div>
         </div>

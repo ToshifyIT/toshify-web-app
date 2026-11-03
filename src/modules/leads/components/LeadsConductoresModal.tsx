@@ -25,6 +25,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { showError, showSuccess } from '../../../utils/toast'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { formatFecha } from '../../../utils/format'
 
 interface LeadFila {
   id: string
@@ -78,9 +79,7 @@ function leadYaPasoAConductor(l: LeadFila): boolean {
 }
 
 function fmtFecha(v: string | null): string {
-  if (!v) return '-'
-  const d = new Date(v)
-  return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('es-AR')
+  return formatFecha(v)
 }
 
 export function LeadsConductoresModal({ onClose, onActualizado }: { onClose: () => void; onActualizado?: () => void }) {

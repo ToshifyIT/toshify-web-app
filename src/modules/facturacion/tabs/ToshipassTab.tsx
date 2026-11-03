@@ -43,6 +43,7 @@ import { showError } from '../../../utils/toast'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 
 import { hoyART } from '../../../utils/fechaArgentina'
+import { formatFecha } from '../../../utils/format'
 const LOTE_IDS = 200
 const PAGINA = 1000
 
@@ -113,7 +114,7 @@ const muestraSaldo = (f: { estadoConductor: string; tipo: string; tieneSaldo: bo
 
 const SIN_DATO = <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
 const etiquetaSemana = (semana: number, anio: number) => `S${String(semana).padStart(2, '0')} ${anio}`
-const fechaCorta = (iso: string) => iso.split('-').reverse().join('/')
+const fechaCorta = (iso: string) => formatFecha(iso)
 
 /** Lee todas las filas de una consulta paginando de a 1000 (límite de PostgREST). */
 async function leerTodo<T>(armarConsulta: () => any): Promise<T[]> {

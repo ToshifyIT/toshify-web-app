@@ -57,7 +57,6 @@ const menuIcons: Record<string, LucideIcon> = {
   'menu-por-rol': List,
   'menu-por-usuario': List,
   'gestor-menus': ClipboardList,
-  'auditoria': FileText,
   'telepase-historico': CreditCard,
   'multas': FileWarning,
   'inventario-dashboard': BarChart3,
@@ -271,8 +270,6 @@ const HistorialMovimientosPage = lazy(() => import('./inventario/HistorialMovimi
 const PedidosPage = lazy(() => import('./inventario/PedidosPage').then(m => ({ default: m.PedidosPage })))
 const USSPage = lazy(() => import('./integraciones/uss/USSPage').then(m => ({ default: m.USSPage })))
 const BitacoraPage = lazy(() => import('./integraciones/uss/BitacoraPage').then(m => ({ default: m.BitacoraPage })))
-// Version de prueba de la bitacora (tabla geotab_bitacora_vprueba)
-const BitacoraVPruebaPage = lazy(() => import('./integraciones/uss/BitacoraVPruebaPage').then(m => ({ default: m.BitacoraVPruebaPage })))
 const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExcesoKmPage').then(m => ({ default: m.ControlExcesoKmPage })))
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
 const TwoChatLlamadasPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatLlamadasPage })))
@@ -293,7 +290,6 @@ const GestionUsuariosPage = lazy(() => import('./administracion/GestionUsuariosP
 const MenuPorRolPage = lazy(() => import('./administracion/MenuPorRolPage').then(m => ({ default: m.MenuPorRolPage })))
 const MenuPorUsuarioPage = lazy(() => import('./administracion/MenuPorUsuarioPage').then(m => ({ default: m.MenuPorUsuarioPage })))
 const GestorMenusPage = lazy(() => import('./administracion/GestorMenusPage').then(m => ({ default: m.GestorMenusPage })))
-const AuditoriaPage = lazy(() => import('./administracion/AuditoriaPage').then(m => ({ default: m.AuditoriaPage })))
 const ZonasPage = lazy(() => import('./administracion/ZonasPage').then(m => ({ default: m.ZonasPage })))
 const SedesPage = lazy(() => import('./administracion/SedesPage').then(m => ({ default: m.SedesPage })))
 const ProfilePage = lazy(() => import('./profile/ProfilePage').then(m => ({ default: m.ProfilePage })))
@@ -340,7 +336,12 @@ export function HomePage() {
   void _seguimientoMenuId
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
-  const [showSedeSelector, setShowSedeSelector] = useState(!sedeActualId)
+  // Pedir la sede solo si nunca se eligió una. Antes dependía de sedeActualId en el
+  // primer render (todavía vacío mientras cargan las sedes) y el cartel salía en cada recarga.
+  const [showSedeSelector, setShowSedeSelector] = useState(() => {
+    if (sedeActualId) return false
+    try { return !localStorage.getItem('toshify-sede-id') } catch { return true }
+  })
 
   useEffect(() => {
     const initGuias = async () => {
@@ -1052,12 +1053,13 @@ export function HomePage() {
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 10px 12px;
+          /* Mismo tamaño que el resto de los ítems del menú (antes 11px y más alto) */
+          padding: 7px 12px;
           color: var(--text-secondary);
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.5px;
@@ -1228,7 +1230,7 @@ export function HomePage() {
           overflow-x: hidden;
           background: var(--bg-secondary);
           /* Arriba solo 8px: sin franja vacía entre la barra superior y el módulo. */
-          padding: 8px 32px 32px;
+          padding: 8px 32px 16px;
         }
 
         .content-card {
@@ -2165,12 +2167,6 @@ export function HomePage() {
                   <LazyPage><BitacoraPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              {/* PRUEBA: misma pantalla apuntando a geotab_bitacora_vprueba */}
-              <Route path="/integraciones/gps/bitacora_vprueba" element={
-                <ProtectedRoute submenuName="bitacora-gps" action="view">
-                  <LazyPage><BitacoraVPruebaPage /></LazyPage>
-                </ProtectedRoute>
-              } />
               <Route path="/integraciones/gps/exceso-km" element={
                 <ProtectedRoute submenuName="ctrl-exceso-km" action="view">
                   <LazyPage><ControlExcesoKmPage /></LazyPage>
@@ -2292,11 +2288,6 @@ export function HomePage() {
               <Route path="/administracion/gestor-menus" element={
                 <ProtectedRoute submenuName="gestor-menus" action="view">
                   <LazyPage><GestorMenusPage /></LazyPage>
-                </ProtectedRoute>
-              } />
-              <Route path="/administracion/auditoria" element={
-                <ProtectedRoute submenuName="auditoria" action="view">
-                  <LazyPage><AuditoriaPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/administracion/sedes" element={

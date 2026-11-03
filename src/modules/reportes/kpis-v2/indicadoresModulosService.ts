@@ -6,6 +6,7 @@
 // y el anterior.
 import { supabase } from '../../../lib/supabase'
 import { lunesDeSemana, sumarDias } from './kpisV2Types'
+import { formatPlata } from '../../../utils/format'
 
 type FiltroSede = <T>(q: T) => T
 
@@ -345,7 +346,7 @@ export async function cargarMultas(filtroSede: FiltroSede, actual: Rango, anteri
   const topMultas = [...porConductorMultas]
     .sort((a, b) => b[1].cantidad - a[1].cantidad || b[1].monto - a[1].monto)
     .slice(0, TOP)
-    .map(([nombre, v]) => ({ nombre: nombrePropio(nombre), cantidad: v.cantidad, detalle: `$ ${Math.round(v.monto).toLocaleString('es-AR')}` }))
+    .map(([nombre, v]) => ({ nombre: nombrePropio(nombre), cantidad: v.cantidad, detalle: formatPlata(v.monto) }))
 
   const porConductorKm = new Map<string, { nombre: string; km: number; monto: number }>()
   for (const x of excesosDe(actual)) {
@@ -359,7 +360,7 @@ export async function cargarMultas(filtroSede: FiltroSede, actual: Rango, anteri
   const topExcesos = [...porConductorKm.values()]
     .sort((a, b) => b.km - a.km)
     .slice(0, TOP)
-    .map(v => ({ nombre: v.nombre, cantidad: Math.round(v.km), detalle: `$ ${Math.round(v.monto).toLocaleString('es-AR')}` }))
+    .map(v => ({ nombre: v.nombre, cantidad: Math.round(v.km), detalle: formatPlata(v.monto) }))
 
   return { actual: resumen(actual), anterior: resumen(anterior), topMultas, topExcesos }
 }

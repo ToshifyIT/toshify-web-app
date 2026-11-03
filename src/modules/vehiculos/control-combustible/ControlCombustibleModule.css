@@ -80,3 +80,23 @@
 .combustible-cargo strong {
   color: var(--text-primary);
 }
+
+/* Leyenda de la columna Estado (debajo de la tabla) */
+.combustible-leyenda {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+  margin: 8px 2px 0;
+}
+.cl-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin: 0 4px 0 2px;
+  vertical-align: middle;
+}
+.cl-dot--verde { background: #16a34a; }
+.cl-dot--rojo { background: #dc2626; }
+.cl-dot--naranja { background: #ea580c; }
+.cl-dot--gris { background: #9ca3af; }

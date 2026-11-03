@@ -5,12 +5,15 @@
  */
 
 import { useMemo, useState, useRef, useEffect } from 'react';
-import { formatFechaHoraCortaART, hoyART } from '../../../../../utils/fechaArgentina';
+import { hoyART } from '../../../../../utils/fechaArgentina';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
 import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Download, ChevronDown, X } from 'lucide-react';
 import type { USSHistoricoRegistro } from '../../../../../services/ussHistoricoService';
+import { formatNumero } from '../../../../../utils/format'
+import { PatenteBadge } from '../../../../../components/ui/PatenteBadge';
+import { formatFechaHora } from '../../../../../utils/format'
 
 interface HistoricoTableProps {
   registros: USSHistoricoRegistro[];
@@ -25,14 +28,14 @@ interface HistoricoTableProps {
   headerControls?: React.ReactNode;
 }
 
-// Formatear timestamp a DD/MM HH:MM:SS mostrando el valor TAL CUAL viene de la BD.
+// Formatear timestamp a DD/MM/YYYY HH:MM:SS mostrando el valor TAL CUAL viene de la BD.
 // La data llega de las columnas fecha_hora_inicio_gmt3 / fecha_hora_fin_gmt3, que ya
 // están en GMT-3. No se aplica ninguna conversión de zona horaria: solo se reformatea
-// el string crudo "YYYY-MM-DD HH:MM:SS" (o ISO con "T") a "DD/MM HH:MM:SS".
+// el string crudo "YYYY-MM-DD HH:MM:SS" (o ISO con "T") a "DD/MM/YYYY HH:MM:SS".
 function formatTimestamp(ts: string | null): string {
   // Delega en el util compartido: sin offset lo lee tal cual (ya es ART) y con
   // offset lo convierte a ART. En ningun caso depende de la zona del browser.
-  return formatFechaHoraCortaART(ts);
+  return formatFechaHora(ts);
 }
 
 // Formatear km: redondear a 2 decimales y usar coma decimal (es-AR).
@@ -170,9 +173,7 @@ export function HistoricoTable({
                 </span>
               )}
             </div>
-            <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-              {r.patente}
-            </span>
+            <span><PatenteBadge patente={r.patente} size="sm" /></span>
           </div>
         );
       },
@@ -312,7 +313,7 @@ export function HistoricoTable({
   const paginationControls = (
     <div className="dt-pagination" style={{ borderTop: 'none', background: 'transparent', padding: '12px 0' }}>
       <div className="dt-pagination-info">
-        Mostrando {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, totalCount)} de {totalCount.toLocaleString()} registros
+        Mostrando {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, totalCount)} de {formatNumero(totalCount)} registros
       </div>
       <div className="dt-pagination-controls">
         <select value={pageSize} onChange={(e) => onPageSizeChange(Number(e.target.value))} className="dt-pagination-select">
@@ -388,7 +389,7 @@ export function HistoricoTable({
           </div>
 
           <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
-            {totalCount.toLocaleString()} registros
+            {formatNumero(totalCount)} registros
           </span>
         </div>
       </div>

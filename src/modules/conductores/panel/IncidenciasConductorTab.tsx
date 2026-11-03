@@ -8,6 +8,9 @@ import { supabase } from '../../../lib/supabase'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import '../../../components/ui/DataTable/DataTable.css'
+import { formatPlata } from '../../../utils/format'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../utils/format'
 
 type Tipo = 'logistica' | 'cobro' | 'siniestro'
 
@@ -38,11 +41,11 @@ const RESPONSABLE: Record<string, string> = {
 
 const fmtFecha = (v: string | null) => {
   if (!v) return '—'
-  const d = new Date(v.length <= 10 ? `${v}T12:00:00` : v)
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-AR')
+  const txt = formatFecha(v)
+  return txt === '-' ? '—' : txt
 }
 const fmtMonto = (n: number | null) =>
-  n === null ? '—' : n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+  n === null ? '—' : formatPlata(n)
 
 export function IncidenciasConductorTab({ conductorId }: { conductorId: string }) {
   const [filas, setFilas] = useState<Fila[] | null>(null)
@@ -148,7 +151,7 @@ export function IncidenciasConductorTab({ conductorId }: { conductorId: string }
                 <div style={{ fontWeight: 600 }}>{f.detalle}</div>
                 {f.subdetalle ? <div className="inc-cond-sub">{f.subdetalle}</div> : null}
               </td>
-              <td style={{ whiteSpace: 'nowrap' }}>{f.patente}</td>
+              <td style={{ whiteSpace: 'nowrap' }}><PatenteBadge patente={f.patente} size="sm" /></td>
               <td>
                 {/* estado_color viene como nombre ('yellow', 'green'…): mismo badge que en Incidencias/Siniestros */}
                 {f.estadoColor?.startsWith('#') ? (

@@ -47,6 +47,10 @@ import { Spinner } from '../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../components/ui/EstadosVista'
 
 import { hoyART } from '../../utils/fechaArgentina'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
+import { formatFecha, formatFechaHora } from '../../utils/format'
 // ============= TIPOS =============
 // Tipos para Pedidos en Tránsito
 interface PedidoItem {
@@ -253,7 +257,7 @@ const todayInputValue = () => hoyART()
 const formatFechaCorta = (value?: string | null) => {
   if (!value) return '—'
   const fecha = parseFechaOperativa(value)
-  return Number.isNaN(fecha.getTime()) ? value : fecha.toLocaleDateString('es-CL')
+  return Number.isNaN(fecha.getTime()) ? value : formatFecha(value.split('T')[0])
 }
 
 const getPedidoRecepcionResumen = (pedido: PedidoAgrupado) => pedido.items.reduce(
@@ -883,9 +887,9 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       to: proveedor?.email?.trim() || '',
       proveedorNombre: proveedor?.razon_social || '',
       numeroPedido: numeroPedidoDraft.trim(),
-      fechaPedido: new Date().toLocaleDateString('es-AR'),
+      fechaPedido: formatFecha(hoyART()),
       fechaEstimada: fechaEstimadaPedido
-        ? new Date(`${fechaEstimadaPedido}T00:00:00`).toLocaleDateString('es-AR')
+        ? formatFecha(fechaEstimadaPedido)
         : '',
       sede: verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede operativa'),
       solicitante: profile?.full_name || user?.email || 'Toshify',
@@ -1515,7 +1519,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     detallesHtml += `
         <hr style="margin: 12px 0;">
         <p><strong>Registrado por:</strong> ${movimiento.usuario_registrador_nombre}</p>
-        <p><strong>Fecha:</strong> ${new Date(movimiento.created_at).toLocaleString('es-CL')}</p>
+        <p><strong>Fecha:</strong> ${formatFechaHora(movimiento.created_at)}</p>
       </div>
     `
 
@@ -1847,7 +1851,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
       cell: ({ row }) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '13px' }}>
           <Calendar size={14} />
-          {new Date(row.original.created_at).toLocaleDateString('es-CL')}
+          {formatFecha(row.original.created_at)}
         </div>
       )
     },
@@ -1862,7 +1866,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
           </div>
           {row.original.fecha_aprobacion && (
             <div style={{ color: 'var(--text-tertiary)', fontSize: '11px', marginTop: '2px' }}>
-              {new Date(row.original.fecha_aprobacion).toLocaleDateString('es-CL')}
+              {formatFecha(row.original.fecha_aprobacion)}
             </div>
           )}
         </div>
@@ -1870,31 +1874,19 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     },
     {
       id: 'acciones',
-      header: 'Recepción',
+      header: 'Acciones',
       cell: ({ row }) => (
-        <div style={{ textAlign: 'center' }}>
-          <button
-            onClick={() => abrirConfirmacionEntrada(row.original)}
-            disabled={processingItem === row.original.id}
-            style={{
-              padding: '8px 14px',
-              background: 'var(--color-success)',
-              color: 'white',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              cursor: processingItem === row.original.id ? 'not-allowed' : 'pointer',
-              fontSize: '13px',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              opacity: processingItem === row.original.id ? 0.6 : 1
-            }}
-          >
-            <CheckCircle size={15} />
-            {processingItem === row.original.id ? 'Procesando...' : 'Confirmar recepción'}
-          </button>
-        </div>
+        <ActionsMenu
+          actions={[
+            {
+              icon: <CheckCircle size={15} />,
+              label: processingItem === row.original.id ? 'Procesando...' : 'Confirmar recepción',
+              onClick: () => abrirConfirmacionEntrada(row.original),
+              disabled: processingItem === row.original.id,
+              variant: 'success',
+            },
+          ]}
+        />
       )
     }
   ], [processingItem, openColumnFilter, productoFilter, proveedorFilter, uniqueProductos, uniqueProveedores])
@@ -4221,77 +4213,19 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
         </div>
 
         {/* Tabs principales - controlados por permisos de tab */}
-        <div className="pedidos-tabs">
-          {!isControlMode && canViewPedidosFlow && (
-            <button
-              className={`pedidos-tab ${activeTab === 'nuevo' ? 'active' : ''}`}
-              onClick={() => setActiveTab('nuevo')}
-            >
-              <Mail size={16} />
-              1. Nuevo pedido
-            </button>
-          )}
-          {!isControlMode && canViewPedidosFlow && (
-            <button
-              className={`pedidos-tab ${activeTab === 'pedidos' ? 'active' : ''}`}
-              onClick={() => setActiveTab('pedidos')}
-            >
-              <Package size={16} />
-              2. Seguimiento proveedor
-              {pedidos.length > 0 && (
-                <span className="pedidos-tab-badge">{pedidos.length}</span>
-              )}
-            </button>
-          )}
-          {isControlMode && canViewIngresosControl && (
-            <button
-              className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
-              onClick={() => setActiveTab('entradas')}
-            >
-              <ArrowDownCircle size={16} />
-              Ingresos por confirmar
-              {entradasSimples.length > 0 && (
-                <span className="pedidos-tab-badge">{entradasSimples.length}</span>
-              )}
-            </button>
-          )}
-          {isControlMode && canViewAprobacionesControl && (
-            <>
-              <span className="pedidos-tab-separator" aria-hidden="true" />
-              <button
-                className={`pedidos-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
-                onClick={() => setActiveTab('pendientes')}
-              >
-                <Clock size={16} />
-                Aprobaciones internas
-                {movimientos.length > 0 && (
-                  <span className="pedidos-tab-badge">{movimientos.length}</span>
-                )}
-              </button>
-            </>
-          )}
-          {isControlMode && canViewProcesadosControl && (
-            <button
-              className={`pedidos-tab ${activeTab === 'historico' ? 'active' : ''}`}
-              onClick={() => setActiveTab('historico')}
-            >
-              <History size={16} />
-              Movimientos procesados
-            </button>
-          )}
-          {!isControlMode && canViewPedidosFlow && (
-            <button
-              className={`pedidos-tab ${activeTab === 'excepciones' ? 'active' : ''}`}
-              onClick={() => setActiveTab('excepciones')}
-            >
-              <AlertTriangle size={16} />
-              Alertas
-              {totalExcepciones > 0 && (
-                <span className="pedidos-tab-badge">{totalExcepciones}</span>
-              )}
-            </button>
-          )}
-        </div>
+        <TabsBar
+          tabs={([
+            { id: 'nuevo', label: '1. Nuevo pedido', icon: Mail, show: !isControlMode && canViewPedidosFlow },
+            { id: 'pedidos', label: '2. Seguimiento proveedor', icon: Package, count: pedidos.length > 0 ? pedidos.length : undefined, show: !isControlMode && canViewPedidosFlow },
+            { id: 'entradas', label: 'Ingresos por confirmar', icon: ArrowDownCircle, count: entradasSimples.length > 0 ? entradasSimples.length : undefined, show: isControlMode && canViewIngresosControl },
+            { id: 'pendientes', label: 'Aprobaciones internas', icon: Clock, count: movimientos.length > 0 ? movimientos.length : undefined, show: isControlMode && canViewAprobacionesControl },
+            { id: 'historico', label: 'Movimientos procesados', icon: History, show: isControlMode && canViewProcesadosControl },
+            { id: 'excepciones', label: 'Alertas', icon: AlertTriangle, count: totalExcepciones > 0 ? totalExcepciones : undefined, show: !isControlMode && canViewPedidosFlow },
+          ] as (TabsBarItem<TabActiva> & { show: boolean })[])
+            .filter(t => t.show)}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
 
         {/* ==================== TAB: NUEVO PEDIDO ==================== */}
         {activeTab === 'nuevo' && (
@@ -4839,7 +4773,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                                     <div>
                                       <div className="pedido-tl-desc">{ev.descripcion}</div>
                                       <div className="pedido-tl-meta">
-                                        {new Date(ev.created_at).toLocaleString('es-CL')}{ev.usuario_nombre ? ` · ${ev.usuario_nombre}` : ''}
+                                        {formatFechaHora(ev.created_at)}{ev.usuario_nombre ? ` · ${ev.usuario_nombre}` : ''}
                                       </div>
                                     </div>
                                   </div>
@@ -5321,7 +5255,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                             {getTipoLabel(movimiento.tipo)}
                           </div>
                           <div className="movimiento-fecha">
-                            {new Date(movimiento.created_at).toLocaleString('es-CL')}
+                            {formatFechaHora(movimiento.created_at)}
                           </div>
                         </div>
 
@@ -5337,7 +5271,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                           {movimiento.vehiculo_patente && (
                             <div className="movimiento-field">
                               <span className="field-label">Vehículo</span>
-                              <span className="field-value">{movimiento.vehiculo_patente}</span>
+                              <span className="field-value"><PatenteBadge patente={movimiento.vehiculo_patente} size="sm" /></span>
                             </div>
                           )}
                           {movimiento.motivo_salida && (
@@ -5508,8 +5442,8 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                           </span>
                           <div className="historico-fecha">
                             {item.fecha_aprobacion
-                              ? new Date(item.fecha_aprobacion).toLocaleString('es-CL')
-                              : new Date(item.created_at).toLocaleString('es-CL')}
+                              ? formatFechaHora(item.fecha_aprobacion)
+                              : formatFechaHora(item.created_at)}
                           </div>
                         </div>
                       </div>

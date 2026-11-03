@@ -12,7 +12,7 @@ import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 
 import { numeroSemana } from '../../../utils/semanaISO'
-import { formatPlata } from '../../../utils/format'
+import { formatPlata, formatFecha, formatFechaHora } from '../../../utils/format'
 interface SiniestroSeguimientoProps {
   siniestro: SiniestroCompleto
   onReload: () => void
@@ -104,9 +104,9 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
     }
   }
 
-  const fmtFechaInc = (s: string | null) => s ? new Date(s + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
-  const fmtFechaHoraInc = (s: string | null) => s ? new Date(s).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : ''
-  const fmtMontoInc = (m: any) => (m == null || m === '') ? '—' : `$ ${Number(m).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const fmtFechaInc = (s: string | null) => s ? formatFecha(s) : '—'
+  const fmtFechaHoraInc = (s: string | null) => s ? formatFechaHora(s) : ''
+  const fmtMontoInc = (m: any) => (m == null || m === '') ? '—' : formatPlata(m)
   const [formData, setFormData] = useState<SeguimientoFormData>({
     tipo_evento: 'nota',
     descripcion: '',
@@ -455,13 +455,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
   }
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return formatFechaHora(dateStr)
   }
 
   function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }

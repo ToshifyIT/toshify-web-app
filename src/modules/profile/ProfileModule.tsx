@@ -12,6 +12,7 @@ import { AvatarUploadModal } from '../../components/ui/AvatarUploadModal'
 import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import './ProfileModule.css'
+import { formatFecha } from '../../utils/format'
 
 interface ProfileFormData {
   full_name: string
@@ -517,7 +518,7 @@ export function ProfileModule() {
 
           {/* Info de cuenta */}
           <div className="profile-footer">
-            <span>Miembro desde: {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('es-AR', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</span>
+            <span>Miembro desde: {formatFecha(profile?.created_at)}</span>
           </div>
         </div>
       </div>

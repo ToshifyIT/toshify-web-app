@@ -8,10 +8,11 @@
 
 import { useMemo, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { formatCurrency } from '../../../types/facturacion.types'
+import { formatPlata } from '../../../utils/format'
 import type { GarantiaKardex, GarantiaResumen, FilaGarantiaSemana } from './conductorDetalleService'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
+import { formatFecha } from '../../../utils/format'
 
 interface Props {
   data: GarantiaKardex | null
@@ -57,7 +58,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
             fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
             background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
           }}>
-            <AlertTriangle size={12} className="ico-inline" />Deuda real ${resumen.deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+            <AlertTriangle size={12} className="ico-inline" />Deuda real {formatPlata(resumen.deudaReal)}
           </span>
         )}
       </div>
@@ -71,20 +72,20 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
         <div style={{ flex: 1, minWidth: '120px' }}>
           <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Garantía objetivo</div>
           <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary, #111827)', marginTop: '2px' }}>
-            {formatCurrency(Math.round(resumen.montoTotal))}
+            {formatPlata(Math.round(resumen.montoTotal))}
           </div>
         </div>
         <div style={{ flex: 1, minWidth: '120px' }}>
           <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Total real pagado</div>
           <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: resumen.tieneExcedente ? '#16a34a' : 'var(--text-primary, #111827)', marginTop: '2px' }}>
-            {formatCurrency(resumen.totalRealPagado)}
+            {formatPlata(resumen.totalRealPagado)}
           </div>
         </div>
         {resumen.tieneExcedente && (
           <div style={{ flex: 1, minWidth: '120px' }}>
             <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Excedente</div>
             <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#16a34a', marginTop: '2px' }}>
-              +{formatCurrency(resumen.excedente)}
+              +{formatPlata(resumen.excedente)}
             </div>
           </div>
         )}
@@ -152,7 +153,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
                   // período). Semana en curso → ícono de aviso.
                   const cerrada = resumen.semanaCerrada(f.anio, f.semana)
                   const fechaBase = cerrada ? (resumen.fechaCierreSemana(f.anio, f.semana) || f.fecha) : ''
-                  const fecha = fechaBase ? new Date(fechaBase).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : ''
+                  const fecha = fechaBase ? formatFecha(fechaBase) : ''
                   const esExtraFacturacion = f.tipoMovimiento === 'facturacion'
                   const esExcedente = !esExtraFacturacion && f.esExcedenteReal
                   const montoColor = esExtraFacturacion || esExcedente ? '#b45309' : 'var(--text-primary, #111827)'
@@ -194,7 +195,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
                         {origenLabel}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, fontWeight: 700 }}>
-                        {formatCurrency(f.montoCuota || 0)}
+                        {formatPlata(f.montoCuota || 0)}
                       </td>
                       {(() => {
                         // Las filas EXTRA (excedente) no se comparan contra la cuota fija.
@@ -207,7 +208,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
                         const esExcedenteDiff = diff > 0
                         return (
                           <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600, color: esExcedenteDiff ? '#16a34a' : '#ef4444' }}>
-                            {esExcedenteDiff ? '+' : ''}{formatCurrency(diff)}
+                            {esExcedenteDiff ? '+' : ''}{formatPlata(diff)}
                           </td>
                         )
                       })()}
@@ -230,7 +231,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
                 {resumen.cuotasPagadas}
               </div>
               <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
-                {formatCurrency(resumen.totalRealPagado)}
+                {formatPlata(resumen.totalRealPagado)}
               </div>
             </div>
             <div style={{ padding: '12px 16px', textAlign: 'center', gridColumn: 'span 3' }}>
@@ -239,7 +240,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
                 {resumen.cuotasRestantes}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary, #6b7280)', marginTop: '2px', fontWeight: 500 }}>
-                {resumen.montoRestante > 0 ? `${formatCurrency(Math.round(resumen.montoRestante))} a futuro` : 'Completada'}
+                {resumen.montoRestante > 0 ? `${formatPlata(Math.round(resumen.montoRestante))} a futuro` : 'Completada'}
               </div>
             </div>
           </div>

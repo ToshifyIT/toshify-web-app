@@ -12,6 +12,8 @@ import { normalizePatente } from '../../utils/normalizeDocuments'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { hoyART } from '../../utils/fechaArgentina'
 import './VencimientosModule.css'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { formatFechaHora } from '../../utils/format'
 
 // Paleta semántica para el badge de estado del vehículo. Mapea por el texto de la
 // descripción para que cada estado tenga su propio color en vez de uno genérico.
@@ -84,17 +86,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  })
+  return formatFechaHora(value)
 }
 
 function formatDateInput(date: Date): string {
@@ -640,7 +632,7 @@ export function VencimientosModule() {
       cell: ({ row }) => (
         <div>
           <div style={{ fontSize: '12px' }}>{row.original.titular}</div>
-          <span className="venc-patente" style={{ fontSize: '11px' }}>{row.original.patente || '-'}</span>
+          <PatenteBadge patente={row.original.patente} size="sm" />
         </div>
       ),
       enableSorting: true
@@ -931,7 +923,7 @@ export function VencimientosModule() {
                 <div className="venc-detail-row">
                   <div>
                     <span className="venc-detail-label">Patente</span>
-                    <p className="venc-detail-value" style={{ fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{selectedItem.patente || '-'}</p>
+                    <p className="venc-detail-value"><PatenteBadge patente={selectedItem.patente} /></p>
                   </div>
                   <div>
                     <span className="venc-detail-label">Titular</span>

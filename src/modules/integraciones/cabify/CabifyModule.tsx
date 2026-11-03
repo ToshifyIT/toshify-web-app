@@ -29,6 +29,9 @@ import { getScoreLevel, getRateLevel, buildLoadingMessage, getDriverPatente } fr
 import { findAsignacionEnIndex } from '../../../services/asignacionesService'
 import type { AsignacionActiva } from '../../../services/asignacionesService'
 import { normalizeDni, normalizeNombre } from '../../../utils/normalizeDocuments'
+import { formatPlata, formatNumero } from '../../../utils/format'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 // Helper: busca la asignación de un driver de Cabify por DNI, licencia o nombre.
 function findAsignacionForCabifyDriver(
@@ -261,11 +264,13 @@ export function CabifyModule() {
   } = useCabifyData()
 
   // Una fila por conductor de Toshify: si tiene varias cuentas Cabify, se suman.
+  // Ordenados por lo que facturaron en la semana (los que trabajaron arriba, los que
+  // todavía no hicieron viajes abajo). El usuario puede reordenar desde las cabeceras.
   const activeAssignedDrivers = useMemo(
     () => mergeDriversByConductor(
       drivers.filter((driver) => hasActiveAssignmentWithVehicle(driver, asignaciones)),
       asignaciones,
-    ),
+    ).sort((a, b) => (Number(b.gananciaTotal) || 0) - (Number(a.gananciaTotal) || 0)),
     [drivers, asignaciones]
   )
 
@@ -492,7 +497,7 @@ function DriversWithoutAssignmentSection({
         </div>
         <div className="cabify-unassigned-summary">
           <span className="summary-item">
-            {totals.totalGanancias.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 })}
+            {formatPlata(totals.totalGanancias)}
           </span>
           <span className="summary-separator">•</span>
           <span className="summary-item">{totals.totalViajes} viajes</span>
@@ -518,10 +523,10 @@ function DriversWithoutAssignmentSection({
               <div className="driver-stats">
                 <span className="stat-viajes">{driver.viajesFinalizados || 0} viajes</span>
                 <span className="stat-separator">•</span>
-                <span className="stat-score">Score {driver.score ? Number(driver.score).toFixed(2) : '0.00'}</span>
+                <span className="stat-score">Score {formatNumero(driver.score ? Number(driver.score) : 0, 2)}</span>
                 <span className="stat-separator">•</span>
                 <span className="stat-ganancias">
-                  {Number(driver.gananciaTotal || 0).toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 })}
+                  {formatPlata(Number(driver.gananciaTotal || 0))}
                 </span>
               </div>
             </div>
@@ -547,7 +552,6 @@ function useTableColumns(
       { ...createNumericColumn('viajesFinalizados', 'V. Finalizados', 'cabify-trips-completed'), size: 110, minSize: 90 },
       { ...createMoneyColumn('gananciaTotal', 'Total', 'cabify-money total'), size: 120, minSize: 100 },
       { ...createMoneyColumn('gananciaPorHora', '$/Hora', 'cabify-money per-hour'), size: 120, minSize: 105 },
-      { ...createTextColumn('email', 'Email'), size: 200, minSize: 150 },
       { ...createNumericColumn('viajesRechazados', 'V. Rechazados', 'cabify-trips-rejected'), size: 110, minSize: 90 },
       { ...createNumericColumn('viajesPerdidos', 'V. Perdidos', 'cabify-trips-lost'), size: 100, minSize: 85 },
       { ...createTasaAceptacionColumn(), size: 100, minSize: 85 },
@@ -563,6 +567,7 @@ function useTableColumns(
       { ...createDeduccionesColumn(), size: 115, minSize: 95 },
       { ...createPermisoEfectivoColumn(), size: 110, minSize: 95 },
       { ...createUltimaDesactivacionColumn(ultimasDesactivaciones), size: 165, minSize: 140 },
+      { ...createTextColumn('email', 'Email'), size: 200, minSize: 150 },
     ],
     [asignaciones, ultimasDesactivaciones]
   )
@@ -582,7 +587,7 @@ function createPatenteColumn(
     header: 'Patente',
     accessorFn: (row) => getDriverPatente(row, asignaciones),
     cell: ({ getValue }) => (
-      <span className="cabify-plate">{getValue() as string}</span>
+      <PatenteBadge patente={(getValue() as string) === '-' ? null : (getValue() as string)} size="sm" />
     ),
   }
 }
@@ -596,8 +601,10 @@ function createTextColumn(
     accessorKey: key,
     header,
     cell: ({ getValue }) => {
-      const value = (getValue() as string) || '-'
-      return className ? <span className={className}>{value}</span> : value
+      const raw = (getValue() as string) || ''
+      // "0h 0m" (no se conectó) también va como guion gris
+      if (!raw || /^0h 0m$/.test(raw)) return <span className="cabify-sin-dato">—</span>
+      return className ? <span className={className}>{raw}</span> : raw
     },
   }
 }
@@ -610,9 +617,11 @@ function createNumericColumn(
   return {
     accessorKey: key,
     header,
-    cell: ({ getValue }) => (
-      <span className={className}>{(getValue() as number) || 0}</span>
-    ),
+    cell: ({ getValue }) => {
+      const v = Number(getValue()) || 0
+      // 0 se muestra como guion gris: así resaltan los valores que importan
+      return v === 0 ? <span className="cabify-sin-dato">—</span> : <span className={className}>{v}</span>
+    },
   }
 }
 
@@ -653,13 +662,9 @@ function createMoneyColumn(
     cell: ({ getValue }) => {
       const rawValue = getValue() as string | number
       const numValue = Number(rawValue) || 0
+      if (numValue === 0) return <span className="cabify-sin-dato">—</span>
       // Formato pesos argentinos
-      const formatted = numValue.toLocaleString('es-AR', {
-        style: 'currency',
-        currency: 'ARS',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      })
+      const formatted = formatPlata(numValue)
       return className ? <span className={className}>{formatted}</span> : formatted
     },
   }
@@ -708,9 +713,9 @@ function createConductorCompactColumn(
         <div className="cabify-driver-compact">
           <div className="cabify-driver-compact-top">
             <span className="cabify-driver-compact-name">{fullName}</span>
-            {score != null && (
+            {score != null && Number(score) > 0 && (
               <span className={`cabify-score ${scoreLevel}`} style={{ fontSize: '11px' }}>
-                {Number(score).toFixed(2)}
+                {formatNumero(Number(score), 2)}
               </span>
             )}
           </div>
@@ -725,9 +730,12 @@ function createConductorCompactColumn(
             <span className={`dt-badge ${modalidadClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
               {modalidadLabel}
             </span>
-            <span className={`dt-badge ${estadoClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
-              {estadoLabel}
-            </span>
+            {/* Todos los de la lista están activos: solo se marca el que no lo está */}
+            {!isActive && (
+              <span className={`dt-badge ${estadoClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+                {estadoLabel}
+              </span>
+            )}
           </div>
         </div>
       )
@@ -748,7 +756,7 @@ function createTasaAceptacionColumn(): ColumnDef<CabifyDriver, unknown> {
       )
       return (
         <span className={`cabify-rate ${level}`}>
-          {rate ? `${rate}%` : '-'}
+          {rate ? `${formatNumero(rate, 2)}%` : '—'}
         </span>
       )
     },
@@ -768,7 +776,7 @@ function createTasaOcupacionColumn(): ColumnDef<CabifyDriver, unknown> {
       )
       return (
         <span className={`cabify-rate ${level}`}>
-          {rate ? `${rate}%` : '-'}
+          {rate ? `${formatNumero(rate, 2)}%` : '—'}
         </span>
       )
     },
@@ -783,8 +791,8 @@ function createDeduccionesColumn(): ColumnDef<CabifyDriver, unknown> {
       const rawValue = getValue() as string | number
       const numValue = Number(rawValue) || 0
       const formatted = numValue > 0
-        ? `-${numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        ? formatPlata(-numValue)
+        : formatPlata(numValue)
       return <span className="cabify-money deductions" style={{ color: numValue > 0 ? '#dc2626' : undefined }}>{formatted}</span>
     },
   }
@@ -800,7 +808,7 @@ function createUltimaDesactivacionColumn(
 ): ColumnDef<CabifyDriver, unknown> {
   return {
     id: 'ultimaDesactivacion',
-    header: 'Ultima fecha desactivado',
+    header: 'Última desactivación',
     accessorFn: (row) => ultimasDesactivaciones.get(normalizeDni(row.nationalIdNumber || '')) || '',
     cell: ({ getValue }) => {
       const iso = getValue() as string
@@ -810,8 +818,8 @@ function createUltimaDesactivacionColumn(
       if (Number.isNaN(fecha.getTime())) return <span className="cabify-sin-dato">-</span>
 
       return (
-        <span title={fecha.toLocaleString('es-AR')}>
-          {fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+        <span title={formatFechaHora(iso)}>
+          {formatFecha(iso)}
         </span>
       )
     },

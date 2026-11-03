@@ -10,6 +10,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './ProductosModule.css'
+import { formatFechaHora } from '../../utils/format'
 
 interface UnidadMedida {
   id: string
@@ -1499,11 +1500,11 @@ export function ProductosModule() {
                   <div className="prod-info-grid">
                     <div className="prod-info-item">
                       <span className="prod-info-label">Creado</span>
-                      <span className="prod-info-value">{new Date(selectedProducto.created_at).toLocaleString('es-CL')}</span>
+                      <span className="prod-info-value">{formatFechaHora(selectedProducto.created_at)}</span>
                     </div>
                     <div className="prod-info-item">
                       <span className="prod-info-label">Actualizado</span>
-                      <span className="prod-info-value">{new Date(selectedProducto.updated_at).toLocaleString('es-CL')}</span>
+                      <span className="prod-info-value">{formatFechaHora(selectedProducto.updated_at)}</span>
                     </div>
                   </div>
                 </div>

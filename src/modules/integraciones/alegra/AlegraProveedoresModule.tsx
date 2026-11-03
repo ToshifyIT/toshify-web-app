@@ -8,7 +8,7 @@
  * pago son datos propios de Toshibase.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, UserPlus, Users, AlertTriangle, MapPinOff, MailX, Edit2 } from 'lucide-react'
+import { RefreshCw, UserPlus, Users, AlertTriangle, MapPinOff, MailX, Edit2, Building2 } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   obtenerProveedores,
@@ -24,10 +24,11 @@ import { abrirFormularioProveedor, datosIncompletos } from './proveedorForm'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import '../cresium/CresiumModule.css'
 import './AlegraComprasModule.css'
+import { TabsBar, type TabsBarItem } from '../../../components/ui/TabsBar'
 
-const EMPRESAS: Array<{ id: EmpresaAlegra; label: string }> = [
-  { id: '44dreams', label: '44 Dreams' },
-  { id: 'grupocg', label: 'Grupo CG' },
+const EMPRESAS: TabsBarItem<EmpresaAlegra>[] = [
+  { id: '44dreams', label: '44 Dreams', icon: Building2 },
+  { id: 'grupocg', label: 'Grupo CG', icon: Building2 },
 ]
 
 type Filtro = 'todos' | 'incompletos' | 'sin_domicilio' | 'sin_email'
@@ -218,24 +219,7 @@ export function AlegraProveedoresModule() {
         </StatsGrid>
       </div>
 
-      <div className="cr-filtros">
-        <div className="ap-empresas" role="tablist">
-          {EMPRESAS.map((e) => (
-            <button
-              key={e.id}
-              role="tab"
-              aria-selected={empresa === e.id}
-              className={empresa === e.id ? 'btn-primary' : 'btn-secondary'}
-              onClick={() => setEmpresa(e.id)}
-            >
-              {e.label}
-            </button>
-          ))}
-        </div>
-        <span className="cr-muted cr-actualizado">
-          {datos?.sincronizado_en ? `Actualizado desde Alegra: ${formatFechaHoraART(datos.sincronizado_en)}` : ''}
-        </span>
-      </div>
+      <TabsBar tabs={EMPRESAS} active={empresa} onChange={setEmpresa} />
 
       {datos && !datos.alegra_configurado && (
         <div className="aviso aviso--warning">Falta el token de Alegra de {datos.empresa_label} en el .env del servidor.</div>
@@ -259,7 +243,9 @@ export function AlegraProveedoresModule() {
               className="btn-secondary"
               onClick={() => void sincronizar()}
               disabled={loading || sincronizando || !datos?.alegra_configurado}
-              title="Trae de Alegra los proveedores y lo que se modificó allá"
+              title={datos?.sincronizado_en
+                ? `Trae de Alegra los proveedores y lo que se modificó allá. Última actualización: ${formatFechaHoraART(datos.sincronizado_en)}`
+                : 'Trae de Alegra los proveedores y lo que se modificó allá'}
             >
               <RefreshCw size={16} className={sincronizando ? 'cr-girando' : undefined} />
               Actualizar desde Alegra

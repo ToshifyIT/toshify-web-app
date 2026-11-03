@@ -11,6 +11,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { History, Save, RotateCcw, Eye, EyeOff, ShieldAlert, RefreshCw, GitCompare } from 'lucide-react'
 import { Spinner } from '../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../components/ui/EstadosVista'
+import { formatFechaHora } from '../../utils/format'
 
 // Diff por palabras (LCS): marca tokens iguales, quitados y agregados. Resalta solo
 // lo que cambió (el prompt suele venir como una sola línea larga, por eso no sirve por línea).
@@ -126,7 +127,7 @@ export function PromptChatbotPage() {
 
   const restaurar = async (version: HistorialRow) => {
     if (promptId == null) return
-    if (!window.confirm(`¿Restaurar la versión del ${new Date(version.created_at).toLocaleString('es-AR')}? El prompt actual se reemplazará (queda registrado en el historial).`)) return
+    if (!window.confirm(`¿Restaurar la versión del ${formatFechaHora(version.created_at)}? El prompt actual se reemplazará (queda registrado en el historial).`)) return
     setSaving(true); setError(''); setOkMsg('')
     try {
       const ahora = new Date().toISOString()
@@ -170,10 +171,7 @@ export function PromptChatbotPage() {
     })
   }
 
-  const fmt = (s: string) => new Date(s).toLocaleString('es-AR', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    timeZone: 'America/Argentina/Buenos_Aires',
-  })
+  const fmt = (s: string) => formatFechaHora(s)
 
   if (!admin) {
     return (
