@@ -11,6 +11,7 @@ import { construirSaldosAnteriores } from '../utils/saldoAnterior'
 import { acumularCuentaCabify, elegirCuentaCabify, type CuentasCabifyPorConductor } from '../utils/cuentaCabify'
 import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
+import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE } from '../utils/descuentoReferido'
 import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import {
   Users,
@@ -227,6 +228,8 @@ interface FacturacionConductor {
   monto_penalidades?: number  // P007 - Penalidades
   monto_toshipass?: number    // P027 - Toshipass (régimen tarifa nueva, en lugar de garantía)
   monto_devolucion_garantia?: number  // P028 - Devolución de garantía por cambio de tarifa (descuento)
+  monto_descuento_referido?: number  // P004 - Descuento 5% primera semana del referido
+  dias_descuento_referido?: number
   monto_tickets_favor?: number  // Tickets a favor
   // Detalle de peajes para validar con Cabify
   peajes_detalle?: Array<{ fecha: string; monto: number }>
@@ -2363,6 +2366,8 @@ export function ReporteFacturacionTab() {
       const reglaToshipassVP = await cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
       const devolucionesGarantiaVP = await cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin })
+      // Referidos: días de esta semana dentro de su primera semana (descuento 5%)
+      const diasDescuentoReferidoVP = await cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       const { data: asignacionesConductores } = await (supabase
         .from('asignaciones_conductores') as any)
         .select(`
@@ -2794,6 +2799,8 @@ export function ReporteFacturacionTab() {
       // Calcular montos por día usando precios históricos
       // También rastrear la fecha de inicio más temprana por conductor para el proyectado
       const primeraFechaPorConductor = new Map<string, Date>()
+      // Referido: 5% del alquiler de cada día de su primera semana (utils/descuentoReferido.ts)
+      const descuentoReferidoVP = new Map<string, { monto: number; dias: number }>()
 
       for (const [conductorId, asignaciones] of asignacionesPorConductorVP.entries()) {
         const prorrateo = prorrateoMap.get(conductorId)
@@ -2801,6 +2808,8 @@ export function ReporteFacturacionTab() {
 
         // Deduplicar montos por fecha (evitar cobro doble si 2 asignaciones cubren el mismo día)
         const montosContados = new Set<string>()
+        const diasReferido = diasDescuentoReferidoVP.get(conductorId)
+        const preciosDiaReferido = new Map<string, number>()
 
         for (const asig of asignaciones) {
           const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
@@ -2821,6 +2830,7 @@ export function ReporteFacturacionTab() {
               const codigo = getCodigoPorModalidadVP(asig.modalidad, gncEsteDia, asig.tipoTarifa)
               const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
               ;(prorrateo as any)[montoKey] += precioDiario
+              if (diasReferido?.has(dateKey)) preciosDiaReferido.set(dateKey, precioDiario)
             }
             currentDate.setDate(currentDate.getDate() + 1)
           }
@@ -2830,6 +2840,22 @@ export function ReporteFacturacionTab() {
         // Restar descuento por hora de entrega
         const alertaVP = alertasProrrateoVP.get(conductorId)
         const descuentoVP = alertaVP?.descuento || 0
+
+        // Descuento del referido sobre lo que se cobró cada día (medio turno = sobre la mitad)
+        if (preciosDiaReferido.size > 0) {
+          const fechaEntregaVP = alertaVP ? alertaVP.fecha.split('/').reverse().join('-') : null
+          let montoRef = 0
+          let diasRef = 0
+          for (const [fecha, precio] of preciosDiaReferido) {
+            const descontadoDia = descontadoPorDiaVP.get(`${conductorId}|${fecha}`)
+              ?? (fechaEntregaVP === fecha ? descuentoVP : 0)
+            const fraccionCobrada = Math.max(0, 1 - descontadoDia)
+            if (fraccionCobrada <= 0) continue
+            montoRef += precio * fraccionCobrada * DESCUENTO_REFERIDO_PORCENTAJE
+            diasRef++
+          }
+          if (diasRef > 0) descuentoReferidoVP.set(conductorId, { monto: Math.round(montoRef * 100) / 100, dias: diasRef })
+        }
         const descCierreVP = descuentosCierreVP.get(conductorId)
         const descuentoCierreVP = (descCierreVP?.TURNO_DIURNO || 0) + (descCierreVP?.CARGO || 0)
         const diasRaw = Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO - descuentoVP - descuentoCierreVP)
@@ -3303,7 +3329,9 @@ export function ReporteFacturacionTab() {
         // Tickets a favor (descuentos) + P004 de penalidades
         // + Devolución de garantía por cambio de tarifa (P028): crédito que resta del total
         const montoDevolucionGarantia = devolucionesGarantiaVP.get(conductorId) || 0
-        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento + montoDevolucionGarantia
+        // Referido: 5% de su primera semana (P004)
+        const descuentoReferido = descuentoReferidoVP.get(conductorId)
+        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento + montoDevolucionGarantia + (descuentoReferido?.monto || 0)
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
         // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
@@ -3373,6 +3401,8 @@ export function ReporteFacturacionTab() {
             monto_penalidades: montoPenalidades,  // P007
             monto_toshipass: montoToshipass,  // P027
             monto_devolucion_garantia: montoDevolucionGarantia,  // P028 (descuento)
+            monto_descuento_referido: descuentoReferido?.monto || 0,  // P004 (descuento)
+            dias_descuento_referido: descuentoReferido?.dias || 0,
             monto_tickets_favor: ticketsMap.get(conductorId) || 0,  // Tickets a favor
            // Prorrateo desglosado por modalidad
            prorrateo_cargo_dias: prorrateo.CARGO,
@@ -4038,6 +4068,8 @@ export function ReporteFacturacionTab() {
       // Set de fechas ya contadas por conductor para deduplicar registros duplicados
       const diasContadosRecalc = new Map<string, Set<string>>()
       conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
+      // Tarifa de cada día contado (para el descuento del referido, utils/descuentoReferido.ts)
+      const tarifaDiaRecalc = new Map<string, Map<string, { modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO'; gnc: boolean; tarifa: 'antigua' | 'nueva' }>>()
 
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
       // Recalcular capa los días hasta HOY en timezone Argentina (no del navegador)
@@ -4237,6 +4269,13 @@ export function ReporteFacturacionTab() {
               } else {
                 if (gncEsteDia) { prorrateo.TURNO_DIURNO++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO++ } else { prorrateo.TURNO_DIURNO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO_SIN_GNC++ }
               }
+              const tarifasDia = tarifaDiaRecalc.get(ac.conductor_id) || new Map()
+              tarifasDia.set(key, {
+                modalidad: modalidadGnc === 'CARGO' ? 'CARGO' : modalidadGnc === 'TURNO_NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
+                gnc: gncEsteDia,
+                tarifa: bucketNuevaR ? 'nueva' : 'antigua',
+              })
+              tarifaDiaRecalc.set(ac.conductor_id, tarifasDia)
             }
             cursorR.setDate(cursorR.getDate() + 1)
           }
@@ -4433,6 +4472,8 @@ export function ReporteFacturacionTab() {
       const reglaToshipass = await cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
       const devolucionesGarantia = await cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin })
+      // Referidos: días de esta semana dentro de su primera semana (descuento 5%)
+      const diasDescuentoReferido = await cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin })
 
       // 4. Obtener conceptos (precios actuales)
       const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
@@ -4871,7 +4912,23 @@ export function ReporteFacturacionTab() {
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + montoToshipass + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
         // Devolución de garantía por cambio de tarifa: crédito que resta del total (P028)
         const montoDevolucionGarantia = devolucionesGarantia.get(conductor.conductor_id) || 0
-        const subtotalDescuentos = totalTickets + totalPenP004 + montoDevolucionGarantia
+        // Referido: 5% del alquiler de cada día de su primera semana (P004). Sobre lo que se
+        // cobró ese día: si hubo medio turno (entrega o vehículo fuera de servicio), sobre esa mitad.
+        let montoDescuentoReferido = 0
+        let diasDescuentoReferidoConductor = 0
+        for (const fecha of diasDescuentoReferido.get(conductor.conductor_id) || []) {
+          const tarifaDia = tarifaDiaRecalc.get(conductor.conductor_id)?.get(fecha)
+          if (!tarifaDia) continue // ese día no se cobra en esta semana
+          const descontadoDia = descontadoPorDiaR.get(`${conductor.conductor_id}|${fecha}`)
+            ?? (fechaDescEntregaRecalc.get(conductor.conductor_id) === fecha ? (descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0) : 0)
+          const fraccionCobrada = Math.max(0, 1 - descontadoDia)
+          if (fraccionCobrada <= 0) continue
+          const precioDia = preciosActuales[getCodigoAlquiler(tarifaDia.modalidad, tarifaDia.gnc, tarifaDia.tarifa)] || 0
+          montoDescuentoReferido += precioDia * fraccionCobrada * DESCUENTO_REFERIDO_PORCENTAJE
+          diasDescuentoReferidoConductor++
+        }
+        montoDescuentoReferido = Math.round(montoDescuentoReferido * 100) / 100
+        const subtotalDescuentos = totalTickets + totalPenP004 + montoDevolucionGarantia + montoDescuentoReferido
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagarRaw = subtotalNeto + saldoAnterior
         const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
@@ -4972,6 +5029,16 @@ export function ReporteFacturacionTab() {
             facturacion_id: facturacionId, concepto_codigo: detalle.codigo,
             concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
             precio_unitario: precioUnitario, subtotal: detalle.monto, total: detalle.monto, es_descuento: false
+          })
+        }
+
+        // P004 - Descuento 5% primera semana del referido
+        if (montoDescuentoReferido > 0) {
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P004',
+            concepto_descripcion: descripcionDescuentoReferido(diasDescuentoReferidoConductor),
+            cantidad: 1, precio_unitario: montoDescuentoReferido,
+            subtotal: montoDescuentoReferido, total: montoDescuentoReferido, es_descuento: true
           })
         }
 
@@ -5813,6 +5880,23 @@ export function ReporteFacturacionTab() {
           subtotal: facturacion.monto_toshipass || 0,
           total: facturacion.monto_toshipass || 0,
           es_descuento: false,
+          referencia_id: null,
+          referencia_tipo: null
+        })
+      }
+
+      // P004 - Descuento 5% primera semana del referido
+      if ((facturacion.monto_descuento_referido || 0) > 0) {
+        detallesSimulados.push({
+          id: `det-descref-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'P004',
+          concepto_descripcion: descripcionDescuentoReferido(facturacion.dias_descuento_referido || 0),
+          cantidad: 1,
+          precio_unitario: facturacion.monto_descuento_referido || 0,
+          subtotal: facturacion.monto_descuento_referido || 0,
+          total: facturacion.monto_descuento_referido || 0,
+          es_descuento: true,
           referencia_id: null,
           referencia_tipo: null
         })

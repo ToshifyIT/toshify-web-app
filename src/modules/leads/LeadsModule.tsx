@@ -2743,6 +2743,7 @@ export function LeadsModule() {
           filterId="lead_nombre"
           openFilterId={openFilterId}
           onOpenChange={setOpenFilterId}
+          selectAll
         />
       ),
       cell: ({ row }) => {
@@ -2889,6 +2890,7 @@ export function LeadsModule() {
           filterId="lead_estado"
           openFilterId={openFilterId}
           onOpenChange={setOpenFilterId}
+          selectAll
         />
       ),
       cell: ({ row }) => {
@@ -2933,6 +2935,7 @@ export function LeadsModule() {
           filterId="lead_zona"
           openFilterId={openFilterId}
           onOpenChange={setOpenFilterId}
+          selectAll
         />
       ),
       cell: ({ row }) => row.original.zona || '-',
@@ -2951,6 +2954,7 @@ export function LeadsModule() {
           filterId="lead_turno"
           openFilterId={openFilterId}
           onOpenChange={setOpenFilterId}
+          selectAll
         />
       ),
       cell: ({ row }) => normalizarTurno(row.original.turno),

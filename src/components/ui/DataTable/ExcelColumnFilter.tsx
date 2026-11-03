@@ -34,6 +34,8 @@ interface ExcelColumnFilterProps {
   openFilterId: string | null
   /** Callback para cambiar qué filtro está abierto */
   onOpenChange: (filterId: string | null) => void
+  /** Con más de 3 opciones muestra «Seleccionar todas» (como el filtro del DataTable). Por defecto, sí. */
+  selectAll?: boolean
 }
 
 interface DropdownPosition {
@@ -49,6 +51,7 @@ export function ExcelColumnFilter({
   filterId,
   openFilterId,
   onOpenChange,
+  selectAll = true,
 }: ExcelColumnFilterProps) {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -240,7 +243,7 @@ export function ExcelColumnFilter({
             autoFocus
           />
           <div className="dt-filter-options">
-            {filteredOptions.length > 3 && (
+            {selectAll && filteredOptions.length > 3 && (
               <label className="dt-filter-option dt-filter-option-todas">
                 <input
                   type="checkbox"
@@ -286,6 +289,7 @@ export function ExcelColumnFilter({
  * Hook para manejar múltiples filtros Excel en una tabla
  * @returns Estado y funciones para manejar filtros
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useExcelFilters() {
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
 
