@@ -34,6 +34,8 @@ interface ExcelColumnFilterProps {
   openFilterId: string | null
   /** Callback para cambiar qué filtro está abierto */
   onOpenChange: (filterId: string | null) => void
+  /** Con más de 3 opciones muestra «Seleccionar todas» (como el filtro del DataTable) */
+  selectAll?: boolean
 }
 
 interface DropdownPosition {
@@ -49,6 +51,7 @@ export function ExcelColumnFilter({
   filterId,
   openFilterId,
   onOpenChange,
+  selectAll = false,
 }: ExcelColumnFilterProps) {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -195,6 +198,18 @@ export function ExcelColumnFilter({
     onSelectionChange([])
   }
 
+  // Marca o desmarca de una vez las opciones visibles (las que coinciden con la búsqueda)
+  const visibles = filteredOptions.map(opt => opt.value)
+  const todasMarcadas = visibles.length > 0 && visibles.every(v => selectedValues.includes(v))
+  const algunasMarcadas = !todasMarcadas && visibles.some(v => selectedValues.includes(v))
+  const toggleTodas = () => {
+    if (todasMarcadas) {
+      onSelectionChange(selectedValues.filter(v => !visibles.includes(v)))
+    } else {
+      onSelectionChange([...selectedValues, ...visibles.filter(v => !selectedValues.includes(v))])
+    }
+  }
+
   return (
     <div className="dt-column-filter">
       <span>{label} {hasSelection && `(${selectedValues.length})`}</span>
@@ -227,6 +242,17 @@ export function ExcelColumnFilter({
             autoFocus
           />
           <div className="dt-excel-filter-list">
+            {selectAll && filteredOptions.length > 3 && (
+              <label className="dt-column-filter-checkbox dt-filter-option-todas">
+                <input
+                  type="checkbox"
+                  checked={todasMarcadas}
+                  ref={el => { if (el) el.indeterminate = algunasMarcadas }}
+                  onChange={toggleTodas}
+                />
+                <span>{searchTerm ? 'Seleccionar resultados' : 'Seleccionar todas'} ({filteredOptions.length})</span>
+              </label>
+            )}
             {filteredOptions.length === 0 ? (
               <div className="dt-excel-filter-empty">Sin resultados</div>
             ) : (
@@ -265,6 +291,7 @@ export function ExcelColumnFilter({
  * Hook para manejar múltiples filtros Excel en una tabla
  * @returns Estado y funciones para manejar filtros
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useExcelFilters() {
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
 
