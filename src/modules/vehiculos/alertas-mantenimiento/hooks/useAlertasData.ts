@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { fetchAlertasPage, marcarAtendida, descartarAlerta, reactivarAlerta } from '../../../../services/alertasService'
-import type { AlertaMantenimiento, AlertasStats } from '../types/alertas.types'
+import type { AlertaMantenimiento, AlertaAgrupada, AlertaSeveridad, AlertasStats } from '../types/alertas.types'
 
 const SERVICE_INTERVAL = 10000
+
+const PESO_SEVERIDAD: Record<AlertaSeveridad, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 }
 
 // Carga progresiva: el primer lote pinta la tabla enseguida (clave en
 // conexiones lentas); el resto baja en background sin bloquear la UI.
@@ -68,14 +70,41 @@ export function useAlertasData(sedeId?: string | null) {
     }
   }, [sedeId])
 
-  // Ordenar: Vencido > Próximo > Al día > Sin datos. Dentro de cada grupo, por fecha desc.
-  const alertas = useMemo(() => {
-    return [...alertasRaw].sort((a, b) => {
+  // Agrupar: una fila por vehículo + falla + gestión (Geotab repite la misma falla
+  // cada vez que la detecta; antes eso eran miles de filas iguales).
+  // Orden por importancia: activas primero, después la severidad, después el
+  // service (vencido > próximo > al día) y por último la más reciente.
+  const alertas = useMemo<AlertaAgrupada[]>(() => {
+    const grupos = new Map<string, AlertaAgrupada>()
+    for (const a of alertasRaw) {
+      const clave = `${a.vehiculo_id || a.patente || '-'}|${(a.diagnostic_name || '').trim().toLowerCase()}|${a.estado}`
+      const g = grupos.get(clave)
+      const veces = a.count > 0 ? a.count : 1
+      if (!g) {
+        grupos.set(clave, { ...a, ids: [a.id], ocurrencias: veces, primera: a.fecha_evento, ultima: a.fecha_evento })
+        continue
+      }
+      g.ids.push(a.id)
+      g.ocurrencias += veces
+      if (a.fecha_evento < g.primera) g.primera = a.fecha_evento
+      if (PESO_SEVERIDAD[a.severidad] < PESO_SEVERIDAD[g.severidad]) g.severidad = a.severidad
+      if (a.fecha_evento > g.ultima) {
+        // La fila representativa es la ocurrencia más reciente
+        const { ids, ocurrencias, primera, severidad } = g
+        Object.assign(g, a, { ids, ocurrencias, primera, ultima: a.fecha_evento, severidad: PESO_SEVERIDAD[a.severidad] < PESO_SEVERIDAD[severidad] ? a.severidad : severidad })
+      }
+    }
+    return [...grupos.values()].sort((a, b) => {
+      const ea = a.estado === 'activa' ? 0 : 1
+      const eb = b.estado === 'activa' ? 0 : 1
+      if (ea !== eb) return ea - eb
+      const sa = PESO_SEVERIDAD[a.severidad] ?? 9
+      const sb = PESO_SEVERIDAD[b.severidad] ?? 9
+      if (sa !== sb) return sa - sb
       const pa = prioridadServicio(a)
       const pb = prioridadServicio(b)
       if (pa !== pb) return pa - pb
-      // Mismo bucket → más reciente arriba
-      return new Date(b.fecha_evento).getTime() - new Date(a.fecha_evento).getTime()
+      return new Date(b.ultima).getTime() - new Date(a.ultima).getTime()
     })
   }, [alertasRaw])
 
@@ -137,17 +166,21 @@ export function useAlertasData(sedeId?: string | null) {
   }, [alertas])
 
   // Acciones
-  const accionAtender = useCallback(async (faultId: string, userName: string) => {
-    await marcarAtendida(faultId, userName)
-  }, [])
+  // Las acciones se aplican a todas las ocurrencias del grupo
+  const accionAtender = useCallback(async (ids: string[], userName: string) => {
+    await marcarAtendida(ids, userName)
+    cargar()
+  }, [cargar])
 
-  const accionDescartar = useCallback(async (faultId: string, userName: string) => {
-    await descartarAlerta(faultId, userName)
-  }, [])
+  const accionDescartar = useCallback(async (ids: string[], userName: string) => {
+    await descartarAlerta(ids, userName)
+    cargar()
+  }, [cargar])
 
-  const accionReactivar = useCallback(async (faultId: string) => {
-    await reactivarAlerta(faultId)
-  }, [])
+  const accionReactivar = useCallback(async (ids: string[]) => {
+    await reactivarAlerta(ids)
+    cargar()
+  }, [cargar])
 
   return {
     alertas,

@@ -20,6 +20,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 
 interface ConductorConDeuda {
   id: string
@@ -510,9 +511,7 @@ export function BloqueosConductoresTab() {
       header: 'Vehículo',
       cell: ({ row }) => (
         <div>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-            {row.original.vehiculo_patente || '-'}
-          </span>
+          <PatenteBadge patente={row.original.vehiculo_patente} size="sm" />
           {row.original.tipo_alquiler && (
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
               {row.original.tipo_alquiler}

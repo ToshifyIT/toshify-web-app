@@ -20,6 +20,7 @@ import '../bitacora/styles/bitacora.css'
 import '../styles/uss.css'
 import '../../../vehiculos/VehicleManagement.css'
 import '../../../vehiculos/alertas-mantenimiento/AlertasMantenimientoModule.css'
+import { formatPlata } from '../../../../utils/format'
 
 // Defaults (override desde parametros_sistema)
 const ALQUILER_TURNO_DEFAULT = 245000
@@ -308,7 +309,7 @@ export function ControlExcesoKmModule() {
           Recorridos: <strong>${row.kmRecorridos.toLocaleString('es-AR')} km</strong> / Límite ${row.limite.toLocaleString('es-AR')}<br>
           Excedido: <strong style="color:#dc2626">${row.excedido.toLocaleString('es-AR')} km</strong> (${row.porcentaje}%)<br>
           Modalidad: ${row.modalidad === 'a_cargo' ? 'A cargo' : 'Turno'}<br>
-          Monto estimado: <strong>$${row.monto.toLocaleString('es-AR')}</strong><br><br>
+          Monto estimado: <strong>${formatPlata(row.monto)}</strong><br><br>
           Se creará en estado <strong>Por Aplicar</strong>.
         </div>
       `,
@@ -336,7 +337,7 @@ export function ControlExcesoKmModule() {
     }, { userId: user?.id, userName })
 
     if (res.ok) {
-      showSuccess('Incidencia creada', `Apareció en "Por Aplicar" — $${res.monto.toLocaleString('es-AR')}`)
+      showSuccess('Incidencia creada', `Apareció en "Por Aplicar" — ${formatPlata(res.monto)}`)
       cargarConductoresConIncidencia()
       refresh()
     } else {
@@ -383,7 +384,7 @@ export function ControlExcesoKmModule() {
           <div className="stat-card">
             <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">${stats.montoSugerido.toLocaleString('es-AR')}</span>
+              <span className="stat-value">{formatPlata(stats.montoSugerido)}</span>
               <span className="stat-label">Monto a cobrar (pendientes)</span>
             </div>
           </div>

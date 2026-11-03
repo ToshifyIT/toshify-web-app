@@ -13,6 +13,7 @@ import type { Conductor } from '../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge } from '../utils/conductorUtils'
 
 import { hoyART } from '../utils/fechaArgentina'
+import { formatFecha } from '../utils/format'
 interface AssignmentData {
   modalidad: 'dia_completo' | 'medio_dia' | 'por_horas' | 'semanal' | 'mensual' | ''
   horario: 'turno' | 'todo_dia' | ''  // turno = modo con pares de conductores
@@ -631,7 +632,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       // NO actualizar estado del vehículo - se mantiene en su estado actual
       // Solo se actualizará cuando se CONFIRME la programación
 
-      showSuccess('¡Programación creada!', `Número: ${codigoAsignacion} - PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`)
+      showSuccess('¡Programación creada!', `Número: ${codigoAsignacion} - PROGRAMADO para ${formatFecha(formData.fecha_programada)}`)
 
       onSuccess()
       onClose()

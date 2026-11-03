@@ -11,6 +11,7 @@ import './styles/stats-compactos.css'
 import './styles/botones.css'
 import './styles/segmentado.css'
 import './styles/tipografia.css'
+import './styles/modo-oscuro.css'
 import { ThemeProvider } from './contexts/ThemeContext'
 import App from './App.tsx'
 

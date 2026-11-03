@@ -1,6 +1,6 @@
 import { rangoSemanaISOFechas, semanaISO } from '../utils/semanaISO'
 import { hoyART } from '../utils/fechaArgentina'
-import { formatFecha } from '../utils/format'
+import { formatFecha, formatPlata } from '../utils/format'
 // =====================================================
 // TIPOS PARA EL MÓDULO DE FACTURACIÓN
 // =====================================================
@@ -510,12 +510,9 @@ export function calcularGarantiaProporcional(turnosCobrados: number): number {
   return (turnosCobrados / FACTURACION_CONFIG.TURNOS_SEMANA) * FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL
 }
 
+/** Plata del modulo Facturacion (con centavos): "$ 1.234,56". Fuera de Facturacion usar formatPlata. */
 export function formatCurrency(value: number): string {
-  const formatted = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value)
-  return `$ ${formatted}`
+  return formatPlata(value, { decimales: 2 })
 }
 
 export function formatDate(dateString: string): string { return formatFecha(dateString) }

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import './DriverHistoryModal.css';
+import { formatPlata } from '../../../utils/format'
 
 interface Nota {
   texto: string;
@@ -34,12 +35,7 @@ export function DriverHistoryModal({ isOpen, onClose, conductor, historial }: Dr
 
   const formatMoney = (amount: number) => {
     // Ensure strict 2 decimals for currency display
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
+    return formatPlata(amount);
   };
 
   return (

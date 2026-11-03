@@ -16,19 +16,13 @@ import { PeriodPicker } from './PeriodPicker'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './CobroComparativo.css'
+import { formatPlata, formatNumero } from '../../../utils/format'
 
 const formatCurrencyK = (value: number) => {
   return `$${Math.round(value / 1000)}K`
 }
 
-const formatCurrencyFull = (value: number) => {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value)
-}
+const formatCurrencyFull = (value: number) => formatPlata(value)
 
 /** Etiquetas genéricas para el eje X según granularidad */
 function getGenericLabels(granularity: Granularity, count: number): string[] {
@@ -70,7 +64,7 @@ function calcVariation(a: number, b: number): { pct: string; direction: 'up' | '
   if (b === 0 && a === 0) return { pct: '0', direction: 'neutral' }
   if (b === 0) return { pct: '100', direction: a > 0 ? 'up' : 'neutral' }
   const diff = a - b
-  const pct = Math.abs((diff / b) * 100).toFixed(1)
+  const pct = formatNumero(Math.abs((diff / b) * 100), 1)
   return { pct, direction: diff > 0 ? 'up' : diff < 0 ? 'down' : 'neutral' }
 }
 

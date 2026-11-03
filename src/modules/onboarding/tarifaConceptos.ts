@@ -10,6 +10,7 @@
 
 import { supabase } from '../../lib/supabase'
 import type { TipoTarifa } from '../../types/onboarding.types'
+import { formatPlata } from '../../utils/format'
 
 export type ModalidadTarifa = 'cargo' | 'diurno' | 'nocturno'
 
@@ -150,8 +151,6 @@ export async function validarPreciosSemanales(
 
 const FALLBACK: Record<TipoTarifa, string> = { antigua: 'Tarifa Antigua', nueva: 'Tarifa Nueva' }
 
-const fmt = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 })
-
 /**
  * Período de una tarifa ("ENE-26", "OCT-26"), sin importe. Sale de cualquier
  * concepto cargado de ese tipo de tarifa (el período es el mismo para todas las
@@ -181,5 +180,5 @@ export function getEtiquetaTarifa(
   const c = conceptos[getCodigoTarifa(modalidad, tieneGnc, tarifa)]
   if (!c || !c.periodo) return FALLBACK[tarifa]
   const importe = c.periodo === PERIODO_TARIFA_LEGACY ? c.precioSemanalConIva : c.precioSemanal
-  return `${c.periodo} (${fmt.format(importe)})`
+  return `${c.periodo} (${formatPlata(importe)})`
 }

@@ -8,6 +8,8 @@ import { supabase } from '../../../../../lib/supabase'
 import { toDateART, formatHoraART, fechaISOART } from '../../../../../utils/fechaArgentina'
 import type { Marcacion } from '../hooks/useUSSHistoricoData'
 import { EmptyState } from '../../../../../components/ui/EstadosVista'
+import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../../../utils/format'
 
 interface Trip {
   id: number
@@ -53,10 +55,7 @@ function superaKmMinimo(kilometraje: string | null): boolean {
 function fmtFechaCorta(iso: string): string {
   const d = new Date(iso)
   const dia = DIAS[d.getDay()]
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const yy = String(d.getFullYear()).slice(2)
-  return `${dia} ${dd}/${mm}/${yy}`
+  return `${dia} ${formatFecha(iso)}`
 }
 /**
  * Los campos *_gmt3 vienen sin offset (ej. "2026-05-09 23:28:48") pero ya están en ART.
@@ -316,10 +315,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
         }}>
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 13, background: 'var(--text-primary, #111827)',
-                color: '#fff', padding: '3px 8px', borderRadius: 'var(--radius-xs)',
-              }}>{patente}</span>
+              <PatenteBadge patente={patente} />
               <span style={{ color: 'var(--text-secondary)' }}>
                 Detalle de trips · {semanaInicio} a {semanaFin}
               </span>

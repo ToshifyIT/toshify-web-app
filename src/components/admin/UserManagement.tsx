@@ -13,6 +13,7 @@ import { validarEmail } from '../../utils/validacionesCampos'
 import { StatsGrid } from '../ui/StatsGrid'
 import './UserManagement.css'
 import './AdminStyles.css'
+import { formatFecha } from '../../utils/format'
 
 /** Estado de la cuenta en Supabase Auth (lo devuelve /api/admin/users/auth-status). */
 interface EstadoAuth {
@@ -593,9 +594,8 @@ export function UserManagement() {
         accessorKey: 'created_at',
         header: 'Registro',
         cell: ({ getValue }) => {
-          const date = new Date(getValue() as string)
           return (
-            <span className="um-date">{date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+            <span className="um-date">{formatFecha(getValue() as string)}</span>
           )
         },
       },

@@ -17,6 +17,7 @@ import { ActualizarGeotabButton } from './components/ActualizarGeotabButton';
 import { wialonBitacoraService } from '../../../../services/wialonBitacoraService';
 import './styles/bitacora.css';
 import '../styles/uss.css';
+import { TabsBar } from '../../../../components/ui/TabsBar';
 
 type VistaType = 'marcaciones' | 'historico';
 
@@ -90,21 +91,7 @@ export function BitacoraModule({ tablaGeotab, tablaGeotabHistorico, soloGeotab }
       )}
 
       {/* Tabs estilo facturación */}
-      <div className="bitacora-tabs">
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              className={`bitacora-tab ${vista === tab.id ? 'active' : ''}`}
-              onClick={() => setVista(tab.id)}
-            >
-              <Icon size={16} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <TabsBar tabs={TABS} active={vista} onChange={setVista} />
 
       {/* Stats now rendered inside MarcacionesTable from filtered data */}
 

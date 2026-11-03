@@ -21,6 +21,7 @@
 // Estrellas = 1 + puntaje × 4, redondeado a media estrella.
 // Las semanas guardadas antes del cambio conservan sus factores y pesos anteriores.
 import type { ConductorPanelRow } from './conductoresPanelService'
+import { formatPlata } from '../../../utils/format'
 
 export interface FactorCalificacion {
   clave: 'deuda' | 'ingresos' | 'cuidado' | 'multas' | 'aprovechamiento' | 'antiguedad' | 'viajes' | 'km'
@@ -145,7 +146,7 @@ export interface Referencias {
   viajes: Map<string, number[]>
 }
 
-const pesos = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+const pesos = (n: number) => formatPlata(n)
 
 /** Interpolación lineal por tramos: puntos [x, y] ordenados por x. */
 function tramos(x: number, puntos: [number, number][]): number {

@@ -12,6 +12,8 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { supabase } from '../../../../../lib/supabase';
 import { Spinner } from '../../../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../../../components/ui/EstadosVista'
+import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../../../utils/format'
 
 interface ConductorHistorialModalProps {
   conductorId: string;
@@ -72,7 +74,7 @@ function turnoBadge(turno: string) {
 }
 
 const fmtFecha = (v: string | null | undefined) =>
-  v ? new Date(v).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : '';
+  v ? formatFecha(v) : '';
 
 export function ConductorHistorialModal({ conductorId, conductorNombre, onClose }: ConductorHistorialModalProps) {
   const [vehiculos, setVehiculos] = useState<VehiculoAsignado[]>([]);
@@ -158,8 +160,10 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                     }}
                   >
                     <div style={{ flex: 1, minWidth: '140px' }}>
-                      <div style={{ color: '#dc2626', fontWeight: 700, fontSize: '13px' }}>
-                        {v?.patente || asig?.codigo || 'N/A'}
+                      <div>
+                        {v?.patente
+                          ? <PatenteBadge patente={v.patente} size="sm" />
+                          : <span style={{ fontWeight: 700, fontSize: '13px' }}>{asig?.codigo || 'N/A'}</span>}
                       </div>
                       {v?.marca && v?.modelo && (
                         <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>
@@ -202,7 +206,7 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                 const color = esBaja ? '#dc2626' : '#059669';
                 const bg = esBaja ? 'rgba(220,38,38,0.06)' : 'rgba(5,150,105,0.06)';
                 const fecha = b.created_at
-                  ? new Date(b.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })
+                  ? formatFecha(b.created_at)
                   : '—';
                 return (
                   <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>

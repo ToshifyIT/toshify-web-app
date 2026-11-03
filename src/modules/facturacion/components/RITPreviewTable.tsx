@@ -8,6 +8,7 @@ import { ArrowLeft, Loader2, Search, RotateCcw, Filter, X, RefreshCw, Download }
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 
 // Tipo para cada fila del preview
 export interface RITPreviewRow {
@@ -653,7 +654,7 @@ export function RITPreviewTable({
                 <td className="sticky-col">{row.conductor}</td>
                 <td>{row.dni}</td>
                 <td>{row.cuit || '-'}</td>
-                <td>{row.patente || '-'}</td>
+                <td><PatenteBadge patente={row.patente} size="sm" /></td>
                 <td>
                   <span className={`badge ${row.tipo === 'CARGO' ? 'badge-blue' : 'badge-gray'}`}>
                     {row.tipo}

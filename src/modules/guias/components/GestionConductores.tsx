@@ -7,7 +7,9 @@ import { Search, FileEdit, X } from 'lucide-react';
 import { normalizeDni } from '../../../utils/normalizeDocuments';
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService';
 import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { formatPlata } from '../../../utils/format'
 import "./GestionConductores.css";
+import { formatFechaHora } from '../../../utils/format'
 
 // Interfaces
 interface RawDriver {
@@ -80,7 +82,7 @@ interface Props {
   onRefresh?: () => void; 
 }
 
-const fmt = (n: number) => `$ ${n.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+const fmt = (n: number) => formatPlata(n);
 
 const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
   const { aplicarFiltroSede, sedeActualId } = useSede();
@@ -464,7 +466,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
 
     const notesHtml = notes.map(n => `
       <div style="text-align: left; margin-bottom: 10px; border-bottom: 1px solid var(--border-primary, #eee); padding-bottom: 5px;">
-        <div style="font-size: 12px; color: var(--text-tertiary, #666);">${n.fecha ? format(new Date(n.fecha), 'dd/MM/yyyy HH:mm') : '-'} - <strong>${n.usuario || 'Sistema'}</strong></div>
+        <div style="font-size: 12px; color: var(--text-tertiary, #666);">${formatFechaHora(n.fecha)} - <strong>${n.usuario || 'Sistema'}</strong></div>
         <div style="font-size: 14px; color: var(--text-primary, #333);">${n.texto}</div>
       </div>
     `).join('');

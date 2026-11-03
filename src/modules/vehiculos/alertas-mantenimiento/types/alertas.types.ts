@@ -45,6 +45,22 @@ export interface AlertaMantenimiento {
 }
 
 /**
+ * Una alerta agrupada: Geotab manda la misma falla una y otra vez (cada vez que
+ * el auto la vuelve a detectar). En pantalla se muestra UNA fila por
+ * vehículo + falla + gestión, con cuántas veces apareció y desde cuándo.
+ * Los campos de AlertaMantenimiento son los de la ocurrencia más reciente.
+ */
+export interface AlertaAgrupada extends AlertaMantenimiento {
+  /** ids de todas las ocurrencias del grupo (las acciones se aplican a todas) */
+  ids: string[]
+  /** cuántas veces apareció la falla */
+  ocurrencias: number
+  /** primera y última vez que apareció */
+  primera: string
+  ultima: string
+}
+
+/**
  * Estado consolidado del vehículo según km recorridos vs próximo service.
  * Calculado en runtime, no se persiste.
  */

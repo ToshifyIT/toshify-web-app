@@ -4,11 +4,13 @@
 
 import { Fragment, useState, useEffect } from 'react'
 import { X } from 'lucide-react'
-import { formatCurrency } from '../../../types/facturacion.types'
+import { formatPlata } from '../../../utils/format'
 import { cargarDetalleSemana, type SemanaDetalle, type FacturacionSemana } from './conductorDetalleService'
 import { etiquetaIvaLinea } from '../../../utils/facturacionIva'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './SemanaDetalleModal.css'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../utils/format'
 
 function fmt(s: string | null): string {
   if (!s) return '—'
@@ -28,8 +30,8 @@ const TIPO_APORTE_LABEL: Record<string, string> = {
 
 function fmtPagoFecha(s: string | null): string {
   if (!s) return ''
-  const d = new Date(s)
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  const txt = formatFecha(s)
+  return txt === '-' ? '' : txt
 }
 
 export function SemanaDetalleModal({
@@ -62,7 +64,7 @@ export function SemanaDetalleModal({
   // Cada producto con IVA lleva su propio renglon de IVA justo debajo, con referencia al
   // concepto (ej: "IVA 21% · P001 - Alquiler Turno Diurno"), igual que en Facturacion.
   const filaIva = (etiqueta: string, valor: number) => (
-    <div className="csem-row"><span className="csem-dot" />{etiqueta}<span className="csem-amt">{formatCurrency(valor)}</span></div>
+    <div className="csem-row"><span className="csem-dot" />{etiqueta}<span className="csem-amt">{formatPlata(valor)}</span></div>
   )
   const subtotalDescuentos = descuentos.reduce((s, c) => s + c.total, 0)
   // Con fraccionamiento, los pagos previos a fraccionar se muestran en "Saldo anterior"
@@ -105,7 +107,7 @@ export function SemanaDetalleModal({
         </div>
 
         <div className="csem-info">
-          <span>Vehículo <b>{semana.patente || '—'}</b></span>
+          <span>Vehículo <PatenteBadge patente={semana.patente} size="sm" /></span>
           <span>Modalidad <b>{semana.modalidad || '—'}</b></span>
           {detalle?.gnc != null && <span>Combustible <b className={detalle.gnc ? 'gnc' : ''}>{detalle.gnc ? 'GNC' : 'Nafta'}</b></span>}
           <span>Turnos <b>{semana.turnosCobrados}/{semana.turnosBase}</b></span>
@@ -121,21 +123,21 @@ export function SemanaDetalleModal({
               <div className="csem-items">
                 {cargos.map((c, i) => (
                   <Fragment key={`c${i}`}>
-                    <div className="csem-row"><span className="csem-dot" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">{formatCurrency(c.neto)}</span></div>
+                    <div className="csem-row"><span className="csem-dot" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">{formatPlata(c.neto)}</span></div>
                     {c.total - c.neto > 0.005 && filaIva(etiquetaIvaLinea(c.ivaPorcentaje, `${c.codigo} - ${c.nombre}`), Math.round((c.total - c.neto) * 100) / 100)}
                   </Fragment>
                 ))}
               </div>
-              <div className="csem-subtotal"><span>Subtotal Cargos</span><span>{formatCurrency(subtotalCargos)}</span></div>
+              <div className="csem-subtotal"><span>Subtotal Cargos</span><span>{formatPlata(subtotalCargos)}</span></div>
 
               {descuentos.length > 0 && (
                 <>
                   <div className="csem-items">
                     {descuentos.map((c, i) => (
-                      <div key={`d${i}`} className="csem-row desc"><span className="csem-dot desc" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">-{formatCurrency(c.total)}</span></div>
+                      <div key={`d${i}`} className="csem-row desc"><span className="csem-dot desc" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">-{formatPlata(c.total)}</span></div>
                     ))}
                   </div>
-                  <div className="csem-subtotal"><span>Subtotal Descuentos</span><span>-{formatCurrency(subtotalDescuentos)}</span></div>
+                  <div className="csem-subtotal"><span>Subtotal Descuentos</span><span>-{formatPlata(subtotalDescuentos)}</span></div>
                 </>
               )}
 
@@ -143,7 +145,7 @@ export function SemanaDetalleModal({
                 <div className="csem-subtotal">
                   <span>{saldoAnterior > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)'}</span>
                   <span className={saldoAnterior > 0 ? 'debit' : 'credit'}>
-                    {saldoAnterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoAnterior))}
+                    {saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior))}
                   </span>
                 </div>
               )}
@@ -154,26 +156,26 @@ export function SemanaDetalleModal({
                   <div className="csem-items">
                     <div className="csem-row">
                       <span className="csem-dot" />Saldo adeudado al cierre S{desgloseFrac.cierreSemana}
-                      <span className="csem-amt" style={{ color: '#dc2626' }}>{formatCurrency(desgloseFrac.saldoCierre)}</span>
+                      <span className="csem-amt" style={{ color: '#dc2626' }}>{formatPlata(desgloseFrac.saldoCierre)}</span>
                     </div>
                     {desgloseFrac.pagos.map(p => (
                       <div key={p.id} className="csem-row aporte">
                         <span className="csem-dot aporte" />{TIPO_APORTE_LABEL[p.tipo] || p.tipo}
                         <span className="csem-ref">· {p.ref}{fmtPagoFecha(p.fecha) ? ` · ${fmtPagoFecha(p.fecha)}` : ''}</span>
                         <span className="csem-amt" style={{ color: p.monto < 0 ? '#dc2626' : '#059669' }}>
-                          {p.monto < 0 ? '+' : '-'}{formatCurrency(Math.abs(p.monto))}
+                          {p.monto < 0 ? '+' : '-'}{formatPlata(Math.abs(p.monto))}
                         </span>
                       </div>
                     ))}
                     <div className="csem-row" title={`Fraccionado el ${fmtPagoFecha(desgloseFrac.fraccionamiento.fecha)}. Se cobra en ${desgloseFrac.fraccionamiento.cuotas} cuotas semanales (P010).`}>
                       <span className="csem-dot" style={{ background: '#6366F1' }} />Fraccionamiento en {desgloseFrac.fraccionamiento.cuotas} cuotas (P010)
-                      <span className="csem-amt" style={{ color: '#6366F1' }}>-{formatCurrency(desgloseFrac.fraccionamiento.monto)}</span>
+                      <span className="csem-amt" style={{ color: '#6366F1' }}>-{formatPlata(desgloseFrac.fraccionamiento.monto)}</span>
                     </div>
                   </div>
                   <div className="csem-subtotal">
                     <span>{saldoAnterior > 0 ? 'Resultado: deuda pendiente' : saldoAnterior < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente'}</span>
                     <span className={saldoAnterior > 0 ? 'debit' : 'credit'}>
-                      {saldoAnterior > 0 ? '+' : saldoAnterior < 0 ? '-' : ''}{formatCurrency(Math.abs(saldoAnterior))}
+                      {saldoAnterior > 0 ? '+' : saldoAnterior < 0 ? '-' : ''}{formatPlata(Math.abs(saldoAnterior))}
                     </span>
                   </div>
                 </>
@@ -192,36 +194,36 @@ export function SemanaDetalleModal({
                         {p.aplicadoAFraccionamiento ? ' · aplicado a la deuda fraccionada' : ''}
                       </span>
                       {p.aplicadoAFraccionamiento
-                        ? <span className="csem-amt" style={{ color: '#9ca3af' }} title="Este pago bajó la deuda antes de fraccionarla: ya está descontado en las cuotas (P010).">{formatCurrency(p.monto)}</span>
-                        : <span className="csem-amt credit">-{formatCurrency(p.monto)}</span>}
+                        ? <span className="csem-amt" style={{ color: '#9ca3af' }} title="Este pago bajó la deuda antes de fraccionarla: ya está descontado en las cuotas (P010).">{formatPlata(p.monto)}</span>
+                        : <span className="csem-amt credit">-{formatPlata(p.monto)}</span>}
                     </div>
                   ))}
                   </div>
-                  <div className="csem-subtotal"><span>Total aportado</span><span className="credit">-{formatCurrency(totalAportado)}</span></div>
+                  <div className="csem-subtotal"><span>Total aportado</span><span className="credit">-{formatPlata(totalAportado)}</span></div>
                 </>
               )}
 
               <div className="csem-total-box">
                 <div className="csem-total-ref">
-                  <div className="csem-ref-row"><span>Subtotal Cargos</span><span>{formatCurrency(subtotalCargos)}</span></div>
+                  <div className="csem-ref-row"><span>Subtotal Cargos</span><span>{formatPlata(subtotalCargos)}</span></div>
                   {subtotalDescuentos > 0 && (
-                    <div className="csem-ref-row"><span>Subtotal Descuentos</span><span>-{formatCurrency(subtotalDescuentos)}</span></div>
+                    <div className="csem-ref-row"><span>Subtotal Descuentos</span><span>-{formatPlata(subtotalDescuentos)}</span></div>
                   )}
                   {saldoAnterior !== 0 && (
                     <div className="csem-ref-row">
                       <span>{saldoAnterior > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)'}</span>
-                      <span>{saldoAnterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoAnterior))}</span>
+                      <span>{saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior))}</span>
                     </div>
                   )}
-                  <div className="csem-total-row"><span>Monto Total Referencial</span><span>{formatCurrency(montoReferencial)}</span></div>
+                  <div className="csem-total-row"><span>Monto Total Referencial</span><span>{formatPlata(montoReferencial)}</span></div>
                   {totalAportado > 0 && (
-                    <div className="csem-ref-row"><span>Total aportado</span><span>-{formatCurrency(totalAportado)}</span></div>
+                    <div className="csem-ref-row"><span>Total aportado</span><span>-{formatPlata(totalAportado)}</span></div>
                   )}
                 </div>
                 <div className="csem-pend">
                   <div className="csem-pend-lbl">{estadoTxt.toUpperCase()}</div>
                   <div className={`csem-pend-amt ${pendiente > 0.01 ? 'debit' : 'credit'}`}>
-                    {formatCurrency(pendienteMostrado)}
+                    {formatPlata(pendienteMostrado)}
                   </div>
                 </div>
               </div>

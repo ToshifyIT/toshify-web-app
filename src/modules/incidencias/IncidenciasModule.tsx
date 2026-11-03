@@ -37,7 +37,6 @@ import {
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
-import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import type {
   IncidenciaCompleta,
@@ -60,7 +59,9 @@ import { StatsGrid } from '../../components/ui/StatsGrid'
 
 import { hoyART } from '../../utils/fechaArgentina'
 import { semanaISO, numeroSemana, sumarSemanasISO } from '../../utils/semanaISO'
-import { formatFecha, formatPlata } from '../../utils/format'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
+import { formatFecha, formatPlata, formatFechaHora, formatHora } from '../../utils/format'
 type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas' | 'rechazados'
 
 // Helper para mapear rol de usuario a área (para incidencias)
@@ -931,7 +932,7 @@ export function IncidenciasModule() {
       title: 'Aplicar en lote',
       html: `
         <p style="margin-bottom:8px;">Se aplicarán <strong>${seleccionadas.length}</strong> cobros/descuentos.</p>
-        <p style="margin-bottom:12px;"><strong>Monto total:</strong> $${seleccionadas.reduce((s, p) => s + (p.monto || 0), 0).toLocaleString('es-AR')}</p>
+        <p style="margin-bottom:12px;"><strong>Monto total:</strong> ${formatPlata(seleccionadas.reduce((s, p) => s + (p.monto || 0), 0))}</p>
         <label style="display:block; text-align:left; font-size:13px; font-weight:600; margin-bottom:4px;">Semana de aplicación:</label>
         <select id="swal-semana-masiva" class="swal2-select" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;">
           ${opcionesPeriodos.map((op, i) => `<option value="${i}" ${i === selectedDefault ? 'selected' : ''}>${op.label}</option>`).join('')}
@@ -1080,7 +1081,7 @@ export function IncidenciasModule() {
       icon: 'question',
       title: 'Enviar a facturación',
       html: `¿Confirmas enviar <strong>${seleccionadas.length}</strong> incidencias a facturación?<br><br>
-        <strong>Monto total:</strong> $${seleccionadas.reduce((sum, i) => sum + (i.monto || 0), 0).toLocaleString('es-AR')}`,
+        <strong>Monto total:</strong> ${formatPlata(seleccionadas.reduce((sum, i) => sum + (i.monto || 0), 0))}`,
       showCancelButton: true,
       confirmButtonText: 'Enviar todas',
       cancelButtonText: 'Cancelar',
@@ -1303,7 +1304,7 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.patente_display || '-'}</span>
+      cell: ({ row }) => <PatenteBadge patente={row.original.patente_display} size="sm" />
     },
     {
       accessorKey: 'conductor_display',
@@ -1387,11 +1388,11 @@ export function IncidenciasModule() {
       header: 'Creado',
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
-        const d = new Date(row.original.created_at)
+        const creado = row.original.created_at
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
-            <div>{d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
-            <div style={{ color: 'var(--text-tertiary)' }}>{d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div>{formatFecha(creado)}</div>
+            <div style={{ color: 'var(--text-tertiary)' }}>{formatHora(creado)}</div>
           </div>
         )
       }
@@ -1498,7 +1499,7 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.patente_display || '-'}</span>
+      cell: ({ row }) => <PatenteBadge patente={row.original.patente_display} size="sm" />
     },
     {
       accessorKey: 'conductor_display',
@@ -1791,7 +1792,7 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.patente_display || '-'}</span>
+      cell: ({ row }) => <PatenteBadge patente={row.original.patente_display} size="sm" />
     },
     {
       accessorKey: 'conductor_display',
@@ -2079,7 +2080,7 @@ export function IncidenciasModule() {
       Alerta.fire({
         icon: 'info',
         title: 'Ya enviado a facturación',
-        html: `Esta incidencia ya fue enviada a facturación.<br><br>Monto: <strong>$${montoTotal.toLocaleString('es-AR')}</strong><br><br>Revisa la pestaña <strong>Cobros/Descuentos</strong> para ver o aplicar el cobro.`,
+        html: `Esta incidencia ya fue enviada a facturación.<br><br>Monto: <strong>${formatPlata(montoTotal)}</strong><br><br>Revisa la pestaña <strong>Cobros/Descuentos</strong> para ver o aplicar el cobro.`,
         confirmButtonText: 'Entendido'
       })
       return
@@ -2104,7 +2105,7 @@ export function IncidenciasModule() {
         title: 'Reenviar a facturación',
         html: `Esta incidencia fue rechazada anteriormente.<br><br>
           <strong>Conductor:</strong> ${incidencia.conductor_display || 'N/A'}<br>
-          <strong>Monto:</strong> $${incidencia.monto?.toLocaleString('es-AR') || 0}<br><br>
+          <strong>Monto:</strong> ${formatPlata(incidencia.monto || 0)}<br><br>
           ¿Confirmas reenviar a facturación?`,
         showCancelButton: true,
         confirmButtonText: 'Reenviar',
@@ -2144,7 +2145,7 @@ export function IncidenciasModule() {
       html: `¿Confirmas enviar esta incidencia a facturación?<br><br>
         <strong>Conductor:</strong> ${incidencia.conductor_display || 'N/A'}<br>
         <strong>Vehículo:</strong> ${incidencia.patente_display || 'N/A'}<br>
-        <strong>Monto:</strong> $${incidencia.monto?.toLocaleString('es-AR') || 0}<br>
+        <strong>Monto:</strong> ${formatPlata(incidencia.monto || 0)}<br>
         <strong>Descripción:</strong> ${incidencia.descripcion || 'Sin descripción'}`,
       showCancelButton: true,
       confirmButtonText: 'Enviar a facturación',
@@ -3019,10 +3020,9 @@ export function IncidenciasModule() {
   // FIX 2026-05-20: helper para mostrar created_at (fecha + hora real de envio)
   function formatCreatedAt(dateStr: string | undefined | null): { date: string; time: string } {
     if (!dateStr) return { date: '-', time: '' }
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return { date: '-', time: '' }
-    const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
-    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+    const date = formatFecha(dateStr)
+    if (date === '-') return { date: '-', time: '' }
+    const time = formatHora(dateStr)
     return { date, time }
   }
 
@@ -3047,7 +3047,7 @@ export function IncidenciasModule() {
       'Descripción': i.descripcion || '',
       'Acción Ejecutada': i.accion_ejecutada || '',
       'Registrado por': i.registrado_por || '',
-      'Fecha Creación': i.created_at ? new Date(i.created_at).toLocaleString('es-AR') : '',
+      'Fecha Creación': i.created_at ? formatFechaHora(i.created_at) : '',
       'Total Penalidades': i.total_penalidades || 0
     }))
 
@@ -3142,7 +3142,6 @@ export function IncidenciasModule() {
         showAllOption={true}
         placeholder="Filtrar por fecha"
       />
-      <VerLogsButton tablas={['incidencias', 'penalidades', 'penalidades_cuotas', 'penalidades_rechazos']} label="Incidencias" />
       {(activeTab === 'por_aplicar' || activeTab === 'aplicadas') && (
         <button className="btn-secondary" onClick={handleExportarPenalidades} title="Exportar" style={{ padding: '6px 10px', fontSize: '12px' }}>
           <Download size={14} /> Exportar
@@ -3197,69 +3196,17 @@ export function IncidenciasModule() {
       </div>
 
       {/* Tabs + Action Button (igual que Siniestros) */}
-      <div className="incidencias-tabs-row">
-        <div className="incidencias-tabs">
-          {canViewTab('incidencias:logistica') && (
-            <button
-              className={`incidencias-tab ${activeTab === 'logistica' ? 'active' : ''}`}
-              onClick={() => setActiveTab('logistica')}
-            >
-              <FileText size={16} />
-              Incidencia Logística
-              <span className="tab-badge">{incidenciasLogisticas.length}</span>
-            </button>
-          )}
-          {canViewTab('incidencias:cobro') && (
-            <button
-              className={`incidencias-tab ${activeTab === 'cobro' ? 'active' : ''}`}
-              onClick={() => setActiveTab('cobro')}
-            >
-              <DollarSign size={16} />
-              Incidencia Facturación
-              <span className="tab-badge">{incidenciasCobro.length}</span>
-            </button>
-          )}
-          {/* Tab Por Aplicar - muestra penalidades pendientes (controlado por permisos de tab) */}
-          {canViewTab('incidencias:por_aplicar') && (
-            <button
-              className={`incidencias-tab ${activeTab === 'por_aplicar' ? 'active' : ''}`}
-              onClick={() => setActiveTab('por_aplicar')}
-            >
-              <Clock size={16} />
-              Por Aplicar
-              {countPorAplicar > 0 && (
-                <span className={`tab-badge ${activeTab !== 'por_aplicar' ? 'pending' : ''}`}>
-                  {countPorAplicar}
-                </span>
-              )}
-            </button>
-          )}
-          {/* Tab Aplicadas - muestra penalidades ya aplicadas (controlado por permisos de tab) */}
-          {canViewTab('incidencias:aplicadas') && (
-            <button
-              className={`incidencias-tab ${activeTab === 'aplicadas' ? 'active' : ''}`}
-              onClick={() => setActiveTab('aplicadas')}
-            >
-              <CheckCircle size={16} />
-              Aplicadas
-              <span className="tab-badge">{countAplicadas}</span>
-            </button>
-          )}
-          {/* Tab Rechazados (controlado por permisos de tab) */}
-          {canViewTab('incidencias:rechazados') && (
-            <button
-              className={`incidencias-tab ${activeTab === 'rechazados' ? 'active' : ''}`}
-              onClick={() => setActiveTab('rechazados')}
-            >
-              <XCircle size={16} />
-              Rechazados
-              {countRechazados > 0 && (
-                <span className="tab-badge pending">{countRechazados}</span>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
+      <TabsBar
+        tabs={([
+          { id: 'logistica', label: 'Incidencia Logística', icon: FileText, count: incidenciasLogisticas.length },
+          { id: 'cobro', label: 'Incidencia Facturación', icon: DollarSign, count: incidenciasCobro.length },
+          { id: 'por_aplicar', label: 'Por Aplicar', icon: Clock, count: countPorAplicar > 0 ? countPorAplicar : undefined },
+          { id: 'aplicadas', label: 'Aplicadas', icon: CheckCircle, count: countAplicadas },
+          { id: 'rechazados', label: 'Rechazados', icon: XCircle, count: countRechazados > 0 ? countRechazados : undefined },
+        ] as TabsBarItem<TabType>[]).filter(t => canViewTab(`incidencias:${t.id}`))}
+        active={activeTab}
+        onChange={setActiveTab}
+      />
 
       {/* Incidencias Logística Tab */}
       {activeTab === 'logistica' && (
@@ -4069,7 +4016,7 @@ export function IncidenciasModule() {
                   <strong>{penalidadRechazar.conductor_display}</strong>
                 </div>
                 <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                  Monto: <span style={{ color: '#F59E0B', fontWeight: 600 }}>${penalidadRechazar.monto?.toLocaleString('es-AR')}</span>
+                  Monto: <span style={{ color: '#F59E0B', fontWeight: 600 }}>{formatPlata(penalidadRechazar.monto)}</span>
                 </div>
               </div>
               <div className="form-group">
@@ -4126,7 +4073,7 @@ export function IncidenciasModule() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <span style={{ color: '#666', fontSize: '14px' }}>Vehículo:</span>
-                  <strong style={{ fontSize: '14px' }}>{penalidadAplicar.patente_display || '-'}</strong>
+                  <PatenteBadge patente={penalidadAplicar.patente_display} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666', fontSize: '14px' }}>Monto Total:</span>
@@ -5083,12 +5030,12 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                               opacity: turnosDisabled ? 0.5 : 1,
                               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: '70px',
                             }}
-                            title={formData.turno ? `${opt.label} turno = $${montoCalculado.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
+                            title={formData.turno ? `${opt.label} turno = ${formatPlata(montoCalculado)}` : 'Seleccione modalidad primero'}
                           >
                             <span>{opt.label}</span>
                             {formData.turno && precioTurno > 0 && (
                               <span style={{ fontSize: '9px', fontWeight: 400, opacity: 0.85 }}>
-                                ${Math.round(montoCalculado).toLocaleString('es-AR')}
+                                {formatPlata(Math.round(montoCalculado))}
                               </span>
                             )}
                           </button>
@@ -5116,7 +5063,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                           background: 'var(--bg-secondary)', color: 'var(--text-primary)',
                           opacity: turnosDisabled ? 0.5 : 1,
                         }}
-                        title={formData.turno ? `Precio por turno: $${precioTurno.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
+                        title={formData.turno ? `Precio por turno: ${formatPlata(precioTurno)}` : 'Seleccione modalidad primero'}
                       />
                     </div>
                   </div>
@@ -5264,8 +5211,7 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
   function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
 
   function formatMoney(amount: number | undefined | null) {
-    if (!amount) return '-'
-    return `$ ${amount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+    return formatPlata(amount, { ceroComoGuion: true })
   }
 
   // Resolver tipo de incidencia
@@ -5314,7 +5260,9 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>{incidencia.patente_display || 'Sin patente'}</span>
+            {incidencia.patente_display
+              ? <PatenteBadge patente={incidencia.patente_display} />
+              : <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Sin patente</span>}
             <span className={`estado-badge estado-${estadoEfectivo.color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{estadoEfectivo.nombre}</span>
             {codInc !== '-' && (
               <span style={{ background: tipoObj?.categoria === 'P004' ? '#dcfce7' : '#fee2e2', color: tipoObj?.categoria === 'P004' ? '#166534' : '#991b1b', padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '11px' }}>{codInc}</span>
@@ -5396,11 +5344,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
   function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
   
   function formatDateTime(dateStr: string | undefined | null) {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString('es-AR', { 
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    })
+    return formatFechaHora(dateStr)
   }
 
   function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
@@ -5495,7 +5439,7 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
           </div>
           <div className="detail-item">
             <span className="detail-item-label">Patente</span>
-            <span className="detail-item-value">{penalidad.patente_display || '-'}</span>
+            <span className="detail-item-value"><PatenteBadge patente={penalidad.patente_display} size="sm" /></span>
           </div>
           <div className="detail-item">
             <span className="detail-item-label">Vehículo</span>

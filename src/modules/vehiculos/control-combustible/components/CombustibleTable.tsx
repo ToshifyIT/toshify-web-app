@@ -4,6 +4,9 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Eye } from 'lucide-react'
 import { DataTable } from '../../../../components/ui/DataTable'
 import type { FuelRow } from '../types/combustible.types'
+import { formatNumero, formatFecha, formatFechaHora } from '../../../../utils/format'
+import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
+import { ActionsMenu } from '../../../../components/ui/ActionsMenu'
 
 interface Props {
   rows: FuelRow[]
@@ -39,12 +42,11 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
       header: 'Vehículo',
       size: 150,
       cell: ({ row }) => {
-        const p = row.original.patente || '-'
         const v = row.original.vehiculo
         const modelo = v ? `${v.marca || ''} ${v.modelo || ''}`.trim() : ''
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, maxWidth: 150 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>{p}</span>
+            <span><PatenteBadge patente={row.original.patente} size="sm" /></span>
             {modelo && (
               <span
                 style={{
@@ -118,7 +120,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
             style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}
             title="Combustible usado en los tramos entre cargas de la semana (aproximado)"
           >
-            {v.toFixed(2)} L
+            {formatNumero(v, 2)} L
           </span>
         )
       },
@@ -130,12 +132,19 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
       cell: ({ row }) => {
         const pct = row.original.nivel_actual_pct
         if (pct == null) return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
-        const color = pct < 20 ? '#dc2626' : pct < 40 ? '#ea580c' : '#16a34a'
+        // Si Geotab no reporta el nivel hace más de 2 días, el dato es viejo: se muestra en gris con su fecha
+        const fecha = row.original.nivel_actual_fecha
+        const viejo = !!fecha && Date.now() - new Date(fecha).getTime() > 2 * 86400000
+        const color = viejo ? '#9ca3af' : pct < 20 ? '#dc2626' : pct < 40 ? '#ea580c' : '#16a34a'
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}
+            title={fecha ? `Último nivel informado por Geotab: ${formatFechaHora(fecha)}` : undefined}
+          >
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color }}>
-              {pct.toFixed(1)}%
+              {formatNumero(pct, 1)}%
             </span>
+            {viejo && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>dato del {formatFecha(fecha)}</span>}
             <div style={{ width: '100%', height: 5, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: color, borderRadius: 'var(--radius-xs)' }} />
             </div>
@@ -157,9 +166,9 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.2 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color }}>
-              {litros.toFixed(2)} L
+              {formatNumero(litros, 2)} L
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{pct.toFixed(0)}%</span>
+            <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{formatNumero(pct)}%</span>
           </div>
         )
       },
@@ -176,7 +185,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         const color = v >= 10 ? '#16a34a' : v >= 7 ? '#ea580c' : '#dc2626'
         return (
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color }}>
-            {v.toFixed(2)} km/L
+            {formatNumero(v, 2)} km/L
           </span>
         )
       },
@@ -192,7 +201,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
             <span className="dt-badge dt-badge-blue">{v}</span>
-            {litros > 0 && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{litros.toFixed(0)} L cargados</span>}
+            {litros > 0 && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{formatNumero(litros)} L cargados</span>}
           </div>
         )
       },
@@ -211,47 +220,38 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
       header: 'Estado',
       size: 120,
       cell: ({ row }) => {
-        if (!row.original.tiene_telemetria) return <span className="dt-badge dt-badge-gray">Sin OBD</span>
+        // Cada estado explica de dónde sale (tooltip): se calcula con los datos de Geotab de la semana elegida.
+        const chip = (cls: string, txt: string, porque: string) => (
+          <span className={`dt-badge ${cls}`} title={porque} style={{ cursor: 'help' }}>{txt}</span>
+        )
+        if (!row.original.tiene_telemetria) {
+          return chip('dt-badge-gray', 'Sin OBD', 'El GPS de este auto no lee la computadora del motor: no informa consumo ni nivel de tanque.')
+        }
         const pct = Number(row.original.ralenti_pct) || 0
         const rendimiento = row.original.rendimiento_semana
-        if (pct > 25) return <span className="dt-badge dt-badge-orange">Ralentí alto</span>
-        if (rendimiento !== null && rendimiento < 7) return <span className="dt-badge dt-badge-red">Consumo alto</span>
-        if (rendimiento !== null) return <span className="dt-badge dt-badge-green">Normal</span>
-        return <span className="dt-badge dt-badge-gray">Sin datos</span>
+        if (pct > 25) {
+          return chip('dt-badge-orange', 'Ralentí alto', `El ${formatNumero(pct)}% del combustible de los últimos 30 días se gastó con el motor en marcha y el auto parado (más del 25%).`)
+        }
+        if (rendimiento !== null && rendimiento < 7) {
+          return chip('dt-badge-red', 'Consumo alto', `Rindió ${formatNumero(rendimiento, 2)} km/L en la semana: menos de 7 km/L (km recorridos ÷ litros consumidos).`)
+        }
+        if (rendimiento !== null) {
+          return chip('dt-badge-green', 'Normal', `Rindió ${formatNumero(rendimiento, 2)} km/L en la semana (7 km/L o más) y el ralentí está por debajo del 25%.`)
+        }
+        return chip('dt-badge-gray', 'Sin datos', 'En la semana elegida Geotab no informó consumo suficiente para calcular el rendimiento.')
       },
     },
     {
       id: 'acciones',
       header: 'Acciones',
       size: 70,
-      cell: ({ row }) => {
-        const btnBase: React.CSSProperties = {
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 2,
-          color: 'var(--text-secondary)',
-        }
-        const labelStyle: React.CSSProperties = {
-          fontSize: 9,
-          color: 'var(--text-tertiary)',
-          marginTop: 1,
-        }
-        return (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRowClick(row.original) }}
-            title="Ver detalle"
-            style={btnBase}
-          >
-            <Eye size={14} />
-            <span style={labelStyle}>Ver</span>
-          </button>
-        )
-      },
+      cell: ({ row }) => (
+        <ActionsMenu
+          actions={[
+            { icon: <Eye size={15} />, label: 'Ver detalle', onClick: () => onRowClick(row.original) },
+          ]}
+        />
+      ),
       enableSorting: false,
     },
   ], [onRowClick])

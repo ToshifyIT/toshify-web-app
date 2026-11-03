@@ -11,6 +11,9 @@ import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 import { cargarConceptosTarifa } from '../../../../onboarding/tarifaConceptos'
 
 import { hoyART } from '../../../../../utils/fechaArgentina'
+import { formatPlata, formatNumero } from '../../../../../utils/format'
+import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { ActionsMenu } from '../../../../../components/ui/ActionsMenu'
 // Defaults (override desde parametros_sistema en el módulo, pasados via props si hace falta)
 const ALQUILER_TURNO_DEFAULT = 245000
 const ALQUILER_A_CARGO_DEFAULT = 360000
@@ -55,7 +58,7 @@ const ETIQUETA_NUMERICA: Record<ColumnaNumerica, (r: ExcesoKmRow) => string> = {
   km_recorridos: (r) => `${r.kmRecorridos.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km`,
   limite: (r) => `${r.limite.toLocaleString('es-AR')} km`,
   consumo: (r) => `${Math.round((r.kmRecorridos / r.limite) * 100)}%`,
-  cobro_exceso: (r) => (r.excedido > 0 ? `$${r.monto.toLocaleString('es-AR')}` : '—'),
+  cobro_exceso: (r) => (r.excedido > 0 ? formatPlata(r.monto) : '—'),
 }
 
 export interface ExcesoKmRow {
@@ -331,9 +334,7 @@ export function ExcesoKmTable({
       header: 'Patente',
       size: 110,
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 'var(--radius-xs)', whiteSpace: 'nowrap' }}>
-          {row.original.patente.replace(/\s/g, '')}
-        </span>
+        <PatenteBadge patente={row.original.patente} size="sm" />
       ),
     },
     {
@@ -427,7 +428,7 @@ export function ExcesoKmTable({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingRight: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: barColor }}>
-                {pctConsumo.toFixed(0)}%
+                {formatNumero(pctConsumo)}%
               </span>
               {excede && (
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: '#dc2626' }}>
@@ -521,7 +522,7 @@ export function ExcesoKmTable({
           || (r.modalidad === 'a_cargo' ? alquilerACargo : alquilerTurno)
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>${r.monto.toLocaleString('es-AR')}</strong>
+            <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatPlata(r.monto)}</strong>
             <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
               {r.porcentaje}% × ${(valor / 1000).toFixed(0)}k × IVA
             </span>
@@ -583,50 +584,18 @@ export function ExcesoKmTable({
       size: 130,
       cell: ({ row }) => {
         const r = row.original
-        const btnBase: React.CSSProperties = {
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-          background: 'none', border: 'none', cursor: 'pointer', padding: 2,
-        }
-        const labelStyle: React.CSSProperties = { fontSize: 9, color: 'var(--text-tertiary)', marginTop: 1 }
+        const crear = r.excedido <= 0
+          ? { icon: <Plus size={15} />, label: 'No excede el límite, no hay incidencia que crear', onClick: () => {}, disabled: true }
+          : r.yaTieneIncidencia
+            ? { icon: <CheckCircle size={15} />, label: 'Ya tiene incidencia creada', onClick: () => {}, disabled: true }
+            : { icon: <Plus size={15} />, label: 'Crear incidencia (Por Aplicar)', onClick: () => onCrear(r), variant: 'success' as const }
         return (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
-            <button
-              onClick={() => onVerDetalle(r)}
-              title="Ver detalle de marcaciones de la semana"
-              style={{ ...btnBase, color: 'var(--text-secondary)' }}
-            >
-              <Eye size={14} />
-              <span style={labelStyle}>Ver</span>
-            </button>
-            {r.excedido <= 0 ? (
-              <button
-                disabled
-                title="No excede el límite, no hay incidencia que crear"
-                style={{ ...btnBase, color: 'var(--text-tertiary)', cursor: 'not-allowed', opacity: 0.3 }}
-              >
-                <Plus size={14} />
-                <span style={labelStyle}>Crear</span>
-              </button>
-            ) : r.yaTieneIncidencia ? (
-              <button
-                disabled
-                title="Ya tiene incidencia creada"
-                style={{ ...btnBase, color: 'var(--text-tertiary)', cursor: 'not-allowed', opacity: 0.4 }}
-              >
-                <CheckCircle size={14} />
-                <span style={labelStyle}>Creada</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => onCrear(r)}
-                title="Crear incidencia (Por Aplicar)"
-                style={{ ...btnBase, color: '#16a34a' }}
-              >
-                <Plus size={14} />
-                <span style={labelStyle}>Crear</span>
-              </button>
-            )}
-          </div>
+          <ActionsMenu
+            actions={[
+              { icon: <Eye size={15} />, label: 'Ver detalle de marcaciones de la semana', onClick: () => onVerDetalle(r) },
+              crear,
+            ]}
+          />
         )
       },
       enableSorting: false,

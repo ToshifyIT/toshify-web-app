@@ -28,7 +28,6 @@ import {
 import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
-import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
@@ -51,6 +50,7 @@ import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
 
 import { hoyART } from '../../utils/fechaArgentina'
 import { formatFecha, formatPlata } from '../../utils/format'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
 function toISODateLocal(date: Date) {
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -483,9 +483,7 @@ export function SiniestrosModule() {
               {row.original.conductor_display || '-'}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-              <span className="dt-badge dt-badge-gray" style={{ fontSize: '10px', padding: '1px 6px' }}>
-                {row.original.vehiculo_patente || 'Sin patente'}
-              </span>
+              <PatenteBadge patente={row.original.vehiculo_patente} size="sm" />
               {resp && (
                 <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
                   {labels[resp] || resp}
@@ -967,7 +965,7 @@ export function SiniestrosModule() {
 
   /** Monto para las tarjetas: muestra "$ 0" en vez de "-". */
   function montoTarjeta(value: number) {
-    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value || 0)
+    return formatPlata(value || 0)
   }
 
   /** "34 días" / "1 día" / "Sin datos" */
@@ -1132,7 +1130,6 @@ export function SiniestrosModule() {
               />
             </div>
             <div className="tabs-actions">
-              <VerLogsButton tablas={['siniestros', 'siniestros_seguimientos']} label="Siniestros" />
               <button className="btn-secondary" onClick={handleExportarExcel} title="Exportar a Excel">
                 <Download size={16} />
                 Exportar
@@ -1792,7 +1789,7 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
       <div className="sd-header">
         <div className="sd-header-main">
           <div className="sd-header-fila">
-            <span className="sd-titulo">{siniestro.vehiculo_patente || 'Sin patente'} · {siniestro.categoria_nombre}</span>
+            <span className="sd-titulo">{siniestro.vehiculo_patente ? <PatenteBadge patente={siniestro.vehiculo_patente} /> : 'Sin patente'} · {siniestro.categoria_nombre}</span>
             <span className={`estado-badge estado-${siniestro.estado_color}`}>{siniestro.estado_nombre}</span>
             {siniestro.dias_siniestrado !== undefined && siniestro.dias_siniestrado !== null && (
               <span className="dias-badge"><Clock size={12} /> {siniestro.dias_siniestrado} días</span>
@@ -1854,7 +1851,7 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
         <section className="sd-seccion">
           <div className="sd-seccion-titulo">Vehículo, conductor y seguro</div>
           <div className="sd-grid">
-            <Dato label="Patente">{siniestro.vehiculo_patente || '-'}</Dato>
+            <Dato label="Patente"><PatenteBadge patente={siniestro.vehiculo_patente} size="sm" /></Dato>
             <Dato label="Vehículo">{vehiculoTexto || '-'}</Dato>
             <Dato label="Conductor" ancho>{siniestro.conductor_display || '-'}</Dato>
             <Dato label="Seguro">{siniestro.seguro_nombre || '-'}</Dato>

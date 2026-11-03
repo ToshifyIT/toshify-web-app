@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { Spinner } from '../../components/ui/LoadingOverlay'
+import { TabsBar } from '../../components/ui/TabsBar'
 
 // Lazy-load tabs — solo se carga el JS del tab activo
 const ReporteFacturacionTab = lazy(() => import('./tabs/ReporteFacturacionTab').then(m => ({ default: m.ReporteFacturacionTab })))
@@ -75,21 +76,7 @@ export function FacturacionModule() {
   return (
     <div className="fact-module">
       {/* Tabs */}
-      <div className="fact-tabs">
-        {visibleTabs.map(tab => {
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.id}
-              className={`fact-tab ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <Icon size={16} />
-              <span>{tab.label}</span>
-            </button>
-          )
-        })}
-      </div>
+      <TabsBar tabs={visibleTabs} active={activeTab} onChange={setActiveTab} />
 
        {/* Contenido */}
        <div className="fact-tab-content">

@@ -13,6 +13,8 @@ import { useFlotaSemanaAnterior } from './useFlotaSemanaAnterior'
 import { showError } from '../../utils/toast'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { formatFecha, formatFechaHora } from '../../utils/format'
 
 interface AsignacionActiva {
   id: string
@@ -581,8 +583,8 @@ export function AsignacionesActivasModule() {
           const vehiculo = row.original.vehiculos
           return vehiculo ? (
             <div>
-              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                {vehiculo.patente}
+              <div>
+                <PatenteBadge patente={vehiculo.patente} size="sm" />
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                 {vehiculo.marca} {vehiculo.modelo} ({vehiculo.anio})
@@ -660,8 +662,7 @@ export function AsignacionesActivasModule() {
         cell: ({ getValue }) => {
           const fecha = getValue() as string | null
           if (!fecha) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-          const d = new Date(fecha)
-          return `${d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}`
+          return formatFechaHora(fecha)
         },
         enableSorting: true,
       },
@@ -671,8 +672,7 @@ export function AsignacionesActivasModule() {
         cell: ({ getValue }) => {
           const fecha = getValue() as string
           if (!fecha || fecha === '-') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-          const d = new Date(fecha)
-          return `${d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}`
+          return formatFechaHora(fecha)
         },
         enableSorting: true,
       },
@@ -1045,23 +1045,19 @@ interface ConductorDetalle {
   conductores_estados?: { descripcion: string } | null
 }
 
-const TZ_AR = 'America/Argentina/Buenos_Aires'
 const SIN_DATO = '-'
 const ORDEN_HORARIO: Record<string, number> = { diurno: 0, nocturno: 1 }
 
 /** Fecha + hora (timestamps) en hora Argentina. */
 function fechaHoraAR(valor: string | null | undefined): string {
   if (!valor || valor === '-') return SIN_DATO
-  const d = new Date(valor)
-  if (isNaN(d.getTime())) return SIN_DATO
-  return `${d.toLocaleDateString('es-AR', { timeZone: TZ_AR })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ_AR })}`
+  return formatFechaHora(valor)
 }
 
 /** Fecha sola (columnas date): se toma el día tal cual, sin corrimiento por zona horaria. */
 function fechaAR(valor: string | null | undefined): string {
   if (!valor) return SIN_DATO
-  const d = new Date(String(valor).substring(0, 10) + 'T12:00:00')
-  return isNaN(d.getTime()) ? SIN_DATO : d.toLocaleDateString('es-AR')
+  return formatFecha(String(valor).substring(0, 10))
 }
 
 /** Clase según cuánto falta para un vencimiento: vencido (rojo) o vence en 30 días (naranja). */
@@ -1200,7 +1196,7 @@ function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: Asignacio
               <div className="efd-card">
                 <div className="efd-card-head">
                   <div>
-                    <span className="efd-patente">{v.patente}</span>
+                    <PatenteBadge patente={v.patente} style={{ marginRight: '8px' }} />
                     <span className="efd-sub">{[v.marca, v.modelo].filter(Boolean).join(' ')}{v.anio ? ` · ${v.anio}` : ''}</span>
                   </div>
                   {v.vehiculos_estados?.descripcion && (

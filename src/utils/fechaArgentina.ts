@@ -101,16 +101,16 @@ export function formatHoraART(valor: string | null | undefined): string {
   return p ? `${p.hora}:${p.minuto}:${p.segundo}` : '-'
 }
 
-/** "DD/MM/YY" en ART. */
+/** "DD/MM/YYYY" en ART (mismo formato que formatFecha de utils/format). */
 export function formatFechaART(valor: string | null | undefined): string {
   const p = partesART(valor)
-  return p ? `${p.dia}/${p.mes}/${p.anio.slice(2)}` : '-'
+  return p ? `${p.dia}/${p.mes}/${p.anio}` : '-'
 }
 
-/** "DD/MM/YY HH:MM:SS" en ART. */
+/** "DD/MM/YYYY HH:MM:SS" en ART (mismo formato que formatFechaHora de utils/format). */
 export function formatFechaHoraART(valor: string | null | undefined): string {
   const p = partesART(valor)
-  return p ? `${p.dia}/${p.mes}/${p.anio.slice(2)} ${p.hora}:${p.minuto}:${p.segundo}` : '-'
+  return p ? `${p.dia}/${p.mes}/${p.anio} ${p.hora}:${p.minuto}:${p.segundo}` : '-'
 }
 
 /** "DD/MM HH:MM:SS" en ART (sin anio). */

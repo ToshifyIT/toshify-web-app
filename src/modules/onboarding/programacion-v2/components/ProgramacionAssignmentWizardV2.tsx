@@ -37,6 +37,7 @@ import { vehiculosActivosDeConductores, type VehiculoActivoDeConductor } from '.
 import { calcularMinutosEntre, type Coordenada } from '../distanciaParService'
 import { documentoSegunTarifa, permiteAnexo } from '../documentoTarifa'
 import { esConductorInterno } from '../../../../utils/conductorUtils'
+import { formatNumero } from '../../../../utils/format'
 
 /**
  * Lead mostrado en la columna informativa del paso 3. Es un subconjunto
@@ -4994,7 +4995,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                   <MapPin size={12} style={{ color: '#10B981' }} />
                                   <span style={{ fontSize: '10px', fontWeight: '600', color: '#059669' }}>
-                                    {par.distanciaKm.toFixed(1)} km
+                                    {formatNumero(par.distanciaKm, 1)} km
                                   </span>
                                 </div>
                                 {par.tiempoMinutos !== undefined && par.tiempoMinutos > 0 && (

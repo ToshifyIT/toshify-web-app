@@ -10,6 +10,8 @@ import { DataTable } from '../../../../components/ui/DataTable/DataTable'
 import { Search, MapPin, Gauge, X } from 'lucide-react'
 import type { ExcesoVelocidad } from '../types/uss.types'
 import { normalizePatente } from '../../../../utils/normalizeDocuments'
+import { formatHora, formatNumero } from '../../../../utils/format'
+import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
 import {
   formatDate,
   formatDuration,
@@ -19,18 +21,6 @@ import {
   getSeverityColor,
 } from '../utils/uss.utils'
 import { reverseGeocode, reverseGeocodeFromCache } from '../utils/reverseGeocode'
-
-// Formato hora Argentina HH:MM:SS
-function formatTimeART(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleTimeString('es-AR', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-}
 
 // Celda de Ubicacion: muestra la direccion. Si la fila ya trae `localizacion`
 // (datos viejos), la usa. Si solo tiene coordenadas (USS via GPS crudo),
@@ -198,6 +188,8 @@ export function ExcesosTable({
     setShowVelFilter(false)
   }
 
+  const hayLimite = useMemo(() => excesos.some(e => (e.limite_velocidad || 0) > 0), [excesos])
+
   // Columnas — headers como texto plano para que DataTable aplique filtros automáticos
   const columns = useMemo<ColumnDef<ExcesoVelocidad, unknown>[]>(() => [
     {
@@ -232,7 +224,7 @@ export function ExcesosTable({
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
           <span style={{ fontSize: '13px', fontWeight: 500 }}>{formatDate(row.original.fecha_evento)}</span>
           <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-            {formatTimeART(row.original.fecha_evento)}
+            {formatHora(row.original.fecha_evento)}
           </span>
         </div>
       ),
@@ -240,11 +232,7 @@ export function ExcesosTable({
     {
       accessorKey: 'patente',
       header: 'Patente',
-      cell: ({ row }) => (
-        <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-          {normalizePatente(row.original.patente)}
-        </span>
-      ),
+      cell: ({ row }) => <PatenteBadge patente={normalizePatente(row.original.patente)} />,
     },
     {
       accessorKey: 'ibutton',
@@ -273,45 +261,49 @@ export function ExcesosTable({
         </span>
       ),
     },
-    {
-      accessorKey: 'limite_velocidad',
-      header: 'Limite',
-      cell: ({ row }) => formatSpeed(row.original.limite_velocidad),
-    },
-    {
-      accessorKey: 'exceso',
-      header: 'Exceso',
-      cell: ({ row }) => {
-        const severityColor = getSeverityColor(row.original.exceso)
-        return (
-          <span
-            className="dt-badge"
-            style={{
-              backgroundColor: severityColor,
-              color: 'white',
-              fontWeight: 600,
-            }}
-          >
-            +{Math.round(row.original.exceso)} km/h
-          </span>
-        )
+    // Límite y exceso solo si el GPS los manda: Geotab hoy no trae el límite de la calle
+    // (viene en 0), así que esas columnas no aportan nada y se ocultan.
+    ...(hayLimite ? [
+      {
+        accessorKey: 'limite_velocidad',
+        header: 'Límite',
+        cell: ({ row }) => formatSpeed(row.original.limite_velocidad),
       },
-    },
+      {
+        accessorKey: 'exceso',
+        header: 'Exceso',
+        cell: ({ row }) => {
+          const severityColor = getSeverityColor(row.original.exceso)
+          return (
+            <span
+              className="dt-badge"
+              style={{
+                backgroundColor: severityColor,
+                color: 'white',
+                fontWeight: 600,
+              }}
+            >
+              +{Math.round(row.original.exceso)} km/h
+            </span>
+          )
+        },
+      },
+    ] as ColumnDef<ExcesoVelocidad, unknown>[] : []),
     {
       accessorKey: 'duracion_segundos',
-      header: 'Duracion',
+      header: 'Duración',
       cell: ({ row }) => formatDuration(row.original.duracion_segundos),
     },
     {
       id: 'localizacion',
       accessorFn: (row) => row.localizacion || (row.latitud != null && row.longitud != null ? `${row.latitud.toFixed(5)}, ${row.longitud.toFixed(5)}` : null),
-      header: 'Ubicacion',
+      header: 'Ubicación',
       cell: ({ row }) => (
         <UbicacionCell exceso={row.original} onVerMapa={setMapaExceso} />
       ),
       enableSorting: false,
     },
-  ], [])
+  ], [hayLimite])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -335,7 +327,7 @@ export function ExcesosTable({
               fontSize: '11px',
               color: 'var(--text-tertiary)'
             }}>
-              {totalCount.toLocaleString()} registros cargados
+              {formatNumero(totalCount)} registros cargados
             </span>
           )}
         </div>
@@ -553,7 +545,7 @@ export function ExcesosTable({
               </div>
               <div>
                 <div style={{ color: 'var(--text-tertiary)', marginBottom: '2px' }}>Hora</div>
-                <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{formatTimeART(mapaExceso.fecha_evento)}</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{formatHora(mapaExceso.fecha_evento)}</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-tertiary)', marginBottom: '2px' }}>Velocidad</div>

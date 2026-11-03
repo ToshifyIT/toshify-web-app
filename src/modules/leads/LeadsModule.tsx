@@ -44,6 +44,8 @@ import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, MARCA_RECONTACTO_SELLIUM, esFo
 import { procesarCargaSellium } from './procesarCargaSellium'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 import { StatsGrid } from '../../components/ui/StatsGrid'
+import { formatNumero } from '../../utils/format'
+import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
 // =====================================================
 // GOOGLE MAPS GEOCODING
@@ -560,14 +562,7 @@ const emptyFormData: LeadFormData = {
 }
 
 function formatDate(dateStr: string | undefined | null): string {
-  if (!dateStr) return '-'
-  try {
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return '-'
-    const day = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
-    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-    return `${day} ${time}`
-  } catch { return '-' }
+  return formatFechaHora(dateStr)
 }
 
 // `monotributo` en la tabla `leads` es texto libre. Los valores reales son "Sí", "No" y
@@ -581,9 +576,8 @@ function formatDateOnly(dateStr: string | undefined | null): string {
   if (!dateStr) return ''
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr))
   if (m) return `${m[3]}/${m[2]}/${m[1]}`
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+  const txt = formatFecha(dateStr)
+  return txt === '-' ? '' : txt
 }
 
 // Valor de filtro para columnas Si/No de texto (licencia, experiencia previa,
@@ -614,13 +608,12 @@ function formatDateParts(dateStr: string | undefined | null): { date: string; ti
   try {
     const d = new Date(dateStr)
     if (isNaN(d.getTime())) return { date: '-', time: '' }
-    const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+    const date = formatFecha(dateStr)
     // 00:00:00.000 exacto en hora Argentina = fecha sin hora (la carga de Sellium solo
     // trae el día). No se muestra una hora que no existe.
-    const hms = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone: 'America/Argentina/Buenos_Aires' })
+    const hms = formatHora(dateStr)
     if (hms === '00:00:00' && d.getMilliseconds() === 0) return { date, time: '' }
-    const time = hms.slice(0, 5)
-    return { date, time }
+    return { date, time: hms }
   } catch {
     return { date: '-', time: '' }
   }
@@ -1048,7 +1041,7 @@ export function LeadsModule() {
   const verConductorPrevio = useCallback((lead: Lead, m: CoincidenciaConductor) => {
     const c = m.conductor
     const esc = (t: string | null | undefined) => String(t ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const fecha = (d: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('/') : '-')
+    const fecha = (d: string | null) => (d ? formatFecha(d.slice(0, 10)) : '-')
     void Alerta.fire({
       title: m.activo ? 'Ya es conductor' : 'Ya fue conductor',
       icon: 'info',
@@ -1919,7 +1912,7 @@ export function LeadsModule() {
           <p style="margin:4px 0;"><strong>Conductor:</strong> ${esc(`${c.nombres ?? ''} ${c.apellidos ?? ''}`.trim())}</p>
           <p style="margin:4px 0;"><strong>DNI:</strong> ${esc(c.numero_dni)}</p>
           <p style="margin:4px 0;"><strong>Estado actual:</strong> ${esc(previo.estado)}</p>
-          ${c.fecha_terminacion ? `<p style="margin:4px 0;"><strong>Baja:</strong> ${esc(String(c.fecha_terminacion).slice(0, 10).split('-').reverse().join('/'))}${c.motivo_baja ? ` · ${esc(c.motivo_baja)}` : ''}</p>` : ''}
+          ${c.fecha_terminacion ? `<p style="margin:4px 0;"><strong>Baja:</strong> ${esc(formatFecha(String(c.fecha_terminacion).slice(0, 10)))}${c.motivo_baja ? ` · ${esc(c.motivo_baja)}` : ''}</p>` : ''}
         </div>
         <p style="margin-top:12px; font-size:13px;">Pasa a <b>ACTIVO</b> con fecha de reincorporación de hoy. Se completan los datos que le falten con los del lead.</p>
         <p style="margin-top:8px; font-size:13px; color:#92400e;">El lead queda como «Reingreso»: no cuenta como conversión de marketing.</p>
@@ -2542,7 +2535,7 @@ export function LeadsModule() {
         // Sin duplicados — confirmar carga normal
         const confirmResult = await Alerta.fire({
           title: '¿Estás seguro que quieres subir los datos?',
-          html: `<p style="font-size: 14px;">Se cargarán <strong>${jsonData.length.toLocaleString()}</strong> registros a la base de datos.</p>`,
+          html: `<p style="font-size: 14px;">Se cargarán <strong>${formatNumero(jsonData.length)}</strong> registros a la base de datos.</p>`,
           icon: 'question',
           showCancelButton: true,
           confirmButtonColor: '#10B981',
@@ -2670,8 +2663,8 @@ export function LeadsModule() {
         })
       } else {
         const resumenParts = []
-        if (insertados > 0) resumenParts.push(`<strong>${insertados.toLocaleString()}</strong> insertados`)
-        if (actualizados > 0) resumenParts.push(`<strong>${actualizados.toLocaleString()}</strong> actualizados`)
+        if (insertados > 0) resumenParts.push(`<strong>${formatNumero(insertados)}</strong> insertados`)
+        if (actualizados > 0) resumenParts.push(`<strong>${formatNumero(actualizados)}</strong> actualizados`)
 
         await Alerta.fire({
           title: 'Carga exitosa',
@@ -3206,12 +3199,13 @@ export function LeadsModule() {
         const lead = row.original
         const tieneFolder = !!lead.url_folder?.trim()
         const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger'; disabled?: boolean }> = []
-        if (canEdit) {
-          actions.push({ label: 'Editar', icon: <Edit2 size={15} />, onClick: () => handleOpenEdit(lead), variant: 'info' })
-        }
+        // Orden: Ver · Editar · (otras) · Eliminar
         actions.push(
           { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
         )
+        if (canEdit) {
+          actions.push({ label: 'Editar', icon: <Edit2 size={15} />, onClick: () => handleOpenEdit(lead), variant: 'info' })
+        }
         actions.push({
           label: 'Documentos',
           icon: <FolderOpen size={15} />,

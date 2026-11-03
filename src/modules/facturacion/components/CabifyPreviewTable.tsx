@@ -10,6 +10,8 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
+import { formatNumero } from '../../../utils/format'
+import { formatFecha } from '../../../utils/format'
 
 // Detalle del cálculo por conductor
 export interface CabifyPreviewRowDetalle {
@@ -542,7 +544,7 @@ export function CabifyPreviewTable({
 
     // Mostrar montos redondos (entero): el alquiler arrastra centavos del precio diario
     // (precio_diario x 7 = 299.000,03). Solo visual, no cambia el dato editado/guardado.
-    const displayValue = isHours ? value.toFixed(1) : formatCurrency(Math.round(value))
+    const displayValue = isHours ? formatNumero(value, 1) : formatCurrency(Math.round(value))
 
     return (
       <span
@@ -951,8 +953,8 @@ export function CabifyPreviewTable({
                   </td>
                   <td className="col-center">{row.anio}</td>
                   <td className="col-center">{row.semana}</td>
-                  <td className="col-center">{row.fechaInicial.toLocaleDateString('es-AR')}</td>
-                  <td className="col-center">{row.fechaFinal.toLocaleDateString('es-AR')}</td>
+                  <td className="col-center">{formatFecha(row.fechaInicial.toISOString())}</td>
+                  <td className="col-center">{formatFecha(row.fechaFinal.toISOString())}</td>
                   <td className="col-nombre">{row.conductor}</td>
                   <td className="col-email">{row.email || '-'}</td>
                   <td className="col-center">{renderEditableTextCell(row, realIdx, 'patente', row.patente)}</td>

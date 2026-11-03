@@ -7,6 +7,7 @@ import { AlertTriangle, Car, User, Gauge, Clock, TrendingUp } from 'lucide-react
 import type { ExcesoStats } from '../types/uss.types'
 import { formatDuration, formatSpeed } from '../utils/uss.utils'
 import { StatsGrid } from '../../../../components/ui/StatsGrid'
+import { formatNumero } from '../../../../utils/format'
 
 interface ExcesosStatsProps {
   readonly stats: ExcesoStats | null
@@ -28,7 +29,7 @@ export function ExcesosStats({ stats, isLoading }: ExcesosStatsProps) {
         <StatCard
           icon={<AlertTriangle size={22} />}
           label="Total Excesos"
-          value={stats.totalExcesos.toLocaleString()}
+          value={formatNumero(stats.totalExcesos)}
           color="red"
         />
         <StatCard
@@ -49,12 +50,15 @@ export function ExcesosStats({ stats, isLoading }: ExcesosStatsProps) {
           value={formatSpeed(stats.velocidadMaxima)}
           color="orange"
         />
-        <StatCard
-          icon={<TrendingUp size={22} />}
-          label="Exceso Promedio"
-          value={formatSpeed(stats.excesoPromedio)}
-          color="yellow"
-        />
+        {/* Geotab no manda el límite de la calle: sin límite no hay exceso que promediar */}
+        {stats.excesoPromedio > 0 && (
+          <StatCard
+            icon={<TrendingUp size={22} />}
+            label="Exceso Promedio"
+            value={formatSpeed(stats.excesoPromedio)}
+            color="yellow"
+          />
+        )}
         <StatCard
           icon={<Clock size={22} />}
           label="Duración Prom."
