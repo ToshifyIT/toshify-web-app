@@ -8,6 +8,7 @@ import { Tag, FileText, Users } from 'lucide-react';
 import { CategoriasSubTab } from './CategoriasSubTab';
 import { MotivosSubTab } from './MotivosSubTab';
 import { AtendedoresSubTab } from './AtendedoresSubTab';
+import { TabsBar } from '../../../components/ui/TabsBar';
 
 type SubTabType = 'categorias' | 'motivos' | 'atendedores';
 
@@ -23,21 +24,7 @@ export function VisitasParametrosTab() {
   return (
     <div className="visitas-params">
       {/* Sub-tabs */}
-      <div className="visitas-subtabs">
-        {SUB_TABS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              className={`visitas-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveSubTab(tab.id)}
-            >
-              <Icon size={15} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <TabsBar tabs={SUB_TABS} active={activeSubTab} onChange={setActiveSubTab} />
 
       {/* Contenido del sub-tab activo */}
       <div className="visitas-subtab-content">

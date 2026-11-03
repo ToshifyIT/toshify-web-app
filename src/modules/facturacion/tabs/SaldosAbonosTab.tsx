@@ -31,11 +31,11 @@ import {
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getISOWeekYear } from 'date-fns'
-import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay, Spinner } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
 import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
+import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 interface ConductorBasico {
   id: string
@@ -1911,7 +1911,7 @@ export function SaldosAbonosTab() {
     const w = window.open('', '_blank', 'width=900,height=700')
     if (!w) return
     const filas = rows.map((r) => {
-      const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
+      const fecha = formatFecha(r.created_at)
       const monto = r.monto_movimiento ? formatCurrency(Math.abs(r.monto_movimiento)) : '-'
       return `<tr>
         <td>${fecha}</td>
@@ -1940,7 +1940,7 @@ export function SaldosAbonosTab() {
       <div class="meta">
         <strong>${saldo.conductor_nombre || ''}</strong> &middot; DNI ${saldo.conductor_dni || '-'} &middot; CUIT ${saldo.conductor_cuit || '-'}
         <br/>Saldo actual: <span class="saldo">${formatCurrency(saldoRealPDF)}</span>
-        <br/>Generado: ${new Date().toLocaleString('es-AR')}
+        <br/>Generado: ${formatFechaHora(new Date().toISOString())}
       </div>
       <table>
         <thead><tr><th>Fecha</th><th>Semana</th><th>Tipo</th><th>Referencia</th><th style="text-align:right">Monto</th><th style="text-align:right">Saldo</th><th>Usuario</th></tr></thead>
@@ -2535,7 +2535,6 @@ export function SaldosAbonosTab() {
                       </button>
                     ))}
                   </div>
-                  <VerLogsButton tablas={['saldos_conductores', 'abonos_conductores', 'cobros_fraccionados']} label="Saldos" />
                 </div>
               </div>
             }
@@ -2816,7 +2815,7 @@ export function SaldosAbonosTab() {
                                           : 'transparent'
                               const montoColor = cls === 'cargo' || cls === 'elim' ? '#dc2626' : cls === 'abono' ? '#16a34a' : 'var(--text-tertiary)'
                               const montoSigno = cls === 'cargo' || cls === 'elim' ? '-' : cls === 'abono' ? '+' : ''
-                              const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
+                              const fecha = formatFecha(r.created_at)
                               return (
                                 <tr key={i} style={{
                                   borderBottom: '1px solid var(--border-primary)',

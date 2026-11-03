@@ -15,6 +15,9 @@ import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 
 import { hoyART } from '../../../../../utils/fechaArgentina'
+import { formatNumero } from '../../../../../utils/format'
+import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { formatFechaHora, formatFecha } from '../../../../../utils/format'
 interface BitacoraTableProps {
   registros: BitacoraRegistroTransformado[]
   totalCount: number
@@ -150,10 +153,8 @@ export function BitacoraTable({
 
   const formatDateTime = (fecha: string, time: string | null) => {
     if (!time) return '-'
-    const d = new Date(fecha + 'T00:00:00')
-    const dd = String(d.getDate()).padStart(2, '0')
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    return `${dd}/${mm} ${time.substring(0, 5)}`
+    // fecha_turno + hora (ya en ART) -> "DD/MM/YYYY HH:MM:SS"
+    return formatFechaHora(`${fecha}T${time.substring(0, 8)}`)
   }
 
   // ====== COLUMNAS ======
@@ -165,9 +166,7 @@ export function BitacoraTable({
           onSelectionChange={setPatenteFilter} filterId="patente" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => (
-        <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-          {normalizePatente(row.original.patente)}
-        </span>
+        <PatenteBadge patente={normalizePatente(row.original.patente)} size="sm" />
       ),
       enableSorting: false,
     },
@@ -522,7 +521,7 @@ export function BitacoraTable({
   const paginationControls = (
     <div className="dt-pagination" style={{ borderTop: 'none', background: 'transparent', padding: '12px 0' }}>
       <div className="dt-pagination-info">
-        Mostrando {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, totalCount)} de {totalCount.toLocaleString()} registros
+        Mostrando {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, totalCount)} de {formatNumero(totalCount)} registros
       </div>
       <div className="dt-pagination-controls">
         <select value={pageSize} onChange={(e) => onPageSizeChange(Number(e.target.value))} className="dt-pagination-select">
@@ -610,7 +609,7 @@ export function BitacoraTable({
       '<tr>' + headers.map(h => `<td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;white-space:nowrap;">${(row as Record<string, unknown>)[h] ?? ''}</td>`).join('') + '</tr>'
     ).join('')
     const html = `<html><head><title>Bitacora</title></head><body>
-      <h3 style="font-family:sans-serif;margin-bottom:8px;">Bitacora - ${new Date().toLocaleDateString('es-AR')}</h3>
+      <h3 style="font-family:sans-serif;margin-bottom:8px;">Bitacora - ${formatFecha(new Date().toISOString())}</h3>
       <table style="border-collapse:collapse;font-family:sans-serif;">
         <thead><tr>${headerRow}</tr></thead>
         <tbody>${bodyRows}</tbody>
@@ -687,7 +686,7 @@ export function BitacoraTable({
           </div>
 
           <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
-            {totalCount.toLocaleString()} registros
+            {formatNumero(totalCount)} registros
           </span>
         </div>
       </div>

@@ -1,9 +1,8 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2 } from 'lucide-react'
+import { AlertTriangle, Eye, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2, Fuel, CalendarClock, ShieldCheck, ClipboardList } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
-import { VerLogsButton } from '../../components/ui/VerLogsButton'
 
 import { HistorialModal } from '../../components/ui/HistorialModal'
 import { supabase } from '../../lib/supabase'
@@ -31,6 +30,10 @@ import { useGruposFlota } from '../../hooks/useGruposFlota'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './VehicleManagement.css'
+import { formatNumero } from '../../utils/format'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
+import { formatFecha, formatFechaHora } from '../../utils/format'
 
 
 
@@ -121,12 +124,12 @@ function fechaHoraArgentina(): { fecha: string; hora: string } {
 type PestanaVehiculo = 'basica' | 'tecnico' | 'estado' | 'seguro' | 'adicional'
 
 /** Pestañas de Editar vehículo, agrupadas por categoría. */
-const PESTANAS_VEHICULO: { id: PestanaVehiculo; label: string }[] = [
-  { id: 'basica', label: 'Básica' },
-  { id: 'tecnico', label: 'Combustible y técnico' },
-  { id: 'estado', label: 'Estado y fechas' },
-  { id: 'seguro', label: 'Seguro y titular' },
-  { id: 'adicional', label: 'Adicional' },
+const PESTANAS_VEHICULO: TabsBarItem<PestanaVehiculo>[] = [
+  { id: 'basica', label: 'Básica', icon: Car },
+  { id: 'tecnico', label: 'Combustible y técnico', icon: Fuel },
+  { id: 'estado', label: 'Estado y fechas', icon: CalendarClock },
+  { id: 'seguro', label: 'Seguro y titular', icon: ShieldCheck },
+  { id: 'adicional', label: 'Adicional', icon: ClipboardList },
 ]
 
 export function VehicleManagement() {
@@ -661,7 +664,7 @@ export function VehicleManagement() {
             <div style="text-align:left; padding:12px; background:#f9fafb; border-radius:8px; margin-top:12px;">
               <p style="margin:4px 0;"><strong>Marca:</strong> ${vehiculoEliminado.marca || '-'}</p>
               <p style="margin:4px 0;"><strong>Modelo:</strong> ${vehiculoEliminado.modelo || '-'}</p>
-              <p style="margin:4px 0;"><strong>Eliminado el:</strong> ${new Date(vehiculoEliminado.deleted_at).toLocaleDateString('es-AR')}</p>
+              <p style="margin:4px 0;"><strong>Eliminado el:</strong> ${formatFecha(vehiculoEliminado.deleted_at)}</p>
             </div>
             <p style="margin-top:12px;">¿Desea restaurar este vehículo y actualizar sus datos con los que ingresó?</p>
           `,
@@ -1951,7 +1954,7 @@ export function VehicleManagement() {
           />
         ),
         cell: ({ getValue }) => (
-          <span className="patente-badge">{getValue() as string}</span>
+          <PatenteBadge patente={getValue() as string} />
         ),
         enableSorting: true,
       },
@@ -2151,13 +2154,13 @@ export function VehicleManagement() {
           const esGeotab = !!updatedAt
           const esUss = !esGeotab && ussPatentes.has(patenteNorm)
           const tooltip = esGeotab && updatedAt
-            ? `Actualizado automáticamente desde Geotab el ${new Date(updatedAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`
+            ? `Actualizado automáticamente desde Geotab el ${formatFechaHora(updatedAt)}`
             : esUss
             ? 'Vehículo con GPS USS (km manual; USS no transmite odómetro acumulado)'
             : 'Carga manual'
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1.3 }} title={tooltip}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{km.toLocaleString()} km</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{formatNumero(km)} km</span>
               {esGeotab && (
                 <span
                   style={{
@@ -2400,9 +2403,9 @@ export function VehicleManagement() {
       if (exportError) throw exportError
 
       const fmtFecha = (v: string | null | undefined) =>
-        v ? new Date(v.length === 10 ? v + 'T00:00:00' : v).toLocaleDateString('es-AR') : ''
+        v ? formatFecha(v) : ''
       const fmtFechaHora = (v: string | null | undefined) =>
-        v ? new Date(v).toLocaleString('es-AR') : ''
+        v ? formatFechaHora(v) : ''
 
       // Mantener orden de los IDs filtrados para que el Excel respete la vista actual
       const ordenIds = new Map(ids.map((id, i) => [id, i]))
@@ -2583,7 +2586,6 @@ export function VehicleManagement() {
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
         headerAction={
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <VerLogsButton tablas={['vehiculos', 'vehiculo_control']} label="Veh\u00edculos" />
             <button
               className="btn-secondary"
               onClick={handleExportarVehiculos}
@@ -2655,20 +2657,13 @@ export function VehicleManagement() {
               </button>
             </div>
             {/* Pestañas por categoría (como Editar conductor): se edita una parte a la vez */}
-            <div className="edit-tabs" role="tablist" aria-label="Datos del vehículo">
-              {PESTANAS_VEHICULO.map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={pestanaVeh === t.id}
-                  className={`edit-tab${pestanaVeh === t.id ? ' is-activa' : ''}`}
-                  onClick={() => setPestanaVeh(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+            <TabsBar
+              className="tabs-bar--modal"
+              ariaLabel="Datos del vehículo"
+              tabs={PESTANAS_VEHICULO}
+              active={pestanaVeh}
+              onChange={setPestanaVeh}
+            />
             <div className="modal-body">
             {/* Mismo formulario que en crear, solo cambia el botón final */}
             {pestanaVeh === 'basica' && (<>
@@ -3328,7 +3323,7 @@ export function VehicleManagement() {
             <div className="details-grid">
               <div>
                 <label className="detail-label">PATENTE</label>
-                <div className="patente-badge" style={{ display: 'inline-block' }}>{selectedVehiculo.patente}</div>
+                <div><PatenteBadge patente={selectedVehiculo.patente} /></div>
               </div>
               <div>
                 <label className="detail-label">ESTADO</label>
@@ -3440,7 +3435,7 @@ export function VehicleManagement() {
                       {historialCambios.map((h, i) => (
                         <tr key={i} style={{ borderBottom: '1px solid var(--border-primary, #f3f4f6)' }}>
                           <td style={{ padding: '6px 8px' }}>
-                            {h.fecha ? h.fecha.split('-').reverse().join('/') : '-'}
+                            {formatFecha(h.fecha)}
                           </td>
                           <td style={{ padding: '6px 8px' }}>
                             <span style={{
@@ -3479,7 +3474,7 @@ export function VehicleManagement() {
               </div>
               <div>
                 <label className="detail-label">KILOMETRAJE</label>
-                <div className="detail-value">{selectedVehiculo.kilometraje_actual?.toLocaleString() || 0} km</div>
+                <div className="detail-value">{formatNumero(selectedVehiculo.kilometraje_actual || 0)} km</div>
               </div>
             </div>
 
@@ -3488,15 +3483,15 @@ export function VehicleManagement() {
             <div className="details-grid">
               <div>
                 <label className="detail-label">FECHA ADQUISICIÓN</label>
-                <div className="detail-value">{selectedVehiculo.fecha_adquisicion ? new Date(selectedVehiculo.fecha_adquisicion).toLocaleDateString('es-AR') : 'N/A'}</div>
+                <div className="detail-value">{selectedVehiculo.fecha_adquisicion ? formatFecha(selectedVehiculo.fecha_adquisicion) : 'N/A'}</div>
               </div>
               <div>
                 <label className="detail-label">ÚLTIMA INSPECCIÓN</label>
-                <div className="detail-value">{selectedVehiculo.fecha_ulti_inspeccion ? new Date(selectedVehiculo.fecha_ulti_inspeccion).toLocaleDateString('es-AR') : 'N/A'}</div>
+                <div className="detail-value">{selectedVehiculo.fecha_ulti_inspeccion ? formatFecha(selectedVehiculo.fecha_ulti_inspeccion) : 'N/A'}</div>
               </div>
               <div>
                 <label className="detail-label">PRÓXIMA INSPECCIÓN</label>
-                <div className="detail-value">{selectedVehiculo.fecha_prox_inspeccion ? new Date(selectedVehiculo.fecha_prox_inspeccion).toLocaleDateString('es-AR') : 'N/A'}</div>
+                <div className="detail-value">{selectedVehiculo.fecha_prox_inspeccion ? formatFecha(selectedVehiculo.fecha_prox_inspeccion) : 'N/A'}</div>
               </div>
             </div>
 
@@ -3513,7 +3508,7 @@ export function VehicleManagement() {
               </div>
               <div>
                 <label className="detail-label">VIGENCIA SEGURO</label>
-                <div className="detail-value">{selectedVehiculo.seguro_vigencia ? new Date(selectedVehiculo.seguro_vigencia).toLocaleDateString('es-AR') : 'N/A'}</div>
+                <div className="detail-value">{selectedVehiculo.seguro_vigencia ? formatFecha(selectedVehiculo.seguro_vigencia) : 'N/A'}</div>
               </div>
               <div>
                 <label className="detail-label">TITULAR</label>
@@ -3537,7 +3532,7 @@ export function VehicleManagement() {
               </div>
               <div>
                 <label className="detail-label">VENCIMIENTO SEGURO</label>
-                <div className="detail-value">{(selectedVehiculo as any).vencimiento_seguro ? new Date((selectedVehiculo as any).vencimiento_seguro).toLocaleDateString('es-AR') : 'N/A'}</div>
+                <div className="detail-value">{(selectedVehiculo as any).vencimiento_seguro ? formatFecha((selectedVehiculo as any).vencimiento_seguro) : 'N/A'}</div>
               </div>
             </div>
 
@@ -3548,7 +3543,7 @@ export function VehicleManagement() {
                 <label className="detail-label">VENCIMIENTO VTV</label>
                 <div className="detail-value">
                   {(selectedVehiculo as any).vto_vtv_aplica
-                    ? `Sí${(selectedVehiculo as any).vto_vtv_fecha ? ` — ${new Date((selectedVehiculo as any).vto_vtv_fecha + 'T00:00:00').toLocaleDateString('es-AR')}` : ''}`
+                    ? `Sí${(selectedVehiculo as any).vto_vtv_fecha ? ` — ${formatFecha((selectedVehiculo as any).vto_vtv_fecha)}` : ''}`
                     : 'No'}
                 </div>
               </div>
@@ -3556,7 +3551,7 @@ export function VehicleManagement() {
                 <label className="detail-label">VENCIMIENTO GNC</label>
                 <div className="detail-value">
                   {(selectedVehiculo as any).vto_gnc_aplica
-                    ? `Sí${(selectedVehiculo as any).vto_gnc_fecha ? ` — ${new Date((selectedVehiculo as any).vto_gnc_fecha + 'T00:00:00').toLocaleDateString('es-AR')}` : ''}`
+                    ? `Sí${(selectedVehiculo as any).vto_gnc_fecha ? ` — ${formatFecha((selectedVehiculo as any).vto_gnc_fecha)}` : ''}`
                     : 'No'}
                 </div>
               </div>
@@ -3564,7 +3559,7 @@ export function VehicleManagement() {
                 <label className="detail-label">VENCIMIENTO MATAFUEGO</label>
                 <div className="detail-value">
                   {(selectedVehiculo as any).vto_matafuego_aplica
-                    ? `Sí${(selectedVehiculo as any).vto_matafuego_fecha ? ` — ${new Date((selectedVehiculo as any).vto_matafuego_fecha + 'T00:00:00').toLocaleDateString('es-AR')}` : ''}`
+                    ? `Sí${(selectedVehiculo as any).vto_matafuego_fecha ? ` — ${formatFecha((selectedVehiculo as any).vto_matafuego_fecha)}` : ''}`
                     : 'No'}
                 </div>
               </div>

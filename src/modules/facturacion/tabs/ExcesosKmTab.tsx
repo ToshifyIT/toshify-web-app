@@ -29,6 +29,8 @@ import {
   FACTURACION_CONFIG
 } from '../../../types/facturacion.types'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
+import { formatNumero } from '../../../utils/format'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 
 interface ExcesoConRelaciones extends ExcesoKilometraje {
   conductor_nombre?: string
@@ -212,7 +214,7 @@ export function ExcesosKmTab() {
           </div>
           <div style="background: #F3F4F6; padding: 12px; border-radius: 8px;">
             <p style="margin: 0 0 6px 0; font-size: 12px; color: #6B7280;">
-              <strong>Base semanal:</strong> ${KM_BASE_SEMANAL.toLocaleString()} km
+              <strong>Base semanal:</strong> ${formatNumero(KM_BASE_SEMANAL)} km
             </p>
             <p style="margin: 0; font-size: 12px; color: #6B7280;">
               <strong>IVA:</strong> ${IVA_EXCESO_KM}%
@@ -416,7 +418,7 @@ export function ExcesosKmTab() {
         <div style="text-align: left;">
           <p><strong>Conductor:</strong> ${exceso.conductor_nombre}</p>
           <p><strong>Vehículo:</strong> ${exceso.vehiculo_patente}</p>
-          <p><strong>KM Base:</strong> ${KM_BASE_SEMANAL.toLocaleString()}</p>
+          <p><strong>KM Base:</strong> ${formatNumero(KM_BASE_SEMANAL)}</p>
           <div style="margin-top: 12px;">
             <label style="display: block; margin-bottom: 4px;">Nuevos KM Recorridos:</label>
             <input id="swal-km" type="number" class="swal2-input" value="${exceso.km_recorridos}" style="margin: 0;">
@@ -523,15 +525,15 @@ export function ExcesosKmTab() {
             </tr>
             <tr style="border-top: 1px solid #E5E7EB;">
               <td style="padding: 6px 0; color: #6B7280;">KM Recorridos:</td>
-              <td style="padding: 6px 0; font-weight: 500;">${exceso.km_recorridos.toLocaleString()} km</td>
+              <td style="padding: 6px 0; font-weight: 500;">${formatNumero(exceso.km_recorridos)} km</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #6B7280;">KM Base:</td>
-              <td style="padding: 6px 0; font-weight: 500;">${exceso.km_base.toLocaleString()} km</td>
+              <td style="padding: 6px 0; font-weight: 500;">${formatNumero(exceso.km_base)} km</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #6B7280;">KM Exceso:</td>
-              <td style="padding: 6px 0; font-weight: 600; color: #ff0033;">${exceso.km_exceso.toLocaleString()} km</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #ff0033;">${formatNumero(exceso.km_exceso)} km</td>
             </tr>
             <tr style="border-top: 1px solid #E5E7EB;">
               <td style="padding: 6px 0; color: #6B7280;">Rango:</td>
@@ -653,9 +655,7 @@ export function ExcesosKmTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-          {row.original.vehiculo_patente}
-        </span>
+        <PatenteBadge patente={row.original.vehiculo_patente} size="sm" />
       )
     },
     {
@@ -663,7 +663,7 @@ export function ExcesosKmTab() {
       header: 'KM Rec.',
       cell: ({ row }) => (
         <span style={{ fontWeight: 500 }}>
-          {row.original.km_recorridos.toLocaleString()}
+          {formatNumero(row.original.km_recorridos)}
         </span>
       )
     },
@@ -672,7 +672,7 @@ export function ExcesosKmTab() {
       header: 'Exceso',
       cell: ({ row }) => (
         <span style={{ color: '#ff0033', fontWeight: 600 }}>
-          +{row.original.km_exceso.toLocaleString()}
+          +{formatNumero(row.original.km_exceso)}
         </span>
       )
     },

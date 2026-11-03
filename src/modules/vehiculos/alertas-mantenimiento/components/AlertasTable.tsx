@@ -2,29 +2,21 @@ import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { AlertOctagon, AlertTriangle, Info, CheckCircle, Eye, Wrench, X as XIcon, RotateCcw } from 'lucide-react'
 import { DataTable } from '../../../../components/ui/DataTable'
-import type { AlertaMantenimiento, AlertaSeveridad } from '../types/alertas.types'
+import type { AlertaAgrupada, AlertaSeveridad } from '../types/alertas.types'
+import { formatFecha, formatHora, formatNumero } from '../../../../utils/format'
+import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
 
 interface Props {
-  alertas: AlertaMantenimiento[]
+  alertas: AlertaAgrupada[]
   loading: boolean
-  onRowClick: (a: AlertaMantenimiento) => void
-  onAtender: (a: AlertaMantenimiento) => void
-  onDescartar: (a: AlertaMantenimiento) => void
-  onReactivar: (a: AlertaMantenimiento) => void
+  onRowClick: (a: AlertaAgrupada) => void
+  onAtender: (a: AlertaAgrupada) => void
+  onDescartar: (a: AlertaAgrupada) => void
+  onReactivar: (a: AlertaAgrupada) => void
 }
 
 // Intervalo de service estándar — el próximo "service mayor" cae cada SERVICE_INTERVAL km.
 const SERVICE_INTERVAL = 10000
-
-function formatFecha(iso: string): { fecha: string; hora: string } {
-  const d = new Date(iso)
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const yy = String(d.getFullYear()).slice(2)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mi = String(d.getMinutes()).padStart(2, '0')
-  return { fecha: `${dd}/${mm}/${yy}`, hora: `${hh}:${mi}` }
-}
 
 /**
  * Calcula los km que faltan para el próximo service estándar (cada 10.000 km).
@@ -71,7 +63,7 @@ function estadoBadge(estado: string) {
 }
 
 export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescartar, onReactivar }: Props) {
-  const columns = useMemo<ColumnDef<AlertaMantenimiento>[]>(() => [
+  const columns = useMemo<ColumnDef<AlertaAgrupada>[]>(() => [
     {
       accessorKey: 'patente',
       header: 'Vehículo',
@@ -82,7 +74,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
         const modelo = v ? `${v.marca || ''} ${v.modelo || ''}`.trim() : ''
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, maxWidth: 150 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>{p}</span>
+            <PatenteBadge patente={p} size="sm" />
             {modelo && (
               <span
                 style={{
@@ -112,7 +104,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
         if (km == null) return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
         return (
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>
-            {km.toLocaleString('es-AR')} km
+            {formatNumero(km)} km
           </span>
         )
       },
@@ -136,7 +128,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
               <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: colors.fg, borderRadius: 'var(--radius-xs)' }} />
             </div>
             <span style={{ fontSize: 10, color: vencido ? '#dc2626' : 'var(--text-tertiary)', fontWeight: vencido ? 600 : 400 }}>
-              {vencido ? `VENCIDO ${Math.abs(faltan).toLocaleString('es-AR')} km` : `en ${faltan.toLocaleString('es-AR')} km`}
+              {vencido ? `VENCIDO ${formatNumero(Math.abs(faltan))} km` : `en ${formatNumero(faltan)} km`}
             </span>
           </div>
         )
@@ -148,7 +140,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
       size: 220,
       cell: ({ row }) => {
         const name = row.original.diagnostic_name || row.original.fault_description || '(sin descripción)'
-        const count = row.original.count
+        const { ocurrencias, primera } = row.original
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, maxWidth: 220 }}>
             <span
@@ -164,7 +156,11 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
             >
               {name}
             </span>
-            {count > 1 && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{count} ocurrencias</span>}
+            {ocurrencias > 1 && (
+              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                {formatNumero(ocurrencias)} veces · desde {formatFecha(primera)}
+              </span>
+            )}
           </div>
         )
       },
@@ -176,11 +172,13 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
       cell: ({ getValue }) => severidadBadge(getValue() as AlertaSeveridad),
     },
     {
-      accessorKey: 'fecha_evento',
-      header: 'Fecha',
+      accessorKey: 'ultima',
+      header: 'Última vez',
       size: 95,
       cell: ({ getValue }) => {
-        const { fecha, hora } = formatFecha(getValue() as string)
+        const v = getValue() as string
+        const fecha = formatFecha(v)
+        const hora = formatHora(v)
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.2 }}>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fecha}</span>
@@ -219,62 +217,52 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
     {
       id: 'acciones',
       header: 'Acciones',
-      size: 140,
+      size: 110,
       cell: ({ row }) => {
         const a = row.original
         const stop = (e: React.MouseEvent) => e.stopPropagation()
         const btnBase: React.CSSProperties = {
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
-          gap: 1,
+          justifyContent: 'center',
           background: 'none',
           border: 'none',
           cursor: 'pointer',
-          padding: 2,
-        }
-        const labelStyle: React.CSSProperties = {
-          fontSize: 9,
-          color: 'var(--text-tertiary)',
-          marginTop: 1,
+          padding: 4,
         }
         return (
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button
               onClick={(e) => { stop(e); onRowClick(a) }}
-              title="Ver detalle"
+              title="Ver detalle" aria-label="Ver detalle"
               style={{ ...btnBase, color: 'var(--text-secondary)' }}
             >
               <Eye size={14} />
-              <span style={labelStyle}>Ver</span>
             </button>
             {a.estado === 'activa' ? (
               <>
                 <button
                   onClick={(e) => { stop(e); onAtender(a) }}
-                  title="Marcar atendida"
+                  title="Marcar atendida (todas las veces)" aria-label="Marcar atendida"
                   style={{ ...btnBase, color: '#16a34a' }}
                 >
                   <Wrench size={14} />
-                  <span style={labelStyle}>Atender</span>
                 </button>
                 <button
                   onClick={(e) => { stop(e); onDescartar(a) }}
-                  title="Descartar alerta"
+                  title="Descartar alerta (todas las veces)" aria-label="Descartar alerta"
                   style={{ ...btnBase, color: '#dc2626' }}
                 >
                   <XIcon size={14} />
-                  <span style={labelStyle}>Descartar</span>
                 </button>
               </>
             ) : (
               <button
                 onClick={(e) => { stop(e); onReactivar(a) }}
-                title="Reactivar alerta"
+                title="Reactivar alerta" aria-label="Reactivar alerta"
                 style={{ ...btnBase, color: '#2563eb' }}
               >
                 <RotateCcw size={14} />
-                <span style={labelStyle}>Reactivar</span>
               </button>
             )}
           </div>

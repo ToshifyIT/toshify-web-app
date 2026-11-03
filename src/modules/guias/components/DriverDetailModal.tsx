@@ -9,6 +9,8 @@ import { AnotacionesEditorModal, type Nota } from './AnotacionesEditorModal';
 import { showError } from '../../../utils/toast'
 
 import { fechaISOART } from '../../../utils/fechaArgentina'
+import { formatPlata } from '../../../utils/format'
+import { formatFecha as formatFechaAR } from '../../../utils/format'
 interface DriverDetailModalProps {
   driver: ConductorWithRelations & {
     id_guia?: string;
@@ -110,7 +112,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
 
   const formatFecha = (fecha: string | null | undefined) => {
     if (!fecha) return "-";
-    return new Date(fecha).toLocaleDateString("es-AR");
+    return formatFechaAR(fecha);
   };
 
   const getLlamadaStatus = (fecha: string | null | undefined) => {
@@ -155,12 +157,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
   // Función helper para formato de moneda (local para asegurar consistencia)
   const formatCurrency = (amount: number | undefined | null) => {
     if (amount === undefined || amount === null) return '$ 0,00';
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
+    return formatPlata(amount);
   };
 
   const handleInputChange = (field: string, value: string | number) => {

@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react'
 import { X, Search, FileDown } from 'lucide-react'
-import { formatCurrency } from '../../../types/facturacion.types'
+import { formatPlata } from '../../../utils/format'
 import {
   saldoActualKardex,
   type SaldoKardex,
@@ -15,6 +15,7 @@ import {
 } from './conductorDetalleService'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
+import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 interface Props {
   // El kardex lo carga el modal una sola vez y lo comparte con los KPIs.
@@ -132,15 +133,15 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
     const w = window.open('', '_blank', 'width=900,height=700')
     if (!w) return
     const cuerpo = rows.map(r => {
-      const fecha = r.createdAt ? new Date(r.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
-      const monto = r.montoMovimiento ? formatCurrency(Math.abs(r.montoMovimiento)) : '-'
+      const fecha = formatFecha(r.createdAt)
+      const monto = r.montoMovimiento ? formatPlata(Math.abs(r.montoMovimiento)) : '-'
       return `<tr>
         <td>${fecha}</td>
         <td>${r.anio} S${String(r.semana ?? '').padStart(2, '0')}</td>
         <td>${TIPO_LABEL[r.tipoMovimiento] || r.tipoMovimiento || '-'}</td>
         <td>${(r.referencia || '-').replace(/</g, '&lt;')}</td>
         <td style="text-align:right">${monto}</td>
-        <td style="text-align:right">${formatCurrency(r.saldoPendiente)}</td>
+        <td style="text-align:right">${formatPlata(r.saldoPendiente)}</td>
         <td>${(r.usuario || 'Sistema').replace(/</g, '&lt;')}</td>
       </tr>`
     }).join('')
@@ -160,8 +161,8 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
       <h1>Control de Saldos</h1>
       <div class="meta">
         <strong>${nombre}</strong> &middot; DNI ${dni || '-'} &middot; CUIT ${cuit || data?.cuit || '-'}
-        <br/>Saldo actual: <span class="saldo">${formatCurrency(saldoReal)}</span>
-        <br/>Generado: ${new Date().toLocaleString('es-AR')}
+        <br/>Saldo actual: <span class="saldo">${formatPlata(saldoReal)}</span>
+        <br/>Generado: ${formatFechaHora(new Date().toISOString())}
       </div>
       <table>
         <thead><tr><th>Fecha</th><th>Semana</th><th>Tipo</th><th>Referencia</th><th style="text-align:right">Monto</th><th style="text-align:right">Saldo</th><th>Usuario</th></tr></thead>
@@ -182,7 +183,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
       fontSize: isTotal ? '14px' : '12px',
     }}>
       <span>{lbl}</span>
-      <span style={{ fontFamily: 'var(--font-mono)' }}>{formatCurrency(val)}</span>
+      <span style={{ fontFamily: 'var(--font-mono)' }}>{formatPlata(val)}</span>
     </div>
   )
 
@@ -201,7 +202,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: '20px', fontWeight: 700, color: sColor, lineHeight: 1 }}>
-            {formatCurrency(saldoReal)}
+            {formatPlata(saldoReal)}
           </div>
           <span style={{
             display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: 'var(--radius-xs)',
@@ -303,7 +304,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                     : 'transparent'
                   const montoColor = cls === 'cargo' || cls === 'elim' ? '#dc2626' : cls === 'abono' ? '#16a34a' : 'var(--text-tertiary, #9ca3af)'
                   const montoSigno = cls === 'cargo' || cls === 'elim' ? '-' : cls === 'abono' ? '+' : ''
-                  const fecha = r.createdAt ? new Date(r.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
+                  const fecha = formatFecha(r.createdAt)
 
                   const refParts = (r.referencia || '').split(' | ')
                   const refMain = refParts[0] || '-'
@@ -342,7 +343,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                         {refDetalle || '-'}
                       </td>
                       <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, whiteSpace: 'nowrap' }}>
-                        {monto > 0 ? `${montoSigno}${formatCurrency(Math.round(monto))}` : '-'}
+                        {monto > 0 ? `${montoSigno}${formatPlata(Math.round(monto))}` : '-'}
                       </td>
                       <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                         {(() => {
@@ -365,7 +366,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                               }}
                               title="Ver detalle de facturación"
                             >
-                              {formatCurrency(fac.totalAPagar)}
+                              {formatPlata(fac.totalAPagar)}
                             </button>
                           )
                         })()}
@@ -375,7 +376,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                         color: saldo < 0 ? '#dc2626' : saldo > 0 ? '#16a34a' : 'var(--text-secondary, #6b7280)',
                         whiteSpace: 'nowrap',
                       }}>
-                        {formatCurrency(saldo)}
+                        {formatPlata(saldo)}
                       </td>
                       <td style={{ padding: '5px 8px', color: 'var(--text-secondary, #6b7280)', fontSize: '10px', whiteSpace: 'nowrap' }}>
                         {r.usuario || 'Sistema'}
@@ -396,13 +397,13 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
             <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'right' }}>
               <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Total cargos</div>
               <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#dc2626', fontFamily: 'var(--font-mono)' }}>
-                -{formatCurrency(totales.totalCargos)}
+                -{formatPlata(totales.totalCargos)}
               </div>
             </div>
             <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'right' }}>
               <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary, #6b7280)', fontWeight: 600, letterSpacing: '0.3px' }}>Total abonos</div>
               <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#16a34a', fontFamily: 'var(--font-mono)' }}>
-                +{formatCurrency(totales.totalAbonos)}
+                +{formatPlata(totales.totalAbonos)}
               </div>
             </div>
             <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'right' }}>
@@ -411,7 +412,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                 fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'var(--font-mono)',
                 color: totales.neto < 0 ? '#dc2626' : totales.neto > 0 ? '#16a34a' : 'var(--text-secondary, #6b7280)',
               }}>
-                {formatCurrency(totales.neto)}
+                {formatPlata(totales.neto)}
               </div>
             </div>
             <div style={{ padding: '8px 12px', textAlign: 'right' }}>
@@ -420,7 +421,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                 fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'var(--font-mono)',
                 color: totales.saldoFinal < 0 ? '#dc2626' : totales.saldoFinal > 0 ? '#16a34a' : 'var(--text-secondary, #6b7280)',
               }}>
-                {formatCurrency(totales.saldoFinal)}
+                {formatPlata(totales.saldoFinal)}
               </div>
             </div>
           </div>

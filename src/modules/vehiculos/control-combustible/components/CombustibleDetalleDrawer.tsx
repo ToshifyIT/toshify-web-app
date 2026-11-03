@@ -10,6 +10,9 @@ import {
   GOOGLE_MAPS_REGION,
 } from '../../../../lib/googleMaps'
 import { Spinner } from '../../../../components/ui/LoadingOverlay'
+import { formatNumero } from '../../../../utils/format'
+import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
+import { formatFechaHora } from '../../../../utils/format'
 
 interface Props {
   vehiculo: FuelRow | null
@@ -85,10 +88,10 @@ function MapaLlenadoModal({ fillup, onClose }: MapaModalProps) {
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Llenado detectado · {fillup.patente}
+              Llenado detectado · <PatenteBadge patente={fillup.patente} size="sm" />
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-              {new Date(fillup.fecha_evento).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {formatFechaHora(fillup.fecha_evento)}
               {fillup.location_direccion ? ` · ${fillup.location_direccion}` : ''}
             </span>
           </div>
@@ -156,11 +159,7 @@ function MapaLlenadoModal({ fillup, onClose }: MapaModalProps) {
 }
 
 function formatFechaLarga(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString('es-AR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+  return formatFechaHora(iso)
 }
 
 export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onClose }: Props) {
@@ -210,8 +209,8 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
         {/* HEADER */}
         <div className="alerta-drawer-header">
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {vehiculo.patente}
+            <span>
+              <PatenteBadge patente={vehiculo.patente} />
             </span>
             {modelo && (
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
@@ -241,19 +240,19 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
               <MetricaSemana
                 icono={<Fuel size={14} style={{ color: 'var(--text-tertiary)' }} />}
                 titulo="Consumo"
-                valor={vehiculo.consumo_semana !== null ? `${vehiculo.consumo_semana.toFixed(2)} L` : '—'}
+                valor={vehiculo.consumo_semana !== null ? `${formatNumero(vehiculo.consumo_semana, 2)} L` : '—'}
                 nota="Tramos entre cargas (aprox.)"
               />
               <MetricaSemana
                 icono={<TrendingUp size={14} style={{ color: 'var(--text-tertiary)' }} />}
                 titulo="Rendimiento"
-                valor={vehiculo.rendimiento_semana !== null ? `${vehiculo.rendimiento_semana.toFixed(2)} km/L` : '—'}
+                valor={vehiculo.rendimiento_semana !== null ? `${formatNumero(vehiculo.rendimiento_semana, 2)} km/L` : '—'}
               />
               <MetricaSemana
                 icono={<Droplet size={14} style={{ color: 'var(--text-tertiary)' }} />}
                 titulo="Llenados"
                 valor={String(vehiculo.llenados_semana)}
-                nota={vehiculo.litros_cargados_semana > 0 ? `${vehiculo.litros_cargados_semana.toFixed(0)} L cargados` : undefined}
+                nota={vehiculo.litros_cargados_semana > 0 ? `${formatNumero(vehiculo.litros_cargados_semana)} L cargados` : undefined}
               />
             </div>
           </div>
@@ -283,7 +282,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                 </div>
                 {vehiculo.tiene_telemetria ? (
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {Number(vehiculo.combustible_litros).toFixed(2)} L
+                    {formatNumero(Number(vehiculo.combustible_litros), 2)} L
                   </div>
                 ) : (
                   <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Sin telemetría OBD</span>
@@ -298,7 +297,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                 </div>
                 {rendimiento > 0 && rendimiento <= 100 ? (
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: rendimientoColor }}>
-                    {rendimiento.toFixed(2)} km/L
+                    {formatNumero(rendimiento, 2)} km/L
                   </div>
                 ) : (
                   <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Datos insuficientes</span>
@@ -314,10 +313,10 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                 {vehiculo.tiene_telemetria && Number(vehiculo.ralenti_litros) > 0 ? (
                   <>
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: ralentiColor }}>
-                      {Number(vehiculo.ralenti_litros).toFixed(2)} L
+                      {formatNumero(Number(vehiculo.ralenti_litros), 2)} L
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      {ralentiPct.toFixed(0)}% del consumo total
+                      {formatNumero(ralentiPct)}% del consumo total
                     </div>
                   </>
                 ) : (
@@ -342,7 +341,9 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <Droplet size={14} style={{ color: 'var(--text-tertiary)' }} />
                     <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>
-                      Nivel actual del tanque
+                      {vehiculo.nivel_actual_fecha && Date.now() - new Date(vehiculo.nivel_actual_fecha).getTime() > 2 * 86400000
+                        ? 'Último nivel informado (Geotab no reporta hace días)'
+                        : 'Nivel actual del tanque'}
                     </span>
                     {vehiculo.nivel_actual_fecha && (
                       <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
@@ -352,7 +353,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: nivelColor }}>
-                      {pct.toFixed(1)}%
+                      {formatNumero(pct, 1)}%
                     </span>
                     <div style={{ flex: 1, height: 10, background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: nivelColor, borderRadius: 'var(--radius-sm)' }} />
@@ -399,7 +400,7 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                         </div>
                         {subida != null && (
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', fontFamily: 'var(--font-mono)' }}>
-                            +{subida.toFixed(1)}%
+                            +{formatNumero(subida, 1)}%
                           </span>
                         )}
                       </div>
@@ -407,13 +408,13 @@ export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onCl
                         {f.tank_nivel_min_pct != null && f.tank_nivel_max_pct != null && (
                           <div>
                             <span style={{ color: 'var(--text-tertiary)' }}>Tanque:</span>{' '}
-                            <strong>{f.tank_nivel_min_pct.toFixed(1)}% → {f.tank_nivel_max_pct.toFixed(1)}%</strong>
+                            <strong>{formatNumero(f.tank_nivel_min_pct, 1)}% → {formatNumero(f.tank_nivel_max_pct, 1)}%</strong>
                           </div>
                         )}
                         {vol != null && vol > 0 && (
                           <div>
                             <span style={{ color: 'var(--text-tertiary)' }}>Volumen:</span>{' '}
-                            <strong>{vol.toFixed(2)} L</strong>
+                            <strong>{formatNumero(vol, 2)} L</strong>
                           </div>
                         )}
                         {f.odometro_metros != null && (

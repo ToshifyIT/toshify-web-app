@@ -14,6 +14,9 @@ import type { OfertaLocacion } from '../titulares/types/ofertaLocacion.types'
 import { OfertaLocacionDetailModal } from './components/OfertaLocacionDetailModal'
 import { OfertaLocacionModal } from '../titulares/components/OfertaLocacionModal'
 import '../VehicleManagement.css'
+import { formatPlata } from '../../../utils/format'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../utils/format'
 
 export function OfertaLocacionListModule() {
   const { user, profile } = useAuth()
@@ -217,7 +220,7 @@ export function OfertaLocacionListModule() {
       cell: ({ row }) => {
         const o = row.original
         const fmtFecha = (d: string | null) =>
-          d ? new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : null
+          d ? formatFecha(d) : null
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.5' }}>
             <div style={{ color: 'var(--text-primary)' }}>
@@ -243,7 +246,7 @@ export function OfertaLocacionListModule() {
       accessorKey: 'patente',
       header: 'Patente',
       cell: ({ row }) => (
-        <span style={{ fontWeight: 600 }}>{row.original.patente || 'N/A'}</span>
+        <PatenteBadge patente={row.original.patente} />
       ),
     },
     {
@@ -264,7 +267,7 @@ export function OfertaLocacionListModule() {
       header: 'Canon',
       cell: ({ row }) => {
         const val = row.original.canon_mensual
-        return val != null ? `$${Number(val).toLocaleString('es-AR')}` : '-'
+        return val != null ? formatPlata(val) : '-'
       },
     },
     {

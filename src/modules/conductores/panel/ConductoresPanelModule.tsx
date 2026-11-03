@@ -11,7 +11,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
-import { formatCurrency } from '../../../types/facturacion.types'
+import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
 import { cabifyService } from '../../../services/cabifyService'
 import { cargarPanelConductores, type ConductorPanelRow } from './conductoresPanelService'
@@ -23,6 +23,8 @@ import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { hoyART } from '../../../utils/fechaArgentina'
 import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 
 // Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
 // anteriores al 16/09/2026 no tienen kilometros sincronizados, y eso no es 0 km.
@@ -388,7 +390,7 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => row.original.vehiculoAsignado
         ? (
           <div>
-            <span className="cpanel-badge asig">{row.original.vehiculoAsignado}</span>
+            <PatenteBadge patente={row.original.vehiculoAsignado} size="sm" />
             {row.original.grupoFlotaAsignado && (
               <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-tertiary, #9ca3af)' }}>
                 {grupoFlotaLabel(row.original.grupoFlotaAsignado)}
@@ -462,28 +464,28 @@ export function ConductoresPanelModule() {
       accessorFn: (r) => r.montoPendiente,
       header: 'Multas Pendientes',
       sortingFn: (a, b) => (a.original.montoPendiente || 0) - (b.original.montoPendiente || 0),
-      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoPendiente)}</span>,
+      cell: ({ row }) => <span className="cpanel-num">{formatPlata(row.original.montoPendiente)}</span>,
     },
     {
       id: 'monto_en_proceso',
       accessorFn: (r) => r.montoEnProceso,
       header: 'Multas En Proceso',
       sortingFn: (a, b) => (a.original.montoEnProceso || 0) - (b.original.montoEnProceso || 0),
-      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoEnProceso)}</span>,
+      cell: ({ row }) => <span className="cpanel-num">{formatPlata(row.original.montoEnProceso)}</span>,
     },
     {
       id: 'monto_pagado',
       accessorFn: (r) => r.montoPagado,
       header: 'Multas Pagadas',
       sortingFn: (a, b) => (a.original.montoPagado || 0) - (b.original.montoPagado || 0),
-      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoPagado)}</span>,
+      cell: ({ row }) => <span className="cpanel-num">{formatPlata(row.original.montoPagado)}</span>,
     },
     {
       id: 'monto_total',
       accessorFn: (r) => r.montoTotalMultas,
       header: 'Monto Total',
       sortingFn: (a, b) => (a.original.montoTotalMultas || 0) - (b.original.montoTotalMultas || 0),
-      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoTotalMultas)}</span>,
+      cell: ({ row }) => <span className="cpanel-num">{formatPlata(row.original.montoTotalMultas)}</span>,
     },
     // --- Saldo y garantía ---
     // Saldo pendiente = deuda del último movimiento del kardex (control_saldos),
@@ -498,17 +500,17 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => {
         const r = row.original
         if (r.saldoPendiente > 0) {
-          return <span className="cpanel-num cpanel-deuda">{formatCurrency(r.saldoPendiente)}</span>
+          return <span className="cpanel-num cpanel-deuda">{formatPlata(r.saldoPendiente)}</span>
         }
         if (r.saldoAFavor > 0) {
           return (
             <span className="cpanel-num cpanel-favor" title="Saldo a favor del conductor">
-              {formatCurrency(r.saldoAFavor)}
+              {formatPlata(r.saldoAFavor)}
               <small> a favor</small>
             </span>
           )
         }
-        return <span className="cpanel-num">{formatCurrency(0)}</span>
+        return <span className="cpanel-num">{formatPlata(0)}</span>
       },
     },
     {
@@ -521,8 +523,8 @@ export function ConductoresPanelModule() {
         if (!r.tieneGarantia) return <span className="cpanel-num cpanel-nulo">Sin garantía</span>
         return (
           <span className="cpanel-num">
-            {formatCurrency(r.garantiaPagada)}
-            {r.garantiaTotal > 0 && <small> de {formatCurrency(r.garantiaTotal)}</small>}
+            {formatPlata(r.garantiaPagada)}
+            {r.garantiaTotal > 0 && <small> de {formatPlata(r.garantiaTotal)}</small>}
           </span>
         )
       },
@@ -539,14 +541,14 @@ export function ConductoresPanelModule() {
         if (d > 0) {
           return (
             <span className="cpanel-num cpanel-deuda" title="La garantía no alcanza a cubrir el saldo pendiente">
-              {formatCurrency(d)}
+              {formatPlata(d)}
               <small> sin cubrir</small>
             </span>
           )
         }
         return (
           <span className="cpanel-num cpanel-favor" title="La garantía cubre el saldo pendiente">
-            {formatCurrency(d)}
+            {formatPlata(d)}
             <small> cubierto</small>
           </span>
         )
@@ -565,7 +567,7 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => {
         const c = row.original.cabify
         if (!c) return <span className="cpanel-num cpanel-nulo" title="Sin registros de Cabify vinculados a este conductor">—</span>
-        return <span className="cpanel-num" title={`Acumulado de la semana en curso (${rangoCabifyLabel})`}>{formatCurrency(c.gananciaTotal)}</span>
+        return <span className="cpanel-num" title={`Acumulado de la semana en curso (${rangoCabifyLabel})`}>{formatPlata(c.gananciaTotal)}</span>
       },
     },
     {
@@ -587,7 +589,7 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => {
         const c = row.original.cabify
         if (!c) return <span className="cpanel-num cpanel-nulo">—</span>
-        return <span className="cpanel-num">{formatCurrency(c.cobroEfectivo)}</span>
+        return <span className="cpanel-num">{formatPlata(c.cobroEfectivo)}</span>
       },
     },
     {
@@ -598,7 +600,7 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => {
         const c = row.original.cabify
         if (!c) return <span className="cpanel-num cpanel-nulo">—</span>
-        return <span className="cpanel-num">{formatCurrency(c.cobroApp)}</span>
+        return <span className="cpanel-num">{formatPlata(c.cobroApp)}</span>
       },
     },
     {
@@ -609,7 +611,7 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => {
         const c = row.original.cabify
         if (!c) return <span className="cpanel-num cpanel-nulo">—</span>
-        return <span className="cpanel-num">{formatCurrency(c.peajes)}</span>
+        return <span className="cpanel-num">{formatPlata(c.peajes)}</span>
       },
     },
     {
@@ -682,7 +684,7 @@ export function ConductoresPanelModule() {
           <span
             className={`cpanel-num${alerta ? ' cpanel-alerta-km' : ''}`}
             title={`${Math.round(pct)}% de los km recorridos fue con viaje asignado (umbral de alerta: ${Math.round(UMBRAL_KM_PRODUCTIVO * 100)}%)`}>
-            {pct.toFixed(1)}%
+            {formatNumero(pct, 1)}%
           </span>
         )
       },
@@ -692,9 +694,11 @@ export function ConductoresPanelModule() {
       header: 'Acciones',
       enableSorting: false,
       cell: ({ row }) => (
-        <button className="cpanel-ver" onClick={() => setDetalle({ fila: row.original, tab: 'calificacion' })}>
-          <Eye size={14} /> Ver detalle
-        </button>
+        <ActionsMenu
+          actions={[
+            { icon: <Eye size={15} />, label: 'Ver detalle', onClick: () => setDetalle({ fila: row.original, tab: 'calificacion' }) },
+          ]}
+        />
       ),
     },
   ], [rangoCabifyLabel, calificaciones])

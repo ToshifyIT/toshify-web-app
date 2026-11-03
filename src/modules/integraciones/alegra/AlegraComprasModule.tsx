@@ -47,10 +47,13 @@ import type {
 import { formatFechaHoraART, mesActualART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
+import { MesSelector } from '../../../components/ui/MesSelector'
 import '../cresium/CresiumModule.css'
 import './AlegraComprasModule.css'
 import { abrirFormularioProveedor } from './proveedorForm'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
+import { formatMoneda, formatNumero } from '../../../utils/format'
+import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 
 /** Estado que se ve en la tabla */
 type EstadoVista = 'esperando' | 'listo' | 'revisar' | 'cargado' | 'error' | 'ignorado'
@@ -82,9 +85,8 @@ const GRUPO_CUENTA: Record<string, string> = {
 }
 const ORDEN_GRUPOS = ['expense', 'cost', 'asset', 'liability', 'equity', 'income']
 
-const PESOS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
-const pesos = (n: number | null | undefined) => PESOS.format(n || 0)
-const NUM = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Comprobantes contables: con centavos, en la moneda del comprobante (utils/format.ts)
+const pesos = (n: number | null | undefined) => formatMoneda(n || 0, 'ARS', { decimales: 2 })
 
 /** Moneda del comprobante: 'ARS' (ARCA la informa como "$" o "PES") o el código que venga */
 function codigoMoneda(m: string | null | undefined): string {
@@ -94,14 +96,14 @@ function codigoMoneda(m: string | null | undefined): string {
   return x
 }
 
-/** Importe en la moneda del comprobante: "$ 1.234,00" / "USD 2.857,50" */
+/** Importe en la moneda del comprobante: "$ 1.234,00" / "US$ 2.857,50" (nunca se convierte) */
 function importe(n: number, moneda: string): string {
-  return moneda === 'ARS' ? pesos(n) : `${moneda} ${NUM.format(n || 0)}`
+  return formatMoneda(n || 0, moneda, { decimales: 2 })
 }
 
 function formatDia(dia: string | null | undefined): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dia || '')
-  return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '-'
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '-'
 }
 
 function escaparHtml(txt: string): string {
@@ -572,11 +574,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
               {c.proveedor_creado ? ' · creado al cargar' : ''}
             </span>
             {c.estado !== 'cargado' && c.estado !== 'ignorado' && !c.alegra_proveedor_id && (
-              puedeEditar ? (
-                <button type="button" className="ac-crear-prov" onClick={() => void crearProveedor(c)} title="No existe en Alegra">
-                  <UserPlus size={12} /> Crear proveedor
-                </button>
-              ) : <span className="cr-aviso">No existe en Alegra</span>
+              <span className="cr-aviso">No existe en Alegra</span>
             )}
           </div>
         )
@@ -615,7 +613,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
             <span className={`cr-badge ${m === 'ARS' ? 'ac-moneda--ars' : 'ac-moneda--ext'}`}>{m}</span>
             {m !== 'ARS' && tc > 1 && (
               <span className="cr-muted" title="Tipo de cambio informado en ARCA">
-                TC {NUM.format(tc)} · ≈ {pesos(c.total * tc)}
+                TC {formatNumero(tc, 2)} · ≈ {pesos(c.total * tc)}
               </span>
             )}
           </div>
@@ -632,15 +630,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
         const c = row.original
         if (!c.drive_link) return <span className="cr-muted">{c.estado === 'cargado' || c.estado === 'ignorado' ? '-' : 'Falta'}</span>
         return (
-          <a
-            className="cr-link ac-archivo"
-            href={c.drive_link}
-            target="_blank"
-            rel="noreferrer"
-            title={`${c.drive_ruta ? `${c.drive_ruta}/` : ''}${c.drive_nombre ?? ''}`}
-          >
-            <FileText size={12} /> Ver factura
-          </a>
+          <span title={`${c.drive_ruta ? `${c.drive_ruta}/` : ''}${c.drive_nombre ?? ''}`}>Recibida</span>
         )
       },
     },
@@ -699,11 +689,6 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
               <>
                 {c.alegra_detalle && <span className="ac-detalle">{c.alegra_detalle}</span>}
                 {c.cargado_en && <span className="cr-muted">{formatFechaHoraART(c.cargado_en)}</span>}
-                {c.alegra_id && c.alegra_tipo && (
-                  <a className="cr-link" href={urlComprobanteAlegra(c.alegra_tipo, c.alegra_id)} target="_blank" rel="noreferrer">
-                    Ver en Alegra <ExternalLink size={12} />
-                  </a>
-                )}
               </>
             )}
             {e === 'revisar' && <span className="ac-motivo">{c.revisar}</span>}
@@ -721,29 +706,56 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       enableSorting: false,
       cell: ({ row }) => {
         const c = row.original
-        if (!puedeEditar) return null
+        const enAlegra = estadoVista(c) === 'cargado' && c.alegra_id && c.alegra_tipo
+          ? urlComprobanteAlegra(c.alegra_tipo, c.alegra_id)
+          : null
+        // Orden: Ver · (otras) — iconos con tooltip
         return (
-          <div className="dt-actions">
-            {c.estado !== 'ignorado' && !c.drive_link && (
-              <button
-                className="dt-accion-icono"
-                onClick={() => elegirAdjunto(c)}
-                title="Adjuntar la factura (se guarda en la carpeta del proveedor en Drive)"
-              >
-                <Paperclip size={14} />
-              </button>
-            )}
-            {(c.estado === 'pendiente' || c.estado === 'error') && (
-              <button className="dt-accion-icono" onClick={() => void marcar(c, 'ignorar')} title="Desestimar (no se carga en Alegra)">
-                <EyeOff size={14} />
-              </button>
-            )}
-            {c.estado === 'ignorado' && (
-              <button className="dt-accion-icono" onClick={() => void marcar(c, 'pendiente')} title="Restaurar (deja de estar desestimada)">
-                <Undo2 size={14} />
-              </button>
-            )}
-          </div>
+          <ActionsMenu
+            maxVisible={4}
+            actions={[
+              {
+                icon: <FileText size={15} />,
+                label: 'Ver factura',
+                onClick: () => { if (c.drive_link) window.open(c.drive_link, '_blank', 'noreferrer') },
+                hidden: !c.drive_link,
+              },
+              {
+                icon: <ExternalLink size={15} />,
+                label: 'Ver en Alegra',
+                onClick: () => { if (enAlegra) window.open(enAlegra, '_blank', 'noreferrer') },
+                hidden: !enAlegra,
+              },
+              {
+                icon: <UserPlus size={15} />,
+                label: 'Crear proveedor (no existe en Alegra)',
+                onClick: () => void crearProveedor(c),
+                hidden: !puedeEditar || c.estado === 'cargado' || c.estado === 'ignorado' || !!c.alegra_proveedor_id,
+                variant: 'success',
+              },
+              {
+                icon: <Paperclip size={15} />,
+                label: 'Adjuntar la factura (se guarda en la carpeta del proveedor en Drive)',
+                onClick: () => elegirAdjunto(c),
+                hidden: !puedeEditar || c.estado === 'ignorado' || !!c.drive_link,
+                variant: 'info',
+              },
+              {
+                icon: <EyeOff size={15} />,
+                label: 'Desestimar (no se carga en Alegra)',
+                onClick: () => void marcar(c, 'ignorar'),
+                hidden: !puedeEditar || !(c.estado === 'pendiente' || c.estado === 'error'),
+                variant: 'warning',
+              },
+              {
+                icon: <Undo2 size={15} />,
+                label: 'Restaurar (deja de estar desestimada)',
+                onClick: () => void marcar(c, 'pendiente'),
+                hidden: !puedeEditar || c.estado !== 'ignorado',
+                variant: 'info',
+              },
+            ]}
+          />
         )
       },
     },
@@ -792,13 +804,7 @@ export function AlegraComprasModule({ empresa }: AlegraComprasModuleProps) {
       <div className="cr-filtros">
         <label className="cr-campo">
           <span>Mes</span>
-          <input
-            type="month"
-            className="form-input"
-            value={mes}
-            onChange={(e) => e.target.value && setMes(e.target.value)}
-            disabled={!mes}
-          />
+          <MesSelector value={mes || ''} onChange={setMes} disabled={!mes} />
         </label>
         {info?.puede_editar && (
           <>

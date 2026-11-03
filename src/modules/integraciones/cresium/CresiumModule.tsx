@@ -41,8 +41,10 @@ import type {
 import { formatFechaHoraART, fechaISOART, hoyART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
+import { MesSelector, nombreMes } from '../../../components/ui/MesSelector'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import './CresiumModule.css'
+import { formatMoneda } from '../../../utils/format'
 
 type FiltroEstado = 'todos' | EstadoAlegra
 
@@ -64,10 +66,10 @@ const ETIQUETA_TIPO: Record<string, string> = {
   WITHDRAWAL_INVESTMENT: 'Rescate inversión',
 }
 
-/** 'AAAA-MM-DD' (día ya en hora argentina) -> 'DD/MM/AA' */
+/** 'AAAA-MM-DD' (día ya en hora argentina) -> 'DD/MM/AAAA' */
 function formatDia(dia: string | null | undefined): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dia || '')
-  return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '-'
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '-'
 }
 
 /** Tipos del plan de cuentas de Alegra -> nombre del grupo en el desplegable */
@@ -85,8 +87,8 @@ const ORDEN_GRUPOS: Record<'entrada' | 'salida', string[]> = {
   entrada: ['income', 'liability', 'asset', 'equity', 'expense', 'cost'],
 }
 
-const PESOS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
-const pesos = (n: number) => PESOS.format(n || 0)
+// Movimientos bancarios: con centavos, igual que el extracto (utils/format.ts)
+const pesos = (n: number) => formatMoneda(n || 0, 'ARS', { decimales: 2 })
 
 function mesActualART(): string {
   const hoy = hoyART()
@@ -729,7 +731,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       <div className="cr-filtros">
         <label className="cr-campo">
           <span>Mes</span>
-          <input type="month" className="form-input" value={mes} max={mesActualART()} onChange={(e) => e.target.value && setMes(e.target.value)} />
+          <MesSelector value={mes} max={mesActualART()} onChange={setMes} />
         </label>
         <button className="btn-primary" onClick={() => void actualizar()} disabled={loading || !datos?.cresium_configurado}>
           <DownloadCloud size={16} />
@@ -785,8 +787,10 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
         pageSizeOptions={[20, 50, 100]}
         searchPlaceholder="Buscar contraparte, CUIT o nota..."
         emptyIcon={<Landmark size={48} />}
-        emptyTitle="No hay movimientos"
-        emptyDescription="Tocá «Traer nuevos de Cresium» o elegí otro mes"
+        emptyTitle={`No hay movimientos en ${nombreMes(mes)}`}
+        emptyDescription={datos?.ultimo_movimiento
+          ? `El último movimiento guardado es del ${formatFechaHoraART(datos.ultimo_movimiento)}. Lo nuevo se trae solo cada hora (9 a 18 h); el botón «Traer nuevos de Cresium» es para no esperar.`
+          : 'Tocá «Traer nuevos de Cresium» o elegí otro mes'}
         disableAutoFilters
         alwaysVisibleColumns={['sel', 'alegra', 'acciones']}
         getRowClassName={(m) => (seleccion.has(m.cresium_id) ? 'cr-fila-seleccionada' : undefined)}

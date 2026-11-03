@@ -7,6 +7,7 @@
 import { Users, DollarSign, TrendingUp, Car, BarChart3 } from 'lucide-react'
 import type { DriverStatistics } from '../types/cabify.types'
 import { formatCurrency } from '../utils/cabify.utils'
+import { formatNumero } from '../../../../utils/format'
 import { STATS_LABELS } from '../constants/cabify.constants'
 import { StatsGrid } from '../../../../components/ui/StatsGrid'
 
@@ -36,14 +37,14 @@ export function StatsAccordion({ estadisticas }: StatsAccordionProps) {
         <div className="stat-card">
           <DollarSign size={18} className="stat-icon" />
           <div className="stat-content">
-            <span className="stat-value">${formatCurrency(estadisticas.totalRecaudado)}</span>
+            <span className="stat-value">{formatCurrency(estadisticas.totalRecaudado)}</span>
             <span className="stat-label">{STATS_LABELS.TOTAL_REVENUE}</span>
           </div>
         </div>
         <div className="stat-card">
           <TrendingUp size={18} className="stat-icon" />
           <div className="stat-content">
-            <span className="stat-value">${formatCurrency(estadisticas.promedioRecaudacion)}</span>
+            <span className="stat-value">{formatCurrency(estadisticas.promedioRecaudacion)}</span>
             <span className="stat-label">{STATS_LABELS.AVG_REVENUE}</span>
           </div>
         </div>
@@ -57,7 +58,7 @@ export function StatsAccordion({ estadisticas }: StatsAccordionProps) {
         <div className="stat-card">
           <BarChart3 size={18} className="stat-icon" />
           <div className="stat-content">
-            <span className="stat-value">{estadisticas.promedioViajes.toFixed(1)}</span>
+            <span className="stat-value">{formatNumero(estadisticas.promedioViajes, 1)}</span>
             <span className="stat-label">{STATS_LABELS.AVG_TRIPS}</span>
           </div>
         </div>

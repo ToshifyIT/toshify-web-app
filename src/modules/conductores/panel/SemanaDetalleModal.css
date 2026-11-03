@@ -17,34 +17,34 @@
 .csem-close {
   position: absolute; top: 16px; right: 16px;
   border: 1px solid var(--border-primary, #e5e7eb);
-  background: #fff; color: #6b7280; cursor: pointer;
+  background: var(--card-bg, #fff); color: var(--text-secondary, #6b7280); cursor: pointer;
   border-radius: var(--radius-md); padding: 5px;
 }
-.csem-close:hover { background: #f3f4f6; }
+.csem-close:hover { background: var(--bg-tertiary, #f3f4f6); }
 
 .csem-header {
   display: flex; justify-content: space-between; align-items: flex-start;
   padding: 20px 22px 14px; gap: 12px;
 }
 .csem-name { font-size: 18px; font-weight: 800; color: var(--text-primary, #111827); }
-.csem-dni { font-size: 13px; color: #9ca3af; margin-top: 2px; }
+.csem-dni { font-size: 13px; color: var(--text-tertiary, #9ca3af); margin-top: 2px; }
 .csem-week { text-align: right; margin-right: 34px; }
 .csem-week-n { font-size: 16px; font-weight: 800; color: #dc2626; }
-.csem-week-r { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+.csem-week-r { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin-top: 2px; }
 
 .csem-info {
   display: flex; flex-wrap: wrap; gap: 6px 18px;
   padding: 12px 22px;
-  background: #f9fafb;
+  background: var(--cdet-suave, #f9fafb);
   border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6;
-  font-size: 13px; color: #6b7280;
+  font-size: 13px; color: var(--text-secondary, #6b7280);
 }
 .csem-info b { color: var(--text-primary, #111827); font-weight: 700; }
 .csem-info b.gnc { color: #059669; }
 .csem-flota { background: #dbeafe; color: #1d4ed8; padding: 1px 8px; border-radius: var(--radius-full); font-weight: 700; font-size: 12px; }
 
 .csem-body { overflow-y: auto; padding: 16px 22px 22px; }
-.csem-empty { text-align: center; color: #9ca3af; padding: 30px; }
+.csem-empty { text-align: center; color: var(--text-tertiary, #9ca3af); padding: 30px; }
 
 .csem-sect-title {
   font-size: 12px; font-weight: 700; color: #dc2626;
@@ -62,7 +62,7 @@
 /* Contenedor de filas: el rayado alterno cuenta solo las filas, igual que
    .portal-detail-items > .portal-detail-item:nth-child(odd) en el portal. */
 .csem-items { display: flex; flex-direction: column; gap: 3px; }
-.csem-items .csem-row:nth-child(odd) { background: #f9fafb; }
+.csem-items .csem-row:nth-child(odd) { background: var(--cdet-suave, #f9fafb); }
 .csem-dot {
   width: 6px; height: 6px; border-radius: 50%; background: #dc2626;
   flex-shrink: 0; margin-top: 6px;
@@ -71,7 +71,7 @@
 .csem-dot.aporte { background: #059669; }
 .csem-row.desc { color: #059669; }
 .csem-row.aporte { color: #065f46; }
-.csem-ref { color: #9ca3af; font-size: 11px; font-weight: 400; }
+.csem-ref { color: var(--text-tertiary, #9ca3af); font-size: 11px; font-weight: 400; }
 .csem-amt {
   margin-left: auto; font-weight: 600; white-space: nowrap;
   font-family: var(--font-mono);
@@ -92,15 +92,15 @@
 
 .csem-total-box {
   margin-top: 12px; padding: 14px;
-  background: #f9fafb; border-radius: var(--radius-lg);
+  background: var(--cdet-suave, #f9fafb); border-radius: var(--radius-lg);
 }
-.csem-total-ref { padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
-.csem-ref-row { display: flex; justify-content: space-between; font-size: 13px; color: #9ca3af; padding: 2px 0; }
+.csem-total-ref { padding-bottom: 12px; border-bottom: 1px solid var(--border-primary, #e5e7eb); }
+.csem-ref-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-tertiary, #9ca3af); padding: 2px 0; }
 .csem-total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: var(--text-primary, #111827); padding: 5px 0 2px; }
 .csem-pend { text-align: center; padding-top: 14px; }
-.csem-pend-lbl { font-size: 12px; font-weight: 700; color: #9ca3af; letter-spacing: .5px; }
+.csem-pend-lbl { font-size: 12px; font-weight: 700; color: var(--text-tertiary, #9ca3af); letter-spacing: .5px; }
 .csem-pend-amt { font-size: 30px; font-weight: 800; margin-top: 4px; }
 .csem-pend-amt.debit { color: #dc2626; }
 .csem-pend-amt.credit { color: #059669; }
 
-.csem-disclaimer { font-size: 11px; color: #9ca3af; font-style: italic; text-align: center; margin-top: 16px; }
+.csem-disclaimer { font-size: 11px; color: var(--text-tertiary, #9ca3af); font-style: italic; text-align: center; margin-top: 16px; }

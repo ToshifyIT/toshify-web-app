@@ -9,6 +9,7 @@ import type { ConceptoFacturacion } from '../../../types/facturacion.types'
 import { formatCurrency, TIPOS_CONCEPTO, TIPOS_PARAMETRO } from '../../../types/facturacion.types'
 
 import { hoyART, fechaLocalISO } from '../../../utils/fechaArgentina'
+import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 const HTML_CAMPO_PRECIO_BASE = `
           <div class="fact-form-row" id="swal-base-group">
             <div class="fact-form-group">
@@ -661,7 +662,8 @@ export function ConceptosFacturacionTab() {
     {
       accessorKey: 'descripcion',
       header: 'Descripción',
-      meta: { expand: true },
+      // Sin "expand": estiraba esta columna y dejaba un hueco vacío antes de Tipo
+      size: 320,
       cell: ({ row }) => <span style={{ whiteSpace: 'normal', fontWeight: 500 }}>{row.original.descripcion}</span>
     },
     {
@@ -824,36 +826,12 @@ export function ConceptosFacturacionTab() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
-        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => editarConcepto(row.original)}
-            style={{
-              padding: '6px',
-              border: 'none',
-              borderRadius: 'var(--radius-xs)',
-              cursor: 'pointer',
-              background: '#EFF6FF',
-              color: '#3B82F6'
-            }}
-            title="Editar"
-          >
-            <Edit2 size={14} />
-          </button>
-          <button
-            onClick={() => eliminarConcepto(row.original)}
-            style={{
-              padding: '6px',
-              border: 'none',
-              borderRadius: 'var(--radius-xs)',
-              cursor: 'pointer',
-              background: '#FEF2F2',
-              color: '#EF4444'
-            }}
-            title="Eliminar"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+        <ActionsMenu
+          actions={[
+            { icon: <Edit2 size={15} />, label: 'Editar', onClick: () => editarConcepto(row.original), variant: 'info' },
+            { icon: <Trash2 size={15} />, label: 'Eliminar', onClick: () => eliminarConcepto(row.original), variant: 'danger' },
+          ]}
+        />
       )
     }
   ], [tipoFilter, activoFilter, openColumnFilter])

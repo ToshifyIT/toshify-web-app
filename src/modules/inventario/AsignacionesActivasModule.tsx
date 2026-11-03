@@ -6,6 +6,9 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { Truck, Package, Calendar, Wrench, RotateCcw, AlertTriangle, Clock, MapPin } from 'lucide-react'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
+import { formatFecha } from '../../utils/format'
 
 interface AsignacionActiva {
   id: string
@@ -195,8 +198,8 @@ export function AsignacionesActivasModule() {
             <Truck size={16} />
           </div>
           <div>
-            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-              {row.original.vehiculo_patente}
+            <div>
+              <PatenteBadge patente={row.original.vehiculo_patente} size="sm" />
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
               {row.original.vehiculo_marca} {row.original.vehiculo_modelo}
@@ -258,7 +261,7 @@ export function AsignacionesActivasModule() {
       cell: ({ row }) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '13px' }}>
           <Calendar size={14} />
-          {new Date(row.original.fecha_asignacion).toLocaleDateString('es-CL')}
+          {formatFecha(row.original.fecha_asignacion)}
         </div>
       )
     },
@@ -300,48 +303,12 @@ export function AsignacionesActivasModule() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => irAMovimientos(row.original, 'devolucion')}
-            style={{
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--card-bg)',
-              color: 'var(--text-primary)',
-              padding: '6px 10px',
-              fontSize: '12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px'
-            }}
-          >
-            <RotateCcw size={14} />
-            Devolver
-          </button>
-          <button
-            type="button"
-            onClick={() => irAMovimientos(row.original, 'dano')}
-            style={{
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--badge-red-bg)',
-              color: 'var(--badge-red-text)',
-              padding: '6px 10px',
-              fontSize: '12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px'
-            }}
-          >
-            <AlertTriangle size={14} />
-            Reportar daño/pérdida
-          </button>
-        </div>
+        <ActionsMenu
+          actions={[
+            { icon: <RotateCcw size={15} />, label: 'Devolver', onClick: () => irAMovimientos(row.original, 'devolucion'), variant: 'info' },
+            { icon: <AlertTriangle size={15} />, label: 'Reportar daño/pérdida', onClick: () => irAMovimientos(row.original, 'dano'), variant: 'danger' },
+          ]}
+        />
       )
     }
   ], [

@@ -22,18 +22,13 @@ import { PeriodPicker } from './PeriodPicker'
 import { FacturadoComparativo } from './FacturadoComparativo'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import './FacturadoVsCobrado.css'
+import { formatPlata, formatNumero } from '../../../utils/format'
 
 type ActiveTab = 'datos' | 'comparativo'
 
 const formatCurrencyK = (value: number) => `$${Math.round(value / 1000)}K`
 
-const formatCurrencyFull = (value: number) =>
-  new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
+const formatCurrencyFull = (value: number) => formatPlata(value)
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload || payload.length === 0) return null
@@ -42,8 +37,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   const facturado = Number(data.facturado || 0)
   const cobrado = Number(data.cobrado || 0)
   const saldoPendiente = facturado - cobrado
-  const pctCobrado = facturado > 0 ? ((cobrado / facturado) * 100).toFixed(1) : '0'
-  const pctDiferencia = facturado > 0 ? ((saldoPendiente / facturado) * 100).toFixed(1) : '0'
+  const pctCobrado = facturado > 0 ? formatNumero((cobrado / facturado) * 100, 1) : '0'
+  const pctDiferencia = facturado > 0 ? formatNumero((saldoPendiente / facturado) * 100, 1) : '0'
 
   return (
     <div className="fact-cob-tooltip">
@@ -134,7 +129,7 @@ export function FacturadoVsCobrado() {
   const selFacturado = selectedData?.facturado || 0
   const selCobrado = selectedData?.cobrado || 0
   const selDiferencia = selFacturado - selCobrado
-  const selPctCobrado = selFacturado > 0 ? ((selCobrado / selFacturado) * 100).toFixed(1) : '0'
+  const selPctCobrado = selFacturado > 0 ? formatNumero((selCobrado / selFacturado) * 100, 1) : '0'
   const selLabel = selectedData?.label || ''
 
   return (

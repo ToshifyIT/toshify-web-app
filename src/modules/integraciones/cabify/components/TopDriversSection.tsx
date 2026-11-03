@@ -140,7 +140,7 @@ function DriverListItem({ driver, rank, type }: DriverListItemProps) {
       </div>
       <div className="cabify-top-stats">
         <span className={`cabify-top-amount ${type}`}>
-          ${formatCurrency(Number(driver.gananciaTotal) || 0)}
+          {formatCurrency(Number(driver.gananciaTotal) || 0)}
         </span>
       </div>
     </div>

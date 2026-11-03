@@ -15,6 +15,7 @@ import { showError, showSuccess } from '../../../utils/toast'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { numeroSemana } from '../../../utils/semanaISO'
 import '../../incidencias/IncidenciasModule.css'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 
 interface TelepaseInput {
   id: string
@@ -538,7 +539,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
               <div className="form-section">
                 <div className="form-section-title">Peaje de Origen (TelePASE)</div>
                 <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  <strong>{registro.patente}</strong>
+                  <PatenteBadge patente={registro.patente} size="sm" />
                   {registro.fecha ? ` · ${registro.fecha}${registro.hora ? ' ' + registro.hora : ''}` : ''}
                   {registro.estacion ? ` · ${registro.estacion}` : ''}
                   {registro.via ? ` · Vía ${registro.via}` : ''}

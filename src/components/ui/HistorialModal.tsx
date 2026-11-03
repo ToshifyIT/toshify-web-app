@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Clock, User, ArrowRight, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { formatFechaHora } from '../../utils/format'
 
 interface HistorialEntry {
   id: string;
@@ -57,13 +58,7 @@ const MODULO_LABELS: Record<string, string> = {
 };
 
 function formatFecha(iso: string): string {
-  const d = new Date(iso);
-  const dia = d.getDate().toString().padStart(2, '0');
-  const mes = (d.getMonth() + 1).toString().padStart(2, '0');
-  const anio = d.getFullYear();
-  const hh = d.getHours().toString().padStart(2, '0');
-  const mm = d.getMinutes().toString().padStart(2, '0');
-  return `${dia}/${mes}/${anio} ${hh}:${mm}`;
+  return formatFechaHora(iso);
 }
 
 function formatDetalles(detalles: Record<string, unknown>): string[] {

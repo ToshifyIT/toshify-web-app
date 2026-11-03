@@ -8,6 +8,8 @@ import { X, Clock, User, MapPin, FileText, Tag, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 import type { VisitaCompleta, VisitaEstado } from '../../../types/visitas.types';
+import { PatenteBadge } from '../../../components/ui/PatenteBadge';
+import { formatFechaHora } from '../../../utils/format'
 
 // Convertir fecha UTC a hora Argentina
 const ARG_TZ = 'America/Argentina/Buenos_Aires';
@@ -169,7 +171,7 @@ export function VisitaDetalleModal({
             {visita.patente && (
               <div className="visita-detalle-row">
                 <MapPin size={16} />
-                <div><strong>Patente:</strong> {visita.patente}</div>
+                <div><strong>Patente:</strong> <PatenteBadge patente={visita.patente} size="sm" /></div>
               </div>
             )}
 
@@ -182,7 +184,7 @@ export function VisitaDetalleModal({
 
             <div className="visita-detalle-meta">
               <span>Agendado por: {visita.citador_nombre}</span>
-              <span>Creado: {format(new Date(visita.created_at), 'dd/MM/yyyy HH:mm')}</span>
+              <span>Creado: {formatFechaHora(visita.created_at)}</span>
             </div>
 
             {/* Transiciones de estado */}

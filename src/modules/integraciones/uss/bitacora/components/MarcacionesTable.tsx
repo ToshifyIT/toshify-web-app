@@ -19,6 +19,7 @@ import { ConductorHistorialModal } from './ConductorHistorialModal';
 import { RangoFilter } from './RangoFilter';
 import { parseDecimal } from '../utils/parseDecimal';
 import { showError } from '../../../../../utils/toast'
+import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
 
 // Conductor malformado de Wialon: iButton sin nombre (ej: "81-", "142-").
 // Lo mostramos como "Sin conductor" para que no aparezca como basura en el filtro.
@@ -51,7 +52,7 @@ interface MarcacionesTableProps {
 function formatFecha(fecha: string): string {
   if (!fecha) return '-';
   const [y, m, d] = fecha.split('-');
-  return `${d}/${m}/${y.slice(2)}`;
+  return `${d}/${m}/${y}`;
 }
 
 // =====================================================
@@ -100,11 +101,11 @@ function sumarDias(iso: string, dias: number): string {
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
 }
 
-/** 'YYYY-MM-DD' -> 'DD/MM/YY' */
+/** 'YYYY-MM-DD' -> 'DD/MM/YYYY' */
 function fechaCorta(iso: string | null): string | null {
   if (!iso) return null;
   const [y, m, d] = iso.split('-');
-  return y && m && d ? `${d}/${m}/${y.slice(2)}` : null;
+  return y && m && d ? `${d}/${m}/${y}` : null;
 }
 
 /** Fecha ISO de la ENTRADA del turno. */
@@ -486,22 +487,19 @@ export function MarcacionesTable({
           onClick={() => setDetalleMarcacion(row.original)}
           title="Ver detalle de trips de esta patente en la semana"
           style={{
-            fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-primary)',
-            fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px',
+            background: 'transparent', padding: '1px',
             borderRadius: 'var(--radius-xs)', whiteSpace: 'nowrap',
             border: '1px dashed transparent', cursor: 'pointer',
             transition: 'all 0.15s',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = 'var(--color-primary)'
-            e.currentTarget.style.background = 'rgba(220, 38, 38, 0.08)'
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.borderColor = 'transparent'
-            e.currentTarget.style.background = 'var(--bg-secondary)'
           }}
         >
-          {row.original.patenteNormalizada || row.original.patente.replace(/\s/g, '')}
+          <PatenteBadge patente={row.original.patenteNormalizada || row.original.patente} size="sm" />
         </button>
       ),
       enableSorting: true,
@@ -1125,7 +1123,7 @@ export function MarcacionesTable({
               borderRadius: 'var(--radius-md)', padding: '12px',
             }}>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Patente</span>
-              <span style={{ color: 'var(--text-primary)' }}>{alertaMarcacion.patente}</span>
+              <span><PatenteBadge patente={alertaMarcacion.patente} size="sm" /></span>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Conductor</span>
               <span style={{ color: 'var(--text-primary)' }}>{conductorLabel(alertaMarcacion.conductor)}</span>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Fecha del turno</span>

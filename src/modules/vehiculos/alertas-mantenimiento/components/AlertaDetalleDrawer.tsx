@@ -1,8 +1,10 @@
 import { X, AlertOctagon, AlertTriangle, Info, CheckCircle, Wrench, Gauge, Clock, Activity, FileText, ClipboardList } from 'lucide-react'
-import type { AlertaMantenimiento, AlertaSeveridad } from '../types/alertas.types'
+import type { AlertaAgrupada, AlertaSeveridad } from '../types/alertas.types'
+import { formatFechaHora, formatNumero } from '../../../../utils/format'
+import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
 
 interface Props {
-  alerta: AlertaMantenimiento | null
+  alerta: AlertaAgrupada | null
   onClose: () => void
 }
 
@@ -18,12 +20,23 @@ function severidadInfo(sev: AlertaSeveridad) {
   return map[sev]
 }
 
-function formatFechaLarga(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString('es-AR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+/**
+ * Geotab a veces manda el modo de falla como JSON ({"id":"b2736"}): eso no le
+ * dice nada a nadie. Se muestra solo si es texto legible.
+ */
+function modoFallaLegible(valor: string | null | undefined): string | null {
+  if (!valor) return null
+  const v = valor.trim()
+  if (v.startsWith('{') || v.startsWith('[')) {
+    try {
+      const o = JSON.parse(v) as Record<string, unknown>
+      const txt = o.name || o.nombre || o.description || o.descripcion
+      return typeof txt === 'string' && txt.trim() ? txt.trim() : null
+    } catch {
+      return null
+    }
+  }
+  return v
 }
 
 function kmHastaProximoService(odometro: number | null | undefined): number | null {
@@ -61,9 +74,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
         {/* HEADER */}
         <div className="alerta-drawer-header">
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {alerta.patente || '-'}
-            </span>
+            <PatenteBadge patente={alerta.patente} />
             {modelo && (
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                 {modelo}{v?.gnc ? ' · GNC' : ''}
@@ -132,7 +143,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Odómetro</span>
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {odometro != null ? `${odometro.toLocaleString('es-AR')} km` : '—'}
+                  {odometro != null ? `${formatNumero(odometro)} km` : '—'}
                 </div>
               </div>
 
@@ -145,7 +156,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                 {faltanKm != null ? (
                   <>
                     <div style={{ fontSize: 14, fontWeight: 700, color: vencido ? '#dc2626' : 'var(--text-primary)', marginBottom: 6 }}>
-                      {vencido ? `Vencido ${Math.abs(faltanKm).toLocaleString('es-AR')} km` : `En ${faltanKm.toLocaleString('es-AR')} km`}
+                      {vencido ? `Vencido ${formatNumero(Math.abs(faltanKm))} km` : `En ${formatNumero(faltanKm)} km`}
                     </div>
                     <div style={{ width: '100%', height: 6, background: 'var(--bg-primary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${Math.min(100, pctConsumido || 0)}%`, background: barColor, borderRadius: 'var(--radius-xs)' }} />
@@ -163,7 +174,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Ocurrencias</span>
                 </div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {alerta.count} {alerta.count === 1 ? 'vez' : 'veces'}
+                  {formatNumero(alerta.ocurrencias)} {alerta.ocurrencias === 1 ? 'vez' : 'veces'}
                 </div>
               </div>
 
@@ -174,14 +185,14 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                   <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Detectado</span>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {formatFechaLarga(alerta.fecha_evento)}
+                  {alerta.ocurrencias > 1 ? `${formatFechaHora(alerta.primera)} → ${formatFechaHora(alerta.ultima)}` : formatFechaHora(alerta.ultima)}
                 </div>
               </div>
             </div>
           </div>
 
           {/* ============ INFO TÉCNICA ============ */}
-          {(alerta.diagnostic_code || alerta.failure_mode || alerta.conductor_name) && (
+          {(alerta.diagnostic_code || modoFallaLegible(alerta.failure_mode) || alerta.conductor_name) && (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
                 Información Técnica
@@ -199,10 +210,10 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                     <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--text-primary)' }}>{alerta.diagnostic_code}</span>
                   </div>
                 )}
-                {alerta.failure_mode && (
+                {modoFallaLegible(alerta.failure_mode) && (
                   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', padding: '8px 14px' }}>
                     <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Modo de falla</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{alerta.failure_mode}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{modoFallaLegible(alerta.failure_mode)}</span>
                   </div>
                 )}
               </div>
@@ -263,7 +274,7 @@ export function AlertaDetalleDrawer({ alerta, onClose }: Props) {
                 {alerta.dismiss_at && (
                   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', padding: '8px 14px' }}>
                     <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Fecha</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{formatFechaLarga(alerta.dismiss_at)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{formatFechaHora(alerta.dismiss_at)}</span>
                   </div>
                 )}
               </div>

@@ -11,6 +11,8 @@ import { Alerta } from '../../../../../components/ui/alertas'
 import { useAuth } from '../../../../../contexts/AuthContext';
 import { showError, showSuccess } from '../../../../../utils/toast';
 import { useGeotabResync, type ResyncPedido } from '../hooks/useGeotabResync';
+import { formatPlata } from '../../../../../utils/format'
+import { formatFechaHora } from '../../../../../utils/format'
 
 interface ActualizarGeotabButtonProps {
   sedeId: string | null;
@@ -23,7 +25,7 @@ interface ActualizarGeotabButtonProps {
 
 const fmtKm = (v?: number) => (v ?? 0).toLocaleString('es-AR');
 const fmtMonto = (v?: number | null) =>
-  v == null ? '-' : `$ ${Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  v == null ? '-' : formatPlata(v);
 
 export function ActualizarGeotabButton({
   sedeId, startDate, endDate, isLoading, onActualizado,
@@ -112,7 +114,7 @@ export function ActualizarGeotabButton({
   const bloqueado = resync.enCurso || isLoading || !resync.habilitado;
   const ultima = !resync.habilitado ? 'La semana todavía no empezó'
     : resync.pedido?.estado === 'terminado' && resync.pedido.terminado_at
-    ? `Última actualización: ${new Date(resync.pedido.terminado_at).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`
+    ? `Última actualización: ${formatFechaHora(resync.pedido.terminado_at)}`
       + (resync.pedido.solicitado_por_nombre ? ` (${resync.pedido.solicitado_por_nombre})` : '')
     : 'Volver a leer esta semana desde Geotab';
 

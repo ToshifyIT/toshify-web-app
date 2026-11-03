@@ -15,6 +15,7 @@ import { normalizeDni } from '../../utils/normalizeDocuments';
 import { DateFilterPill } from './DateFilterPill';
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import './EscuelaModule.css';
+import { formatPlata, formatNumero } from '../../utils/format'
 
 interface MetricData {
   promGan: number;
@@ -308,7 +309,7 @@ export function EscuelaModule() {
         accessorFn: (row) => row.previo.promGan,
         cell: ({ getValue }) => (
           <span className="td-money">
-            {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(getValue() as number)}
+            {formatPlata(getValue() as number)}
           </span>
         )
       },
@@ -318,7 +319,7 @@ export function EscuelaModule() {
         size: 75,
         accessorFn: (row) => row.previo.horas,
         cell: ({ getValue }) => (
-          <span className="td-porcentaje">{(getValue() as number).toFixed(1)}</span>
+          <span className="td-porcentaje">{formatNumero(getValue() as number, 1)}</span>
         )
       },
       {
@@ -327,7 +328,7 @@ export function EscuelaModule() {
         size: 80,
         accessorFn: (row) => row.previo.porcOcup,
         cell: ({ getValue }) => (
-          <span className="td-porcentaje">{(getValue() as number).toFixed(0)}%</span>
+          <span className="td-porcentaje">{formatNumero(getValue() as number)}%</span>
         )
       },
       {
@@ -336,7 +337,7 @@ export function EscuelaModule() {
         size: 80,
         accessorFn: (row) => row.previo.acept,
         cell: ({ getValue }) => (
-          <span className="td-porcentaje">{(getValue() as number).toFixed(0)}%</span>
+          <span className="td-porcentaje">{formatNumero(getValue() as number)}%</span>
         )
       },
       // POST GROUP
@@ -347,7 +348,7 @@ export function EscuelaModule() {
         accessorFn: (row) => row.post.promGan,
         cell: ({ getValue }) => (
           <span className="td-money" style={{ fontWeight: 700 }}>
-            {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(getValue() as number)}
+            {formatPlata(getValue() as number)}
           </span>
         )
       },
@@ -357,7 +358,7 @@ export function EscuelaModule() {
         size: 75,
         accessorFn: (row) => row.post.horas,
         cell: ({ getValue }) => (
-          <span className="td-porcentaje">{(getValue() as number).toFixed(1)}</span>
+          <span className="td-porcentaje">{formatNumero(getValue() as number, 1)}</span>
         )
       },
       {
@@ -366,7 +367,7 @@ export function EscuelaModule() {
         size: 80,
         accessorFn: (row) => row.post.porcOcup,
         cell: ({ getValue }) => (
-          <span className="td-porcentaje">{(getValue() as number).toFixed(0)}%</span>
+          <span className="td-porcentaje">{formatNumero(getValue() as number)}%</span>
         )
       },
       {
@@ -380,7 +381,7 @@ export function EscuelaModule() {
             if (val >= 90) badgeColor = 'green';
             else if (val >= 80) badgeColor = 'blue';
             else if (val >= 70) badgeColor = 'yellow';
-            return <span className={`dt-badge dt-badge-${badgeColor}`}>{val.toFixed(0)}%</span>;
+            return <span className={`dt-badge dt-badge-${badgeColor}`}>{formatNumero(val)}%</span>;
         }
       },
     ],

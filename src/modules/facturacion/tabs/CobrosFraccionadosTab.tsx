@@ -21,6 +21,8 @@ import { formatCurrency } from '../../../types/facturacion.types'
 import { Alerta } from '../../../components/ui/alertas'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import '../CobrosFraccionados.css'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../utils/format'
 
 interface Cuota {
   id: string
@@ -322,7 +324,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           <tr>
             <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">#${p.numero_cuota || '-'}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${p.semana && p.anio ? `S${p.semana}/${p.anio}` : '-'}</td>
-            <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${new Date(p.fecha_pago).toLocaleDateString('es-AR')}</td>
+            <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${formatFecha(p.fecha_pago)}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: right; color: #16a34a; font-weight: 600;">${formatCurrency(p.monto)}</td>
             <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">${p.referencia || '-'}</td>
           </tr>
@@ -512,9 +514,9 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       <span className="conductor">
                         {formatNombreCompleto(cobro.conductor?.nombre_completo || cobro.conductor_nombre) || 'Sin nombre'}
                       </span>
-                      <span className="patente" style={{ marginLeft: '10px', color: 'var(--text-secondary, #666)' }}>
-                        {cobro.vehiculo_patente || ''}
-                      </span>
+                      {cobro.vehiculo_patente && (
+                        <PatenteBadge patente={cobro.vehiculo_patente} size="sm" style={{ marginLeft: '10px' }} />
+                      )}
                       <span style={{
                         marginLeft: '8px',
                         padding: '2px 8px',
@@ -542,7 +544,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                     </div>
                     <div className="cobro-detalles">
                       <span className="monto">
-                        ${(cobro.monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {formatCurrency(cobro.monto || 0)}
                       </span>
                       <span className="cuotas">
                         {cuotasAplicadas} de {totalCuotas} cuotas
@@ -588,7 +590,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                           <div>
                             <span className="label">Próxima Cuota:</span>
                             <span className="valor">
-                              Semana {proxima.semana}/{proxima.anio || '?'} - ${proxima.monto_cuota.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              Semana {proxima.semana}/{proxima.anio || '?'} - {formatCurrency(proxima.monto_cuota)}
                             </span>
                           </div>
                         )
@@ -640,7 +642,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                             <td>#{cuota.numero_cuota}</td>
                             <td>Semana {cuota.semana} - {cuota.anio || '?'}</td>
                             <td>
-                              ${cuota.monto_cuota.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              {formatCurrency(cuota.monto_cuota)}
                             </td>
                             <td>
                               <span style={{
@@ -665,9 +667,9 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                             </td>
                             <td>
                               {cuota.pagado && cuota.fecha_pago
-                                ? new Date(cuota.fecha_pago).toLocaleDateString('es-AR')
+                                ? formatFecha(cuota.fecha_pago)
                                 : cuota.fecha_aplicacion
-                                  ? new Date(cuota.fecha_aplicacion + 'T00:00:00').toLocaleDateString('es-AR')
+                                  ? formatFecha(cuota.fecha_aplicacion)
                                   : '-'
                               }
                             </td>
@@ -725,9 +727,9 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[
                 { label: 'Conductor', value: formatNombreCompleto(modalIncidencia.conductor?.nombre_completo || modalIncidencia.conductor_nombre) },
-                { label: 'Vehículo', value: modalIncidencia.vehiculo_patente || '-' },
-                { label: 'Fecha de la incidencia', value: modalIncidencia.fecha ? new Date(modalIncidencia.fecha).toLocaleDateString('es-AR') : '-' },
-                { label: 'Fecha de registro', value: modalIncidencia.created_at ? new Date(modalIncidencia.created_at).toLocaleDateString('es-AR') : '-' },
+                { label: 'Vehículo', value: <PatenteBadge patente={modalIncidencia.vehiculo_patente} size="sm" /> },
+                { label: 'Fecha de la incidencia', value: formatFecha(modalIncidencia.fecha) },
+                { label: 'Fecha de registro', value: formatFecha(modalIncidencia.created_at) },
                 { label: 'Monto total', value: formatCurrency(modalIncidencia.monto) },
                 { label: 'Cuotas', value: `${modalIncidencia.cantidad_cuotas} cuota${modalIncidencia.cantidad_cuotas !== 1 ? 's' : ''}` },
                 ...(modalIncidencia.observaciones ? [{ label: 'Observaciones', value: modalIncidencia.observaciones }] : []),

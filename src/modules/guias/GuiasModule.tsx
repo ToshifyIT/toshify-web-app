@@ -49,6 +49,9 @@ import { showError } from '../../utils/toast'
 import { Spinner } from '../../components/ui/LoadingOverlay'
 
 import { fechaLocalISO } from '../../utils/fechaArgentina'
+import { formatPlata, formatNumero } from '../../utils/format'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { formatFecha } from '../../utils/format'
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
 };
@@ -315,9 +318,9 @@ export function GuiasModule() {
 
       const formatM = (m: { promGan: number; horas: number; porcOcup: number; acept: number }) => ({
         promGan: m.promGan,
-        horas: m.horas.toFixed(1),
-        porcOcup: m.porcOcup.toFixed(0) + '%',
-        acept: m.acept.toFixed(0) + '%',
+        horas: formatNumero(m.horas, 1),
+        porcOcup: formatNumero(m.porcOcup) + '%',
+        acept: formatNumero(m.acept) + '%',
       });
 
       const updatedData = conductoresEscuela.map((d) => {
@@ -1397,12 +1400,7 @@ export function GuiasModule() {
 
           const getFilterDisplayValue = (value: number) => {
             if (value === 0 && !hasCabifyData) return "N/A";
-            return new Intl.NumberFormat('es-AR', {
-              style: 'currency',
-              currency: 'ARS',
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            }).format(value);
+            return formatPlata(value);
           };
 
           baseConductor.facturacion_efectivo_filter = getFilterDisplayValue(facturacionEfectivo);
@@ -2396,7 +2394,7 @@ export function GuiasModule() {
             const tieneGnc = vehiculo.gnc === true;
             return (
               <div className="vehiculo-cell">
-                <div className="vehiculo-cell-patente">{vehiculo.patente}</div>
+                <div><PatenteBadge patente={vehiculo.patente} size="sm" /></div>
                 <div className="vehiculo-cell-info">
                   {vehiculo.marca} {vehiculo.modelo}
                 </div>
@@ -2494,7 +2492,7 @@ export function GuiasModule() {
           const saldoConductor = (row.original as any).saldo_conductor ?? 0;
           const tieneSaldo = saldoConductor < 0; // negativo = deuda
           const saldoDisplay = tieneSaldo
-            ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(Math.abs(saldoConductor))
+            ? formatPlata(Math.abs(saldoConductor))
             : null;
 
           const saldoElement = (
@@ -2613,13 +2611,13 @@ export function GuiasModule() {
           const formatMoney = (v: number | null | undefined) => {
             const n = v ? Number(Number(v).toFixed(2)) : v as any;
             if (n && n > 0) {
-              return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n as number);
+              return formatPlata(n as number);
             }
             if (!hasCabify) {
               return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
             }
             if (n === undefined || n === null) return "-";
-            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(Number(n).toFixed(2)));
+            return formatPlata(Number(Number(n).toFixed(2)));
           };
           return (
             <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', columnGap: 4, rowGap: 1, fontSize: '12px', alignItems: 'baseline' }}>
@@ -2643,7 +2641,7 @@ export function GuiasModule() {
           const cuota = (row.original as any).billing_cuota_semanal as number;
           const fmtBilling = (v: number) => {
             if (!hasBilling) return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de facturación">N/A</span>;
-            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+            return formatPlata(v);
           };
           return (
             <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', columnGap: 4, rowGap: 1, fontSize: '12px', alignItems: 'baseline' }}>
@@ -2676,7 +2674,7 @@ export function GuiasModule() {
           return (
             <div style={{ fontSize: '11px', minWidth: '80px' }}>
               <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(proyectado)}
+                {formatPlata(proyectado)}
               </div>
               <div style={{
                 width: '100%',
@@ -2724,7 +2722,7 @@ export function GuiasModule() {
         cell: ({ row }) => {
           const fecha = (row.original as any).fecha_llamada as string | null;
           const hasFecha = !!fecha;
-          const formatted = hasFecha ? new Date(fecha).toLocaleDateString('es-AR') : null;
+          const formatted = hasFecha ? formatFecha(fecha) : null;
           const isRealizada = hasFecha;
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2973,7 +2971,7 @@ export function GuiasModule() {
 
                   // Formateador de moneda
                   const formatCurrency = (val: number) => {
-                    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val);
+                    return formatPlata(val);
                   };
 
                   return (

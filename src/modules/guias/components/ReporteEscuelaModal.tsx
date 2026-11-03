@@ -1,5 +1,6 @@
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import './ReporteEscuelaModal.css';
+import { formatPlata } from '../../../utils/format'
 
 interface MetricData {
   promGan: number;
@@ -39,12 +40,7 @@ export function ReporteEscuelaModal({
   if (!isOpen) return null;
 
   const formatMoney = (value: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value);
+    return formatPlata(value);
   };
 
   const getBadgeClass = (acept: string) => {

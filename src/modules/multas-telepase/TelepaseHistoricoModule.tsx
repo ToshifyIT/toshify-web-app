@@ -18,6 +18,11 @@ import { crearCobroDesdeTelepase } from './services/crearCobroDesdeTelepase'
 import { hoyART } from '../../utils/fechaArgentina'
 import { numeroSemana } from '../../utils/semanaISO'
 import './MultasTelepase.css'
+import { formatPlata } from '../../utils/format'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
+import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
 interface TelepaseRegistro {
   id: string
@@ -39,7 +44,7 @@ interface TelepaseRegistro {
 }
 
 function formatMoney(value: string | number | null | undefined): string {
-  if (!value) return '$ 0'
+  if (!value) return formatPlata(0)
   let num: number
   if (typeof value === 'string') {
     // Formato europeo: "3.622,54" -> convertir a número
@@ -49,24 +54,12 @@ function formatMoney(value: string | number | null | undefined): string {
   } else {
     num = value
   }
-  if (isNaN(num)) return '$ 0'
-  return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  if (isNaN(num)) return formatPlata(0)
+  return formatPlata(num)
 }
 
 function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return '-'
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleString('es-AR', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return dateStr
-  }
+  return formatFechaHora(dateStr)
 }
 
 export default function TelepaseHistoricoModule() {
@@ -302,10 +295,10 @@ export default function TelepaseHistoricoModule() {
   const totalDesestimadas = useMemo(() =>
     registros.filter(r => !!(r as any).desestimada_at).length
   , [registros])
-  const vistaOptions = useMemo<Array<{ id: 'activas' | 'enviadas' | 'desestimadas'; label: string; count: number }>>(() => [
-    { id: 'activas', label: 'Activas', count: totalActivas },
-    { id: 'enviadas', label: 'Enviadas a facturación', count: totalEnviadas },
-    { id: 'desestimadas', label: 'Desestimadas', count: totalDesestimadas },
+  const vistaOptions = useMemo<TabsBarItem<'activas' | 'enviadas' | 'desestimadas'>[]>(() => [
+    { id: 'activas', label: 'Activas', icon: FileText, count: totalActivas },
+    { id: 'enviadas', label: 'Enviadas a facturación', icon: SendHorizonal, count: totalEnviadas },
+    { id: 'desestimadas', label: 'Desestimadas', icon: Archive, count: totalDesestimadas },
   ], [totalActivas, totalEnviadas, totalDesestimadas])
 
   // Calcular totales
@@ -619,9 +612,8 @@ export default function TelepaseHistoricoModule() {
       cell: ({ row }) => {
         // FECHA CARGA = created_at (cuando se cargo al sistema)
         if (!row.original.created_at) return '-'
-        const d = new Date(row.original.created_at)
-        const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+        const fecha = formatFecha(row.original.created_at)
+        const hora = formatHora(row.original.created_at)
         return (
           <div style={{ fontSize: '12px', lineHeight: '1.3' }}>
             <div>{fecha}</div>
@@ -682,7 +674,7 @@ export default function TelepaseHistoricoModule() {
         />
       ),
       cell: ({ row }) => (
-        <span className="patente-badge">{row.original.patente || '-'}</span>
+        <PatenteBadge patente={row.original.patente} />
       )
     },
     {
@@ -760,69 +752,48 @@ export default function TelepaseHistoricoModule() {
       size: 180,
       header: 'Acciones',
       cell: ({ row }) => {
-        // Mismo look & feel que MultasModule: icono arriba + label de texto abajo
-        const btnBase = (color: string): React.CSSProperties => ({
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '2px',
-          color,
-        })
-        const labelStyle: React.CSSProperties = { fontSize: '9px', fontWeight: 600, lineHeight: 1 }
+        const sinConductor = !row.original.conductor || !row.original.conductor.trim()
+        const yaEnviado = telepaseEnviados.has(row.original.id)
+        const deshabilitado = sinConductor || yaEnviado
+        const titulo = yaEnviado
+          ? 'Este peaje ya fue enviado a facturación'
+          : (sinConductor ? 'No se puede enviar a cobro: el peaje no tiene conductor asignado' : 'Enviar a cobro')
+        // Orden: Ver · Editar · (otras) · Eliminar — iconos con tooltip (mismo patrón que MultasModule)
         return (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button title="Ver detalle" onClick={() => handleVerDetalle(row.original)} style={btnBase('var(--text-secondary)')}>
-              <Eye size={14} />
-              <span style={labelStyle}>Ver</span>
-            </button>
-            <button title="Editar" onClick={() => handleEditar(row.original)} style={btnBase('#2563eb')}>
-              <Edit2 size={14} />
-              <span style={labelStyle}>Editar</span>
-            </button>
-            {(() => {
-              const sinConductor = !row.original.conductor || !row.original.conductor.trim()
-              const yaEnviado = telepaseEnviados.has(row.original.id)
-              const deshabilitado = sinConductor || yaEnviado
-              const titulo = yaEnviado
-                ? 'Este peaje ya fue enviado a facturación'
-                : (sinConductor ? 'No se puede enviar a cobro: el peaje no tiene conductor asignado' : 'Enviar a cobro')
-              return (
-                <button
-                  title={titulo}
-                  onClick={() => !deshabilitado && handleEnviarACobro(row.original)}
-                  disabled={deshabilitado}
-                  style={{
-                    ...btnBase('#16a34a'),
-                    opacity: deshabilitado ? 0.4 : 1,
-                    cursor: deshabilitado ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  <SendHorizonal size={14} />
-                  <span style={labelStyle}>Enviar</span>
-                </button>
-              )
-            })()}
-            <button title="Desestimar (ocultar sin borrar de la base)" onClick={() => handleDesestimar(row.original)} style={btnBase('#f59e0b')}>
-              <Archive size={14} />
-              <span style={labelStyle}>Desestimar</span>
-            </button>
-            {canReactivar && (row.original as any).desestimada_at && (
-              <button title="Reactivar" onClick={() => handleReactivar(row.original)} style={btnBase('#7c3aed')}>
-                <RotateCcw size={14} />
-                <span style={labelStyle}>Reactivar</span>
-              </button>
-            )}
-            {canBorrar && (
-              <button title="Eliminar definitivo" onClick={() => handleEliminar(row.original)} style={btnBase('#dc2626')}>
-                <Trash2 size={14} />
-                <span style={labelStyle}>Borrar</span>
-              </button>
-            )}
-          </div>
+          <ActionsMenu
+            maxVisible={5}
+            actions={[
+              { icon: <Eye size={15} />, label: 'Ver detalle', onClick: () => handleVerDetalle(row.original) },
+              { icon: <Edit2 size={15} />, label: 'Editar', onClick: () => handleEditar(row.original), variant: 'info' },
+              {
+                icon: <SendHorizonal size={15} />,
+                label: titulo,
+                onClick: () => { if (!deshabilitado) handleEnviarACobro(row.original) },
+                disabled: deshabilitado,
+                variant: 'success',
+              },
+              {
+                icon: <Archive size={15} />,
+                label: 'Desestimar (ocultar sin borrar de la base)',
+                onClick: () => handleDesestimar(row.original),
+                variant: 'warning',
+              },
+              {
+                icon: <RotateCcw size={15} />,
+                label: 'Reactivar',
+                onClick: () => handleReactivar(row.original),
+                hidden: !(canReactivar && (row.original as any).desestimada_at),
+                variant: 'info',
+              },
+              {
+                icon: <Trash2 size={15} />,
+                label: 'Eliminar definitivo',
+                onClick: () => handleEliminar(row.original),
+                hidden: !canBorrar,
+                variant: 'danger',
+              },
+            ]}
+          />
         )
       }
     }
@@ -898,6 +869,9 @@ export default function TelepaseHistoricoModule() {
         </div>
       </div>
 
+      {/* Pestañas de vista: Activas / Enviadas a facturación / Desestimadas */}
+      <TabsBar tabs={vistaOptions} active={vista} onChange={setVista} />
+
       {/* DataTable */}
       <DataTable
         data={registrosFiltrados}
@@ -908,50 +882,6 @@ export default function TelepaseHistoricoModule() {
         onFilteredDataChange={setRegistrosVisibles}
         headerAction={
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-            {/* Tabs de vista: Activas / Enviadas a facturación / Desestimadas */}
-            <div style={{
-              display: 'inline-flex',
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-sm)',
-              overflow: 'hidden',
-            }}>
-              {vistaOptions.map((option, index) => {
-                const isActive = vista === option.id
-                return (
-                  <button
-                    key={option.id}
-                    onClick={() => setVista(option.id)}
-                    style={{
-                      border: 'none',
-                      background: isActive ? 'var(--text-primary)' : 'var(--bg-primary)',
-                      color: isActive ? '#fff' : 'var(--text-secondary)',
-                      padding: '6px 12px',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      borderRight: index < vistaOptions.length - 1 ? '1px solid var(--border-primary)' : 'none',
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {option.label}
-                    <span style={{
-                      background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
-                      color: isActive ? '#fff' : 'var(--text-tertiary)',
-                      padding: '1px 6px',
-                      borderRadius: 'var(--radius-lg)',
-                      fontSize: 10,
-                      fontWeight: 600,
-                    }}>
-                      {option.count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
             <button className="btn-secondary" onClick={handleExportar}>
               <Download size={16} />
               Exportar
@@ -996,7 +926,7 @@ export default function TelepaseHistoricoModule() {
                   <tr>
                     <td className="multas-detail-label">Patente</td>
                     <td className="multas-detail-value">
-                      <span className="patente-badge">{selectedRegistro.patente || '-'}</span>
+                      <PatenteBadge patente={selectedRegistro.patente} />
                     </td>
                   </tr>
                   <tr>
@@ -1072,7 +1002,7 @@ export default function TelepaseHistoricoModule() {
               {/* Info no editable */}
               <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
-                  <div><strong>Patente:</strong> <span className="patente-badge" style={{ marginLeft: '4px' }}>{editingRegistro.patente}</span></div>
+                  <div><strong>Patente:</strong> <PatenteBadge patente={editingRegistro.patente} style={{ marginLeft: '4px' }} /></div>
                   <div><strong>Fecha:</strong> {editingRegistro.fecha} {editingRegistro.hora}</div>
                   <div><strong>Tarifa:</strong> <span style={{ color: '#F59E0B', fontWeight: 600 }}>{formatMoney(editingRegistro.tarifa)}</span></div>
                   <div><strong>Concesionario:</strong> {editingRegistro.concesionario}</div>

@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, CSSProperties } from 'react';
 import {
   ChevronDown, ChevronRight, Clock, Shield, Globe,
   Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff, Receipt, Landmark, Phone,
-  AlertCircle, RefreshCw, Zap, ZapOff, Activity,
+  AlertCircle,
   Bot, Key, Plus, Trash2, Copy, Check, Power,
-  Edit2, CalendarClock, Loader2,
+  CalendarClock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { formatFecha, formatFechaHora } from '../../utils/format';
 import { Spinner } from '../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../components/ui/EstadosVista'
+import { TabsBar } from '../../components/ui/TabsBar'
 
 // =============================================
 // Tipos
@@ -103,7 +105,7 @@ const INTEGRATIONS: IntegrationSystem[] = [
     color: 'var(--color-purple)',
     badgeColor: 'purple',
     authType: 'OAuth2 (usuario + contraseña)',
-    authDescription: 'El script del servidor inicia sesión con el usuario de la cuenta en cada corrida y obtiene un token temporal. La web pide su token a /api/cabify/token (las claves nunca llegan al navegador).',
+    authDescription: 'El script del servidor inicia sesión con el usuario de la cuenta en cada ejecución y obtiene un token temporal. La web pide su token a /api/cabify/token (las claves nunca llegan al navegador).',
     baseUrl: 'https://partners.cabify.com/api/graphql',
     environment: 'both',
     status: 'active',
@@ -117,12 +119,12 @@ const INTEGRATIONS: IntegrationSystem[] = [
     notes: [
       'Un solo script recorre todas las cuentas activas de Parámetros › Grupos de flota › Cuentas de Cabify',
       'Los datos se guardan en cabify_historico con la columna cuenta_cabify = CG',
-      'Las edge functions viejas de Cabify (pestaña Monitor) están desactivadas: ya no se usan',
+      'Las edge functions viejas de Cabify (lista de Procesos automáticos) están desactivadas: ya no se usan',
     ],
     tokenInfo: {
       type: 'OAuth2 Access Token (temporal)',
       location: '.env (web) + env.sh (scripts del servidor)',
-      rotation: 'Automática — se pide uno nuevo en cada corrida',
+      rotation: 'Automática — se pide uno nuevo en cada ejecución',
     },
     credentialKeys: {
       systemKey: 'cabify_ba',
@@ -161,7 +163,7 @@ const INTEGRATIONS: IntegrationSystem[] = [
     tokenInfo: {
       type: 'OAuth2 Access Token (temporal)',
       location: 'env.sh de los scripts del servidor',
-      rotation: 'Automática — se pide uno nuevo en cada corrida',
+      rotation: 'Automática — se pide uno nuevo en cada ejecución',
     },
     credentialKeys: {
       systemKey: 'cabify_44',
@@ -539,7 +541,7 @@ interface CuentaCabifyInfo {
 
 type EstadoJob = 'funcionando' | 'atrasado' | 'error' | 'desactivado' | 'manual' | 'sin_registro';
 
-/** Minutos entre corridas segun el cron (aprox.): sirve para saber si un job esta al dia. */
+/** Minutos entre ejecuciones segun el cron (aprox.): sirve para saber si un job esta al dia. */
 function intervaloMinutos(schedule: string): number | null {
   const p = schedule.trim().split(/\s+/);
   if (p.length !== 5) return null;
@@ -554,22 +556,23 @@ function intervaloMinutos(schedule: string): number | null {
 function estadoJob(job: CronJobRecord): EstadoJob {
   const meta = (job.metadata || {}) as Record<string, unknown>;
   if (meta.desactivado) return 'desactivado';
+  if (!job.activo && job.tipo !== 'email') return 'desactivado';
   if (job.schedule === 'manual') return 'manual';
   if (job.ultimo_estado === 'error') return 'error';
   if (!job.ultima_ejecucion) return 'sin_registro';
   const iv = intervaloMinutos(job.schedule);
   const minutos = (Date.now() - new Date(job.ultima_ejecucion).getTime()) / 60000;
-  if (iv && minutos > iv * 3 + 20) return 'atrasado';
+  if (iv && !meta.a_pedido && minutos > iv * 3 + 20) return 'atrasado';
   return 'funcionando';
 }
 
 const ESTADO_JOB: Record<EstadoJob, { label: string; color: string; bg: string; ayuda: string }> = {
-  funcionando: { label: 'Funcionando', color: '#047857', bg: 'rgba(16,185,129,0.12)', ayuda: 'La última corrida terminó bien y está al día' },
-  atrasado: { label: 'Atrasado', color: '#b45309', bg: 'rgba(245,158,11,0.14)', ayuda: 'Hace más de lo esperado que no termina una corrida' },
-  error: { label: 'Con error', color: '#dc2626', bg: 'rgba(239,68,68,0.12)', ayuda: 'La última corrida falló' },
-  desactivado: { label: 'Desactivado', color: '#6b7280', bg: 'var(--bg-tertiary)', ayuda: 'Apagado a propósito: no corre en el servidor' },
+  funcionando: { label: 'Funcionando', color: '#047857', bg: 'rgba(16,185,129,0.12)', ayuda: 'La última ejecución terminó bien y está al día' },
+  atrasado: { label: 'Atrasado', color: '#b45309', bg: 'rgba(245,158,11,0.14)', ayuda: 'Hace más de lo esperado que no termina una ejecución' },
+  error: { label: 'Con error', color: '#dc2626', bg: 'rgba(239,68,68,0.12)', ayuda: 'La última ejecución falló' },
+  desactivado: { label: 'Desactivado', color: '#6b7280', bg: 'var(--bg-tertiary)', ayuda: 'No está programado: no corre' },
   manual: { label: 'Manual', color: '#6b7280', bg: 'var(--bg-tertiary)', ayuda: 'No tiene horario: se corre a mano cuando hace falta' },
-  sin_registro: { label: 'Sin registro aún', color: '#6b7280', bg: 'var(--bg-tertiary)', ayuda: 'Todavía no terminó ninguna corrida registrada' },
+  sin_registro: { label: 'Sin registro aún', color: '#6b7280', bg: 'var(--bg-tertiary)', ayuda: 'Todavía no terminó ninguna ejecución registrada' },
 };
 
 function haceCuanto(fecha: string | null): string {
@@ -579,7 +582,7 @@ function haceCuanto(fecha: string | null): string {
   if (min < 60) return `hace ${min} min`;
   const h = Math.round(min / 60);
   if (h < 48) return `hace ${h} h`;
-  return new Date(fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  return formatFecha(fecha);
 }
 
 function ordenarJobs(jobs: CronJobRecord[]): CronJobRecord[] {
@@ -636,7 +639,7 @@ function ScriptsServidor({ jobs }: { jobs: CronJobRecord[] }) {
                     )}
                     {job.comando && (
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', marginTop: '3px', wordBreak: 'break-all' }}>
-                        {job.tipo === 'script' ? `/opt/toshify-sync/${job.comando}` : job.comando.slice(0, 90)}
+                        {rutaJob(job)}
                       </div>
                     )}
                   </div>
@@ -646,7 +649,7 @@ function ScriptsServidor({ jobs }: { jobs: CronJobRecord[] }) {
                       <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{job.schedule === 'manual' ? 'A mano' : describeCron(job.schedule)}</div>
                     </div>
                     <div style={{ textAlign: 'right', minWidth: '92px' }}>
-                      <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Última corrida</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Última ejecución</div>
                       <div style={{ fontSize: '12px', fontWeight: 600, color: job.ultimo_estado === 'error' ? '#dc2626' : 'var(--text-primary)' }}>{haceCuanto(job.ultima_ejecucion)}</div>
                     </div>
                   </div>
@@ -1075,346 +1078,6 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError, job
 }
 
 // =============================================
-// Edge Functions Monitor
-// =============================================
-
-interface EdgeFunction {
-  id: string;
-  function_name: string;
-  label: string;
-  description: string;
-  category: string;
-  is_active: boolean;
-  health_status: string;
-  response_time_ms: number | null;
-  health_error: string | null;
-  checked_at: string;
-  last_health_check: string | null;
-  last_health_status: string | null;
-}
-
-const CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
-  sistema: { label: 'Sistema', color: 'blue' },
-  cabify: { label: 'Cabify', color: 'purple' },
-  wialon: { label: 'Wialon', color: 'yellow' },
-  google: { label: 'Google', color: 'green' },
-};
-
-function HealthBadge({ status, responseTime }: { status: string; responseTime: number | null }) {
-  const config: Record<string, { bg: string; text: string; label: string }> = {
-    online: { bg: 'var(--badge-green-bg)', text: 'var(--badge-green-text)', label: 'Online' },
-    error: { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)', label: 'Error' },
-    timeout: { bg: 'var(--badge-yellow-bg)', text: 'var(--badge-yellow-text)', label: 'Timeout' },
-    offline: { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)', label: 'Offline' },
-    unknown: { bg: 'var(--badge-gray-bg)', text: 'var(--badge-gray-text)', label: 'Sin datos' },
-    checking: { bg: 'var(--badge-blue-bg)', text: 'var(--badge-blue-text)', label: 'Verificando...' },
-  };
-  const c = config[status] || config.unknown;
-  return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '3px 10px',
-      borderRadius: 'var(--radius-lg)',
-      fontSize: '11px',
-      fontWeight: 600,
-      background: c.bg,
-      color: c.text,
-    }}>
-      <span style={{
-        width: '6px',
-        height: '6px',
-        borderRadius: '50%',
-        background: status === 'online' ? 'var(--color-success)' : status === 'checking' ? 'var(--color-info)' : status === 'timeout' ? 'var(--color-warning)' : status === 'error' || status === 'offline' ? 'var(--color-danger)' : 'var(--text-tertiary)',
-      }} />
-      {c.label}
-      {responseTime !== null && status !== 'checking' && (
-        <span style={{ fontWeight: 400, opacity: 0.8 }}>({responseTime}ms)</span>
-      )}
-    </span>
-  );
-}
-
-function EdgeFunctionsMonitor() {
-  const [functions, setFunctions] = useState<EdgeFunction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-
-  // Primero la lista con el último estado guardado (inmediato) y después el chequeo
-  // real en segundo plano: así la pestaña no queda en "Cargando..." hasta que
-  // responde la función más lenta.
-  const fetchHealth = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError('Sin sesion activa');
-        return;
-      }
-      const headers = { 'Authorization': `Bearer ${session.access_token}` };
-
-      const lista = await fetch('/api/admin/function-health?ping=0', { headers });
-      if (!lista.ok) {
-        const err = await lista.json().catch(() => ({ error: 'No responde el servidor de la API. En local, reiniciá npm run dev' }));
-        setError(err.error || `Error ${lista.status}`);
-        return;
-      }
-      const dataLista = await lista.json();
-      if (dataLista.success) setFunctions(dataLista.functions);
-
-      const res = await fetch('/api/admin/function-health', { headers });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: `Error ${res.status}` }));
-        setError(err.error || `Error ${res.status}`);
-        return;
-      }
-      const data = await res.json();
-      if (data.success) {
-        setFunctions(data.functions);
-      }
-    } catch {
-      setError('Error de conexion');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const toggleFunction = async (fn: EdgeFunction) => {
-    setTogglingId(fn.id);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
-      const res = await fetch('/api/admin/toggle-function', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ functionId: fn.id, isActive: !fn.is_active }),
-      });
-
-      if (res.ok) {
-        setFunctions(prev => prev.map(f =>
-          f.id === fn.id ? { ...f, is_active: !f.is_active } : f
-        ));
-      }
-    } catch {
-      // silently fail
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
-  useEffect(() => {
-    fetchHealth();
-  }, [fetchHealth]);
-
-  // Group by category
-  const grouped = functions.reduce<Record<string, EdgeFunction[]>>((acc, fn) => {
-    if (!acc[fn.category]) acc[fn.category] = [];
-    acc[fn.category].push(fn);
-    return acc;
-  }, {});
-
-  const onlineCount = functions.filter(f => f.health_status === 'online').length;
-  const totalCount = functions.length;
-
-  return (
-    <div style={{
-      background: 'var(--card-bg)',
-      border: '1px solid var(--border-primary)',
-      borderRadius: 'var(--radius-lg)',
-      marginBottom: '20px',
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 20px',
-        borderBottom: '1px solid var(--border-primary)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Activity size={20} style={{ color: 'var(--color-primary)' }} />
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Edge Functions Monitor
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              {totalCount > 0 ? `${onlineCount}/${totalCount} online` : 'Cargando...'}
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={fetchHealth}
-          disabled={loading}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '8px 14px',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-primary)',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '12px',
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1,
-          }}
-        >
-          <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : undefined} />
-          {loading ? 'Verificando...' : 'Verificar'}
-        </button>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div style={{
-          padding: '12px 20px',
-          fontSize: '13px',
-          color: 'var(--color-danger)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-        }}>
-          <AlertCircle size={14} />
-          {error}
-        </div>
-      )}
-
-      {/* Function list grouped by category */}
-      <div style={{ padding: '0' }}>
-        {Object.entries(grouped).map(([category, fns]) => {
-          const catInfo = CATEGORY_LABELS[category] || { label: category, color: 'gray' };
-          return (
-            <div key={category}>
-              {/* Category header */}
-              <div style={{
-                padding: '10px 20px',
-                background: 'var(--bg-secondary)',
-                borderBottom: '1px solid var(--border-primary)',
-                borderTop: '1px solid var(--border-primary)',
-              }}>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  color: `var(--badge-${catInfo.color}-text)`,
-                }}>
-                  {catInfo.label}
-                </span>
-                {category === 'cabify' && (
-                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: '10px' }}>
-                    Funciones viejas, apagadas. Cabify ahora se sincroniza con los scripts del servidor: ver pestaña Integraciones › Cabify.
-                  </span>
-                )}
-              </div>
-
-              {/* Functions in category */}
-              {fns.map((fn, i) => (
-                <div key={fn.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 20px',
-                  borderBottom: i < fns.length - 1 ? '1px solid var(--border-secondary)' : 'none',
-                }}>
-                  {/* Toggle */}
-                  <button
-                    onClick={() => toggleFunction(fn)}
-                    disabled={togglingId === fn.id}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: togglingId === fn.id ? 'wait' : 'pointer',
-                      padding: '4px',
-                      flexShrink: 0,
-                      color: fn.is_active ? 'var(--color-success)' : 'var(--text-tertiary)',
-                      opacity: togglingId === fn.id ? 0.5 : 1,
-                    }}
-                    title={fn.is_active ? 'Desactivar' : 'Activar'}
-                  >
-                    {fn.is_active ? <Zap size={16} /> : <ZapOff size={16} />}
-                  </button>
-
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <code style={{
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        color: fn.is_active ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                      }}>
-                        {fn.function_name}
-                      </code>
-                      {!fn.is_active && (
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          padding: '1px 6px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--badge-gray-bg)',
-                          color: 'var(--badge-gray-text)',
-                          textTransform: 'uppercase',
-                        }}>
-                          Desactivado
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
-                      {fn.description}
-                    </div>
-                  </div>
-
-                  {/* Health status */}
-                  <div style={{ flexShrink: 0 }}>
-                    {fn.is_active ? (
-                      <HealthBadge
-                        status={loading ? 'checking' : (fn.health_status || 'unknown')}
-                        responseTime={fn.response_time_ms}
-                      />
-                    ) : (
-                      <span title="Está publicada pero apagada: nada la ejecuta" style={{ display: 'inline-flex', padding: '3px 10px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600, background: 'var(--badge-gray-bg)', color: 'var(--badge-gray-text)' }}>
-                        No se usa
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Error tooltip */}
-                  {fn.is_active && fn.health_error && (
-                    <div style={{
-                      flexShrink: 0,
-                      color: 'var(--color-danger)',
-                    }} title={fn.health_error}>
-                      <AlertCircle size={14} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          );
-        })}
-
-        {/* Empty state */}
-        {functions.length === 0 && !loading && !error && (
-          <EmptyState size="sm" title="No se encontraron Edge Functions configuradas" />
-        )}
-      </div>
-
-      {/* Spin keyframe for RefreshCw */}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-}
-
-// =============================================
 // Componente Principal
 // =============================================
 
@@ -1671,10 +1334,7 @@ function McpTab() {
 
   const formatDate = (date: string | null) => {
     if (!date) return 'Nunca';
-    return new Date(date).toLocaleString('es-AR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
+    return formatFechaHora(date);
   };
 
   return (
@@ -1980,7 +1640,7 @@ function McpTab() {
 }
 
 // =============================================
-// Cron Jobs Tab
+// Registro de procesos (tabla cron_jobs)
 // =============================================
 
 interface CronJobRecord {
@@ -2001,185 +1661,273 @@ interface CronJobRecord {
 }
 
 function describeCron(cron: string): string {
-  const parts = cron.split(' ');
+  const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) return cron;
   const [min, hour, , , dow] = parts;
-  const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const days = ['domingos', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados'];
+  const hhmm = (h: string, m: string) => `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+  if (min === '*' && hour === '*') return 'Cada minuto';
   // "*/10" o "5-59/10" (cada N minutos con desfase)
   const cadaN = min.match(/^(?:\*|\d+-\d+)\/(\d+)$/);
   if (cadaN && hour === '*') return `Cada ${cadaN[1]} min`;
-  if (hour === '*' && /^\d+$/.test(min)) return min === '0' ? 'Cada hora' : `Cada hora (min ${min})`;
-  if (dow !== '*') {
-    const dayName = days[parseInt(dow)] || dow;
-    return `${dayName} ${hour}:${min.padStart(2, '0')} hs`;
+  if (hour === '*' && /^\d+$/.test(min)) return min === '0' ? 'Cada hora' : `Cada hora (al minuto ${min})`;
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour)) {
+    if (dow !== '*') {
+      const nombres = dow.split(',').map(d => days[parseInt(d)] || d).join(', ');
+      return `Los ${nombres} ${hhmm(hour, min)}`;
+    }
+    return `Todos los días ${hhmm(hour, min)}`;
   }
-  return `Diario ${hour}:${min.padStart(2, '0')} hs`;
+  return cron;
 }
 
-const TIPO_LABELS: Record<string, { label: string; color: string }> = {
-  script: { label: 'Script', color: '#3b82f6' },
-  edge_function: { label: 'Edge Fn', color: '#8b5cf6' },
-  email: { label: 'Email', color: '#10b981' },
-  pg_cron: { label: 'Base de datos', color: '#f59e0b' },
-};
-
 const INTEG_LABELS: Record<string, string> = {
-  geotab: 'Geotab', wialon: 'Wialon', uss: 'USS', cabify_ba: 'Cabify BA', cabify_bari: 'Cabify Bari', sistema: 'Sistema',
+  geotab: 'Geotab', wialon: 'Wialon', uss: 'USS', cabify_ba: 'Cabify', cabify_bari: 'Cabify Bariloche', sistema: 'Sistema',
 };
 
-function CronJobsTab() {
-  const [jobs, setJobs] = useState<CronJobRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sinRefresco, setSinRefresco] = useState(false);
 
-  const cargarJobs = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Pone la tabla al día con lo que realmente corrió (logs de sync + pg_cron)
-      const { error: errRef } = await supabase.rpc('refrescar_cron_jobs' as any);
-      setSinRefresco(!!errRef);
-      const { data, error } = await supabase.from('cron_jobs').select('*').order('integracion').order('nombre');
-      if (error) throw error;
-      setJobs((data || []) as CronJobRecord[]);
-    } catch { setJobs([]); }
-    finally { setLoading(false); }
+// =============================================
+// Procesos automáticos (todo lo que corre solo: servidor, base de datos y funciones)
+// =============================================
+
+interface FuncionSupabase {
+  id: string;
+  function_name: string;
+  label: string;
+  description: string;
+  category: string;
+  is_active: boolean;
+}
+
+type DondeCorre = 'servidor' | 'base' | 'funcion';
+
+interface FilaProceso {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  integracion: string;
+  donde: DondeCorre;
+  ruta: string | null;
+  frecuencia: string;
+  ultima: string | null;
+  estado: EstadoJob;
+  error: string | null;
+  job?: CronJobRecord;
+  funcion?: FuncionSupabase;
+}
+
+const DONDE: Record<DondeCorre, string> = {
+  servidor: 'Servidor',
+  base: 'Base de datos',
+  funcion: 'Supabase (función)',
+};
+
+const FILTROS_PROCESO: { id: 'todos' | 'funcionando' | 'problema' | 'desactivado'; label: string }[] = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'funcionando', label: 'Funcionando' },
+  { id: 'problema', label: 'Con problema' },
+  { id: 'desactivado', label: 'Desactivados' },
+];
+
+function rutaJob(job: CronJobRecord): string | null {
+  const meta = (job.metadata || {}) as Record<string, unknown>;
+  if (typeof meta.ruta === 'string' && meta.ruta) return meta.ruta;
+  if (!job.comando) return null;
+  if (job.tipo === 'pg_cron') return job.comando.slice(0, 90);
+  return job.comando.startsWith('/') ? job.comando : `/opt/toshify-sync/${job.comando}`;
+}
+
+function filaDeJob(job: CronJobRecord): FilaProceso {
+  return {
+    id: job.id,
+    nombre: job.nombre,
+    descripcion: job.descripcion,
+    integracion: INTEG_LABELS[job.integracion || ''] || job.integracion || 'Sistema',
+    donde: job.tipo === 'pg_cron' ? 'base' : 'servidor',
+    ruta: rutaJob(job),
+    frecuencia: job.schedule === 'manual' ? 'A mano' : describeCron(job.schedule),
+    ultima: job.ultima_ejecucion,
+    estado: estadoJob(job),
+    error: job.ultimo_estado === 'error' ? job.ultimo_error : null,
+    job,
+  };
+}
+
+function filaDeFuncion(fn: FuncionSupabase): FilaProceso {
+  return {
+    id: `fn-${fn.id}`,
+    nombre: fn.label || fn.function_name,
+    descripcion: fn.description || null,
+    integracion: CATEGORIA_FUNCION[fn.category] || fn.category || 'Sistema',
+    donde: 'funcion',
+    ruta: fn.function_name,
+    frecuencia: 'Cuando la web la llama',
+    ultima: null,
+    estado: fn.is_active ? 'funcionando' : 'desactivado',
+    error: null,
+    funcion: fn,
+  };
+}
+
+const CATEGORIA_FUNCION: Record<string, string> = { sistema: 'Sistema', cabify: 'Cabify', wialon: 'Wialon', google: 'Google' };
+
+function ProcesosAutomaticos({ jobs, cargando }: { jobs: CronJobRecord[]; cargando: boolean }) {
+  const [funciones, setFunciones] = useState<FuncionSupabase[]>([]);
+  const [filtro, setFiltro] = useState<'todos' | 'funcionando' | 'problema' | 'desactivado'>('todos');
+  const [busqueda, setBusqueda] = useState('');
+  const [cambiando, setCambiando] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch('/api/admin/function-health?ping=0', { headers: { Authorization: `Bearer ${session.access_token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelado && data.success) setFunciones(data.functions || []);
+      } catch { /* sin la API local no se listan las funciones */ }
+    })();
+    return () => { cancelado = true; };
   }, []);
 
-  useEffect(() => { cargarJobs(); }, [cargarJobs]);
-
-  const editarJob = async (job: Partial<CronJobRecord> & { id: string }) => {
-    const { default: Alerta } = await import('../../components/ui/alertas');
-    const isNew = !job.id;
-    const { value } = await Alerta.fire({
-      title: isNew ? 'Nuevo Cron Job' : 'Editar Cron Job',
-      html: `
-        <div style="text-align:left;display:flex;flex-direction:column;gap:10px;">
-          <div><label style="font-size:12px;font-weight:600;color:#666;">Nombre</label>
-          <input id="swal-nombre" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.nombre || ''}" placeholder="Nombre del job"></div>
-          <div><label style="font-size:12px;font-weight:600;color:#666;">Descripción</label>
-          <input id="swal-desc" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.descripcion || ''}" placeholder="Descripción"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div><label style="font-size:12px;font-weight:600;color:#666;">Schedule (cron)</label>
-            <input id="swal-schedule" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.schedule || ''}" placeholder="*/5 * * * *"></div>
-            <div><label style="font-size:12px;font-weight:600;color:#666;">Tipo</label>
-            <select id="swal-tipo" class="swal2-select" style="margin:4px 0;font-size:13px;padding:8px;">
-              <option value="script" ${job.tipo === 'script' ? 'selected' : ''}>Script</option>
-              <option value="edge_function" ${job.tipo === 'edge_function' ? 'selected' : ''}>Edge Function</option>
-              <option value="email" ${job.tipo === 'email' ? 'selected' : ''}>Email</option>
-            </select></div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div><label style="font-size:12px;font-weight:600;color:#666;">Comando/Script</label>
-            <input id="swal-comando" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.comando || ''}" placeholder="run-script.sh"></div>
-            <div><label style="font-size:12px;font-weight:600;color:#666;">Integración</label>
-            <select id="swal-integ" class="swal2-select" style="margin:4px 0;font-size:13px;padding:8px;">
-              <option value="">Sin integración</option>
-              <option value="wialon" ${job.integracion === 'wialon' ? 'selected' : ''}>Wialon</option>
-              <option value="uss" ${job.integracion === 'uss' ? 'selected' : ''}>USS</option>
-              <option value="cabify_ba" ${job.integracion === 'cabify_ba' ? 'selected' : ''}>Cabify BA</option>
-              <option value="cabify_bari" ${job.integracion === 'cabify_bari' ? 'selected' : ''}>Cabify Bariloche</option>
-              <option value="sistema" ${job.integracion === 'sistema' ? 'selected' : ''}>Sistema</option>
-            </select></div>
-          </div>
-        </div>
-      `,
-      showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: '#ef4444',
-      preConfirm: () => ({
-        nombre: (document.getElementById('swal-nombre') as HTMLInputElement).value,
-        descripcion: (document.getElementById('swal-desc') as HTMLInputElement).value || null,
-        schedule: (document.getElementById('swal-schedule') as HTMLInputElement).value,
-        tipo: (document.getElementById('swal-tipo') as HTMLSelectElement).value,
-        comando: (document.getElementById('swal-comando') as HTMLInputElement).value || null,
-        integracion: (document.getElementById('swal-integ') as HTMLSelectElement).value || null,
-      }),
-    });
-    if (!value || !value.nombre || !value.schedule) return;
+  const cambiarFuncion = async (fn: FuncionSupabase) => {
+    setCambiando(fn.id);
     try {
-      if (job.id) {
-        const { error } = await supabase.from('cron_jobs').update({ ...value, updated_at: new Date().toISOString() }).eq('id', job.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('cron_jobs').insert({ ...value, activo: true });
-        if (error) throw error;
-      }
-      cargarJobs();
-    } catch {
-      const { default: S } = await import('../../components/ui/alertas');
-      S.fire('Error', 'No se pudo guardar', 'error');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const res = await fetch('/api/admin/toggle-function', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ functionId: fn.id, isActive: !fn.is_active }),
+      });
+      if (res.ok) setFunciones(prev => prev.map(f => f.id === fn.id ? { ...f, is_active: !f.is_active } : f));
+    } finally {
+      setCambiando(null);
     }
   };
 
-  const eliminarJob = async (job: CronJobRecord) => {
-    const { default: Alerta } = await import('../../components/ui/alertas');
-    const r = await Alerta.fire({ title: '¿Eliminar cron job?', text: job.nombre, icon: 'warning', showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#ef4444' });
-    if (!r.isConfirmed) return;
-    await supabase.from('cron_jobs').delete().eq('id', job.id);
-    cargarJobs();
-  };
+  const filas = [...jobs.map(filaDeJob), ...funciones.map(filaDeFuncion)];
+  const peso: Record<EstadoJob, number> = { error: 0, atrasado: 1, funcionando: 2, sin_registro: 3, manual: 4, desactivado: 5 };
+  const q = busqueda.trim().toLowerCase();
+  const visibles = filas
+    .filter(f => {
+      if (filtro === 'funcionando') return f.estado === 'funcionando';
+      if (filtro === 'problema') return f.estado === 'error' || f.estado === 'atrasado';
+      if (filtro === 'desactivado') return f.estado === 'desactivado';
+      return true;
+    })
+    .filter(f => !q || `${f.nombre} ${f.descripcion || ''} ${f.integracion} ${f.ruta || ''}`.toLowerCase().includes(q))
+    .sort((a, b) => peso[a.estado] - peso[b.estado] || a.integracion.localeCompare(b.integracion) || a.nombre.localeCompare(b.nombre));
 
-  if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px', gap: '8px', color: 'var(--text-secondary)' }}><Loader2 size={20} className="spinning" /> Cargando...</div>;
-  }
+  const cuenta = (id: typeof filtro) => id === 'todos' ? filas.length
+    : id === 'problema' ? filas.filter(f => f.estado === 'error' || f.estado === 'atrasado').length
+    : filas.filter(f => f.estado === id).length;
+
+  const th: CSSProperties = { position: 'sticky', top: 0, zIndex: 1, background: 'var(--card-bg)', textAlign: 'left', padding: '10px 12px', fontSize: '11px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.3px', borderBottom: '1px solid var(--border-primary)', whiteSpace: 'nowrap' };
+  const td: CSSProperties = { padding: '10px 12px', fontSize: '12px', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-primary)', verticalAlign: 'top' };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-          {jobs.length} jobs · {jobs.filter(j => j.activo && (j.tipo === 'script' || j.tipo === 'pg_cron')).length} corriendo
-          <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}> · estado real según la última corrida registrada</span>
-          {sinRefresco ? <div style={{ fontSize: '11px', color: '#b45309', marginTop: '2px' }}>Falta ejecutar sql/cron_jobs_reales.sql en Supabase: hasta entonces esto es el registro manual.</div> : null}
+    <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-lg)', marginBottom: '20px', overflow: 'hidden' }}>
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 260px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CalendarClock size={18} /> Procesos automáticos
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            Todo lo que corre solo: qué hace, dónde corre, cada cuánto y cómo le fue. El estado del servidor se actualiza cada 5 minutos.
+          </div>
         </div>
-        <button onClick={() => editarJob({ id: '', nombre: '', schedule: '', tipo: 'script' })} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-          <Plus size={14} /> Nuevo Job
-        </button>
+        <input
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          placeholder="Buscar proceso..."
+          style={{ padding: '7px 10px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', fontSize: '13px', background: 'var(--bg-primary)', color: 'var(--text-primary)', minWidth: '200px' }}
+        />
       </div>
-      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-        {jobs.map((job, idx) => {
-          const ti = TIPO_LABELS[job.tipo] || { label: job.tipo, color: '#666' };
-          return (
-            <div key={job.id} style={{ borderTop: idx === 0 ? 'none' : '1px solid var(--border-primary)', padding: '8px 14px', opacity: job.activo || !(job.tipo === 'script' || job.tipo === 'pg_cron') ? 1 : 0.6, transition: 'opacity 0.2s' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: (job.tipo === 'script' || job.tipo === 'pg_cron') ? (job.activo ? '#10b981' : '#9ca3af') : '#d1d5db' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600 }}>{job.nombre}</span>
-                    <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-xs)', background: `${ti.color}15`, color: ti.color }}>{ti.label}</span>
-                    {job.integracion && <span style={{ fontSize: '10px', fontWeight: 500, padding: '1px 6px', borderRadius: 'var(--radius-xs)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{INTEG_LABELS[job.integracion] || job.integracion}</span>}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{job.descripcion || job.comando || '-'}</div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, width: '140px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600 }}>{describeCron(job.schedule)}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{job.schedule}</div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, width: '100px' }}>
-                  {job.ultima_ejecucion ? (
-                    <>
-                      <div style={{ fontSize: '10px', color: job.ultimo_estado === 'error' ? '#ef4444' : '#10b981', fontWeight: 600 }}>{job.ultimo_estado === 'error' ? 'Error' : 'OK'}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{new Date(job.ultima_ejecucion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
-                    </>
-                  ) : <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Sin ejecución</div>}
-                </div>
-                <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                  {(() => {
-                    const medible = job.tipo === 'script' || job.tipo === 'pg_cron';
-                    const txt = !medible ? 'Sin registro' : job.activo ? 'Corriendo' : 'Detenido';
-                    const color = !medible ? 'var(--text-tertiary)' : job.activo ? '#047857' : '#6b7280';
-                    const bg = !medible ? 'var(--bg-secondary)' : job.activo ? 'rgba(16,185,129,0.12)' : 'var(--bg-secondary)';
-                    return <span title={medible ? 'Según la última corrida registrada' : 'Este job no deja registro de sus corridas'} style={{ fontSize: '10px', fontWeight: 600, padding: '3px 8px', borderRadius: 'var(--radius-full)', background: bg, color, alignSelf: 'center', minWidth: '62px', textAlign: 'center' }}>{txt}</span>;
-                  })()}
-                  {job.tipo !== 'pg_cron' && (<>
-                  <button onClick={() => editarJob(job)} title="Editar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit2 size={14} /></button>
-                  <button onClick={() => eliminarJob(job)} title="Eliminar" style={{ padding: '4px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
-                  </>)}
-                </div>
-              </div>
-              {job.ultimo_estado === 'error' && job.ultimo_error && (
-                <div style={{ marginTop: '8px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', fontSize: '11px', color: '#dc2626' }}>{job.ultimo_error}</div>
-              )}
-            </div>
-          );
-        })}
+      <div style={{ display: 'flex', gap: '6px', padding: '10px 20px', borderBottom: '1px solid var(--border-primary)', flexWrap: 'wrap' }}>
+        {FILTROS_PROCESO.map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFiltro(f.id)}
+            style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+              background: filtro === f.id ? 'var(--color-primary)' : 'var(--bg-primary)', color: filtro === f.id ? '#fff' : 'var(--text-secondary)' }}
+          >
+            {f.label} ({cuenta(f.id)})
+          </button>
+        ))}
+      </div>
+      {cargando ? (
+        <div style={{ padding: '30px' }}><Spinner size="sm" message="Cargando procesos..." /></div>
+      ) : visibles.length === 0 ? (
+        <div style={{ padding: '20px' }}><EmptyState size="sm" title="No hay procesos con ese filtro" /></div>
+      ) : (
+        // Scroll propio con la cabecera fija: al bajar se sigue viendo qué es cada columna
+        <div style={{ overflow: 'auto', maxHeight: '70vh' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+            <thead>
+              <tr>
+                <th style={th}>Proceso</th>
+                <th style={th}>Integración</th>
+                <th style={th}>Dónde corre</th>
+                <th style={th}>Frecuencia</th>
+                <th style={th}>Última ejecución</th>
+                <th style={th}>Estado</th>
+                <th style={{ ...th, textAlign: 'center' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibles.map(f => {
+                const cfg = ESTADO_JOB[f.estado];
+                return (
+                  <tr key={f.id} style={{ opacity: f.estado === 'desactivado' ? 0.65 : 1 }}>
+                    <td style={{ ...td, minWidth: '260px' }}>
+                      <div style={{ fontWeight: 600 }}>{f.nombre}</div>
+                      {f.descripcion && <div style={{ color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.4 }}>{f.descripcion}</div>}
+                      {f.error && <div style={{ marginTop: '6px', padding: '4px 8px', borderRadius: 'var(--radius-sm)', background: 'rgba(239,68,68,0.06)', color: '#dc2626', fontSize: '11px' }}>{f.error}</div>}
+                    </td>
+                    <td style={td}>{f.integracion}</td>
+                    <td style={td}>
+                      <div>{DONDE[f.donde]}</div>
+                      {f.ruta && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', maxWidth: '260px' }}>{f.ruta}</div>}
+                    </td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{f.frecuencia}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      {f.donde === 'funcion' ? '—' : f.ultima ? (
+                        <>
+                          <div>{formatFechaHora(f.ultima)}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{haceCuanto(f.ultima)}</div>
+                        </>
+                      ) : 'Nunca'}
+                    </td>
+                    <td style={td}>
+                      <span title={cfg.ayuda} style={{ fontSize: '11px', fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-full)', background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap' }}>
+                        {f.donde === 'funcion' ? (f.estado === 'desactivado' ? 'Desactivada' : 'Activa') : cfg.label}
+                      </span>
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      {f.funcion ? (
+                        <button
+                          onClick={() => cambiarFuncion(f.funcion!)}
+                          disabled={cambiando === f.funcion.id}
+                          title={f.funcion.is_active ? 'Desactivar esta función (la web deja de usarla)' : 'Activar esta función'}
+                          aria-label={f.funcion.is_active ? 'Desactivar función' : 'Activar función'}
+                          style={{ padding: '5px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: f.funcion.is_active ? 'var(--text-secondary)' : 'var(--color-success)' }}
+                        >
+                          <Power size={14} />
+                        </button>
+                      ) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ padding: '10px 20px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+        Los horarios están en hora Argentina. Para prender o apagar un script del servidor hay que cambiar el crontab; esta lista lo refleja sola.
       </div>
     </div>
   );
@@ -2189,14 +1937,12 @@ function CronJobsTab() {
 // Tab types & config
 // =============================================
 
-type TabId = 'integraciones' | 'monitor' | 'credenciales' | 'mcp' | 'cronjobs';
+type TabId = 'integraciones' | 'credenciales' | 'mcp';
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
-  { id: 'integraciones', label: 'Integraciones', icon: Globe },
-  { id: 'monitor', label: 'Monitor', icon: Activity },
+  { id: 'integraciones', label: 'Integraciones y procesos', icon: Globe },
   { id: 'credenciales', label: 'Credenciales', icon: Eye },
   { id: 'mcp', label: 'MCP', icon: Bot },
-  { id: 'cronjobs', label: 'Cron Jobs', icon: CalendarClock },
 ];
 
 // =============================================
@@ -2209,16 +1955,10 @@ export function IntegracionesTokensModule() {
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensError, setTokensError] = useState<string | null>(null);
   const [tokensLoaded, setTokensLoaded] = useState(false);
-  const [cronJobCount, setCronJobCount] = useState<number | null>(null);
 
   const [jobsServidor, setJobsServidor] = useState<CronJobRecord[]>([]);
+  const [cargandoJobs, setCargandoJobs] = useState(true);
   const [cuentasCabify, setCuentasCabify] = useState<CuentaCabifyInfo[]>([]);
-
-  // Load cron job count from DB
-  useEffect(() => {
-    supabase.from('cron_jobs').select('id', { count: 'exact', head: true })
-      .then(({ count }) => { if (count !== null) setCronJobCount(count); });
-  }, []);
 
   // Scripts del servidor y cuentas de Cabify para la pestaña Integraciones (estado real)
   useEffect(() => {
@@ -2227,7 +1967,7 @@ export function IntegracionesTokensModule() {
     (async () => {
       await supabase.rpc('refrescar_cron_jobs' as any);
       const [{ data: jobs }, { data: cuentas }, { data: grupos }, { data: sedes }] = await Promise.all([
-        supabase.from('cron_jobs').select('*').neq('tipo', 'pg_cron').order('nombre'),
+        supabase.from('cron_jobs').select('*').order('nombre'),
         (supabase.from('cabify_cuentas' as any) as any).select('codigo, nombre, activa, tabla_destino, grupo_flota_id, sede_id'),
         (supabase.from('grupos_flota') as any).select('id, razon_social'),
         (supabase.from('sedes') as any).select('id, nombre'),
@@ -2249,6 +1989,7 @@ export function IntegracionesTokensModule() {
       }));
       if (cancelado) return;
       setJobsServidor((jobs || []) as CronJobRecord[]);
+      setCargandoJobs(false);
       setCuentasCabify(conUltimo);
     })();
     return () => { cancelado = true; };
@@ -2297,7 +2038,8 @@ export function IntegracionesTokensModule() {
   }, [activeTab, tokensLoaded, fetchTokens]);
 
   const activeCount = INTEGRATIONS.filter(s => s.status === 'active').length;
-  const cronCount = cronJobCount ?? INTEGRATIONS.reduce((acc, s) => acc + s.cronJobs.length, 0);
+  const procesosActivos = jobsServidor.filter(j => estadoJob(j) !== 'desactivado').length;
+  const procesosConProblema = jobsServidor.filter(j => ['error', 'atrasado'].includes(estadoJob(j))).length;
 
   return (
     <div className="module-container">
@@ -2322,61 +2064,27 @@ export function IntegracionesTokensModule() {
           <div className="stat-card">
             <div className="stat-icon" style={{ color: 'var(--color-warning)' }}><Clock size={18} /></div>
             <div className="stat-content">
-              <span className="stat-value">{cronCount}</span>
-              <span className="stat-label">Cron Jobs</span>
+              <span className="stat-value">{procesosActivos}</span>
+              <span className="stat-label">Procesos programados</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ color: procesosConProblema ? 'var(--color-danger)' : 'var(--color-success)' }}><AlertCircle size={18} /></div>
+            <div className="stat-content">
+              <span className="stat-value">{procesosConProblema}</span>
+              <span className="stat-label">Con problema</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div role="tablist" style={{
-        display: 'flex',
-        gap: '0',
-        borderBottom: '2px solid var(--border-primary)',
-        marginBottom: '20px',
-        // En celular las pestañas no entran: se desplazan de costado en vez de cortarse
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-      }}>
-        {TABS.map(tab => {
-          const isActive = activeTab === tab.id;
-          const TabIcon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                flex: '1 0 auto',
-                whiteSpace: 'nowrap',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                padding: '10px 12px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: isActive ? '2px solid var(--color-primary)' : '2px solid transparent',
-                marginBottom: '-2px',
-                fontSize: '13px',
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? 'var(--color-primary)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <TabIcon size={16} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <TabsBar tabs={TABS} active={activeTab} onChange={setActiveTab} ariaLabel="Secciones de integraciones" />
 
       {/* Tab content */}
       {activeTab === 'integraciones' && (
         <>
+          <ProcesosAutomaticos jobs={jobsServidor} cargando={cargandoJobs} />
           {INTEGRATIONS.map(system => (
             <IntegrationCard
               key={system.id}
@@ -2384,15 +2092,11 @@ export function IntegracionesTokensModule() {
               serverTokens={serverTokens}
               tokensLoading={tokensLoading}
               tokensError={tokensError}
-              jobs={jobsServidor.filter(j => j.integracion && system.jobIntegraciones?.includes(j.integracion))}
+              jobs={jobsServidor.filter(j => j.tipo !== 'pg_cron' && j.integracion && system.jobIntegraciones?.includes(j.integracion))}
               cuenta={cuentasCabify.find(c => c.codigo === system.cuentaCabify)}
             />
           ))}
         </>
-      )}
-
-      {activeTab === 'monitor' && (
-        <EdgeFunctionsMonitor />
       )}
 
       {activeTab === 'credenciales' && (
@@ -2407,9 +2111,6 @@ export function IntegracionesTokensModule() {
         <McpTab />
       )}
 
-      {activeTab === 'cronjobs' && (
-        <CronJobsTab />
-      )}
     </div>
   );
 }

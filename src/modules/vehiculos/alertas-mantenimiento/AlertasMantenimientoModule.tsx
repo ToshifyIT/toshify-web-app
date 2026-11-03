@@ -6,7 +6,8 @@ import { fetchAlertaDetalle } from '../../../services/alertasService'
 import { useAlertasData } from './hooks/useAlertasData'
 import { AlertasTable } from './components/AlertasTable'
 import { AlertaDetalleDrawer } from './components/AlertaDetalleDrawer'
-import type { AlertaMantenimiento } from './types/alertas.types'
+import type { AlertaAgrupada } from './types/alertas.types'
+import { formatNumero } from '../../../utils/format'
 import '../VehicleManagement.css'
 import './AlertasMantenimientoModule.css'
 
@@ -20,11 +21,11 @@ export function AlertasMantenimientoModule() {
     accionAtender, accionDescartar, accionReactivar,
   } = useAlertasData(sedeActualId)
 
-  const [selected, setSelected] = useState<AlertaMantenimiento | null>(null)
+  const [selected, setSelected] = useState<AlertaAgrupada | null>(null)
 
   // El listado viaja con select liviano; el detalle completo (recomendación,
   // lámparas, etc.) se trae recién al abrir el drawer.
-  const abrirDetalle = useCallback(async (a: AlertaMantenimiento) => {
+  const abrirDetalle = useCallback(async (a: AlertaAgrupada) => {
     setSelected(a)
     try {
       const full = await fetchAlertaDetalle(a.id)
@@ -43,7 +44,7 @@ export function AlertasMantenimientoModule() {
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vehiculosConAlerta}</span>
-              <span className="stat-label">Vehículos con alerta</span>
+              <span className="stat-label">Vehículos con alerta activa</span>
             </div>
           </div>
           <div className="stat-card">
@@ -70,7 +71,7 @@ export function AlertasMantenimientoModule() {
           <div className="stat-card">
             <Gauge size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.kmFlotaAcumulados.toLocaleString('es-AR')}</span>
+              <span className="stat-value">{formatNumero(stats.kmFlotaAcumulados)}</span>
               <span className="stat-label">Km flota acumulados</span>
             </div>
           </div>
@@ -83,9 +84,9 @@ export function AlertasMantenimientoModule() {
           alertas={alertas}
           loading={loading}
           onRowClick={abrirDetalle}
-          onAtender={(a) => accionAtender(a.id, userName)}
-          onDescartar={(a) => accionDescartar(a.id, userName)}
-          onReactivar={(a) => accionReactivar(a.id)}
+          onAtender={(a) => accionAtender(a.ids, userName)}
+          onDescartar={(a) => accionDescartar(a.ids, userName)}
+          onReactivar={(a) => accionReactivar(a.ids)}
         />
       </div>
 

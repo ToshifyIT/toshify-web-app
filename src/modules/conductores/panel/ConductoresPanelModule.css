@@ -5,8 +5,8 @@
 /* Montos de saldo / garantía: rojo = deuda o sin cubrir, verde = a favor o cubierto. */
 .cpanel-num.cpanel-deuda { color: #dc2626; font-weight: 600; }
 .cpanel-num.cpanel-favor { color: #16a34a; font-weight: 600; }
-.cpanel-num.cpanel-nulo { color: #9ca3af; }
-.cpanel-num small { font-size: 10px; font-weight: 500; color: #9ca3af; margin-left: 4px; }
+.cpanel-num.cpanel-nulo { color: var(--text-tertiary, #9ca3af); }
+.cpanel-num small { font-size: 10px; font-weight: 500; color: var(--text-tertiary, #9ca3af); margin-left: 4px; }
 
 .cpanel-badge {
   display: inline-block;
@@ -17,7 +17,7 @@
   white-space: nowrap;
 }
 .cpanel-badge.ok { background: #dcfce7; color: #15803d; }
-.cpanel-badge.off { background: #f3f4f6; color: #6b7280; text-transform: capitalize; }
+.cpanel-badge.off { background: var(--bg-tertiary, #f3f4f6); color: var(--text-secondary, #6b7280); text-transform: capitalize; }
 .cpanel-badge.asig { background: #dbeafe; color: #1d4ed8; letter-spacing: .03em; }
 .cpanel-badge.noasig { background: #fef3c7; color: #b45309; }
 .cpanel-badge.turno { text-transform: none; }

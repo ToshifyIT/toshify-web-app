@@ -1,3 +1,4 @@
+import { formatFecha, formatFechaHora, formatHora } from './format'
 /**
  * Utilidades de fecha para el proyecto Toshify
  *
@@ -26,45 +27,21 @@ export function formatDateTimeAR(
     timeOnly?: boolean
   }
 ): string {
-  if (!date) return '-'
+  if (date === null || date === undefined || date === '') return '-'
 
-  try {
-    const dateObj = typeof date === 'string' || typeof date === 'number'
-      ? new Date(date)
-      : date
-
+  // Delegar en los formatos unicos de utils/format (DD/MM/YYYY y DD/MM/YYYY HH:MM:SS, 24h, ART)
+  let valor: string
+  if (typeof date === 'string') {
+    valor = date
+  } else {
+    const dateObj = typeof date === 'number' ? new Date(date) : date
     if (isNaN(dateObj.getTime())) return '-'
-
-    const formatOptions: Intl.DateTimeFormatOptions = {
-      timeZone: ARGENTINA_TIMEZONE,
-    }
-
-    if (options?.dateOnly) {
-      formatOptions.day = '2-digit'
-      formatOptions.month = '2-digit'
-      formatOptions.year = 'numeric'
-    } else if (options?.timeOnly) {
-      formatOptions.hour = '2-digit'
-      formatOptions.minute = '2-digit'
-      if (options?.includeSeconds) {
-        formatOptions.second = '2-digit'
-      }
-    } else {
-      // Fecha y hora completa
-      formatOptions.day = '2-digit'
-      formatOptions.month = '2-digit'
-      formatOptions.year = 'numeric'
-      formatOptions.hour = '2-digit'
-      formatOptions.minute = '2-digit'
-      if (options?.includeSeconds) {
-        formatOptions.second = '2-digit'
-      }
-    }
-
-    return dateObj.toLocaleString(ARGENTINA_LOCALE, formatOptions)
-  } catch {
-    return '-'
+    valor = dateObj.toISOString()
   }
+
+  if (options?.dateOnly) return formatFecha(valor)
+  if (options?.timeOnly) return formatHora(valor)
+  return formatFechaHora(valor)
 }
 
 /**
@@ -75,7 +52,7 @@ export function formatDateAR(date: string | Date | number | null | undefined): s
 }
 
 /**
- * Formatea solo la hora en hora Argentina (HH:MM)
+ * Formatea solo la hora en hora Argentina (HH:MM:SS)
  */
 export function formatTimeAR(date: string | Date | number | null | undefined): string {
   return formatDateTimeAR(date, { timeOnly: true })

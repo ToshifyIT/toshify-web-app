@@ -13,6 +13,8 @@ import { showError, showSuccess } from '../../../utils/toast'
 import type { Titular, TitularFormData, TitularStats, VehiculoTitular } from './types/titulares.types'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import '../VehicleManagement.css'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../utils/format'
 
 // Códigos de vehiculos_estados que consideran ACTIVO a un titular
 const CODIGOS_TITULAR_ACTIVO = new Set([
@@ -725,11 +727,7 @@ export function TitularesModule() {
       cell: ({ row }) => {
         const fecha = row.original.created_at
         if (!fecha) return 'N/A'
-        return new Date(fecha).toLocaleDateString('es-AR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        })
+        return formatFecha(fecha)
       },
       sortingFn: 'datetime',
     },
@@ -1127,7 +1125,7 @@ export function TitularesModule() {
                 </div>
                 <div>
                   <label style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Creado</label>
-                  <div style={{ fontWeight: 500 }}>{selectedTitular.created_at ? new Date(selectedTitular.created_at).toLocaleDateString('es-AR') : 'N/A'}</div>
+                  <div style={{ fontWeight: 500 }}>{selectedTitular.created_at ? formatFecha(selectedTitular.created_at) : 'N/A'}</div>
                 </div>
               </div>
             </div>
@@ -1172,12 +1170,12 @@ export function TitularesModule() {
                         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover, rgba(59,130,246,0.08))' }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = idx % 2 === 1 ? 'var(--bg-secondary, rgba(0,0,0,0.03))' : 'transparent' }}
                       >
-                        <td style={{ padding: '8px', fontWeight: 600 }}>{vt.vehiculos?.patente || 'N/A'}</td>
+                        <td style={{ padding: '8px' }}><PatenteBadge patente={vt.vehiculos?.patente} size="sm" /></td>
                         <td style={{ padding: '8px' }}>{vt.vehiculos ? `${vt.vehiculos.marca} ${vt.vehiculos.modelo}` : 'N/A'}</td>
-                        <td style={{ padding: '8px' }}>{vt.fecha_desde ? new Date(vt.fecha_desde).toLocaleDateString('es-AR') : 'N/A'}</td>
+                        <td style={{ padding: '8px' }}>{vt.fecha_desde ? formatFecha(vt.fecha_desde) : 'N/A'}</td>
                         <td style={{ padding: '8px' }}>
                           {vt.fecha_hasta
-                            ? new Date(vt.fecha_hasta).toLocaleDateString('es-AR')
+                            ? formatFecha(vt.fecha_hasta)
                             : (
                               <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
                                 Vigente

@@ -4,6 +4,8 @@ import { useSede } from '../contexts/SedeContext'
 import { getCache, setCache } from './useSessionCache'
 import { fetchCobroMultasStats } from '../services/cobroMultasStatsService'
 import { calcularMetricasGarantias } from '../modules/facturacion/utils/garantiasMetricas'
+import { formatPlata, formatNumero } from '../utils/format'
+import { formatFecha } from '../utils/format'
 
 // ─── Mismas reglas que Estado de Flota (AsignacionesActivasModule) ───
 // Total Flota por INCLUSIÓN: solo cuentan estos estados, identificados por la
@@ -286,17 +288,11 @@ export function useDashboardStats() {
         const diasDesdeUltimoRobo = ultimoRobo ? diffDias(today, ultimoRobo) : null
         const diasDesdeUltimoSiniestro = ultimoSiniestro ? diffDias(today, ultimoSiniestro) : null
 
-        const formatDateEs = (d: Date | undefined) => (d ? d.toLocaleDateString('es-AR') : '-')
+        const formatDateEs = (d: Date | undefined) => (d ? formatFecha(d.toISOString()) : '-')
 
-        const formatCurrencyArs = (value: number) =>
-          new Intl.NumberFormat('es-AR', {
-            style: 'currency',
-            currency: 'ARS',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          }).format(value)
+        const formatCurrencyArs = (value: number) => formatPlata(value)
         const formatCurrencyCompacto = (value: number) =>
-          value < 1 ? '$0' : new Intl.NumberFormat('es-AR', {
+          value < 1 ? formatPlata(0) : new Intl.NumberFormat('es-AR', {
             style: 'currency',
             currency: 'ARS',
             notation: 'compact',
@@ -399,8 +395,8 @@ export function useDashboardStats() {
         }, 0)
 
         const porcentajeDeudaSemanaPasada = totalDeudaActual > 0 
-          ? ((deudaSemanaPasada / totalDeudaActual) * 100).toFixed(1)
-          : '0.0'
+          ? formatNumero((deudaSemanaPasada / totalDeudaActual) * 100, 1)
+          : '0,0'
 
         const newStats: DashboardStats = {
           totalFlota: {

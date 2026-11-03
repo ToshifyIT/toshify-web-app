@@ -12,6 +12,8 @@ import { showError, showSuccess } from '../../../utils/toast'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { numeroSemana } from '../../../utils/semanaISO'
 import '../../incidencias/IncidenciasModule.css'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFechaHora } from '../../../utils/format'
 
 interface MultaInput {
   id: number
@@ -510,8 +512,8 @@ export function CrearCobroMultaModal({ isOpen, multa, onClose, onSaved }: Props)
               <div className="form-section">
                 <div className="form-section-title">Multa de Origen</div>
                 <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  <strong>{multa.patente}</strong>
-                  {multa.fecha_infraccion ? ` · ${new Date(multa.fecha_infraccion).toLocaleString('es-AR')}` : ''}
+                  <PatenteBadge patente={multa.patente} size="sm" />
+                  {multa.fecha_infraccion ? ` · ${formatFechaHora(multa.fecha_infraccion)}` : ''}
                   {multa.infraccion ? ` · ${multa.infraccion}` : ''}
                   {multa.lugar ? ` · ${multa.lugar}` : ''}
                 </div>

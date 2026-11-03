@@ -187,6 +187,29 @@
   color: var(--color-primary);
 }
 
+/* Pantallas anchas: todas las tarjetas en una sola fila; cada una toma el
+   ancho de su contenido (los montos son más anchos que los contadores). */
+@media (min-width: 1401px) {
+  .fact-stats-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .fact-stats .stat-card {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 10px;
+    gap: 8px;
+  }
+  .fact-stats .stat-value {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+  .fact-stats .stat-label {
+    white-space: nowrap;
+  }
+}
+
 /* Responsive Stats */
 @media (max-width: 1400px) {
   .fact-stats-grid {
@@ -2337,4 +2360,9 @@
 
 .fact-stat-info:hover {
   color: var(--color-primary);
+}
+
+/* TabsBar compartido: el módulo ya separa con gap */
+.fact-module > .tabs-bar {
+  margin-bottom: 0;
 }

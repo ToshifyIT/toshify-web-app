@@ -1,5 +1,8 @@
 import { X, Check, Minus, ExternalLink } from 'lucide-react'
 import type { OfertaLocacion } from '../../titulares/types/ofertaLocacion.types'
+import { formatPlata } from '../../../../utils/format'
+import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
+import { formatFecha } from '../../../../utils/format'
 
 interface Props {
   oferta: OfertaLocacion
@@ -39,8 +42,8 @@ export function OfertaLocacionDetailModal({ oferta, onClose }: Props) {
     ? <Check size={14} style={{ color: '#059669' }} />
     : <Minus size={14} style={{ color: '#9ca3af' }} />
 
-  const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-AR') : '-'
-  const formatMoney = (v: number | null) => v != null ? `$${Number(v).toLocaleString('es-AR')}` : '-'
+  const formatDate = (d: string | null) => formatFecha(d)
+  const formatMoney = (v: number | null) => v != null ? formatPlata(v) : '-'
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -90,7 +93,7 @@ export function OfertaLocacionDetailModal({ oferta, onClose }: Props) {
 
           <div style={sectionTitle}>Vehiculo</div>
           <div className="ol-grid-2">
-            <div><div style={labelStyle}>Patente</div><div style={valueStyle}>{o.patente || '-'}</div></div>
+            <div><div style={labelStyle}>Patente</div><div style={valueStyle}><PatenteBadge patente={o.patente} size="sm" /></div></div>
             <div><div style={labelStyle}>Marca / Modelo</div><div style={valueStyle}>{`${o.marca || ''} ${o.modelo || ''}`.trim() || '-'}</div></div>
             <div><div style={labelStyle}>Anio</div><div style={valueStyle}>{o.anio || '-'}</div></div>
             <div><div style={labelStyle}>Color</div><div style={valueStyle}>{o.color || '-'}</div></div>

@@ -77,6 +77,9 @@ import { AvisoLeadsPendientes, type LeadPendiente } from './components/AvisoLead
 import { calcularMinutosEntre, tieneCoordenadas, type Coordenada } from './distanciaParService'
 import { documentoSegunTarifa, permiteAnexo } from './documentoTarifa'
 import { esConductorInterno } from '../../../utils/conductorUtils'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { TabsBar } from '../../../components/ui/TabsBar'
+import { formatFecha } from '../../../utils/format'
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   entrega_auto: 'Entrega de auto',
@@ -1667,7 +1670,7 @@ export function ProgramacionV2Module() {
       html: `
         <div style="text-align: left; font-size: 14px;">
           <p><strong>Vehículo:</strong> ${prog.vehiculo_entregar_patente || 'N/A'}</p>
-          <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita).toLocaleDateString('es-AR') : 'Hoy'}</p>
+          <p><strong>Fecha:</strong> ${prog.fecha_cita ? formatFecha(prog.fecha_cita) : 'Hoy'}</p>
           <p style="margin-top: 10px; color: #6B7280; font-size: 12px;">Se creará un registro de devolución (no se genera asignación).</p>
         </div>
       `,
@@ -2112,7 +2115,7 @@ export function ProgramacionV2Module() {
           <p><strong>Vehiculo:</strong> ${prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '-'}</p>
           <p><strong>Conductor${prog.modalidad === 'turno' && enviarDiurno && enviarNocturno ? 'es' : ''}:</strong><br>${conductorDisplay}</p>
           <p><strong>Modalidad:</strong> ${prog.modalidad === 'turno' ? 'Turno' : 'A Cargo'}</p>
-          <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin definir'}</p>
+          <p><strong>Fecha:</strong> ${prog.fecha_cita ? formatFecha(prog.fecha_cita) : 'Sin definir'}</p>
           <p><strong>Hora:</strong> ${horaDisplay}</p>
         </div>
         <p style="margin-top: 16px; color: #6B7280;">Se creara una asignacion en estado <strong>Programado</strong></p>
@@ -2432,9 +2435,7 @@ export function ProgramacionV2Module() {
       header: 'Vehiculo',
       cell: ({ row }) => (
         <div className="prog-vehiculo-cell">
-          <span className="prog-patente">
-            {row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema || '-'}
-          </span>
+          <span><PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" /></span>
           <span className="prog-modelo">
             {row.original.vehiculo_entregar_modelo || row.original.vehiculo_entregar_modelo_sistema || ''}
           </span>
@@ -2633,8 +2634,7 @@ export function ProgramacionV2Module() {
         const fecha = row.original.fecha_cita
         const hora = row.original.hora_cita?.substring(0, 5)
         if (!fecha) return <span className="prog-hora">-</span>
-        const fechaObj = new Date(fecha + 'T12:00:00')
-        const fechaCorta = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+        const fechaCorta = formatFecha(fecha)
         return (
           <div className="prog-fecha-hora">
             <span className="prog-fecha">{fechaCorta}</span>
@@ -2834,9 +2834,7 @@ export function ProgramacionV2Module() {
       header: 'Vehiculo',
       cell: ({ row }) => (
         <div className="prog-vehiculo-cell">
-          <span className="prog-patente" style={{ fontSize: '13px' }}>
-            {row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema || '-'}
-          </span>
+          <span><PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" /></span>
           <span className="prog-modelo" style={{ fontSize: '11px' }}>
             {row.original.vehiculo_entregar_modelo || row.original.vehiculo_entregar_modelo_sistema || ''}
           </span>
@@ -3010,8 +3008,7 @@ export function ProgramacionV2Module() {
         const fecha = row.original.fecha_cita
         const hora = row.original.hora_cita?.substring(0, 5)
         if (!fecha) return <span className="prog-hora">-</span>
-        const fechaObj = new Date(fecha + 'T12:00:00')
-        const fechaCorta = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+        const fechaCorta = formatFecha(fecha)
         return (
           <div className="prog-fecha-hora" style={{ fontSize: '13px' }}>
             <span className="prog-fecha">{fechaCorta}</span>
@@ -3198,34 +3195,18 @@ export function ProgramacionV2Module() {
       */}
 
       {/* Tabs - controlados por permisos de tab */}
-      <div className="prog-tabs">
-        {canViewTab('programacion:pendientes') && (
-          <button
-            className={`prog-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pendientes')}
-          >
-            <Calendar size={14} />
-            Pendientes
-            <span className="prog-tab-contador">
-              {programaciones.length}
-            </span>
-          </button>
-        )}
-        {canViewTab('programacion:historico') && (
-          <button
-            className={`prog-tab ${activeTab === 'historico' ? 'active' : ''}`}
-            onClick={() => setActiveTab('historico')}
-          >
-            <Send size={14} />
-            Enviados
-            {programacionesHistorico.length > 0 && (
-              <span className="prog-tab-contador">
-                {programacionesHistorico.length}
-              </span>
-            )}
-          </button>
-        )}
-      </div>
+      <TabsBar
+        tabs={[
+          ...(canViewTab('programacion:pendientes')
+            ? [{ id: 'pendientes' as const, label: 'Pendientes', icon: Calendar, count: programaciones.length }]
+            : []),
+          ...(canViewTab('programacion:historico')
+            ? [{ id: 'historico' as const, label: 'Enviados', icon: Send, count: programacionesHistorico.length > 0 ? programacionesHistorico.length : undefined }]
+            : []),
+        ]}
+        active={activeTab}
+        onChange={setActiveTab}
+      />
 
       {/* DataTable - Pendientes */}
       {activeTab === 'pendientes' && (
@@ -3956,13 +3937,13 @@ export function ProgramacionV2Module() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0' }}>
                       <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(251, 191, 36, 0.15)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
                         <label style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO ANTERIOR</label>
-                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{(previewProgramacion as any).vehiculo_cambio_patente || '-'}</p>
+                        <p style={{ margin: 0 }}><PatenteBadge patente={(previewProgramacion as any).vehiculo_cambio_patente} /></p>
                         <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-tertiary)' }}>{(previewProgramacion as any).vehiculo_cambio_modelo || ''}</p>
                       </div>
                       <ArrowLeftRight size={20} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
                       <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
                         <label style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO NUEVO</label>
-                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
+                        <p style={{ margin: 0 }}><PatenteBadge patente={previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema} /></p>
                         <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-tertiary)' }}>{previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || ''}</p>
                       </div>
                     </div>
@@ -3971,7 +3952,7 @@ export function ProgramacionV2Module() {
                   <div className="prog-modal-grid">
                     <div>
                       <label>Patente</label>
-                      <p>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
+                      <p><PatenteBadge patente={previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema} /></p>
                     </div>
                     <div>
                       <label>Modelo</label>
@@ -4069,7 +4050,7 @@ export function ProgramacionV2Module() {
                 <div className="prog-modal-grid">
                   <div>
                     <label>Fecha</label>
-                    <p>{previewProgramacion.fecha_cita ? new Date(previewProgramacion.fecha_cita + 'T12:00:00').toLocaleDateString('es-AR') : '-'}</p>
+                    <p>{previewProgramacion.fecha_cita ? formatFecha(previewProgramacion.fecha_cita) : '-'}</p>
                   </div>
                   <div>
                     <label>Hora</label>

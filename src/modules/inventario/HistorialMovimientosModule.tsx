@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import { hoyART } from '../../utils/fechaArgentina'
 import './HistorialMovimientos.css'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
 interface Movimiento {
   id: string
@@ -280,7 +282,7 @@ export function HistorialMovimientosModule() {
       'Observaciones',
     ]
     const rows = filteredData.map(item => [
-      new Date(item.created_at).toLocaleString('es-CL'),
+      formatFechaHora(item.created_at),
       getTipoLabel(item.tipo_movimiento),
       item.producto.codigo,
       item.producto.nombre,
@@ -307,14 +309,14 @@ export function HistorialMovimientosModule() {
       accessorKey: 'created_at',
       header: 'Fecha',
       cell: ({ row }) => {
-        const date = new Date(row.original.created_at)
+        const creado = row.original.created_at
         return (
           <div className="hist-date-cell">
             <Calendar size={14} />
             <div>
-              <div>{date.toLocaleDateString('es-CL')}</div>
+              <div>{formatFecha(creado)}</div>
               <div className="hist-date-time">
-                {date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                {formatHora(creado)}
               </div>
             </div>
           </div>
@@ -440,9 +442,7 @@ export function HistorialMovimientosModule() {
         </div>
       ),
       cell: ({ row }) => (
-        <span>
-          {row.original.vehiculo_destino?.patente || row.original.vehiculo_origen?.patente || '-'}
-        </span>
+        <PatenteBadge patente={row.original.vehiculo_destino?.patente || row.original.vehiculo_origen?.patente} size="sm" />
       )
     },
     {

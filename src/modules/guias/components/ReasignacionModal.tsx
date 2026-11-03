@@ -3,6 +3,7 @@ import { X, Car, Search, Check } from 'lucide-react';
 import { Alerta } from '../../../components/ui/alertas'
 import './ReasignacionModal.css';
 import type { VehicleBasic } from '../../../types/vehiculo.types';
+import { PatenteBadge } from '../../../components/ui/PatenteBadge';
 
 interface Guide {
   id: string;
@@ -130,7 +131,7 @@ export function ReasignacionModal({
                     <span className="vehiculo-modelo">
                       {conductor.vehiculo_asignado.marca} {conductor.vehiculo_asignado.modelo}
                     </span>
-                    <span className="vehiculo-placa">Placa: {conductor.vehiculo_asignado.patente}</span>
+                    <span className="vehiculo-placa">Placa: <PatenteBadge patente={conductor.vehiculo_asignado.patente} size="sm" /></span>
                   </>
                 ) : (
                   <span className="vehiculo-modelo" style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>

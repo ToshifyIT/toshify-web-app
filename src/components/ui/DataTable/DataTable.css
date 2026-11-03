@@ -640,7 +640,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  /* Barra de paginación más baja (antes 16px arriba/abajo y botones de 36px) */
+  padding: 6px 16px;
   border-top: 1px solid var(--border-primary);
   background: var(--bg-primary);
   flex-wrap: wrap;
@@ -672,8 +673,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 1px solid var(--border-primary);
   background: var(--bg-primary);
@@ -710,7 +711,7 @@
 }
 
 .dt-pagination-select {
-  padding: 8px 12px;
+  padding: 4px 10px;
   padding-right: 32px;
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);

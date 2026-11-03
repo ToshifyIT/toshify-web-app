@@ -16,6 +16,7 @@ import type {
   ModalidadDistribution,
 } from '../types/cabify.types'
 import { SCORE_THRESHOLDS, CHART_COLORS } from '../constants/cabify.constants'
+import { formatPlata } from '../../../../utils/format'
 
 // =====================================================
 // FORMATEO DE VALORES
@@ -24,14 +25,10 @@ import { SCORE_THRESHOLDS, CHART_COLORS } from '../constants/cabify.constants'
 /**
  * Formatea un valor numérico como moneda argentina
  * @param value - Valor a formatear (puede ser string o number)
- * @returns String formateado con separadores de miles y 2 decimales
+ * @returns "$ 12.345" (formato unico de plata, ver utils/format.ts)
  */
 export function formatCurrency(value: number | string | undefined): string {
-  const numericValue = parseNumericValue(value)
-  return numericValue.toLocaleString('es-AR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
+  return formatPlata(parseNumericValue(value))
 }
 
 /**

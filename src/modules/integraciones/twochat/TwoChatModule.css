@@ -357,3 +357,32 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Registro de llamadas: filtros en la misma línea que el buscador */
+.tc-filtros-linea {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tc-filtros-linea .tc-campo {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.tc-filtros-linea .tc-campo .form-input {
+  height: 36px;
+  font-size: 13px;
+}
+.tc-filtros-linea .btn-primary {
+  height: 36px;
+}
+.tc-actualizado {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  align-self: center;
+  white-space: nowrap;
+}
+.tc-actualizado--pie {
+  margin: 6px 2px 0;
+}

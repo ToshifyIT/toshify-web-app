@@ -48,6 +48,7 @@ import {
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import './DashboardDirectivoModule.css'
+import { formatFechaHora } from '../../../utils/format'
 
 const fmtSemanas = (v: number | null) =>
   v === null ? '—' : `${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(v)} sem.`
@@ -253,12 +254,8 @@ function Kpis({ d }: { d: DirectivoRaw }) {
 // ───────────── Insights ─────────────
 
 const fmtGenerado = (iso: string) => {
-  const f = new Date(iso)
-  if (Number.isNaN(f.getTime())) return ''
-  return f.toLocaleString('es-AR', {
-    weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-    timeZone: 'America/Argentina/Buenos_Aires',
-  })
+  const txt = formatFechaHora(iso)
+  return txt === '-' ? '' : txt
 }
 
 interface InsightsProps {

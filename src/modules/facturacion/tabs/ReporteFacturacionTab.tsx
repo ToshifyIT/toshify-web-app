@@ -45,7 +45,6 @@ import {
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
-import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -71,6 +70,8 @@ import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTab
 import { DiscrepancyReportModal } from '../../../components/ui/DiscrepancyReportModal'
 import { DiscrepancyBadge } from '../../../components/ui/DiscrepancyBadge'
 import logoToshifyUrl from '../../../assets/logo-toshify.png'
+import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 
 
@@ -96,6 +97,7 @@ import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
+import { formatNumero } from '../../../utils/format'
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
 function parseImporteMulta(val: string): number {
   let s = val.replace(/[$\s]/g, '')
@@ -433,12 +435,9 @@ function separarPagosSemana(
   return { saldoCierre: Math.round((saldoAnterior + totalPagos) * 100) / 100, pagos, totalPagos }
 }
 
-/** Fecha y hora AR de un movimiento, para tooltips ("20/10/2026, 11:00"). */
+/** Fecha y hora AR de un movimiento, para tooltips ("20/10/2026 11:00:00"). */
 function fechaHoraAR(iso: string): string {
-  return new Date(iso).toLocaleString('es-AR', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-  })
+  return formatFechaHora(iso)
 }
 
 /** Ícono (i) con la explicación de una tarjeta de indicadores (al pasar el mouse). */
@@ -5566,7 +5565,7 @@ export function ReporteFacturacionTab() {
             ? `<p>El período ya no está abierto (estado actual: <strong>${periodoBD.estado}</strong>). Otra persona lo modificó mientras esta pantalla estaba abierta.</p>
                <p style="margin-top:8px;color:#6B7280;font-size:12px">Se recargó la facturación.</p>`
             : `<p>La facturación de este período se <strong>recalculó después</strong> de que se abrió esta pantalla` +
-              (periodoBD.updated_at ? ` (último recálculo: <strong>${new Date(periodoBD.updated_at).toLocaleString('es-AR')}</strong>)` : '') +
+              (periodoBD.updated_at ? ` (último recálculo: <strong>${formatFechaHora(periodoBD.updated_at)}</strong>)` : '') +
               `.</p><p style="margin-top:8px">Se recargó la facturación con los datos actuales: revisá los importes y volvé a cerrar el período.</p>`,
           confirmButtonText: 'Entendido',
           confirmButtonColor: '#f59e0b',
@@ -6333,9 +6332,9 @@ export function ReporteFacturacionTab() {
         }
 
         const fechaReg = pen.fecha ? format(parseISO(pen.fecha), 'dd/MM/yyyy') : '-'
-        const fechaCreacion = pen.created_at ? format(parseISO(pen.created_at), 'dd/MM/yyyy HH:mm') : '-'
+        const fechaCreacion = pen.created_at ? formatFechaHora(pen.created_at) : '-'
         const aplicadoSiNo = pen.aplicado ? 'Sí' : 'No'
-        const fechaAplicacionStr = fechaAplicacionReal ? format(parseISO(fechaAplicacionReal), 'dd/MM/yyyy HH:mm') : null
+        const fechaAplicacionStr = fechaAplicacionReal ? formatFechaHora(fechaAplicacionReal) : null
         const tipoNombre = pen.tipos_cobro_descuento?.nombre || 'Sin tipo'
         const categoria = pen.tipos_cobro_descuento?.categoria || '-'
         const conductorNombre = pen.conductores
@@ -6383,7 +6382,7 @@ export function ReporteFacturacionTab() {
         const creadoPorNombre = await resolverNombreUsuario(pen.created_by_name, pen.created_by)
 
         const fechaReg = pen.fecha ? format(parseISO(pen.fecha), 'dd/MM/yyyy') : '-'
-        const fechaCreacion = pen.created_at ? format(parseISO(pen.created_at), 'dd/MM/yyyy HH:mm') : '-'
+        const fechaCreacion = pen.created_at ? formatFechaHora(pen.created_at) : '-'
         const tipoNombre = pen.tipos_cobro_descuento?.nombre || 'Sin tipo'
         const conductorNombre = pen.conductores
           ? `${pen.conductores.nombres || ''} ${pen.conductores.apellidos || ''}`.trim()
@@ -6478,7 +6477,7 @@ export function ReporteFacturacionTab() {
         const peajesDetalle = detalleFacturacion.peajes_detalle
         if (peajesDetalle && peajesDetalle.length > 0) {
           const rows = [...peajesDetalle].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '')).map(p => {
-            const fecha = p.fecha ? format(parseISO(p.fecha), 'dd/MM/yy') : '-'
+            const fecha = p.fecha ? formatFecha(p.fecha) : '-'
             return `<tr><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb">${fecha}</td><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb;text-align:right;font-family:monospace;font-weight:600">${formatCurrency(p.monto)}</td></tr>`
           }).join('')
           htmlExtra = `
@@ -6531,7 +6530,7 @@ export function ReporteFacturacionTab() {
               <strong>Descripción:</strong> <span>${ticket.descripcion || '-'}</span>
               <strong>Monto:</strong> <span style="color:#059669;font-weight:600">${formatCurrency(ticket.monto || 0)}</span>
               <strong>Estado:</strong> <span>${ticket.estado || '-'}</span>
-              ${ticket.created_at ? `<strong>Creado:</strong> <span>${format(parseISO(ticket.created_at), 'dd/MM/yyyy HH:mm')}</span>` : ''}
+              ${ticket.created_at ? `<strong>Creado:</strong> <span>${formatFechaHora(ticket.created_at)}</span>` : ''}
             </div>
           `
         }
@@ -6569,7 +6568,7 @@ export function ReporteFacturacionTab() {
       }
 
       const rows = multas.map((m: any) => {
-        const fecha = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'dd/MM/yyyy HH:mm') : '-'
+        const fecha = m.fecha_infraccion ? formatFechaHora(m.fecha_infraccion) : '-'
         const monto = parseImporteMulta(typeof m.importe === 'string' ? m.importe : String(m.importe || 0))
         return `
           <tr>
@@ -6897,7 +6896,7 @@ export function ReporteFacturacionTab() {
           const pendiente = totalFull - montoVal
           if (pendiente > 0) {
             saldoRow.style.display = 'block'
-            saldoEl.textContent = '$ ' + Math.round(pendiente).toLocaleString('en-US')
+            saldoEl.textContent = formatCurrency(pendiente)
           } else {
             saldoRow.style.display = 'none'
           }
@@ -8890,7 +8889,7 @@ export function ReporteFacturacionTab() {
               fact,
               mora,
               'P009',
-              `Mora 5% s/deuda $${deuda.toLocaleString()}`
+              `Mora 5% s/deuda ${formatCurrency(deuda)}`
             ))
           }
         }
@@ -10795,7 +10794,7 @@ export function ReporteFacturacionTab() {
           const totalAdeudado = deben.reduce((s, f) => s + deudaDeben(f), 0)
           // Formato compacto para el card de total adeudado (ej "2.37M")
           const fmtCompacto = (v: number) => {
-            if (v >= 1_000_000) return `$ ${(v / 1_000_000).toFixed(2)}M`
+            if (v >= 1_000_000) return `$ ${formatNumero(v / 1_000_000, 2)}M`
             if (v >= 1000) return `$ ${(v / 1000).toFixed(0)}K`
             return formatCurrency(v)
           }
@@ -11817,7 +11816,7 @@ export function ReporteFacturacionTab() {
                     <td className="col-center cabify-pagos-row-num">{idx + 1}</td>
                     <td className="col-nombre">{row.conductor_nombre}</td>
                     <td className="col-center">{row.conductor_dni}</td>
-                    <td className="col-center">{row.patente}</td>
+                    <td className="col-center"><PatenteBadge patente={row.patente} size="sm" /></td>
                     <td className="col-money">{formatCurrency(row.total_a_pagar)}</td>
                     <td className={`col-money ${row.monto_cobrado > 0 ? 'cabify-pagos-cobrado' : 'cabify-pagos-muted'}`}>
                       {row.monto_cobrado > 0 ? formatCurrency(row.monto_cobrado) : '-'}
@@ -12243,7 +12242,7 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
-                        <span className="stat-label">Cubrió Toshipass{'\u00A0'}<StatInfo text="Conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">Cubrió{'\u00A0'}<StatInfo text="Cubrió Toshipass: conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                     <div className="fact-stat-card"
@@ -12253,7 +12252,7 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon red" />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
-                        <span className="stat-label">No cubrió Toshipass{'\u00A0'}<StatInfo text="Conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">No cubrió{'\u00A0'}<StatInfo text="No cubrió Toshipass: conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                   </>
@@ -12303,7 +12302,7 @@ export function ReporteFacturacionTab() {
                   <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
                     onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
                     <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
-                    {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoTelepase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
+                    {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· {formatCurrency(montoTelepase)}</span>}
                   </button>
                 )}
                 {countEfectivoOn > 0 && (
@@ -12392,7 +12391,6 @@ export function ReporteFacturacionTab() {
             onTableReady={setTableInstance}
             headerAction={
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <VerLogsButton tablas={['facturacion_conductores', 'facturacion_detalle', 'periodos_facturacion', 'penalidades', 'saldos_conductores']} label="Facturación" />
                 <button className="fact-btn-export fact-btn--preview" onClick={prepararFacturacionPreviewVistaPrevia} disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0}>
                   {loadingSiFacturaPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />}
                   Prev. Fact.
@@ -12465,7 +12463,7 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
-                        <span className="stat-label">Cubrió Toshipass{'\u00A0'}<StatInfo text="Conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">Cubrió{'\u00A0'}<StatInfo text="Cubrió Toshipass: conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                     <div className="fact-stat-card"
@@ -12475,7 +12473,7 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon red" />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
-                        <span className="stat-label">No cubrió Toshipass{'\u00A0'}<StatInfo text="Conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">No cubrió{'\u00A0'}<StatInfo text="No cubrió Toshipass: conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                   </>
@@ -12680,7 +12678,7 @@ export function ReporteFacturacionTab() {
                     <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
                       onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
                       <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
-                      {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoTelepase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
+                      {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· {formatCurrency(montoTelepase)}</span>}
                     </button>
                   )}
                   {countEfectivoOn > 0 && (
@@ -13184,9 +13182,7 @@ export function ReporteFacturacionTab() {
                                     {h.fechaFin && h.fechaFin !== 'NULL' ? displayArgDate(h.fechaFin) : <span style={{ color: '#10b981', fontWeight: 500 }}>vigente</span>}
                                   </span>
                                   {h.patente && (
-                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'rgba(107, 114, 128, 0.1)', color: 'var(--text-secondary)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                                      {h.patente}
-                                    </span>
+                                    <PatenteBadge patente={h.patente} size="sm" />
                                   )}
                                   {h.patente && (
                                     <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: h.tieneGnc ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: h.tieneGnc ? '#10b981' : '#ef4444' }}>
@@ -13258,7 +13254,7 @@ export function ReporteFacturacionTab() {
                             )}
                             {diasModalData.devolucion.fecha_devolucion && (
                               <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px', paddingLeft: '16px' }}>
-                                Devuelto: {(() => { try { const raw = diasModalData.devolucion.fecha_devolucion || ''; const dateStr = raw.includes('T') ? toArgDate(raw) : raw.slice(0, 10); return dateStr && dateStr !== '-' ? dateStr.split('-').reverse().join('/') : '-' } catch { return '-' } })()}
+                                Devuelto: {(() => { try { const raw = diasModalData.devolucion.fecha_devolucion || ''; const dateStr = raw.includes('T') ? toArgDate(raw) : raw.slice(0, 10); return dateStr && dateStr !== '-' ? formatFecha(dateStr) : '-' } catch { return '-' } })()}
                               </div>
                             )}
                             {diasModalData.devolucion.ultimo_dia_cobro && (
@@ -13378,12 +13374,8 @@ export function ReporteFacturacionTab() {
                               }} />
 
                               {/* Patente */}
-                              <span style={{
-                                fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)',
-                                width: '70px', flexShrink: 0,
-                                fontFamily: 'var(--font-mono)',
-                              }}>
-                                {a.vehiculoPatente}
+                              <span style={{ width: '80px', flexShrink: 0 }}>
+                                <PatenteBadge patente={a.vehiculoPatente} size="sm" />
                               </span>
 
                               {/* Fechas */}
@@ -13487,7 +13479,7 @@ export function ReporteFacturacionTab() {
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Vehículo</span>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{detalleFacturacion.vehiculo_patente || '-'}</span>
+                      <PatenteBadge patente={detalleFacturacion.vehiculo_patente} size="sm" />
                     </div>
                     <div style={{ width: '1px', background: 'var(--border-primary)' }} />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -13562,7 +13554,7 @@ export function ReporteFacturacionTab() {
                         const esPenalidad = item.referencia_id && (item.referencia_tipo === 'penalidad' || item.referencia_tipo === 'penalidad_cuota')
                         const esMulta = item.concepto_codigo === 'P008' || item.referencia_tipo === 'multa_transito'
                         const fechaStr = item.fecha_referencia
-                          ? format(parseISO(item.fecha_referencia), 'dd/MM/yy')
+                          ? formatFecha(item.fecha_referencia)
                           : null
                         // TODOS los conceptos se muestran con 2 decimales, sin excepcion.
                         // El alquiler arrastra centavos (7 x 42714,29 = 299000,03) y antes se

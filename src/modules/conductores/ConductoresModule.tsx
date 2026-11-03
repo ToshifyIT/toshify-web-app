@@ -2,10 +2,9 @@
  
 import { GUIAS_ACTIVOS } from '../leads/guias'
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown, Download, MapPin, Check, X } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown, Download, MapPin, Check, X, User, IdCard, Phone, Briefcase } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
-import { VerLogsButton } from "../../components/ui/VerLogsButton";
 
 import { HistorialModal } from "../../components/ui/HistorialModal";
 import { supabase } from "../../lib/supabase";
@@ -46,6 +45,10 @@ import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 
 import { hoyART, sumarDiasISO } from '../../utils/fechaArgentina'
+import { formatPlata } from '../../utils/format'
+import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TabsBar, type TabsBarItem } from "../../components/ui/TabsBar";
+import { formatFecha } from '../../utils/format'
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
 
@@ -65,9 +68,8 @@ const EXPORT_CHUNK_IDS = 100;
 // El mediodía evita el corrimiento de un día por zona horaria.
 function formatFechaExport(valor?: string | null): string {
   if (!valor) return "";
-  const soloFecha = String(valor).substring(0, 10);
-  const d = new Date(soloFecha + "T12:00:00");
-  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-AR");
+  const txt = formatFecha(String(valor).substring(0, 10));
+  return txt === "-" ? "" : txt;
 }
 
 // Mismas etiquetas que muestra el badge de la columna Turno: si hay asignación
@@ -1515,7 +1517,7 @@ export function ConductoresModule() {
       const impacto = await previewImpactoBaja(selectedConductor.id);
       if (impacto.cobrosCount > 0 || impacto.penalidadesCount > 0) {
         const fmt = (n: number) =>
-          new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n);
+          formatPlata(n);
         const filas: string[] = [];
         if (impacto.cobrosCount > 0) {
           filas.push(`<li><strong>${impacto.cobrosCount}</strong> cuota(s) de saldo fraccionado por <strong>${fmt(impacto.cobrosMonto)}</strong> — se reingresarán al saldo pendiente del conductor.</li>`);
@@ -3256,10 +3258,9 @@ export function ConductoresModule() {
         cell: ({ getValue }) => {
           const val = getValue() as string;
           if (!val) return "-";
-          const d = new Date(val);
           return (
             <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-              {`${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear().toString().slice(2)}`}
+              {formatFecha(val)}
             </span>
           );
         },
@@ -3428,7 +3429,7 @@ export function ConductoresModule() {
           if (estadoCodigo === 'baja') return '-';
           const fecha = getValue() as string;
           if (!fecha) return '-';
-          return new Date(fecha).toLocaleDateString("es-AR");
+          return formatFecha(fecha);
         },
         enableSorting: true,
       },
@@ -3537,7 +3538,7 @@ export function ConductoresModule() {
               <span className={badgeClass}>{getEstadoConductorDisplay(estado)}</span>
               {esBaja && fechaTerminacion && (
                 <span style={{ fontSize: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                  {new Date(fechaTerminacion + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                  {formatFecha(String(fechaTerminacion).substring(0, 10))}
                 </span>
               )}
             </div>
@@ -3649,7 +3650,7 @@ export function ConductoresModule() {
           if (vehiculo) {
             return (
               <div className="vehiculo-cell">
-                <div className="vehiculo-cell-patente">{vehiculo.patente}</div>
+                <div><PatenteBadge patente={vehiculo.patente} size="sm" /></div>
                 <div className="vehiculo-cell-info">
                   {vehiculo.marca} {vehiculo.modelo}
                 </div>
@@ -3908,10 +3909,7 @@ export function ConductoresModule() {
               {exportando ? <Loader2 size={15} className="spin-animation" /> : <Download size={15} />}
               {exportando ? 'Generando...' : 'Exportar'}
             </button>
-            {/* "Ver Logs" y "Sincronizar" solo visibles para admin */}
-            {isAdmin() && (
-              <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />
-            )}
+            {/* "Sincronizar" solo visible para admin */}
             {isAdmin() && (
             <div ref={syncMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
               <button
@@ -4315,7 +4313,7 @@ export function ConductoresModule() {
                   {impactoBajaUI.cobrosCount} cuota(s)
                 </div>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#78350F' }}>
-                  {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.cobrosMonto)}
+                  {formatPlata(impactoBajaUI.cobrosMonto)}
                 </div>
               </div>
               <div style={{ padding: '10px', background: '#E0E7FF', border: '1px solid #6366F1', borderRadius: 'var(--radius-sm)' }}>
@@ -4324,7 +4322,7 @@ export function ConductoresModule() {
                   {impactoBajaUI.penalidadesCount} cuota(s)
                 </div>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#312E81' }}>
-                  {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.penalidadesMonto)}
+                  {formatPlata(impactoBajaUI.penalidadesMonto)}
                 </div>
               </div>
               <div style={{ padding: '10px', background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: 'var(--radius-sm)' }}>
@@ -4333,7 +4331,7 @@ export function ConductoresModule() {
                   {impactoBajaUI.cobrosCount + impactoBajaUI.penalidadesCount} cuota(s)
                 </div>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#7F1D1D' }}>
-                  {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.cobrosMonto + impactoBajaUI.penalidadesMonto)}
+                  {formatPlata(impactoBajaUI.cobrosMonto + impactoBajaUI.penalidadesMonto)}
                 </div>
                 <div style={{ fontSize: '11px', color: '#7F1D1D', marginTop: '4px' }}>
                   Suma a la deuda pendiente.
@@ -4368,7 +4366,7 @@ export function ConductoresModule() {
                         <td style={{ padding: '6px 8px' }}>#{d.numero_cuota}</td>
                         <td style={{ padding: '6px 8px' }}>S{d.semana}/{d.anio}</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>
-                          {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(d.monto_cuota)}
+                          {formatPlata(d.monto_cuota)}
                         </td>
                         <td style={{ padding: '6px 8px', color: '#6B7280' }}>{d.descripcion || '-'}</td>
                       </tr>
@@ -4458,12 +4456,12 @@ function ModalCrear({
 
 type PestanaEdicion = 'personal' | 'licencia' | 'contacto' | 'operativo' | 'documentacion'
 
-const PESTANAS_EDICION: { id: PestanaEdicion; label: string }[] = [
-  { id: 'personal', label: 'Personal' },
-  { id: 'licencia', label: 'Licencia' },
-  { id: 'contacto', label: 'Contacto' },
-  { id: 'operativo', label: 'Operativo' },
-  { id: 'documentacion', label: 'Documentación' },
+const PESTANAS_EDICION: TabsBarItem<PestanaEdicion>[] = [
+  { id: 'personal', label: 'Personal', icon: User },
+  { id: 'licencia', label: 'Licencia', icon: IdCard },
+  { id: 'contacto', label: 'Contacto', icon: Phone },
+  { id: 'operativo', label: 'Operativo', icon: Briefcase },
+  { id: 'documentacion', label: 'Documentación', icon: FileText },
 ]
 
 /** En qué pestaña está cada campo validado (los demás caen en Personal). */
@@ -4588,24 +4586,18 @@ function ModalEditar({
           </button>
         </div>
         {/* Pestañas por categoría (como el lead): se edita una parte a la vez */}
-        <div className="cond-edit-tabs" role="tablist" aria-label="Datos del conductor">
-          {PESTANAS_EDICION.map(t => {
+        <TabsBar
+          className="tabs-bar--modal"
+          ariaLabel="Datos del conductor"
+          tabs={PESTANAS_EDICION.map(t => {
             const n = erroresPorPestana[t.id] || 0
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={pestana === t.id}
-                className={`cond-edit-tab${pestana === t.id ? ' is-activa' : ''}${n ? ' tiene-error' : ''}`}
-                onClick={() => setPestana(t.id)}
-              >
-                {t.label}
-                {n ? <span className="cond-edit-tab-error" title={`${n} campo(s) para revisar`}>{n}</span> : null}
-              </button>
-            )
+            return n
+              ? { ...t, count: n, countVariant: 'danger' as const, countTitle: `${n} campo(s) para revisar` }
+              : t
           })}
-        </div>
+          active={pestana}
+          onChange={setPestana}
+        />
         <div className="modal-body">
         {pestana === 'personal' && (<>
         <div className="section-title">Información Personal</div>
@@ -5299,7 +5291,7 @@ function ModalEditar({
                         Fraccionamientos pendientes
                       </div>
                       <div style={{ fontSize: '11px', color: '#78350F', marginTop: '2px' }}>
-                        {impactoBajaUI.cobrosCount + impactoBajaUI.penalidadesCount} cuota(s) — {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.cobrosMonto + impactoBajaUI.penalidadesMonto)}. Click para ver detalle.
+                        {impactoBajaUI.cobrosCount + impactoBajaUI.penalidadesCount} cuota(s) — {formatPlata(impactoBajaUI.cobrosMonto + impactoBajaUI.penalidadesMonto)}. Click para ver detalle.
                       </div>
                     </div>
                   </button>
@@ -5758,9 +5750,7 @@ function ModalDetalles({
             <label className="detail-label">FECHA NACIMIENTO</label>
             <div className="detail-value">
               {selectedConductor.fecha_nacimiento
-                ? new Date(
-                    selectedConductor.fecha_nacimiento,
-                  ).toLocaleDateString("es-AR")
+                ? formatFecha(selectedConductor.fecha_nacimiento)
                 : "N/A"}
             </div>
           </div>
@@ -5843,9 +5833,7 @@ function ModalDetalles({
           <div>
             <label className="detail-label">VENCIMIENTO</label>
             <div className="detail-value">
-              {new Date(
-                selectedConductor.licencia_vencimiento,
-              ).toLocaleDateString("es-AR")}
+              {formatFecha(selectedConductor.licencia_vencimiento)}
             </div>
           </div>
           <div>
@@ -6006,7 +5994,7 @@ function ModalDetalles({
                 <label className="detail-label">FECHA DE TERMINACIÓN</label>
                 <div className="detail-value">
                   {selectedConductor.fecha_terminacion
-                    ? new Date(selectedConductor.fecha_terminacion + 'T12:00:00').toLocaleDateString("es-AR")
+                    ? formatFecha(String(selectedConductor.fecha_terminacion).substring(0, 10))
                     : "N/A"}
                 </div>
               </div>
@@ -6060,7 +6048,7 @@ function ModalDetalles({
             <label className="detail-label">FECHA DE INCORPORACIÓN</label>
             <div className="detail-value">
               {(selectedConductor as any).fecha_contratacion
-                ? new Date((selectedConductor as any).fecha_contratacion + 'T12:00:00').toLocaleDateString("es-AR")
+                ? formatFecha(String((selectedConductor as any).fecha_contratacion).substring(0, 10))
                 : "N/A"}
             </div>
           </div>
@@ -6068,7 +6056,7 @@ function ModalDetalles({
             <label className="detail-label">FECHA REINCORPORACIÓN</label>
             <div className="detail-value">
               {(selectedConductor as any).fecha_reincorpoaracion
-                ? new Date((selectedConductor as any).fecha_reincorpoaracion + 'T12:00:00').toLocaleDateString("es-AR")
+                ? formatFecha(String((selectedConductor as any).fecha_reincorpoaracion).substring(0, 10))
                 : "N/A"}
             </div>
           </div>
@@ -6158,8 +6146,8 @@ function ModalDetalles({
                     <div className="vehiculo-fecha">
                       {(item.fecha_inicio || asig?.fecha_inicio) && (
                         <span>
-                          {new Date(item.fecha_inicio || asig.fecha_inicio).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
-                          {(item.fecha_fin || asig?.fecha_fin) && ` - ${new Date(item.fecha_fin || asig.fecha_fin).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`}
+                          {formatFecha(item.fecha_inicio || asig.fecha_inicio)}
+                          {(item.fecha_fin || asig?.fecha_fin) && ` - ${formatFecha(item.fecha_fin || asig.fecha_fin)}`}
                         </span>
                       )}
                     </div>
@@ -6193,9 +6181,9 @@ function ModalDetalles({
                 // Mostrar la fecha efectiva de terminación (baja). Para reactivaciones,
                 // que no tienen fecha de terminación, se usa la de creación del registro.
                 const fecha = b.fecha_terminacion_nueva
-                  ? new Date(b.fecha_terminacion_nueva + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                  ? formatFecha(String(b.fecha_terminacion_nueva).substring(0, 10))
                   : (b.created_at
-                      ? new Date(b.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })
+                      ? formatFecha(b.created_at)
                       : '—');
                 return (
                   <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>

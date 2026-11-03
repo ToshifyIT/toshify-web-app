@@ -5,6 +5,8 @@
 
 import { X, AlertTriangle } from 'lucide-react'
 import type { ExcesoKmRow } from './ExcesoKmTable'
+import { formatNumero } from '../../../../../utils/format'
+import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
 
 interface Props {
   row: ExcesoKmRow | null
@@ -14,7 +16,7 @@ interface Props {
 function formatFecha(fecha: string): string {
   if (!fecha) return '-'
   const [y, m, d] = fecha.split('-')
-  return `${d}/${m}/${y.slice(2)}`
+  return `${d}/${m}/${y}`
 }
 
 export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
@@ -141,8 +143,8 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
                           <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}> → {formatFecha(fechaHasta)}</span>
                         )}
                       </span>
-                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-                        {patentes.join(' - ')}
+                      <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                        {patentes.map(p => <PatenteBadge key={p} patente={p} size="sm" />)}
                       </span>
                     </div>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
@@ -158,7 +160,7 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Acumulado</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: barColor }}>
-                        {acumActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km · {pctAcum.toFixed(0)}%
+                        {acumActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km · {formatNumero(pctAcum)}%
                       </span>
                     </div>
                     <div style={{ width: '100%', height: 5, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
