@@ -4,9 +4,10 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
-import { Eye, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package, Edit2 } from 'lucide-react'
+import { Eye, Trash2, Building2, FileText, Phone, CreditCard, Calendar, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
+import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import './ProveedoresModule.css'
@@ -70,7 +71,6 @@ export function ProveedoresModule() {
 
   // Column filter states - Multiselect tipo Excel
   const [razonSocialFilter, setRazonSocialFilter] = useState<string[]>([])
-  const [razonSocialSearch, setRazonSocialSearch] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
@@ -100,11 +100,6 @@ export function ProveedoresModule() {
     return [...new Set(razones)].sort()
   }, [proveedores])
 
-  const razonSocialFiltrados = useMemo(() => {
-    if (!razonSocialSearch) return razonSocialUnicos
-    return razonSocialUnicos.filter(r => r.toLowerCase().includes(razonSocialSearch.toLowerCase()))
-  }, [razonSocialUnicos, razonSocialSearch])
-
   const estadoOptions = [
     { value: 'true', label: 'Activo' },
     { value: 'false', label: 'Inactivo' }
@@ -117,25 +112,6 @@ export function ProveedoresModule() {
       .filter((c): c is CategoriaProveedor => !!c)
     return [...new Set(cats)].sort()
   }, [proveedores])
-
-  // Toggle functions para multiselect
-  const toggleRazonSocialFilter = (razon: string) => {
-    setRazonSocialFilter(prev =>
-      prev.includes(razon) ? prev.filter(r => r !== razon) : [...prev, razon]
-    )
-  }
-
-  const toggleCategoriaFilter = (cat: string) => {
-    setCategoriaFilter(prev =>
-      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    )
-  }
-
-  const toggleEstadoFilter = (estado: string) => {
-    setEstadoFilter(prev =>
-      prev.includes(estado) ? prev.filter(e => e !== estado) : [...prev, estado]
-    )
-  }
 
   // Handler para stat cards - NO afecta el filtro de columna
   const handleStatCardClick = (cardType: string) => {
@@ -454,55 +430,15 @@ export function ProveedoresModule() {
       {
         accessorKey: 'razon_social',
         header: () => (
-          <div className="dt-column-filter">
-            <span>Razón Social {razonSocialFilter.length > 0 && `(${razonSocialFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${razonSocialFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'razon_social' ? null : 'razon_social')
-              }}
-              title="Filtrar por razón social"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'razon_social' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={razonSocialSearch}
-                  onChange={(e) => setRazonSocialSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {razonSocialFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    razonSocialFiltrados.slice(0, 50).map(razon => (
-                      <label key={razon} className={`dt-column-filter-checkbox ${razonSocialFilter.includes(razon) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={razonSocialFilter.includes(razon)}
-                          onChange={() => toggleRazonSocialFilter(razon)}
-                        />
-                        <span>{razon}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {razonSocialFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setRazonSocialFilter([]); setRazonSocialSearch('') }}
-                  >
-                    Limpiar ({razonSocialFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Razón Social"
+            options={razonSocialUnicos}
+            selectedValues={razonSocialFilter}
+            onSelectionChange={setRazonSocialFilter}
+            filterId="razon_social"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -529,50 +465,15 @@ export function ProveedoresModule() {
       {
         accessorKey: 'categoria',
         header: () => (
-          <div className="dt-column-filter">
-            <span>Categoría {categoriaFilter.length > 0 && `(${categoriaFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${categoriaFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'categoria' ? null : 'categoria')
-              }}
-              title="Filtrar por categoría"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'categoria' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {categoriasUnicas.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin categorías</div>
-                  ) : (
-                    categoriasUnicas.map(cat => {
-                      const catInfo = CATEGORIAS_PROVEEDOR.find(c => c.value === cat)
-                      return (
-                        <label key={cat} className={`dt-column-filter-checkbox ${categoriaFilter.includes(cat) ? 'selected' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={categoriaFilter.includes(cat)}
-                            onChange={() => toggleCategoriaFilter(cat)}
-                          />
-                          <span>{catInfo?.label || cat}</span>
-                        </label>
-                      )
-                    })
-                  )}
-                </div>
-                {categoriaFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => setCategoriaFilter([])}
-                  >
-                    Limpiar ({categoriaFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Categoría"
+            options={categoriasUnicas.map(cat => ({ value: cat, label: CATEGORIAS_PROVEEDOR.find(c => c.value === cat)?.label || cat }))}
+            selectedValues={categoriaFilter}
+            onSelectionChange={setCategoriaFilter}
+            filterId="categoria"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ getValue }) => {
           const value = getValue() as CategoriaProveedor | null
@@ -604,43 +505,15 @@ export function ProveedoresModule() {
       {
         accessorKey: 'activo',
         header: () => (
-          <div className="dt-column-filter">
-            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
-              }}
-              title="Filtrar por estado"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {estadoOptions.map(opt => (
-                    <label key={opt.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(opt.value) ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={estadoFilter.includes(opt.value)}
-                        onChange={() => toggleEstadoFilter(opt.value)}
-                      />
-                      <span>{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-                {estadoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => setEstadoFilter([])}
-                  >
-                    Limpiar ({estadoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Estado"
+            options={estadoOptions}
+            selectedValues={estadoFilter}
+            onSelectionChange={setEstadoFilter}
+            filterId="estado"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ getValue }) => {
           const activo = getValue() as boolean
@@ -729,7 +602,7 @@ export function ProveedoresModule() {
         ),
       },
     ],
-    [canView, canEdit, canDelete, razonSocialFilter, categoriaFilter, categoriasUnicas, estadoFilter, openColumnFilter, handleReactivar]
+    [canView, canEdit, canDelete, razonSocialFilter, razonSocialUnicos, categoriaFilter, categoriasUnicas, estadoFilter, openColumnFilter, handleReactivar]
   )
 
   // Calcular estadísticas
@@ -854,7 +727,6 @@ export function ProveedoresModule() {
         onClearAllFilters={() => {
           // Limpiar TODO: filtros de columna + stat cards
           setRazonSocialFilter([])
-          setRazonSocialSearch('')
           setCategoriaFilter([])
           setEstadoFilter([])
           setActiveStatCard(null)

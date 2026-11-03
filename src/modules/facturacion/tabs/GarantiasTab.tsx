@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -15,7 +14,6 @@ import {
   Eye,
   // Plus,
   DollarSign,
-  Filter,
   UserPlus,
   Trash2,
   Receipt,
@@ -46,6 +44,7 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 import { hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 import { formatFecha } from '../../../utils/format'
+import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 interface ConductorBasico {
   id: string
   nombres: string
@@ -279,7 +278,6 @@ export function GarantiasTab() {
   // Estados para filtros Excel - Garantías
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
-  const [conductorSearch, setConductorSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
   // Búsqueda global del DataTable controlada para reflejarla en "Exportar Registros"
@@ -302,7 +300,6 @@ export function GarantiasTab() {
 
   // Estados para filtros Excel - Movimientos
   const [movConductorFilter, setMovConductorFilter] = useState<string[]>([])
-  const [movConductorSearch, setMovConductorSearch] = useState('')
 
   // Kardex de Garantía (modal P1)
   const [kardexModal, setKardexModal] = useState<{
@@ -384,7 +381,7 @@ export function GarantiasTab() {
     if (!openColumnFilter) return
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn') && !target.closest('.dt-filter-dropdown') && !target.closest('.dt-filter-btn')) {
         setOpenColumnFilter(null)
       }
     }
@@ -480,31 +477,10 @@ export function GarantiasTab() {
     [...new Set(garantias.map(g => g.conductor_nombre).filter(Boolean) as string[])].sort()
   , [garantias])
 
-  const conductoresFiltrados = useMemo(() => {
-    if (!conductorSearch) return conductoresUnicos
-    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
-  }, [conductoresUnicos, conductorSearch])
-
   // Para movimientos
   const movConductoresUnicos = useMemo(() =>
     [...new Set(todosLosPagos.map(p => p.conductor_nombre).filter(Boolean) as string[])].sort()
   , [todosLosPagos])
-
-  const movConductoresFiltrados = useMemo(() => {
-    if (!movConductorSearch) return movConductoresUnicos
-    return movConductoresUnicos.filter(c => c.toLowerCase().includes(movConductorSearch.toLowerCase()))
-  }, [movConductoresUnicos, movConductorSearch])
-
-  // Toggle functions
-  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleMovConductorFilter = (val: string) => setMovConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
 
   async function cargarGarantias() {
     setLoading(true)
@@ -1861,41 +1837,15 @@ export function GarantiasTab() {
       accessorKey: 'conductor_nombre',
       meta: { info: 'Conductor, su DNI o CUIT y la modalidad del alquiler (TURNO o CARGO).' },
       header: () => (
-        <div className="dt-column-filter">
-          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
-            data-filter-id="conductor"
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'conductor' && createPortal(
-            <div className="dt-column-filter-dropdown dt-excel-filter dt-filter-portal" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="conductor"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="conductor"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268) }} onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar conductor..."
-                value={conductorSearch}
-                onChange={(e) => setConductorSearch(e.target.value)}
-                className="dt-column-filter-input"
-              />
-              <div className="dt-excel-filter-list">
-                {conductoresFiltrados.map(c => (
-                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
-                    <span>{c}</span>
-                  </label>
-                ))}
-              </div>
-              {conductorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
-                  Limpiar ({conductorFilter.length})
-                </button>
-              )}
-            </div>,
-            document.body
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Conductor"
+          options={conductoresUnicos}
+          selectedValues={conductorFilter}
+          onSelectionChange={setConductorFilter}
+          filterId="conductor"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         // FIX 2026-05-20: padding interno para que el conductor no quede pegado al borde
@@ -2064,42 +2014,23 @@ export function GarantiasTab() {
       accessorKey: 'estado',
       meta: { info: 'Estado de la garantía: En curso, Completada, Pendiente, Devuelto o N/A. En bajas se cruza con el saldo: DEBE si, aun descontando la garantía, sigue debiendo; EN DEVOLUCIÓN si la garantía cubre la deuda y hay que devolverle la diferencia. El monto está en Liquidación.' },
       header: () => (
-        <div className="dt-column-filter">
-          <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
-            data-filter-id="estado"
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'estado' && createPortal(
-            <div className="dt-column-filter-dropdown dt-excel-filter dt-filter-portal" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="estado"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="estado"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268) }} onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {[
-                  { value: 'completada', label: 'Completada' },
-                  { value: 'en_curso', label: 'En Curso' },
-                  { value: 'en_devolucion', label: 'En Devolución' },
-                  { value: 'debe', label: 'Debe' },
-                  { value: 'devuelto', label: 'Devuelto' },
-                  { value: 'pendiente', label: 'Pendiente' },
-                  { value: 'no_aplica', label: 'N/A (no aplica)' }
-                ].map(e => (
-                  <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(e.value) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={estadoFilter.includes(e.value)} onChange={() => toggleEstadoFilter(e.value)} />
-                    <span>{e.label}</span>
-                  </label>
-                ))}
-              </div>
-              {estadoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setEstadoFilter([])}>
-                  Limpiar ({estadoFilter.length})
-                </button>
-              )}
-            </div>,
-            document.body
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Estado"
+          options={[
+            { value: 'completada', label: 'Completada' },
+            { value: 'en_curso', label: 'En Curso' },
+            { value: 'en_devolucion', label: 'En Devolución' },
+            { value: 'debe', label: 'Debe' },
+            { value: 'devuelto', label: 'Devuelto' },
+            { value: 'pendiente', label: 'Pendiente' },
+            { value: 'no_aplica', label: 'N/A (no aplica)' }
+          ]}
+          selectedValues={estadoFilter}
+          onSelectionChange={setEstadoFilter}
+          filterId="estado"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => {
         const estado = row.original.estado
@@ -2240,7 +2171,7 @@ export function GarantiasTab() {
     // Los handlers (editar/eliminar/registrar devolucion) se recrean en cada render:
     // incluirlos rearmaria las columnas siempre y romperia el memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides, saldosPorConductor, cambiosTarifa, etiquetasTarifa])
+  ], [conductorFilter, conductoresUnicos, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides, saldosPorConductor, cambiosTarifa, etiquetasTarifa])
 
   // ========== COLUMNAS TABLA MOVIMIENTOS ==========
 
@@ -2253,41 +2184,15 @@ export function GarantiasTab() {
     {
       accessorKey: 'conductor_nombre',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Conductor {movConductorFilter.length > 0 && `(${movConductorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${movConductorFilter.length > 0 ? 'active' : ''}`}
-            data-filter-id="mov-conductor"
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'mov-conductor' ? null : 'mov-conductor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'mov-conductor' && createPortal(
-            <div className="dt-column-filter-dropdown dt-excel-filter dt-filter-portal" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="mov-conductor"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="mov-conductor"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268) }} onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar conductor..."
-                value={movConductorSearch}
-                onChange={(e) => setMovConductorSearch(e.target.value)}
-                className="dt-column-filter-input"
-              />
-              <div className="dt-excel-filter-list">
-                {movConductoresFiltrados.map(c => (
-                  <label key={c} className={`dt-column-filter-checkbox ${movConductorFilter.includes(c) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={movConductorFilter.includes(c)} onChange={() => toggleMovConductorFilter(c)} />
-                    <span>{c}</span>
-                  </label>
-                ))}
-              </div>
-              {movConductorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setMovConductorFilter([]); setMovConductorSearch('') }}>
-                  Limpiar ({movConductorFilter.length})
-                </button>
-              )}
-            </div>,
-            document.body
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Conductor"
+          options={movConductoresUnicos}
+          selectedValues={movConductorFilter}
+          onSelectionChange={setMovConductorFilter}
+          filterId="mov-conductor"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => <span className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</span>
     },
@@ -2335,7 +2240,7 @@ export function GarantiasTab() {
     }
     // Igual que en garantias: editarMovimiento se recrea en cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [movConductorFilter, movConductorSearch, movConductoresFiltrados, openColumnFilter])
+  ], [movConductorFilter, movConductoresUnicos, openColumnFilter])
 
   // ========== DATOS FILTRADOS ==========
 
@@ -2348,7 +2253,7 @@ export function GarantiasTab() {
       chips.push({
         id: 'gar-conductor',
         label: conductorFilter.length === 1 ? `Conductor: ${conductorFilter[0]}` : `Conductor: ${conductorFilter.length} seleccionados`,
-        onClear: () => { setConductorFilter([]); setConductorSearch('') }
+        onClear: () => { setConductorFilter([]) }
       })
     }
 
@@ -2485,7 +2390,6 @@ export function GarantiasTab() {
     setFiltroKpi(null)
     setEstadoFilter([])
     setConductorFilter([])
-    setConductorSearch('')
     setEstadoCondFilter('todos')
     setAsignadoFilter('todos')
   }
@@ -2604,18 +2508,18 @@ export function GarantiasTab() {
                   {/* Descargas disponibles para cualquier usuario con acceso. */}
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
-                      className="fact-btn fact-btn-secondary"
+                      className="btn-secondary"
                       onClick={exportarRegistrosVisibles}
                       title="Exportar a Excel solo las garantías visibles en la tabla, respetando todos los filtros aplicados"
                     >
-                      <Download size={14} /> Exportar
+                      <Download size={15} /> Exportar
                     </button>
                     <button
-                      className="fact-btn fact-btn-secondary"
+                      className="btn-secondary"
                       onClick={exportarDeudores}
                       title="Exportar a Excel los conductores de baja que nos deben, con sus datos de contacto y la empresa con la que firmaron contrato"
                     >
-                      <Download size={14} /> Exportar deudores
+                      <Download size={15} /> Exportar deudores
                     </button>
                     {/* Sincronizar oculto: la garantía se recalcula automáticamente al cerrar período */}
                   </div>
@@ -2659,9 +2563,13 @@ export function GarantiasTab() {
                       </button>
                     ))}
                   </div>
-                  <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
+                  <button
+                    className="btn-primary garantias-btn-agregar"
+                    onClick={agregarGarantia}
+                    title="Agregar garantía"
+                    aria-label="Agregar garantía"
+                  >
                     <UserPlus size={16} />
-                    Agregar Garantía
                   </button>
                 </div>
               </div>

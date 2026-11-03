@@ -7,6 +7,7 @@ import { showError, showSuccess } from '../../utils/toast'
 import { Eye, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box, AlertTriangle, CheckCircle, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
+import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './ProductosModule.css'
@@ -100,9 +101,7 @@ export function ProductosModule() {
 
   // Column filter states - Multiselect tipo Excel
   const [codigoFilter, setCodigoFilter] = useState<string[]>([])
-  const [codigoSearch, setCodigoSearch] = useState('')
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
-  const [nombreSearch, setNombreSearch] = useState('')
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
@@ -142,36 +141,6 @@ export function ProductosModule() {
     { value: 'REPUESTOS', label: 'Repuestos' },
     { value: 'HERRAMIENTAS', label: 'Herramientas' }
   ]
-
-  // Opciones filtradas por búsqueda
-  const codigosFiltrados = useMemo(() => {
-    if (!codigoSearch) return codigosUnicos
-    return codigosUnicos.filter(c => c.toLowerCase().includes(codigoSearch.toLowerCase()))
-  }, [codigosUnicos, codigoSearch])
-
-  const nombresFiltrados = useMemo(() => {
-    if (!nombreSearch) return nombresUnicos
-    return nombresUnicos.filter(n => n.toLowerCase().includes(nombreSearch.toLowerCase()))
-  }, [nombresUnicos, nombreSearch])
-
-  // Toggle functions para multiselect
-  const toggleCodigoFilter = (codigo: string) => {
-    setCodigoFilter(prev =>
-      prev.includes(codigo) ? prev.filter(c => c !== codigo) : [...prev, codigo]
-    )
-  }
-
-  const toggleNombreFilter = (nombre: string) => {
-    setNombreFilter(prev =>
-      prev.includes(nombre) ? prev.filter(n => n !== nombre) : [...prev, nombre]
-    )
-  }
-
-  const toggleTipoFilter = (tipo: string) => {
-    setTipoFilter(prev =>
-      prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
-    )
-  }
 
   // Generar filtros externos para mostrar en la barra de filtros del DataTable
   const externalFilters = useMemo(() => {
@@ -602,55 +571,15 @@ export function ProductosModule() {
       {
         accessorKey: 'codigo',
         header: () => (
-          <div className="dt-column-filter">
-            <span>Código {codigoFilter.length > 0 && `(${codigoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${codigoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo')
-              }}
-              title="Filtrar por código"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'codigo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={codigoSearch}
-                  onChange={(e) => setCodigoSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {codigosFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    codigosFiltrados.slice(0, 50).map(codigo => (
-                      <label key={codigo} className={`dt-column-filter-checkbox ${codigoFilter.includes(codigo) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={codigoFilter.includes(codigo)}
-                          onChange={() => toggleCodigoFilter(codigo)}
-                        />
-                        <span>{codigo}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {codigoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setCodigoFilter([]); setCodigoSearch('') }}
-                  >
-                    Limpiar ({codigoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Código"
+            options={codigosUnicos}
+            selectedValues={codigoFilter}
+            onSelectionChange={setCodigoFilter}
+            filterId="codigo"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
@@ -661,55 +590,15 @@ export function ProductosModule() {
       {
         accessorKey: 'nombre',
         header: () => (
-          <div className="dt-column-filter">
-            <span>Nombre {nombreFilter.length > 0 && `(${nombreFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${nombreFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre')
-              }}
-              title="Filtrar por nombre"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'nombre' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={nombreSearch}
-                  onChange={(e) => setNombreSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {nombresFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    nombresFiltrados.slice(0, 50).map(nombre => (
-                      <label key={nombre} className={`dt-column-filter-checkbox ${nombreFilter.includes(nombre) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={nombreFilter.includes(nombre)}
-                          onChange={() => toggleNombreFilter(nombre)}
-                        />
-                        <span>{nombre}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {nombreFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setNombreFilter([]); setNombreSearch('') }}
-                  >
-                    Limpiar ({nombreFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Nombre"
+            options={nombresUnicos}
+            selectedValues={nombreFilter}
+            onSelectionChange={setNombreFilter}
+            filterId="nombre"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 500 }}>{getValue() as string}</span>
@@ -730,43 +619,15 @@ export function ProductosModule() {
       {
         id: 'tipo',
         header: () => (
-          <div className="dt-column-filter">
-            <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo')
-              }}
-              title="Filtrar por tipo"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'tipo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {tipoOptions.map(opt => (
-                    <label key={opt.value} className={`dt-column-filter-checkbox ${tipoFilter.includes(opt.value) ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={tipoFilter.includes(opt.value)}
-                        onChange={() => toggleTipoFilter(opt.value)}
-                      />
-                      <span>{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-                {tipoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => setTipoFilter([])}
-                  >
-                    Limpiar ({tipoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Tipo"
+            options={tipoOptions}
+            selectedValues={tipoFilter}
+            onSelectionChange={setTipoFilter}
+            filterId="tipo"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ row }) => {
           const tipo = row.original.tipo
@@ -881,7 +742,7 @@ export function ProductosModule() {
         ),
       },
     ],
-    [canView, canEdit, canDelete, codigoFilter, nombreFilter, tipoFilter, openColumnFilter]
+    [canView, canEdit, canDelete, codigoFilter, codigosUnicos, nombreFilter, nombresUnicos, tipoFilter, openColumnFilter]
   )
 
   // Calcular estadísticas en una sola pasada O(n) en vez de O(3n)
@@ -1006,9 +867,7 @@ export function ProductosModule() {
         onClearAllFilters={() => {
           // Limpiar filtros de columna
           setCodigoFilter([])
-          setCodigoSearch('')
           setNombreFilter([])
-          setNombreSearch('')
           setTipoFilter([])
           // Limpiar stat card
           setActiveStatCard(null)

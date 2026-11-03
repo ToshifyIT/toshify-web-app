@@ -195,13 +195,26 @@ export function ExcelColumnFilter({
     onSelectionChange([])
   }
 
+  // Marcar / desmarcar todas las opciones visibles (las que coinciden con la búsqueda)
+  const todasMarcadas = filteredOptions.length > 0 && filteredOptions.every(o => selectedValues.includes(o.value))
+  const algunasMarcadas = !todasMarcadas && filteredOptions.some(o => selectedValues.includes(o.value))
+  const toggleTodas = () => {
+    const visibles = filteredOptions.map(o => o.value)
+    if (todasMarcadas) {
+      onSelectionChange(selectedValues.filter(v => !visibles.includes(v)))
+    } else {
+      onSelectionChange([...new Set([...selectedValues, ...visibles])])
+    }
+  }
+
+  // Mismo aspecto que los filtros automáticos de DataTable (dt-filter-*)
   return (
-    <div className="dt-column-filter">
-      <span>{label} {hasSelection && `(${selectedValues.length})`}</span>
+    <div className="dt-filter-header">
+      <span className="dt-filter-label">{label}</span>
       <button
         ref={buttonRef}
         type="button"
-        className={`dt-column-filter-btn ${hasSelection ? 'active' : ''}`}
+        className={`dt-filter-btn ${hasSelection ? 'active' : ''}`}
         onClick={handleToggle}
         title={`Filtrar por ${label.toLowerCase()}`}
       >
@@ -210,7 +223,7 @@ export function ExcelColumnFilter({
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="dt-column-filter-dropdown dt-excel-filter dt-filter-portal"
+          className="dt-filter-dropdown"
           style={{
             position: 'fixed',
             top: position.top,
@@ -223,18 +236,26 @@ export function ExcelColumnFilter({
             placeholder="Buscar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="dt-column-filter-input"
+            className="dt-filter-search"
             autoFocus
           />
-          <div className="dt-excel-filter-list">
+          <div className="dt-filter-options">
+            {filteredOptions.length > 3 && (
+              <label className="dt-filter-option dt-filter-option-todas">
+                <input
+                  type="checkbox"
+                  checked={todasMarcadas}
+                  ref={el => { if (el) el.indeterminate = algunasMarcadas }}
+                  onChange={toggleTodas}
+                />
+                <span>{searchTerm ? 'Seleccionar resultados' : 'Seleccionar todas'} ({filteredOptions.length})</span>
+              </label>
+            )}
             {filteredOptions.length === 0 ? (
-              <div className="dt-excel-filter-empty">Sin resultados</div>
+              <div className="dt-filter-empty">Sin resultados</div>
             ) : (
               filteredOptions.map(option => (
-                <label
-                  key={option.value}
-                  className={`dt-column-filter-checkbox ${selectedValues.includes(option.value) ? 'selected' : ''}`}
-                >
+                <label key={option.value} className="dt-filter-option">
                   <input
                     type="checkbox"
                     checked={selectedValues.includes(option.value)}
@@ -248,10 +269,10 @@ export function ExcelColumnFilter({
           {hasSelection && (
             <button
               type="button"
-              className="dt-column-filter-clear"
+              className="dt-filter-clear"
               onClick={() => { clearSelection(); setSearchTerm(''); }}
             >
-              Limpiar ({selectedValues.length})
+              Limpiar filtro
             </button>
           )}
         </div>,

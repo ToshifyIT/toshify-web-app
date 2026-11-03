@@ -9,6 +9,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
+import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 import { Alerta } from '../../components/ui/alertas'
@@ -1603,17 +1604,6 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     [...new Set(entradasSimples.map(e => e.proveedor_nombre))].filter(Boolean) as string[],
     [entradasSimples]
   )
-  // Toggle functions for Entradas Simples filters
-  const toggleProductoFilter = (value: string) => {
-    setProductoFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    )
-  }
-  const toggleProveedorFilter = (value: string) => {
-    setProveedorFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    )
-  }
   // Filtered Entradas Simples data
   const entradasFiltered = useMemo(() => {
     let data = entradasSimples
@@ -1750,32 +1740,15 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     {
       accessorKey: 'producto_codigo',
       header: () => (
-        <div className="dt-column-filter" ref={openColumnFilter === 'producto' ? filterRef : null}>
-          <span>Producto {productoFilter.length > 0 && `(${productoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${productoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'producto' ? null : 'producto') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'producto' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {uniqueProductos.map(producto => (
-                  <label key={producto} className={`dt-column-filter-checkbox ${productoFilter.includes(producto) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={productoFilter.includes(producto)} onChange={() => toggleProductoFilter(producto)} />
-                    <span>{producto}</span>
-                  </label>
-                ))}
-              </div>
-              {productoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setProductoFilter([])}>
-                  Limpiar ({productoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Producto"
+          options={uniqueProductos}
+          selectedValues={productoFilter}
+          onSelectionChange={setProductoFilter}
+          filterId="producto"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         <div>
@@ -1794,32 +1767,15 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     {
       accessorKey: 'proveedor_nombre',
       header: () => (
-        <div className="dt-column-filter" ref={openColumnFilter === 'proveedor' ? filterRef : null}>
-          <span>Proveedor {proveedorFilter.length > 0 && `(${proveedorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${proveedorFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'proveedor' ? null : 'proveedor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'proveedor' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {uniqueProveedores.map(proveedor => (
-                  <label key={proveedor} className={`dt-column-filter-checkbox ${proveedorFilter.includes(proveedor) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={proveedorFilter.includes(proveedor)} onChange={() => toggleProveedorFilter(proveedor)} />
-                    <span>{proveedor}</span>
-                  </label>
-                ))}
-              </div>
-              {proveedorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setProveedorFilter([])}>
-                  Limpiar ({proveedorFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Proveedor"
+          options={uniqueProveedores}
+          selectedValues={proveedorFilter}
+          onSelectionChange={setProveedorFilter}
+          filterId="proveedor"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         <span style={{ color: 'var(--text-primary)', fontSize: '14px' }}>

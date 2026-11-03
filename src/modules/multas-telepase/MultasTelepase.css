@@ -405,3 +405,26 @@
 .multa-detalle:hover .multa-detalle-tip {
   display: block;
 }
+
+/* Ver detalle de los montos: solo el ojo, para que la tarjeta no se pise */
+.multas-stats .multas-stat-detalle {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.multas-stats .multas-stat-detalle:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+.multas-stats .multas-stat-detalle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
