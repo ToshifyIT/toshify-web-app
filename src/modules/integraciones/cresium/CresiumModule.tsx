@@ -515,6 +515,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
     {
       accessorKey: 'tipo',
       header: 'Movimiento',
+      meta: { filterValue: (m: MovimientoCresium) => ETIQUETA_TIPO[m.tipo ?? ''] ?? m.tipo },
       cell: ({ row }) => {
         const m = row.original
         const Icono = m.direccion === 'entrada' ? ArrowDownLeft : ArrowUpRight
@@ -631,6 +632,7 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
     {
       accessorKey: 'alegra_estado',
       header: 'Estado',
+      meta: { filterValue: (m: MovimientoCresium) => ETIQUETA_ESTADO[m.alegra_estado] },
       cell: ({ row }) => {
         const m = row.original
         return (
@@ -769,13 +771,13 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
       </div>
 
       {datos && !datos.cresium_configurado && (
-        <div className="aviso aviso--warning">Faltan las claves de Cresium de {datos.empresa_label} en el .env del servidor.</div>
+        <div className="aviso aviso--warning"><AlertTriangle size={14} /><span>Faltan las claves de Cresium de {datos.empresa_label} en el .env del servidor.</span></div>
       )}
       {datos && !datos.alegra_configurado && (
-        <div className="aviso aviso--warning">Falta el token de Alegra de {datos.empresa_label} en el .env del servidor: se pueden ver los movimientos pero no cargarlos.</div>
+        <div className="aviso aviso--warning"><AlertTriangle size={14} /><span>Falta el token de Alegra de {datos.empresa_label} en el .env del servidor: se pueden ver los movimientos pero no cargarlos.</span></div>
       )}
       {propuestas?.error_alegra && (
-        <div className="aviso aviso--warning">No se pudo leer Alegra: {propuestas.error_alegra}</div>
+        <div className="aviso aviso--warning"><AlertTriangle size={14} /><span>No se pudo leer Alegra: {propuestas.error_alegra}</span></div>
       )}
 
       <DataTable
@@ -791,7 +793,6 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
         emptyDescription={datos?.ultimo_movimiento
           ? `El último movimiento guardado es del ${formatFechaHoraART(datos.ultimo_movimiento)}. Lo nuevo se trae solo cada hora (9 a 18 h); el botón «Traer nuevos de Cresium» es para no esperar.`
           : 'Tocá «Traer nuevos de Cresium» o elegí otro mes'}
-        disableAutoFilters
         alwaysVisibleColumns={['sel', 'alegra', 'acciones']}
         getRowClassName={(m) => (seleccion.has(m.cresium_id) ? 'cr-fila-seleccionada' : undefined)}
         headerAction={

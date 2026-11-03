@@ -1,28 +1,32 @@
-/* Grilla de indicadores uniforme: mismo ancho y alto; entran tantas por fila como quepan */
+/* Fila de indicadores: cada tarjeta mide lo que su contenido (los montos son más
+   anchos que los contadores) y se estiran para llenar la fila. Así entran todas en
+   una línea siempre que se pueda; si no, bajan a la siguiente. Mismo alto. */
 #root .stats-grid-uniforme {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: stretch;
 }
-#root .stats-grid-uniforme > * { min-width: 0; height: 100%; box-sizing: border-box; }
+#root .stats-grid-uniforme > * { flex: 1 1 auto; min-width: 0; box-sizing: border-box; }
 
+/* Celular: 2 columnas parejas */
 @media (max-width: 640px) {
-  #root .stats-grid-uniforme { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #root .stats-grid-uniforme { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* Contenido de la tarjeta siempre igual: valor y etiqueta lado a lado; la etiqueta
-   ocupa hasta 2 renglones y, si aun así no entra, se corta con «…». */
+/* Contenido de la tarjeta siempre igual: valor arriba y etiqueta abajo; la
+   etiqueta ocupa hasta 2 renglones y, si aun así no entra, se corta con «…». */
 #root .stats-grid-uniforme [class*="stat-content"] {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 0;
   min-width: 0;
 }
 #root .stats-grid-uniforme [class*="stat-value"] { flex-shrink: 0; }
 #root .stats-grid-uniforme [class*="stat-label"] {
+  max-width: 100%;
   min-width: 0;
   white-space: normal;
   line-height: 1.2;

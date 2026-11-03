@@ -234,21 +234,21 @@ export function ExcelDateRangeFilter({
   }
 
   return (
-    <div className="dt-column-filter">
-      <span>{label}{mostrarIndicador && hasSelection && ' (*)'}</span>
+    <div className="dt-filter-header">
+      <span className="dt-filter-label">{label}{mostrarIndicador && hasSelection && ' (*)'}</span>
       <button
         ref={buttonRef}
         type="button"
-        className={`dt-column-filter-btn ${hasSelection ? 'active' : ''}`}
+        className={`dt-filter-btn ${hasSelection ? 'active' : ''}`}
         onClick={handleToggle}
         title={`Filtrar por rango de fechas`}
       >
-        <Calendar size={14} />
+        <Calendar size={12} />
       </button>
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="dt-column-filter-dropdown dt-filter-portal dt-filter-dropdown-calendar"
+          className="dt-filter-dropdown dt-filter-dropdown-calendar"
           style={{ position: 'fixed', top: position.top, left: position.left }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -341,9 +341,8 @@ export function ExcelDateRangeFilter({
             {hasSelection && (
               <button
                 type="button"
-                className="dt-column-filter-clear"
+                className="dt-filter-clear"
                 onClick={() => onRangeChange(null, null)}
-                style={{ marginTop: '4px' }}
               >
                 Limpiar filtro
               </button>

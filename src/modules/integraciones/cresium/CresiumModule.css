@@ -330,3 +330,11 @@
 @keyframes cr-girar {
   to { transform: rotate(360deg); }
 }
+
+/* Avisos (falta de claves, error de Alegra): una franja fina de todo el ancho,
+   pegada a lo que tiene arriba y abajo, para no comerle alto a la tabla. */
+.cr-module > .aviso {
+  width: 100%;
+  padding: 4px 10px;
+  margin: -8px 0;
+}

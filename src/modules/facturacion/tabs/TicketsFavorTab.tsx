@@ -8,8 +8,7 @@ import {
   Clock,
   XCircle,
   Plus,
-  DollarSign,
-  Filter
+  DollarSign
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -18,6 +17,7 @@ import { formatCurrency, formatDate, TIPOS_TICKET_FAVOR } from '../../../types/f
 import { useSede } from '../../../contexts/SedeContext'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
+import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 
 export function TicketsFavorTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -29,7 +29,6 @@ export function TicketsFavorTab() {
   // Estados para filtros Excel
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
-  const [conductorSearch, setConductorSearch] = useState('')
   const [tipoFilterExcel, setTipoFilterExcel] = useState<string[]>([])
   const [estadoFilterExcel, setEstadoFilterExcel] = useState<string[]>([])
 
@@ -42,7 +41,7 @@ export function TicketsFavorTab() {
     if (!openColumnFilter) return
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn') && !target.closest('.dt-filter-dropdown') && !target.closest('.dt-filter-btn')) {
         setOpenColumnFilter(null)
       }
     }
@@ -54,22 +53,6 @@ export function TicketsFavorTab() {
   const conductoresUnicos = useMemo(() =>
     [...new Set(tickets.map(t => t.conductor_nombre).filter(Boolean) as string[])].sort()
   , [tickets])
-
-  const conductoresFiltrados = useMemo(() => {
-    if (!conductorSearch) return conductoresUnicos
-    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
-  }, [conductoresUnicos, conductorSearch])
-
-  // Toggle functions
-  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleTipoFilterExcel = (val: string) => setTipoFilterExcel(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleEstadoFilterExcel = (val: string) => setEstadoFilterExcel(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
 
   async function cargarTickets() {
     setLoading(true)
@@ -387,39 +370,15 @@ export function TicketsFavorTab() {
     {
       accessorKey: 'conductor_nombre',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'conductor' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar conductor..."
-                value={conductorSearch}
-                onChange={(e) => setConductorSearch(e.target.value)}
-                className="dt-column-filter-input"
-              />
-              <div className="dt-excel-filter-list">
-                {conductoresFiltrados.map(c => (
-                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
-                    <span>{c}</span>
-                  </label>
-                ))}
-              </div>
-              {conductorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
-                  Limpiar ({conductorFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Conductor"
+          options={conductoresUnicos}
+          selectedValues={conductorFilter}
+          onSelectionChange={setConductorFilter}
+          filterId="conductor"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         <div>
@@ -431,32 +390,15 @@ export function TicketsFavorTab() {
     {
       accessorKey: 'tipo',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Tipo {tipoFilterExcel.length > 0 && `(${tipoFilterExcel.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${tipoFilterExcel.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'tipo' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {TIPOS_TICKET_FAVOR.map(t => (
-                  <label key={t.codigo} className={`dt-column-filter-checkbox ${tipoFilterExcel.includes(t.codigo) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={tipoFilterExcel.includes(t.codigo)} onChange={() => toggleTipoFilterExcel(t.codigo)} />
-                    <span>{t.nombre}</span>
-                  </label>
-                ))}
-              </div>
-              {tipoFilterExcel.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setTipoFilterExcel([])}>
-                  Limpiar ({tipoFilterExcel.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Tipo"
+          options={TIPOS_TICKET_FAVOR.map(t => ({ value: t.codigo, label: t.nombre }))}
+          selectedValues={tipoFilterExcel}
+          onSelectionChange={setTipoFilterExcel}
+          filterId="tipo"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => {
         const tipoInfo = TIPOS_TICKET_FAVOR.find(t => t.codigo === row.original.tipo)
@@ -476,37 +418,20 @@ export function TicketsFavorTab() {
     {
       accessorKey: 'estado',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Estado {estadoFilterExcel.length > 0 && `(${estadoFilterExcel.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${estadoFilterExcel.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'estado' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {[
-                  { value: 'pendiente', label: 'Pendiente' },
-                  { value: 'aprobado', label: 'Aprobado' },
-                  { value: 'rechazado', label: 'Rechazado' },
-                  { value: 'aplicado', label: 'Aplicado' }
-                ].map(e => (
-                  <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilterExcel.includes(e.value) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={estadoFilterExcel.includes(e.value)} onChange={() => toggleEstadoFilterExcel(e.value)} />
-                    <span>{e.label}</span>
-                  </label>
-                ))}
-              </div>
-              {estadoFilterExcel.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setEstadoFilterExcel([])}>
-                  Limpiar ({estadoFilterExcel.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Estado"
+          options={[
+                { value: 'pendiente', label: 'Pendiente' },
+                { value: 'aprobado', label: 'Aprobado' },
+                { value: 'rechazado', label: 'Rechazado' },
+                { value: 'aplicado', label: 'Aplicado' }
+              ]}
+          selectedValues={estadoFilterExcel}
+          onSelectionChange={setEstadoFilterExcel}
+          filterId="estado"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => {
         const estado = row.original.estado
@@ -546,7 +471,7 @@ export function TicketsFavorTab() {
         )
       }
     }
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, tipoFilterExcel, estadoFilterExcel, openColumnFilter])
+  ], [conductorFilter, conductoresUnicos, tipoFilterExcel, estadoFilterExcel, openColumnFilter])
 
   const ticketsFiltrados = useMemo(() => {
     return tickets.filter(t => {

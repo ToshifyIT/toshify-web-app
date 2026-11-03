@@ -2366,3 +2366,75 @@
 .fact-module > .tabs-bar {
   margin-bottom: 0;
 }
+
+/* -----------------------------------------------------
+   Fila de metricas del Reporte: se busca que entren todas en 1 linea.
+   - Numero arriba y texto abajo (no uno al lado del otro): cada tarjeta mide
+     lo que el mas ancho de los dos, no la suma, y asi entran las 8.
+   - Si igual no entran, bajan de linea (como mucho 2 filas).
+   - #root para ganarle a stats-compactos.css. Scoped porque .fact-stats-grid
+     la comparten otros tabs.
+   ----------------------------------------------------- */
+@media (min-width: 769px) {
+  #root .fact-stats-grid.fact-stats-grid-reporte {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  #root .fact-stats-grid-reporte .fact-stat-card {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  #root .fact-stats-grid-reporte .stat-content {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
+
+  #root .fact-stats-grid-reporte .stat-value {
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  #root .fact-stats-grid-reporte .stat-label {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+}
+
+/* Acciones de Garantías en la misma línea que el buscador: sin la caja ni el
+   padding de .fact-header (que las bajaba a una fila aparte). */
+.fact-module .fact-header.fact-header-inline {
+  padding: 0;
+  gap: 8px;
+}
+
+/* "Agregar garantía": solo el ícono, cuadrado como el alto de los botones */
+.fact-header .btn-primary.garantias-btn-agregar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* Fila de metricas de Garantias en 1 linea si entran (como el Reporte): cada
+   tarjeta mide lo que su contenido y bajan de linea solo si no hay lugar. */
+@media (min-width: 769px) {
+  #root .fact-stats-grid.fact-stats-grid-garantias {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  #root .fact-stats-grid-garantias .fact-stat-card {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}

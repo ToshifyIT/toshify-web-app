@@ -28,7 +28,6 @@ import {
   Loader2,
   RefreshCw,
   // FileSpreadsheet,
-  Filter,
   AlertCircle,
   AlertTriangle,
   Calculator,
@@ -99,6 +98,7 @@ import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 import { formatNumero } from '../../../utils/format'
+import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
 function parseImporteMulta(val: string): number {
   let s = val.replace(/[$\s]/g, '')
@@ -670,7 +670,6 @@ export function ReporteFacturacionTab() {
 
   // Filtros Excel por columna
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
-  const [conductorSearch, setConductorSearch] = useState('')
   const [tipoFilter] = useState<string[]>([])
   const [patenteFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
@@ -924,7 +923,9 @@ export function ReporteFacturacionTab() {
 
   // Cerrar dropdown de filtro al hacer click fuera
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('.dt-filter-dropdown') || target?.closest('.dt-filter-btn')) return
       if (openColumnFilter) setOpenColumnFilter(null)
     }
     document.addEventListener('click', handleClickOutside)
@@ -938,17 +939,6 @@ export function ReporteFacturacionTab() {
   const conductoresUnicos = useMemo(() =>
     [...new Set(datosParaFiltros.map(f => f.conductor_nombre).filter(Boolean))].sort() as string[]
   , [datosParaFiltros])
-
-  // Listas filtradas por búsqueda
-  const conductoresFiltrados = useMemo(() => {
-    if (!conductorSearch) return conductoresUnicos
-    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
-  }, [conductoresUnicos, conductorSearch])
-
-  // Toggle functions
-  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
 
   // Cargar desglose de días para un conductor específico
   async function cargarDesgloseDias(conductorId: string, conductorNombre: string, conductorDni: string, _turnosCobrados: number) {
@@ -11081,38 +11071,15 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'conductor_nombre',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'conductor' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar conductor..."
-                value={conductorSearch}
-                onChange={(e) => setConductorSearch(e.target.value)}
-              />
-              <div className="dt-excel-filter-list">
-                {conductoresFiltrados.map(c => (
-                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
-                    <span>{c}</span>
-                  </label>
-                ))}
-              </div>
-              {conductorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
-                  Limpiar ({conductorFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Conductor"
+          options={conductoresUnicos}
+          selectedValues={conductorFilter}
+          onSelectionChange={setConductorFilter}
+          filterId="conductor"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', paddingLeft: '8px' }}>
@@ -11674,7 +11641,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados])
+  ], [excesos, modoVistaPrevia, conductorFilter, conductoresUnicos, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados])
 
   // Info de la semana
   const infoSemana = useMemo(() => {
@@ -12274,7 +12241,7 @@ export function ReporteFacturacionTab() {
           {/* Stats de Vista Previa */}
           {stats && (
             <div className="fact-stats">
-              <div className="fact-stats-grid">
+              <div className="fact-stats-grid fact-stats-grid-reporte">
                 <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
@@ -12495,7 +12462,7 @@ export function ReporteFacturacionTab() {
           {/* Stats */}
           {stats && (
             <div className="fact-stats">
-              <div className="fact-stats-grid">
+              <div className="fact-stats-grid fact-stats-grid-reporte">
                 <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
