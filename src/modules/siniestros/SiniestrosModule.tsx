@@ -23,7 +23,8 @@ import {
   FolderOpen,
   Download,
   CheckCircle,
-  History
+  History,
+  Users
 } from 'lucide-react'
 import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
@@ -51,6 +52,7 @@ import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
 import { hoyART } from '../../utils/fechaArgentina'
 import { formatFecha, formatPlata } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
 function toISODateLocal(date: Date) {
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -83,6 +85,16 @@ function parseFechaSiniestro(fechaStr: string | undefined | null) {
   }
   return null
 }
+
+/** Pestañas del formulario de edición (como Conductores): se edita una parte a la vez. */
+type PestanaSiniestro = 'evento' | 'descripcion' | 'tercero' | 'gestion'
+
+const PESTANAS_SINIESTRO: TabsBarItem<PestanaSiniestro>[] = [
+  { id: 'evento', label: 'Evento', icon: AlertTriangle },
+  { id: 'descripcion', label: 'Descripción', icon: FileText },
+  { id: 'tercero', label: 'Tercero', icon: Users },
+  { id: 'gestion', label: 'Gestión y montos', icon: DollarSign },
+]
 
 /** Estados en los que el vehículo circula: no hace falta "Habilitar vehículo". */
 const ESTADOS_QUE_CIRCULAN = ['EN_USO', 'PKG_ON_BASE']
@@ -124,6 +136,7 @@ export function SiniestrosModule() {
   const [showModal, setShowModal] = useState(false)
   const [seguimientoSiniestro, setSeguimientoSiniestro] = useState<SiniestroCompleto | null>(null)
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create')
+  const [pestanaEdicion, setPestanaEdicion] = useState<PestanaSiniestro>('evento')
   const [selectedSiniestro, setSelectedSiniestro] = useState<SiniestroCompleto | null>(null)
   const [formData, setFormData] = useState<SiniestroFormData>({
     categoria_id: '',
@@ -610,6 +623,7 @@ export function SiniestrosModule() {
   }
 
   function handleEditarSiniestro(siniestro: SiniestroCompleto) {
+    setPestanaEdicion('evento')
     setSelectedSiniestro(siniestro)
     setFormData({
       vehiculo_id: siniestro.vehiculo_id || undefined,
@@ -652,6 +666,8 @@ export function SiniestrosModule() {
 
   async function handleGuardar() {
     if (!formData.categoria_id || !formData.estado_id || !formData.fecha_siniestro) {
+      // Los obligatorios están en la pestaña Evento
+      setPestanaEdicion('evento')
       showError('Error', 'Complete los campos requeridos')
       return
     }
@@ -1175,6 +1191,16 @@ export function SiniestrosModule() {
               </button>
             </div>
 
+            {modalMode === 'edit' && (
+              <TabsBar
+                className="tabs-bar--modal"
+                ariaLabel="Datos del siniestro"
+                tabs={PESTANAS_SINIESTRO}
+                active={pestanaEdicion}
+                onChange={setPestanaEdicion}
+              />
+            )}
+
             <div className="modal-body">
               {modalMode === 'view' && selectedSiniestro ? (
                 <SiniestroDetailView
@@ -1208,6 +1234,7 @@ export function SiniestrosModule() {
                   onVehiculoChange={handleVehiculoChange}
                   disabled={modalMode === 'view'}
                   isEditMode={modalMode === 'edit'}
+                  pestana={modalMode === 'edit' ? pestanaEdicion : undefined}
                 />
               )}
             </div>
@@ -1272,6 +1299,8 @@ interface SiniestroFormProps {
   onVehiculoChange: (id: string) => void
   disabled?: boolean
   isEditMode?: boolean // Solo permite editar estado y responsable
+  /** Pestaña visible (edición). Sin pestaña se muestran todas las secciones. */
+  pestana?: PestanaSiniestro
 }
 
 function SiniestroForm({
@@ -1285,8 +1314,13 @@ function SiniestroForm({
   onVehiculoChange,
   disabled,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  isEditMode: _isEditMode = false
+  isEditMode: _isEditMode = false,
+  pestana,
 }: SiniestroFormProps) {
+  // Sección visible según la pestaña. Se ocultan con display (no se desmontan) para no
+  // perder lo que se está escribiendo al cambiar de pestaña.
+  const seccion = (cual: PestanaSiniestro): React.CSSProperties | undefined =>
+    pestana && pestana !== cual ? { display: 'none' } : undefined
   // Todos los campos son editables en modo edición
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isFieldDisabled = (_fieldName: string) => {
@@ -1315,7 +1349,7 @@ function SiniestroForm({
   return (
     <>
       {/* Datos del evento */}
-      <div className="form-section">
+      <div className="form-section" style={seccion('evento')}>
         <div className="form-section-title">Datos del Evento</div>
         <div className="form-row">
           <div className="form-group">
@@ -1447,7 +1481,7 @@ function SiniestroForm({
       </div>
 
       {/* Clasificación */}
-      <div className="form-section">
+      <div className="form-section" style={seccion('evento')}>
         <div className="form-section-title">Clasificación</div>
         <div className="form-row">
           <div className="form-group">
@@ -1512,7 +1546,7 @@ function SiniestroForm({
       </div>
 
       {/* Descripción */}
-      <div className="form-section">
+      <div className="form-section" style={seccion('descripcion')}>
         <div className="form-section-title">Descripción</div>
         <div className="form-row">
           <div className="form-group full-width">
@@ -1540,7 +1574,7 @@ function SiniestroForm({
       </div>
 
       {/* Datos del tercero */}
-      <div className="form-section">
+      <div className="form-section" style={seccion('tercero')}>
         <div className="form-section-title">Datos del Tercero (Opcional)</div>
         <div className="form-row three-cols">
           <div className="form-group">
@@ -1603,7 +1637,7 @@ function SiniestroForm({
       </div>
 
       {/* Gestión */}
-      <div className="form-section">
+      <div className="form-section" style={seccion('gestion')}>
         <div className="form-section-title">Gestión</div>
         <div className="form-row">
           <div className="form-group">
@@ -1667,7 +1701,7 @@ function SiniestroForm({
       </div>
 
       {/* Montos */}
-      <div className="form-section">
+      <div className="form-section" style={seccion('gestion')}>
         <div className="form-section-title">Montos</div>
         <div className="form-row">
           <div className="form-group">
@@ -1758,7 +1792,7 @@ function SiniestroForm({
       </div>
 
       {/* Observaciones */}
-      <div className="form-section">
+      <div className="form-section" style={seccion('descripcion')}>
         <div className="form-section-title">Observaciones</div>
         <div className="form-row">
           <div className="form-group full-width">
