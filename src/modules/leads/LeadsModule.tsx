@@ -474,6 +474,7 @@ function leadToFormData(lead: Lead): LeadFormData {
     cochera: lead.cochera || '',
     rueda: lead.rueda || '',
     monotributo: lead.monotributo || '',
+    motivo_sin_monotributo: lead.motivo_sin_monotributo || '',
     bcra: lead.bcra || '',
     experiencia_previa: lead.experiencia_previa || '',
     cbu: lead.cbu || '',
@@ -565,10 +566,6 @@ function formatDate(dateStr: string | undefined | null): string {
   return formatFechaHora(dateStr)
 }
 
-// `monotributo` en la tabla `leads` es texto libre. Los valores reales son "Sí", "No" y
-// unos pocos "Si" sin tilde que entraron por importación. Antes se resolvía con
-// .includes('tiene'), que daba false para todos ellos: ningún lead se convertía con
-// monotributo en true. Se compara contra el valor normalizado, sin tildes.
 // Fecha sin hora, para columnas date-only (fecha_de_nacimiento, vencimiento_licencia).
 // No usa timeZone: un valor "YYYY-MM-DD" parseado con new Date() se interpreta como
 // UTC y al convertirlo a AR (UTC-3) mostraria el dia anterior.

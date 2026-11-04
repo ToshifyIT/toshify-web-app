@@ -12,6 +12,7 @@ import { acumularCuentaCabify, elegirCuentaCabify, type CuentasCabifyPorConducto
 import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
 import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE } from '../utils/descuentoReferido'
+import { cruzarPagosDidi, leerExcelDidi, palabrasNombreDidi, type CandidatoDidi, type MetodoCruceDidi, type NoCruzadoDidi } from '../utils/pagosDidi'
 import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import {
   Users,
@@ -399,7 +400,79 @@ function coberturaToshipass(f: { monto_toshipass?: number; subtotal_alquiler?: n
   return cobroApp - (f.subtotal_alquiler || 0) >= toshipass - TOLERANCIA_PESOS ? 'cubrio' : 'no_cubrio'
 }
 
-interface PagoSemana { monto: number; ref: string; fecha: string | null }
+// monto > 0 baja la deuda. esAjuste: ajuste manual del saldo (no es un pago del conductor).
+interface PagoSemana { monto: number; ref: string; fecha: string | null; esAjuste?: boolean }
+
+/** Estilos de las vistas previas de Pagos Cabify y Pagos DiDi. */
+const PAGOS_APP_CSS = `
+          .fact-preview-container { background: var(--bg-primary); border-radius: 8px; padding: 16px; }
+          .fact-preview-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 12px; }
+          .fact-preview-header-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+          .fact-preview-header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+          .fact-preview-back-btn { display: flex; align-items: center; gap: 4px; padding: 6px 10px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 12px; cursor: pointer; }
+          .fact-preview-back-btn:hover { background: var(--bg-tertiary); }
+          .fact-preview-title h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
+          .fact-preview-subtitle { font-size: 11px; color: var(--text-secondary); }
+          .fact-preview-stats-inline { display: flex; align-items: center; gap: 8px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border-color); flex-wrap: wrap; }
+          .fact-stat-inline { display: flex; align-items: center; gap: 3px; padding: 4px 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+          .fact-stat-inline strong { color: var(--text-primary); }
+          .cabify-pagos-highlight { background: rgba(124, 58, 237, 0.12) !important; }
+          .cabify-pagos-highlight strong { color: #7C3AED !important; }
+          .fact-preview-btn { display: flex; align-items: center; gap: 4px; padding: 8px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+          .fact-preview-btn.sync { background: #7C3AED; color: white; }
+          .fact-preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+          .fact-preview-table-wrapper { overflow: auto; border: 1px solid var(--border-color); border-radius: 6px; max-height: 65vh; }
+          .fact-preview-table-wrapper::-webkit-scrollbar { height: 12px; width: 12px; }
+          .fact-preview-table-wrapper::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+          .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #7C3AED; border-radius: 6px; border: 2px solid var(--bg-tertiary); }
+          .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #6D28D9; }
+          .cabify-pagos-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          .cabify-pagos-table th { padding: 10px 8px; text-align: left; background: var(--bg-secondary); border-bottom: 2px solid var(--border-color); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 10px; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+          .cabify-pagos-table td { padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); white-space: nowrap; }
+          .cabify-pagos-table tbody tr:hover { background: var(--bg-secondary); }
+          .col-center { text-align: center; }
+          .col-money { text-align: center; font-family: monospace; }
+          .col-right { text-align: right; }
+          .cabify-pagos-table th.col-money { text-align: center; }
+          .col-nombre { max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+          .cabify-pagos-col-th { background: rgba(124, 58, 237, 0.08) !important; border-left: 2px solid rgba(124, 58, 237, 0.25) !important; color: #7C3AED !important; }
+          .cabify-pagos-col { background: rgba(124, 58, 237, 0.04); border-left: 2px solid rgba(124, 58, 237, 0.25); }
+          .cabify-pagos-importe { font-weight: 700; color: #7C3AED; }
+          .cabify-pagos-row-num { color: var(--text-muted); }
+          .cabify-pagos-cobrado { color: #16a34a; }
+          .cabify-pagos-muted { color: var(--text-muted); }
+          .cabify-pagos-pagado { color: #16a34a; font-weight: 600; }
+          .cabify-pagos-saldo { color: #DC2626; font-weight: 700; background: rgba(220, 38, 38, 0.08); border-radius: 4px; }
+          .cabify-pagos-saldo-row { background: #fef2f2 !important; }
+          .cabify-pagos-saldo-row:hover { background: #fee2e2 !important; }
+          [data-theme="dark"] .cabify-pagos-saldo-row { background: rgba(220, 38, 38, 0.06) !important; }
+          [data-theme="dark"] .cabify-pagos-saldo-row:hover { background: rgba(220, 38, 38, 0.12) !important; }
+          [data-theme="dark"] .cabify-pagos-saldo { background: rgba(220, 38, 38, 0.15); }
+          .totals-row { background: var(--bg-secondary) !important; font-weight: 600; }
+          .totals-row td { border-top: 2px solid var(--border-color); position: sticky; bottom: 0; background: var(--bg-secondary); padding: 10px 8px; }
+          .spinning { animation: spin 1s linear infinite; }
+          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          [data-theme="dark"] .cabify-pagos-col-th { background: rgba(124, 58, 237, 0.15) !important; border-left-color: rgba(124, 58, 237, 0.4) !important; }
+          [data-theme="dark"] .cabify-pagos-col { background: rgba(124, 58, 237, 0.08); }
+          [data-theme="dark"] .cabify-pagos-highlight { background: rgba(124, 58, 237, 0.2) !important; }
+          [data-theme="dark"] .cabify-pagos-highlight strong { color: #a78bfa !important; }
+`
+
+/** Fila de la vista previa de Pagos DiDi (Excel cruzado con la facturación). */
+interface PagoDidiFila {
+  conductor_id: string
+  facturacion_id: string
+  conductor_nombre: string
+  conductor_dni: string
+  conductor_cuit: string
+  patente: string
+  total_a_pagar: number
+  monto_cobrado: number // ya cobrado de esta facturación (incluye el pago Cabify)
+  monto_didi: number
+  metodo: MetodoCruceDidi
+  excel: string // nombre y celular tal como vienen en el Excel
+  ya_registrado: boolean // ya tiene un "Pago DiDi" de esta semana: no se vuelve a registrar
+}
 /** Saldo anterior separado: saldo al cierre de la semana previa + pagos hechos en la semana. */
 interface SaldoSeparado { saldoCierre: number; pagos: PagoSemana[]; totalPagos: number }
 
@@ -411,6 +484,9 @@ interface SaldoSeparado { saldoCierre: number; pagos: PagoSemana[]; totalPagos: 
  * Pagos de la semana = pagos manuales/efectivo del kardex (control_saldos) desde el inicio
  * de la semana hasta el movimiento cuyo saldo es el que tomó la facturación. pago_cabify no
  * cuenta: liquida la semana anterior. Si en la semana se eliminó un pago no se separa.
+ * Los ajustes manuales del saldo también se listan (esAjuste): su monto en el kardex va sin
+ * signo, así que el efecto se toma de la diferencia con el movimiento anterior. Si no está
+ * ese movimiento en la lista, no se separa.
  * `movsDesc`: movimientos del conductor, más recientes primero. Signos: saldo_anterior
  * positivo = deuda; saldo_pendiente del kardex positivo = a favor.
  */
@@ -429,10 +505,18 @@ function separarPagosSemana(
     return t >= inicioSemanaMs && t <= finMs
   })
   if (enSemana.some(m => m.tipo_movimiento === 'eliminacion_pago')) return null
-  const pagos = enSemana
-    .filter(m => ['pago_manual', 'pago_efectivo'].includes(m.tipo_movimiento) && (m.monto_movimiento || 0) > 0)
-    .reverse()
-    .map(m => ({ monto: m.monto_movimiento || 0, ref: m.referencia || 'Pago en efectivo', fecha: m.created_at || null }))
+  const pagos: PagoSemana[] = []
+  for (const m of enSemana) {
+    if (['pago_manual', 'pago_efectivo'].includes(m.tipo_movimiento) && (m.monto_movimiento || 0) > 0) {
+      pagos.push({ monto: m.monto_movimiento || 0, ref: m.referencia || 'Pago en efectivo', fecha: m.created_at || null })
+    } else if (m.tipo_movimiento === 'ajuste_manual') {
+      const previo = movsDesc[movsDesc.indexOf(m) + 1]
+      if (!previo) return null
+      const efecto = (centavos(m.saldo_pendiente || 0) - centavos(previo.saldo_pendiente || 0)) / 100
+      if (efecto !== 0) pagos.push({ monto: efecto, ref: m.referencia || 'Ajuste de saldo', fecha: m.created_at || null, esAjuste: true })
+    }
+  }
+  pagos.reverse()
   if (pagos.length === 0) return null
   const totalPagos = Math.round(pagos.reduce((acc, p) => acc + p.monto, 0) * 100) / 100
   return { saldoCierre: Math.round((saldoAnterior + totalPagos) * 100) / 100, pagos, totalPagos }
@@ -631,7 +715,7 @@ export function ReporteFacturacionTab() {
   //   son los pagos hechos DURANTE la semana facturada (no son saldo anterior).
   const [detalleSaldoBreakdown, setDetalleSaldoBreakdown] = useState<{
     saldoPrevio: number
-    pagos: Array<{ monto: number; ref: string; fecha: string | null }>
+    pagos: PagoSemana[]
     resultado: number
     cierreSemana: number | null
     // Deuda que pasó a cuotas (P010) en esta semana: se resta del saldo anterior.
@@ -761,6 +845,15 @@ export function ReporteFacturacionTab() {
   const [loadingCabifyPagos, setLoadingCabifyPagos] = useState(false)
   const [procesandoCabifyPagos, setProcesandoCabifyPagos] = useState(false)
   const cabifyFileInputRef = useRef<HTMLInputElement>(null)
+
+  // Cargar Pagos DiDi (Excel de retenciones de DiDi, ver utils/pagosDidi.ts)
+  const [showDidiPagosPreview, setShowDidiPagosPreview] = useState(false)
+  const [didiPagosData, setDidiPagosData] = useState<PagoDidiFila[]>([])
+  const [didiNoCruzados, setDidiNoCruzados] = useState<NoCruzadoDidi[]>([])
+  const [didiIgnoradas, setDidiIgnoradas] = useState(0)
+  const [loadingDidiPagos, setLoadingDidiPagos] = useState(false)
+  const [procesandoDidiPagos, setProcesandoDidiPagos] = useState(false)
+  const didiFileInputRef = useRef<HTMLInputElement>(null)
 
   // Default: semana actual (inicializada en useState)
 
@@ -2157,7 +2250,8 @@ export function ReporteFacturacionTab() {
           .eq('anio', (periodoData as any).anio)
           .eq('semana', (periodoData as any).semana)
           .eq('tipo_cobro', 'facturacion_semanal')
-          .ilike('referencia', 'Pago Cabify%')
+          // Cabify y DiDi: los dos cuentan como cobrado de la semana
+          .or('referencia.ilike.Pago Cabify*,referencia.ilike.Pago DiDi*')
         const mapa = new Map<string, number>()
         for (const p of (pagosData || []) as Array<{ conductor_id: string; monto: number }>) {
           mapa.set(p.conductor_id, (mapa.get(p.conductor_id) || 0) + Number(p.monto || 0))
@@ -7417,6 +7511,350 @@ export function ReporteFacturacionTab() {
     }
   }
 
+  /**
+   * Pagos DiDi: lee el Excel, lo cruza con los conductores facturados de la semana
+   * (por celular o nombre) y abre la vista previa. No registra nada.
+   */
+  async function handleDidiFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset input para poder subir el mismo archivo de nuevo
+    e.target.value = ''
+
+    setLoadingDidiPagos(true)
+    try {
+      const lectura = await leerExcelDidi(await file.arrayBuffer())
+      if (!lectura.ok) {
+        await Alerta.fire({ icon: 'error', title: 'El archivo no tiene el formato de DiDi', text: lectura.error, confirmButtonText: 'Entendido' })
+        return
+      }
+      if (lectura.filas.length === 0) {
+        Alerta.fire('Sin pagos', 'El archivo no tiene conductores con monto mayor a 0.', 'warning')
+        return
+      }
+
+      // Una facturación por conductor (la de la semana en pantalla)
+      const factPorConductor = new Map<string, typeof facturaciones[0]>()
+      for (const f of facturaciones) {
+        if (f.conductor_id && f.id && !factPorConductor.has(f.conductor_id)) factPorConductor.set(f.conductor_id, f)
+      }
+      const conductorIds = [...factPorConductor.keys()]
+      const factIds = [...factPorConductor.values()].map(f => f.id)
+
+      // Celulares y nombre de la ficha; y los que ya tienen Pago DiDi en esta semana
+      const semanaNum = periodo?.semana || getISOWeek(semanaActual.inicio)
+      const anioNum = periodo?.anio || getISOWeekYear(semanaActual.inicio)
+      const fichas = new Map<string, { nombre: string; telefonos: string[] }>()
+      const yaRegistradas = new Set<string>()
+      for (let i = 0; i < conductorIds.length; i += 200) {
+        const { data, error } = await (supabase.from('conductores') as any)
+          .select('id, nombres, apellidos, telefono_contacto, telefono_secundario')
+          .in('id', conductorIds.slice(i, i + 200))
+        if (error) throw error
+        for (const c of (data || []) as any[]) {
+          fichas.set(c.id, {
+            nombre: `${c.nombres || ''} ${c.apellidos || ''}`.trim(),
+            telefonos: [c.telefono_contacto, c.telefono_secundario].filter(Boolean),
+          })
+        }
+      }
+      for (let i = 0; i < factIds.length; i += 200) {
+        const { data, error } = await (supabase.from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'facturacion_semanal')
+          .in('referencia_id', factIds.slice(i, i + 200))
+          .ilike('referencia', `Pago DiDi S${semanaNum}/${anioNum}%`)
+        if (error) throw error
+        for (const p of (data || []) as Array<{ referencia_id: string }>) yaRegistradas.add(String(p.referencia_id))
+      }
+
+      // Se cruza contra el nombre de la facturación y el de la ficha
+      const candidatos: CandidatoDidi[] = []
+      for (const [conductorId, f] of factPorConductor) {
+        const ficha = fichas.get(conductorId)
+        const telefonos = ficha?.telefonos || []
+        candidatos.push({ conductor_id: conductorId, nombre: f.conductor_nombre || '', telefonos })
+        if (ficha?.nombre && palabrasNombreDidi(ficha.nombre).join(' ') !== palabrasNombreDidi(f.conductor_nombre).join(' ')) {
+          candidatos.push({ conductor_id: conductorId, nombre: ficha.nombre, telefonos })
+        }
+      }
+
+      const { cruces, noCruzados } = cruzarPagosDidi(lectura.filas, candidatos)
+      const filas: PagoDidiFila[] = cruces.map(c => {
+        const f = factPorConductor.get(c.conductor_id)!
+        return {
+          conductor_id: c.conductor_id,
+          facturacion_id: f.id,
+          conductor_nombre: f.conductor_nombre || '',
+          conductor_dni: f.conductor_dni || '',
+          conductor_cuit: f.conductor_cuit || '',
+          patente: f.vehiculo_patente || '',
+          total_a_pagar: Math.abs(f.total_a_pagar || 0),
+          monto_cobrado: f.monto_cobrado || 0,
+          monto_didi: c.monto,
+          metodo: c.metodo,
+          excel: c.filas.map(x => `${x.nombre} · ${x.telefono}`).join(' / '),
+          ya_registrado: yaRegistradas.has(String(f.id)),
+        }
+      }).sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
+
+      setDidiPagosData(filas)
+      setDidiNoCruzados(noCruzados)
+      setDidiIgnoradas(lectura.ignoradasMontoCero)
+      setShowDidiPagosPreview(true)
+    } catch (error: any) {
+      showError('Error', `No se pudo leer el archivo de DiDi: ${error.message || error}`)
+    } finally {
+      setLoadingDidiPagos(false)
+    }
+  }
+
+  async function procesarPagosDidiBatch() {
+    const aRegistrar = didiPagosData.filter(d => !d.ya_registrado)
+    if (aRegistrar.length === 0) return
+
+    const semanaNum = periodo?.semana || getISOWeek(semanaActual.inicio)
+    const anioNum = periodo?.anio || getISOWeekYear(semanaActual.inicio)
+    const hoy = new Date()
+    const { semana: semanaHoy, anio: anioHoy } = semanaISO(hoyART())
+
+    // Igual que Cabify: si la facturación o lo cobrado cambió (otro pago, recálculo),
+    // se frena. También cubre que alguien haya registrado este DiDi en otra pestaña.
+    const verificacion = await verificarFacturacionVigente(aRegistrar)
+    if (!verificacion.ok) {
+      const lista = verificacion.conductores.slice(0, 8).map(n => `<li>${n}</li>`).join('')
+      const resto = verificacion.conductores.length > 8 ? `<li>… y ${verificacion.conductores.length - 8} más</li>` : ''
+      await Alerta.fire({
+        icon: 'warning',
+        title: 'No se registró ningún pago',
+        html: `<div style="text-align:left;font-size:13px;">
+          <p style="margin:0 0 8px 0"><strong>${verificacion.titulo}</strong></p>
+          ${lista ? `<p style="margin:0 0 4px 0">Conductores afectados:</p><ul style="margin:0 0 8px 18px;padding:0">${lista}${resto}</ul>` : ''}
+          <p style="margin:0;color:#6B7280;font-size:12px">Recargá la página y volvé a cargar el Excel de Pagos DiDi.</p>
+        </div>`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#7C3AED',
+      })
+      return
+    }
+
+    const confirm = await Alerta.fire({
+      title: 'Confirmar Pagos DiDi',
+      html: `<div style="text-align:left;font-size:13px;">
+        <p>Se registrarán <strong>${aRegistrar.length} pagos</strong> por un total de <strong>${formatCurrency(aRegistrar.reduce((s, d) => s + d.monto_didi, 0))}</strong></p>
+        <p style="color:#6B7280;font-size:12px;margin-top:8px;">Referencia: Pago DiDi S${semanaNum}/${anioNum}</p>
+      </div>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Registrar Pagos',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#7C3AED',
+    })
+    if (!confirm.isConfirmed) return
+
+    setProcesandoDidiPagos(true)
+    let exitosos = 0
+    let fallidos = 0
+    const errores: string[] = []
+    const ctxPago = { semanaNum, anioNum, semanaHoy, anioHoy, hoy }
+    for (const pago of aRegistrar) {
+      try {
+        await registrarPagoApp('DiDi', pago, pago.monto_didi, ctxPago)
+        exitosos++
+      } catch (error: any) {
+        fallidos++
+        errores.push(`${pago.conductor_nombre}: ${error.message || error}`)
+      }
+    }
+
+    setProcesandoDidiPagos(false)
+    setShowDidiPagosPreview(false)
+    setDidiPagosData([])
+    setDidiNoCruzados([])
+
+    await cargarFacturacion()
+
+    if (fallidos === 0) {
+      showSuccess('Pagos DiDi registrados', `${exitosos} pagos procesados exitosamente`)
+    } else {
+      Alerta.fire({
+        title: 'Resultado',
+        html: `<div style="text-align:left;font-size:13px;">
+          <p style="color:#16a34a;">Exitosos: ${exitosos}</p>
+          <p style="color:#dc2626;">Fallidos: ${fallidos}</p>
+          ${errores.length > 0 ? `<div style="margin-top:8px;font-size:12px;max-height:150px;overflow-y:auto;">${errores.map(e => `<div style="color:#dc2626;">- ${e}</div>`).join('')}</div>` : ''}
+        </div>`,
+        icon: 'warning',
+      })
+    }
+  }
+
+  /**
+   * Registra el pago de una app (Cabify o DiDi) sobre la facturación semanal del
+   * conductor: pagos_conductores, saldo, kardex, abono, estado pagado y cuotas.
+   * `monto_cobrado` es lo ya cobrado de esa facturación (incluye los pagos de la
+   * otra app), así los dos pagos se acumulan sin pisarse.
+   * Referencias: "Pago Cabify S44/2026" / "Pago DiDi S44/2026"; kardex pago_cabify / pago_didi.
+   */
+  async function registrarPagoApp(
+    app: 'Cabify' | 'DiDi',
+    pago: {
+      conductor_id: string; facturacion_id: string; conductor_nombre: string; conductor_dni: string
+      conductor_cuit: string; total_a_pagar: number; monto_cobrado: number
+    },
+    monto: number,
+    ctx: { semanaNum: number; anioNum: number; semanaHoy: number; anioHoy: number; hoy: Date },
+  ) {
+    const { semanaNum, anioNum, semanaHoy, anioHoy, hoy } = ctx
+    const referencia = `Pago ${app} S${semanaNum}/${anioNum}`
+    const yaCobrado = pago.monto_cobrado
+    const totalAbsoluto = pago.total_a_pagar
+
+    // 1. Registrar pago en pagos_conductores
+    const { error: errorPago } = await (supabase.from('pagos_conductores') as any)
+      .insert({
+        conductor_id: pago.conductor_id,
+        tipo_cobro: 'facturacion_semanal',
+        referencia_id: pago.facturacion_id,
+        referencia_tabla: 'facturacion_conductores',
+        numero_cuota: null,
+        monto,
+        fecha_pago: hoy.toISOString(),
+        referencia: referencia,
+        semana: semanaHoy,
+        anio: anioHoy,
+        conductor_nombre: pago.conductor_nombre,
+        created_by_name: profile?.full_name || 'Sistema'
+      })
+
+    if (errorPago) throw errorPago
+
+    // 2. Actualizar saldo en saldos_conductores
+    // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
+    // es lo que queda sin pagar (negativo = deuda, 0 = saldado)
+    const pendiente = pago.total_a_pagar - yaCobrado
+    const saldoCrudo = -(pendiente - monto)
+    // Write-off de residuos < $1 (redondeos distintos entre la app y la facturación
+    // dejan diferencias de centavos que no queremos arrastrar).
+    const nuevoSaldo = Math.abs(saldoCrudo) < 1 ? 0 : saldoCrudo
+
+    await upsertSaldoConductor({
+      conductorId: pago.conductor_id,
+      conductorNombre: pago.conductor_nombre,
+      conductorDni: pago.conductor_dni,
+      conductorCuit: pago.conductor_cuit || null,
+      nuevoSaldo: nuevoSaldo,
+      timestamp: hoy.toISOString(),
+      sedeId: sedeActualId || sedeUsuario?.id,
+    })
+
+    // 2b. Registrar movimiento en kardex (control_saldos)
+    await insertControlSaldo({
+      conductorId: pago.conductor_id,
+      semana: semanaNum,
+      anio: anioNum,
+      tipoMovimiento: app === 'Cabify' ? 'pago_cabify' : 'pago_didi',
+      montoMovimiento: monto,
+      saldoPendiente: nuevoSaldo,
+      referencia: referencia,
+      userName: profile?.full_name,
+    })
+
+    // 3. Registrar en abonos_conductores como audit trail
+    await (supabase.from('abonos_conductores') as any).insert({
+      conductor_id: pago.conductor_id,
+      tipo: 'abono',
+      monto,
+      concepto: referencia,
+      referencia: referencia,
+      semana: semanaHoy,
+      anio: anioHoy,
+      fecha_abono: hoy.toISOString()
+    })
+
+    // 4. Si el total cobrado cubre el total, marcar como pagado
+    if ((yaCobrado + monto) >= totalAbsoluto) {
+      await (supabase.from('facturacion_conductores') as any)
+        .update({ estado: 'pagado' })
+        .eq('id', pago.facturacion_id)
+    }
+
+    // 5. Registrar pagos individuales para cobros_fraccionados y penalidades
+    const { data: detalles } = await supabase
+      .from('facturacion_detalle')
+      .select('*')
+      .eq('facturacion_id', pago.facturacion_id)
+      .order('es_descuento')
+      .order('concepto_codigo')
+
+    // Cuotas que ya pagó la otra app esta semana ("Pago via Cabify/DiDi S44/2026"):
+    // cuentan como cubiertas pero no se vuelven a registrar.
+    const idsCuotas = (detalles || [])
+      .map((det: any) => det.referencia_id as string | null)
+      .filter((id: string | null): id is string => !!id)
+    const cuotasYaPagadas = new Set<string>()
+    if (idsCuotas.length > 0) {
+      const { data: pagosCuotas, error: errCuotas } = await (supabase.from('pagos_conductores') as any)
+        .select('referencia_id')
+        .in('tipo_cobro', ['cobro_fraccionado', 'penalidad_cuota'])
+        .in('referencia_id', idsCuotas)
+        .ilike('referencia', `Pago via % S${semanaNum}/${anioNum}`)
+      if (errCuotas) {
+        // El pago ya quedó registrado: sin saber qué cuotas están pagadas no se
+        // aplican (se evita pagarlas dos veces); se pueden aplicar a mano.
+        console.error('[Pagos apps] No se pudieron leer las cuotas ya pagadas:', errCuotas)
+        return
+      }
+      for (const pc of (pagosCuotas || []) as Array<{ referencia_id: string }>) cuotasYaPagadas.add(String(pc.referencia_id))
+    }
+
+    // DiDi puede ser el segundo pago de la semana: lo ya cobrado también cubre cuotas.
+    // Cabify conserva el cálculo de siempre (solo su monto).
+    let restantePago = (app === 'DiDi' ? yaCobrado : 0) + monto
+    for (const det of (detalles || [])) {
+      const d = det as { referencia_id: string | null; referencia_tipo: string | null; total: number; es_descuento: boolean }
+      if (!d.referencia_id) continue
+      if (d.referencia_tipo !== 'cobro_fraccionado' && d.referencia_tipo !== 'penalidad_cuota') continue
+
+      if (d.es_descuento) {
+        restantePago += d.total
+        continue
+      }
+
+      if (cuotasYaPagadas.has(String(d.referencia_id))) {
+        restantePago -= d.total
+        continue
+      }
+
+      if (restantePago >= d.total) {
+        restantePago -= d.total
+        const tipoCobro = d.referencia_tipo === 'cobro_fraccionado' ? 'cobro_fraccionado' : 'penalidad_cuota'
+        const refTabla = d.referencia_tipo === 'cobro_fraccionado' ? 'cobros_fraccionados' : 'penalidades_cuotas'
+
+        await (supabase.from('pagos_conductores') as any)
+          .insert({
+            conductor_id: pago.conductor_id,
+            tipo_cobro: tipoCobro,
+            referencia_id: d.referencia_id,
+            referencia_tabla: refTabla,
+            numero_cuota: null,
+            monto: d.total,
+            fecha_pago: hoy.toISOString(),
+            referencia: `Pago via ${app} S${semanaNum}/${anioNum}`,
+            semana: semanaHoy,
+            anio: anioHoy,
+            conductor_nombre: pago.conductor_nombre
+          })
+
+        await (supabase.from(refTabla) as any)
+          .update({ aplicado: true })
+          .eq('id', d.referencia_id)
+      } else {
+        break
+      }
+    }
+  }
+
   async function procesarPagosCabifyBatch() {
     if (cabifyPagosData.length === 0) return
 
@@ -7466,128 +7904,10 @@ export function ReporteFacturacionTab() {
     let fallidos = 0
     const errores: string[] = []
 
+    const ctxPago = { semanaNum, anioNum, semanaHoy, anioHoy, hoy }
     for (const pago of cabifyPagosData) {
       try {
-        const monto = pago.importe_descontar
-        const yaCobrado = pago.monto_cobrado
-        const totalAbsoluto = pago.total_a_pagar
-
-        // 1. Registrar pago en pagos_conductores
-        const { error: errorPago } = await (supabase.from('pagos_conductores') as any)
-          .insert({
-            conductor_id: pago.conductor_id,
-            tipo_cobro: 'facturacion_semanal',
-            referencia_id: pago.facturacion_id,
-            referencia_tabla: 'facturacion_conductores',
-            numero_cuota: null,
-            monto,
-            fecha_pago: hoy.toISOString(),
-            referencia: `Pago Cabify S${semanaNum}/${anioNum}`,
-            semana: semanaHoy,
-            anio: anioHoy,
-            conductor_nombre: pago.conductor_nombre,
-            created_by_name: profile?.full_name || 'Sistema'
-          })
-
-        if (errorPago) throw errorPago
-
-        // 2. Actualizar saldo en saldos_conductores
-        // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
-        // es lo que queda sin pagar (negativo = deuda, 0 = saldado)
-        const pendienteCabify = pago.total_a_pagar - yaCobrado
-        const saldoCrudo = -(pendienteCabify - monto)
-        // Write-off de residuos < $1 (redondeos distintos entre Cabify y la facturación
-        // dejan diferencias de centavos que no queremos arrastrar).
-        const nuevoSaldoCabify = Math.abs(saldoCrudo) < 1 ? 0 : saldoCrudo
-
-        await upsertSaldoConductor({
-          conductorId: pago.conductor_id,
-          conductorNombre: pago.conductor_nombre,
-          conductorDni: pago.conductor_dni,
-          conductorCuit: pago.conductor_cuit || null,
-          nuevoSaldo: nuevoSaldoCabify,
-          timestamp: hoy.toISOString(),
-          sedeId: sedeActualId || sedeUsuario?.id,
-        })
-
-        // 2b. Registrar movimiento en kardex (control_saldos)
-        await insertControlSaldo({
-          conductorId: pago.conductor_id,
-          semana: semanaNum,
-          anio: anioNum,
-          tipoMovimiento: 'pago_cabify',
-          montoMovimiento: monto,
-          saldoPendiente: nuevoSaldoCabify,
-          referencia: `Pago Cabify S${semanaNum}/${anioNum}`,
-          userName: profile?.full_name,
-        })
-
-        // 3. Registrar en abonos_conductores como audit trail
-        await (supabase.from('abonos_conductores') as any).insert({
-          conductor_id: pago.conductor_id,
-          tipo: 'abono',
-          monto,
-          concepto: `Pago Cabify S${semanaNum}/${anioNum}`,
-          referencia: `Pago Cabify S${semanaNum}/${anioNum}`,
-          semana: semanaHoy,
-          anio: anioHoy,
-          fecha_abono: hoy.toISOString()
-        })
-
-        // 4. Si el total cobrado cubre el total, marcar como pagado
-        if ((yaCobrado + monto) >= totalAbsoluto) {
-          await (supabase.from('facturacion_conductores') as any)
-            .update({ estado: 'pagado' })
-            .eq('id', pago.facturacion_id)
-        }
-
-        // 5. Registrar pagos individuales para cobros_fraccionados y penalidades
-        const { data: detalles } = await supabase
-          .from('facturacion_detalle')
-          .select('*')
-          .eq('facturacion_id', pago.facturacion_id)
-          .order('es_descuento')
-          .order('concepto_codigo')
-
-        let restantePago = monto
-        for (const det of (detalles || [])) {
-          const d = det as { referencia_id: string | null; referencia_tipo: string | null; total: number; es_descuento: boolean }
-          if (!d.referencia_id) continue
-          if (d.referencia_tipo !== 'cobro_fraccionado' && d.referencia_tipo !== 'penalidad_cuota') continue
-
-          if (d.es_descuento) {
-            restantePago += d.total
-            continue
-          }
-
-          if (restantePago >= d.total) {
-            restantePago -= d.total
-            const tipoCobro = d.referencia_tipo === 'cobro_fraccionado' ? 'cobro_fraccionado' : 'penalidad_cuota'
-            const refTabla = d.referencia_tipo === 'cobro_fraccionado' ? 'cobros_fraccionados' : 'penalidades_cuotas'
-
-            await (supabase.from('pagos_conductores') as any)
-              .insert({
-                conductor_id: pago.conductor_id,
-                tipo_cobro: tipoCobro,
-                referencia_id: d.referencia_id,
-                referencia_tabla: refTabla,
-                numero_cuota: null,
-                monto: d.total,
-                fecha_pago: hoy.toISOString(),
-                referencia: `Pago via Cabify S${semanaNum}/${anioNum}`,
-                semana: semanaHoy,
-                anio: anioHoy,
-                conductor_nombre: pago.conductor_nombre
-              })
-
-            await (supabase.from(refTabla) as any)
-              .update({ aplicado: true })
-              .eq('id', d.referencia_id)
-          } else {
-            break
-          }
-        }
-
+        await registrarPagoApp('Cabify', pago, pago.importe_descontar, ctxPago)
         exitosos++
       } catch (error: any) {
         fallidos++
@@ -10884,7 +11204,7 @@ export function ReporteFacturacionTab() {
           return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
               <div style="padding:12px;text-align:center;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
-                <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">${esSemanaEnCurso ? 'Con saldo anterior' : (pagosCabifyMap.size > 0 ? 'Pendiente tras pago Cabify' : 'Con deuda')}</div>
+                <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">${esSemanaEnCurso ? 'Con saldo anterior' : (pagosCabifyMap.size > 0 ? 'Pendiente tras pagos Cabify/DiDi' : 'Con deuda')}</div>
                 <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:var(--text-primary);line-height:1;font-family:monospace;">${deben.length}</div>
               </div>
               <div style="padding:12px;text-align:center;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
@@ -11531,9 +11851,9 @@ export function ReporteFacturacionTab() {
             <AdaptiveTooltip
               content={
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span>Pagos de esta semana (ya descontados del total):</span>
+                  <span>Pagos y ajustes de esta semana (ya aplicados en el total):</span>
                   {separado.pagos.map((p, idx) => (
-                    <span key={idx}>-{formatCurrency(p.monto)} · {p.ref}{p.fecha ? ` · ${fechaHoraAR(p.fecha)} hs` : ''}</span>
+                    <span key={idx}>{p.monto < 0 ? '+' : '-'}{formatCurrency(Math.abs(p.monto))} · {p.esAjuste ? 'Ajuste · ' : ''}{p.ref}{p.fecha ? ` · ${fechaHoraAR(p.fecha)} hs` : ''}</span>
                   ))}
                   <span>Saldo aplicado en el total: {formatCurrency(row.original.saldo_anterior)}</span>
                 </div>
@@ -11800,6 +12120,143 @@ export function ReporteFacturacionTab() {
     )
   }
 
+  // Si estamos en modo Cargar Pagos DiDi, mostrar preview del cruce del Excel
+  if (showDidiPagosPreview) {
+    const semanaNum = periodo?.semana || infoSemana.semana
+    const anioNum = periodo?.anio || infoSemana.anio
+    const aRegistrar = didiPagosData.filter(d => !d.ya_registrado)
+    const totalDidi = aRegistrar.reduce((s, d) => s + d.monto_didi, 0)
+    const totalDeuda = aRegistrar.reduce((s, d) => s + d.total_a_pagar, 0)
+    const totalYaCobrado = aRegistrar.reduce((s, d) => s + d.monto_cobrado, 0)
+    const totalSaldo = aRegistrar.reduce((s, d) => s + (d.total_a_pagar - d.monto_cobrado - d.monto_didi), 0)
+    const cerrar = () => { setShowDidiPagosPreview(false); setDidiPagosData([]); setDidiNoCruzados([]) }
+
+    return (
+      <div className="fact-preview-container">
+        <div className="fact-preview-header">
+          <div className="fact-preview-header-left">
+            <button className="fact-preview-back-btn" onClick={cerrar}>
+              <X size={14} /> Volver
+            </button>
+            <div className="fact-preview-title">
+              <h2>Cargar Pagos DiDi - S{semanaNum}/{anioNum}</h2>
+              <span className="fact-preview-subtitle">
+                {aRegistrar.length} pagos a registrar
+                {didiNoCruzados.length > 0 && ` · ${didiNoCruzados.length} sin cruzar`}
+                {didiIgnoradas > 0 && ` · ${didiIgnoradas} filas en $0 ignoradas`}
+              </span>
+            </div>
+            <div className="fact-preview-stats-inline">
+              <span className="fact-stat-inline">Deuda: <strong>{formatCurrency(totalDeuda)}</strong></span>
+              <span className="fact-stat-inline">Ya cobrado: <strong>{formatCurrency(totalYaCobrado)}</strong></span>
+              <span className="fact-stat-inline cabify-pagos-highlight">Pago DiDi: <strong>{formatCurrency(totalDidi)}</strong></span>
+              <span className="fact-stat-inline">Saldo: <strong>{formatCurrency(Math.max(0, totalSaldo))}</strong></span>
+            </div>
+          </div>
+          <div className="fact-preview-header-right">
+            <button
+              className="fact-preview-btn sync"
+              onClick={procesarPagosDidiBatch}
+              disabled={procesandoDidiPagos || aRegistrar.length === 0}
+            >
+              {procesandoDidiPagos ? <Loader2 size={14} className="spinning" /> : <Banknote size={14} />}
+              {procesandoDidiPagos ? 'Procesando...' : 'Confirmar Pagos'}
+            </button>
+          </div>
+        </div>
+
+        <div className="fact-preview-table-wrapper">
+          <table className="fact-preview-table cabify-pagos-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Conductor</th>
+                <th className="col-center">Patente</th>
+                <th>En el Excel</th>
+                <th className="col-center">Cruce por</th>
+                <th className="col-money">Total a Pagar</th>
+                <th className="col-money">Ya Cobrado</th>
+                <th className="col-money cabify-pagos-col-th">Pago DiDi</th>
+                <th className="col-money">Saldo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {didiPagosData.map((row, idx) => {
+                const pendiente = row.total_a_pagar - row.monto_cobrado
+                const saldo = Math.round((pendiente - row.monto_didi) * 100) / 100
+                return (
+                  <tr key={row.facturacion_id} className={!row.ya_registrado && saldo > 0 ? 'cabify-pagos-saldo-row' : ''} style={row.ya_registrado ? { opacity: 0.5 } : undefined}>
+                    <td className="col-center cabify-pagos-row-num">{idx + 1}</td>
+                    <td className="col-nombre">{row.conductor_nombre}</td>
+                    <td className="col-center">{row.patente ? <PatenteBadge patente={row.patente} size="sm" /> : '-'}</td>
+                    <td style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{row.excel}</td>
+                    <td className="col-center">{row.metodo}</td>
+                    <td className="col-money">{formatCurrency(row.total_a_pagar)}</td>
+                    <td className={`col-money ${row.monto_cobrado > 0 ? 'cabify-pagos-cobrado' : 'cabify-pagos-muted'}`}>
+                      {row.monto_cobrado > 0 ? formatCurrency(row.monto_cobrado) : '-'}
+                    </td>
+                    <td className="col-money cabify-pagos-col cabify-pagos-importe">{formatCurrency(row.monto_didi)}</td>
+                    <td className={`col-money ${row.ya_registrado ? 'cabify-pagos-muted' : saldo > 0 ? 'cabify-pagos-saldo' : 'cabify-pagos-pagado'}`}>
+                      {row.ya_registrado
+                        ? 'YA REGISTRADO'
+                        : saldo > 0 ? formatCurrency(saldo) : saldo < 0 ? `A favor ${formatCurrency(-saldo)}` : 'PAGADO'}
+                    </td>
+                  </tr>
+                )
+              })}
+              {didiPagosData.length === 0 && (
+                <tr><td colSpan={9} className="col-center cabify-pagos-muted">Ninguna fila del Excel cruzó con un conductor facturado de la semana</td></tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="totals-row">
+                <td colSpan={5} className="col-right">TOTALES A REGISTRAR:</td>
+                <td className="col-money">{formatCurrency(totalDeuda)}</td>
+                <td className="col-money cabify-pagos-cobrado">{formatCurrency(totalYaCobrado)}</td>
+                <td className="col-money cabify-pagos-col cabify-pagos-importe">{formatCurrency(totalDidi)}</td>
+                <td className="col-money cabify-pagos-saldo">{formatCurrency(Math.max(0, totalSaldo))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {didiNoCruzados.length > 0 && (
+          <div style={{ marginTop: '16px' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '13px', color: 'var(--text-primary)' }}>
+              Sin cruzar ({didiNoCruzados.length}) — no se registran
+            </h3>
+            <div className="fact-preview-table-wrapper" style={{ maxHeight: '30vh' }}>
+              <table className="fact-preview-table cabify-pagos-table">
+                <thead>
+                  <tr>
+                    <th className="col-center">Fila</th>
+                    <th>Nombre (Excel)</th>
+                    <th className="col-center">Celular (Excel)</th>
+                    <th className="col-money">Monto</th>
+                    <th>Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {didiNoCruzados.map(nc => (
+                    <tr key={nc.fila.fila}>
+                      <td className="col-center cabify-pagos-row-num">{nc.fila.fila}</td>
+                      <td className="col-nombre">{nc.fila.nombre}</td>
+                      <td className="col-center">{nc.fila.telefono}</td>
+                      <td className="col-money">{formatCurrency(nc.fila.monto)}</td>
+                      <td style={{ color: '#DC2626' }}>{nc.motivo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <style>{PAGOS_APP_CSS}</style>
+      </div>
+    )
+  }
+
   // Si estamos en modo Cargar Pagos Cabify, mostrar preview de pagos
   if (showCabifyPagosPreview && cabifyPagosData.length > 0) {
     const semanaNum = periodo?.semana || infoSemana.semana
@@ -11894,59 +12351,7 @@ export function ReporteFacturacionTab() {
           </table>
         </div>
 
-        <style>{`
-          .fact-preview-container { background: var(--bg-primary); border-radius: 8px; padding: 16px; }
-          .fact-preview-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 12px; }
-          .fact-preview-header-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-          .fact-preview-header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-          .fact-preview-back-btn { display: flex; align-items: center; gap: 4px; padding: 6px 10px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 12px; cursor: pointer; }
-          .fact-preview-back-btn:hover { background: var(--bg-tertiary); }
-          .fact-preview-title h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
-          .fact-preview-subtitle { font-size: 11px; color: var(--text-secondary); }
-          .fact-preview-stats-inline { display: flex; align-items: center; gap: 8px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border-color); flex-wrap: wrap; }
-          .fact-stat-inline { display: flex; align-items: center; gap: 3px; padding: 4px 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
-          .fact-stat-inline strong { color: var(--text-primary); }
-          .cabify-pagos-highlight { background: rgba(124, 58, 237, 0.12) !important; }
-          .cabify-pagos-highlight strong { color: #7C3AED !important; }
-          .fact-preview-btn { display: flex; align-items: center; gap: 4px; padding: 8px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
-          .fact-preview-btn.sync { background: #7C3AED; color: white; }
-          .fact-preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-          .fact-preview-table-wrapper { overflow: auto; border: 1px solid var(--border-color); border-radius: 6px; max-height: 65vh; }
-          .fact-preview-table-wrapper::-webkit-scrollbar { height: 12px; width: 12px; }
-          .fact-preview-table-wrapper::-webkit-scrollbar-track { background: var(--bg-tertiary); }
-          .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #7C3AED; border-radius: 6px; border: 2px solid var(--bg-tertiary); }
-          .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #6D28D9; }
-          .cabify-pagos-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          .cabify-pagos-table th { padding: 10px 8px; text-align: left; background: var(--bg-secondary); border-bottom: 2px solid var(--border-color); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 10px; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
-          .cabify-pagos-table td { padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); white-space: nowrap; }
-          .cabify-pagos-table tbody tr:hover { background: var(--bg-secondary); }
-          .col-center { text-align: center; }
-          .col-money { text-align: center; font-family: monospace; }
-          .col-right { text-align: right; }
-          .cabify-pagos-table th.col-money { text-align: center; }
-          .col-nombre { max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-          .cabify-pagos-col-th { background: rgba(124, 58, 237, 0.08) !important; border-left: 2px solid rgba(124, 58, 237, 0.25) !important; color: #7C3AED !important; }
-          .cabify-pagos-col { background: rgba(124, 58, 237, 0.04); border-left: 2px solid rgba(124, 58, 237, 0.25); }
-          .cabify-pagos-importe { font-weight: 700; color: #7C3AED; }
-          .cabify-pagos-row-num { color: var(--text-muted); }
-          .cabify-pagos-cobrado { color: #16a34a; }
-          .cabify-pagos-muted { color: var(--text-muted); }
-          .cabify-pagos-pagado { color: #16a34a; font-weight: 600; }
-          .cabify-pagos-saldo { color: #DC2626; font-weight: 700; background: rgba(220, 38, 38, 0.08); border-radius: 4px; }
-          .cabify-pagos-saldo-row { background: #fef2f2 !important; }
-          .cabify-pagos-saldo-row:hover { background: #fee2e2 !important; }
-          [data-theme="dark"] .cabify-pagos-saldo-row { background: rgba(220, 38, 38, 0.06) !important; }
-          [data-theme="dark"] .cabify-pagos-saldo-row:hover { background: rgba(220, 38, 38, 0.12) !important; }
-          [data-theme="dark"] .cabify-pagos-saldo { background: rgba(220, 38, 38, 0.15); }
-          .totals-row { background: var(--bg-secondary) !important; font-weight: 600; }
-          .totals-row td { border-top: 2px solid var(--border-color); position: sticky; bottom: 0; background: var(--bg-secondary); padding: 10px 8px; }
-          .spinning { animation: spin 1s linear infinite; }
-          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          [data-theme="dark"] .cabify-pagos-col-th { background: rgba(124, 58, 237, 0.15) !important; border-left-color: rgba(124, 58, 237, 0.4) !important; }
-          [data-theme="dark"] .cabify-pagos-col { background: rgba(124, 58, 237, 0.08); }
-          [data-theme="dark"] .cabify-pagos-highlight { background: rgba(124, 58, 237, 0.2) !important; }
-          [data-theme="dark"] .cabify-pagos-highlight strong { color: #a78bfa !important; }
-        `}</style>
+        <style>{PAGOS_APP_CSS}</style>
       </div>
     )
   }
@@ -12281,7 +12686,7 @@ export function ReporteFacturacionTab() {
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
-                    <span className="stat-label">Deben{'\u00A0'}<StatInfo text={esSemanaEnCurso ? 'Semana en curso: conductores que arrastran saldo anterior (deuda de semanas previas). Click para ver el detalle.' : 'Semana cerrada: conductores que quedaron con saldo pendiente después del pago Cabify cargado (sin pagos cargados, los que tienen total mayor a cero). Click para ver el detalle.'} /></span>
+                    <span className="stat-label">Deben{'\u00A0'}<StatInfo text={esSemanaEnCurso ? 'Semana en curso: conductores que arrastran saldo anterior (deuda de semanas previas). Click para ver el detalle.' : 'Semana cerrada: conductores que quedaron con saldo pendiente después de los pagos Cabify/DiDi cargados (sin pagos cargados, los que tienen total mayor a cero). Click para ver el detalle.'} /></span>
                   </div>
                 </div>
                 {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
@@ -12502,7 +12907,7 @@ export function ReporteFacturacionTab() {
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
-                    <span className="stat-label">Deben{'\u00A0'}<StatInfo text={esSemanaEnCurso ? 'Semana en curso: conductores que arrastran saldo anterior (deuda de semanas previas). Click para ver el detalle.' : 'Semana cerrada: conductores que quedaron con saldo pendiente después del pago Cabify cargado (sin pagos cargados, los que tienen total mayor a cero). Click para ver el detalle.'} /></span>
+                    <span className="stat-label">Deben{'\u00A0'}<StatInfo text={esSemanaEnCurso ? 'Semana en curso: conductores que arrastran saldo anterior (deuda de semanas previas). Click para ver el detalle.' : 'Semana cerrada: conductores que quedaron con saldo pendiente después de los pagos Cabify/DiDi cargados (sin pagos cargados, los que tienen total mayor a cero). Click para ver el detalle.'} /></span>
                   </div>
                 </div>
                 {(stats.toshipass_cubrio + stats.toshipass_no_cubrio + stats.toshipass_sin_datos) > 0 && (
@@ -12558,7 +12963,7 @@ export function ReporteFacturacionTab() {
                       <div className="stat-content">
                         <span className="stat-value">{formatCurrency(totalDebe)}</span>
                         <span className="stat-label">
-                          Imp. Gen.{'\u00A0'}<StatInfo text="Importe generado de la semana cerrada y qué porcentaje ya se cubrió con los pagos de Cabify cargados. Click para ver el detalle." />{' '}
+                          Imp. Gen.{'\u00A0'}<StatInfo text="Importe generado de la semana cerrada y qué porcentaje ya se cubrió con los pagos de Cabify y DiDi cargados. Click para ver el detalle." />{' '}
                           {hayPagos ? (
                             <span style={{ color: pctColor, fontWeight: 700 }}>
                               · {pct}% cubierto
@@ -12824,6 +13229,10 @@ export function ReporteFacturacionTab() {
                       <input type="file" ref={cabifyFileInputRef} accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleCabifyFileUpload} />
                       <button className="fact-btn-export fact-btn--preview" onClick={() => cabifyFileInputRef.current?.click()} disabled={loadingCabifyPagos || facturacionesFiltradas.length === 0}>
                         {loadingCabifyPagos ? <Loader2 size={12} className="spinning" /> : <Upload size={12} />} Pagos Cabify
+                      </button>
+                      <input type="file" ref={didiFileInputRef} accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleDidiFileUpload} />
+                      <button className="fact-btn-export fact-btn--preview" onClick={() => didiFileInputRef.current?.click()} disabled={loadingDidiPagos || facturacionesFiltradas.length === 0}>
+                        {loadingDidiPagos ? <Loader2 size={12} className="spinning" /> : <Upload size={12} />} Pagos DiDi
                       </button>
                     </>
                   )}
@@ -13809,10 +14218,12 @@ export function ReporteFacturacionTab() {
                           {detalleSaldoBreakdown.pagos.map((p, idx) => (
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {detalleSaldoBreakdown.cierreSemana !== null ? `Pago de esta semana · ${p.ref}` : p.ref}
+                                {p.esAjuste
+                                  ? `Ajuste de saldo · ${p.ref}`
+                                  : detalleSaldoBreakdown.cierreSemana !== null ? `Pago de esta semana · ${p.ref}` : p.ref}
                                 {p.fecha && (
                                   <AdaptiveTooltip
-                                    content={`Pago registrado el ${fechaHoraAR(p.fecha)} hs`}
+                                    content={`${p.esAjuste ? 'Ajuste' : 'Pago'} registrado el ${fechaHoraAR(p.fecha)} hs`}
                                     width={220}
                                     variant="dark"
                                   >

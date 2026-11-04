@@ -1889,7 +1889,7 @@ export function SaldosAbonosTab() {
     // FIX 2026-05-27: usar saldo real del kardex para el PDF
     const saldoRealPDF = rows.length > 0 ? (Number(rows[0].saldo_pendiente) || 0) : (saldo.saldo_actual || 0)
     const tipoLabel: Record<string, string> = {
-      regularizado: 'Facturación', pago_cabify: 'Pago Cabify', pago: 'Pago',
+      regularizado: 'Facturación', pago_cabify: 'Pago Cabify', pago_didi: 'Pago DiDi', pago: 'Pago',
       pago_manual: 'Pago Manual', pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste', devolucion_garantia: 'Devolución Garantía',
       eliminacion_pago: 'Elim. Pago', edicion_pago: 'Edic. Pago', cargo: 'Cargo',
       abono: 'Abono', eliminacion_saldo: 'Elim. Saldo', importacion: 'Importación',
@@ -2628,6 +2628,7 @@ export function SaldosAbonosTab() {
                   const tipoLabel: Record<string, string> = {
                     regularizado: 'Facturación',
                     pago_cabify: 'Pago Cabify',
+                    pago_didi: 'Pago DiDi',
                     pago: 'Pago',
                     pago_manual: 'Pago Manual',
                     pago_cuota: 'Pago Cuota',
@@ -2641,7 +2642,7 @@ export function SaldosAbonosTab() {
                     importacion: 'Importación',
                   }
                   const cargosTipos = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
-                  const abonosTipos = new Set(['pago_cabify', 'pago', 'pago_manual', 'pago_cuota', 'abono', 'devolucion_garantia'])
+                  const abonosTipos = new Set(['pago_cabify', 'pago_didi', 'pago', 'pago_manual', 'pago_cuota', 'abono', 'devolucion_garantia'])
                   const elimTipos = new Set(['eliminacion_pago', 'eliminacion_saldo'])
 
                   // Clasificar fila como cargo / abono / eliminación

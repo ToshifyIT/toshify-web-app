@@ -19,6 +19,7 @@ import { cargarGoogleMaps, ubicacionDeComponentes, ubicacionDesdeCoordenadas } f
 import type { UbicacionDireccion } from '../../utils/ubicacionGoogle'
 import type { Lead } from '../../types/leads.types'
 import { guiaParaConductor } from './guias'
+import { estadoMonotributo, faltantesMonotributo } from './monotributo'
 
 /**
  * Tope para la geocodificacion. Es una llamada a Google que puede quedarse sin
@@ -118,10 +119,6 @@ function matchCatalogo(
   return null
 }
 
-const parseMonotributo = (valor?: string | null): boolean => {
-  const v = (valor || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  return v === 'si' || v === 'tiene monotributo'
-}
 
 export interface OpcionesValidacion {
   /**
@@ -147,7 +144,8 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
     // Guía obligatorio: queda en conductores.guia (ver guias.ts)
     if (!lead.entrevistador_asignado?.trim()) camposFaltantes.push('Guía')
     if (!lead.dni?.trim()) camposFaltantes.push('DNI')
-    if (!lead.cuit?.trim()) camposFaltantes.push('CUIT')
+    // Con monotributo: CUIT obligatorio. Sin monotributo: el motivo (ver ./monotributo.ts)
+    camposFaltantes.push(...faltantesMonotributo(lead))
     if (!lead.fecha_de_nacimiento) camposFaltantes.push('Fecha de nacimiento')
     if (!lead.nacionalidad?.trim()) camposFaltantes.push('Nacionalidad')
     if (!lead.estado_civil?.trim()) camposFaltantes.push('Estado civil')
@@ -337,7 +335,8 @@ export async function convertirLeadAConductor(
       nacionalidad_id: nacionalidadId,
       estado_civil_id: estadoCivilId,
       cbu: lead.cbu || '',
-      monotributo: parseMonotributo(lead.monotributo),
+      monotributo: estadoMonotributo(lead.monotributo) === 'si',
+      motivo_sin_monotributo: estadoMonotributo(lead.monotributo) === 'no' ? lead.motivo_sin_monotributo?.trim() || null : null,
       fecha_nacimiento: lead.fecha_de_nacimiento || null,
       direccion_lat: latFinal,
       direccion_lng: lngFinal,

@@ -453,6 +453,7 @@ export function ConductoresModule() {
     numero_cuit: "",
     cbu: "",
     monotributo: false,
+    motivo_sin_monotributo: "",
     numero_licencia: "",
     licencia_categorias_ids: [] as string[], // Array de categorías de licencia
     licencia_vencimiento: "",
@@ -1433,7 +1434,8 @@ export function ConductoresModule() {
     if (!formData.nombres?.trim()) newErrors.nombres = 'Requerido';
     if (!formData.apellidos?.trim()) newErrors.apellidos = 'Requerido';
     if (!formData.numero_dni?.trim()) newErrors.numero_dni = 'Requerido (usado en contratos)';
-    if (!formData.numero_cuit?.trim()) newErrors.numero_cuit = 'Requerido para facturación';
+    // CUIT obligatorio solo con monotributo: sin monotributo puede ingresar solo con DNI
+    if (formData.monotributo && !formData.numero_cuit?.trim()) newErrors.numero_cuit = 'Requerido con monotributo';
     if (!formData.fecha_nacimiento) newErrors.fecha_nacimiento = 'Requerido (usado en contratos)';
     if (!formData.nacionalidad_id) newErrors.nacionalidad_id = 'Requerido (usado en contratos)';
     if (!formData.estado_civil_id) newErrors.estado_civil_id = 'Requerido (usado en contratos)';
@@ -1903,6 +1905,8 @@ export function ConductoresModule() {
         numero_cuit: formData.numero_cuit || null,
         cbu: formData.cbu || null,
         monotributo: formData.monotributo,
+        // Con monotributo el motivo no aplica (ver leads/monotributo.ts)
+        motivo_sin_monotributo: formData.monotributo ? null : formData.motivo_sin_monotributo?.trim() || null,
         numero_licencia: formData.numero_licencia || null,
         licencia_vencimiento: formData.licencia_vencimiento,
         licencia_estado_id: formData.licencia_estado_id || null,
@@ -2568,6 +2572,7 @@ export function ConductoresModule() {
       numero_cuit: fc.numero_cuit || "",
       cbu: fc.cbu || "",
       monotributo: fc.monotributo || false,
+      motivo_sin_monotributo: fc.motivo_sin_monotributo || "",
       numero_licencia: fc.numero_licencia || "",
       licencia_categorias_ids: categoriasIds,
       licencia_vencimiento: fc.licencia_vencimiento,
@@ -2818,6 +2823,7 @@ export function ConductoresModule() {
       numero_cuit: "",
       cbu: "",
       monotributo: false,
+      motivo_sin_monotributo: "",
       numero_licencia: "",
       licencia_categorias_ids: [],
       licencia_vencimiento: "",
@@ -4435,7 +4441,7 @@ function ModalEditar({
             {editErrors.numero_dni && <span className="error-message">{editErrors.numero_dni}</span>}
           </div>
           <div className="form-group">
-            <label className="form-label">CUIT *</label>
+            <label className="form-label">CUIT{formData.monotributo ? ' *' : ''}</label>
             <input
               type="text"
               className={`form-input ${editErrors.numero_cuit ? 'input-error' : ''}`}
@@ -4588,6 +4594,21 @@ function ModalEditar({
             </div>
           </div>
         </div>
+        {!formData.monotributo && (
+          <div className="form-row">
+            <div className="form-group" style={{ flex: 1 }}>
+              <label className="form-label">Motivo sin monotributo</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Por qué se le permite ingresar sin monotributo"
+                value={formData.motivo_sin_monotributo}
+                onChange={(e) => setFormData({ ...formData, motivo_sin_monotributo: e.target.value })}
+                disabled={saving}
+              />
+            </div>
+          </div>
+        )}
 
         </>)}
         {pestana === 'licencia' && (<>
@@ -5536,6 +5557,14 @@ function ModalDetalles({
               {(selectedConductor as any).monotributo ? "Sí" : "No"}
             </div>
           </div>
+          {!(selectedConductor as any).monotributo && (
+            <div>
+              <label className="detail-label">MOTIVO SIN MONOTRIBUTO</label>
+              <div className="detail-value">
+                {(selectedConductor as any).motivo_sin_monotributo || "N/A"}
+              </div>
+            </div>
+          )}
           <div>
             <label className="detail-label">FECHA NACIMIENTO</label>
             <div className="detail-value">
