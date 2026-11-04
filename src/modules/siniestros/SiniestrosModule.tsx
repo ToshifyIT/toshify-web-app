@@ -84,6 +84,9 @@ function parseFechaSiniestro(fechaStr: string | undefined | null) {
   return null
 }
 
+/** Estados en los que el vehículo circula: no hace falta "Habilitar vehículo". */
+const ESTADOS_QUE_CIRCULAN = ['EN_USO', 'PKG_ON_BASE']
+
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
   const { canEditInSubmenu, isAdmin } = usePermissions()
@@ -154,7 +157,7 @@ export function SiniestrosModule() {
         supabase.from('siniestros_categorias' as any).select('id, codigo, nombre, descripcion, es_robo, orden').eq('is_active', true).order('orden'),
         supabase.from('siniestros_estados' as any).select('id, codigo, nombre, color, orden').eq('is_active', true).order('orden'),
         supabase.from('seguros' as any).select('id, nombre').eq('is_active', true).order('nombre'),
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)')).order('patente'),
         supabase.from('conductores_estados').select('id, codigo') as unknown as Promise<{ data: { id: string; codigo: string }[] | null; error: any }>,
         aplicarFiltroSede(supabase.from('v_siniestros_completos' as any).select('*')).order('fecha_siniestro', { ascending: false }).limit(2000),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('activo', true).order('descripcion')
@@ -445,6 +448,13 @@ export function SiniestrosModule() {
   }
 
   // Columnas para DataTable con filtros tipo Excel
+  // Estado actual de cada vehículo (para mostrar "Habilitar vehículo" solo si no circula)
+  const estadoPorVehiculo = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const v of vehiculos) if (v.vehiculos_estados?.codigo) m.set(v.id, v.vehiculos_estados.codigo)
+    return m
+  }, [vehiculos])
+
   const siniestrosColumns = useMemo<ColumnDef<SiniestroCompleto>[]>(() => [
     {
       accessorKey: 'fecha_siniestro',
@@ -540,10 +550,13 @@ export function SiniestrosModule() {
       size: 110,
       header: 'Acciones',
       cell: ({ row }) => {
-        const isHabilitado = row.original.habilitado_circular
         const hasVehiculo = !!row.original.vehiculo_id
         const hasDrive = !!row.original.carpeta_drive_url
-        const habilitarDisabled = isHabilitado || !hasVehiculo
+        // "Habilitar vehículo" solo tiene sentido si el auto hoy NO circula (taller,
+        // siniestrado, PKG OFF, retenido...). Si sigue En uso o en PKG ON (p. ej. un choque
+        // leve) no se ofrece. (habilitado_circular no existe en la tabla: venía siempre vacío.)
+        const estadoVehiculo = row.original.vehiculo_id ? estadoPorVehiculo.get(row.original.vehiculo_id) : undefined
+        const vehiculoCircula = !!estadoVehiculo && ESTADOS_QUE_CIRCULAN.includes(estadoVehiculo)
 
         return (
           <ActionsMenu
@@ -561,17 +574,17 @@ export function SiniestrosModule() {
               },
               {
                 icon: <CheckCircle size={15} />,
-                label: !hasVehiculo ? 'Habilitar (sin vehículo)' : isHabilitado ? 'Vehículo ya habilitado' : 'Habilitar vehículo',
+                label: 'Habilitar vehículo',
                 onClick: () => handleHabilitarVehiculo(row.original),
-                disabled: habilitarDisabled,
-                variant: habilitarDisabled ? undefined : 'warning',
+                hidden: !hasVehiculo || vehiculoCircula,
+                variant: 'warning',
               },
             ]}
           />
         )
       }
     },
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, categoriasUnicas, categoriaFilter, responsableFilter, estadosUnicos, estadoFilter, openFilterId, canEdit])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, categoriasUnicas, categoriaFilter, responsableFilter, estadosUnicos, estadoFilter, openFilterId, canEdit, estadoPorVehiculo])
 
   function handleNuevoSiniestro() {
     const estadoRegistrado = estados.find(e => e.codigo === 'REGISTRADO')
@@ -946,7 +959,9 @@ export function SiniestrosModule() {
 
   function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
 
-  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
+  // fecha_siniestro se guarda como el día a las 00:00 UTC: pasarla a hora argentina la
+  // corría al día anterior (04/11 -> 03/11 21:00). Se muestra el día tal cual se cargó.
+  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr ? dateStr.slice(0, 10) : dateStr) }
 
   // Montos del período elegido en el selector (con "Todo el historial" = todos).
   // Mismas fórmulas que calcularStats, pero sobre los siniestros del período, así las
@@ -1772,7 +1787,9 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
 
   function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
 
-  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
+  // fecha_siniestro se guarda como el día a las 00:00 UTC: pasarla a hora argentina la
+  // corría al día anterior (04/11 -> 03/11 21:00). Se muestra el día tal cual se cargó.
+  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr ? dateStr.slice(0, 10) : dateStr) }
 
   const respLabels: Record<string, string> = { tercero: 'Tercero', conductor: 'Conductor', compartida: 'Compartida', sin_info: 'Sin info' }
   const vehiculoTexto = [siniestro.vehiculo_marca, siniestro.vehiculo_modelo].filter(Boolean).join(' ')
