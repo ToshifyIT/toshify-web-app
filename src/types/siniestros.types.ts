@@ -215,6 +215,8 @@ export interface VehiculoSimple {
   patente: string
   marca: string
   modelo: string
+  /** Estado actual del vehículo (para saber si hace falta "Habilitar vehículo") */
+  vehiculos_estados?: { codigo: string | null } | null
 }
 
 // Tipo para conductor simplificado (para selects)
