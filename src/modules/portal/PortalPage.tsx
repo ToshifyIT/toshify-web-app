@@ -1701,7 +1701,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         checkPage(10)
         pdf.setTextColor(negro)
         pdf.text(etiqueta, margin, y)
-        pdf.text(formatPlata(valor), pageWidth - margin, y, { align: 'right' })
+        pdf.text(formatPlata(valor, { decimales: 2 }), pageWidth - margin, y, { align: 'right' })
         y += 5
       }
       cargos.forEach((cargo) => {
@@ -1712,7 +1712,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           ? `${cargoDesc} x${cargo.cantidad}`
           : cargoDesc
         pdf.text(cargoLabel, margin, y)
-        pdf.text(formatPlata(montoNeto(cargo, ivaPorCodigo)), pageWidth - margin, y, { align: 'right' })
+        pdf.text(formatPlata(montoNeto(cargo, ivaPorCodigo), { decimales: 2 }), pageWidth - margin, y, { align: 'right' })
         y += 5
         const ivaCargoPdf = ivaDeLinea(cargo, ivaPorCodigo)
         if (ivaCargoPdf.monto > 0) filaIvaPdf(etiquetaIvaLinea(ivaCargoPdf.porcentaje, `${cargo.concepto_codigo} - ${cargoDesc}`), ivaCargoPdf.monto)
@@ -1726,7 +1726,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           : descDesc
         pdf.text(descLabel, margin, y)
         pdf.setTextColor(verde)
-        pdf.text(`-${formatPlata(desc.total)}`, pageWidth - margin, y, { align: 'right' })
+        pdf.text(`-${formatPlata(desc.total, { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
         y += 5
       })
 
@@ -1738,12 +1738,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       pdf.setDrawColor(230, 230, 230); pdf.setLineWidth(0.2); pdf.line(margin, y, pageWidth - margin, y); y += 5
       pdf.setFont('helvetica', 'bold'); pdf.setTextColor(negro)
       pdf.text('Subtotal Cargos', margin, y)
-      pdf.text(formatPlata(subtotalCargos), pageWidth - margin, y, { align: 'right' })
+      pdf.text(formatPlata(subtotalCargos, { decimales: 2 }), pageWidth - margin, y, { align: 'right' })
       y += 5
       if (subtotalDescPdf > 0) {
         pdf.text('Subtotal Descuentos', margin, y)
         pdf.setTextColor(verde)
-        pdf.text(`-${formatPlata(subtotalDescPdf)}`, pageWidth - margin, y, { align: 'right' })
+        pdf.text(`-${formatPlata(subtotalDescPdf, { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
         y += 5
       }
 
@@ -1757,24 +1757,24 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         pdf.setTextColor(gris)
         pdf.text(`Saldo adeudado al cierre S${desgloseFrac.cierreSemana}`, margin, y)
         pdf.setTextColor(rojo)
-        pdf.text(formatPlata(desgloseFrac.saldoCierre), pageWidth - margin, y, { align: 'right' })
+        pdf.text(formatPlata(desgloseFrac.saldoCierre, { decimales: 2 }), pageWidth - margin, y, { align: 'right' })
         y += 5
         desgloseFrac.pagos.forEach(p => {
           pdf.setTextColor(negro)
           pdf.text(`${tipoLabelPdf[p.tipo] || p.tipo} · ${p.ref} · ${fechaCorta(p.fecha || '')}`, margin, y)
           pdf.setTextColor(p.monto < 0 ? rojo : verde)
-          pdf.text(`${p.monto < 0 ? '+' : '-'}${formatPlata(Math.abs(p.monto))}`, pageWidth - margin, y, { align: 'right' })
+          pdf.text(`${p.monto < 0 ? '+' : '-'}${formatPlata(Math.abs(p.monto), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
           y += 5
         })
         pdf.setTextColor(negro)
         pdf.text(`Fraccionamiento en ${desgloseFrac.fraccionamiento.cuotas} cuotas (P010)`, margin, y)
         pdf.setTextColor('#6366F1')
-        pdf.text(`-${formatPlata(desgloseFrac.fraccionamiento.monto)}`, pageWidth - margin, y, { align: 'right' })
+        pdf.text(`-${formatPlata(desgloseFrac.fraccionamiento.monto, { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
         y += 5
         pdf.setTextColor(negro)
         pdf.text(saldoAntPdf > 0 ? 'Resultado: deuda pendiente' : saldoAntPdf < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente', margin, y)
         pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
-        pdf.text(`${saldoAntPdf > 0 ? '+' : saldoAntPdf < 0 ? '-' : ''}${formatPlata(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+        pdf.text(`${saldoAntPdf > 0 ? '+' : saldoAntPdf < 0 ? '-' : ''}${formatPlata(Math.abs(saldoAntPdf), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
         y += 6
       } else if (saldoAntPdf !== 0) {
         checkPage(23 + (detalleSaldoBreakdown?.pagos.length || 1) * 5)
@@ -1788,25 +1788,25 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           pdf.setTextColor(gris)
           pdf.text(previoAFavor ? 'Saldo a favor anterior' : 'Saldo adeudado anterior', margin, y)
           if (previoAFavor) pdf.setTextColor(verde)
-          pdf.text(`${previoAFavor ? '-' : ''}${formatPlata(Math.abs(detalleSaldoBreakdown.saldoPrevio))}`, pageWidth - margin, y, { align: 'right' })
+          pdf.text(`${previoAFavor ? '-' : ''}${formatPlata(Math.abs(detalleSaldoBreakdown.saldoPrevio), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
           y += 5
           detalleSaldoBreakdown.pagos.forEach(p => {
             pdf.setTextColor(negro)
             pdf.text(`${tipoLabelPdf[p.tipo] || 'Pago Manual'} · ${p.ref} · ${fechaCorta(p.fecha)}`, margin, y)
             pdf.setTextColor(verde)
-            pdf.text(`-${formatPlata(p.monto)}`, pageWidth - margin, y, { align: 'right' })
+            pdf.text(`-${formatPlata(p.monto, { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
             y += 5
           })
           pdf.setTextColor(negro)
           pdf.text(saldoAntPdf > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor', margin, y)
           pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
-          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatPlata(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatPlata(Math.abs(saldoAntPdf), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
           y += 6
         } else {
           pdf.setTextColor(negro)
           pdf.text(saldoAntPdf > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior', margin, y)
           pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
-          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatPlata(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatPlata(Math.abs(saldoAntPdf), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
           y += 6
         }
       }
@@ -1831,21 +1831,21 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           if (p.aplicadoAFraccionamiento) {
             // Ya descontado dentro de las cuotas (P010): se informa sin restarlo
             pdf.setTextColor(156, 163, 175)
-            pdf.text(formatPlata(p.monto), pageWidth - margin, y, { align: 'right' })
+            pdf.text(formatPlata(p.monto, { decimales: 2 }), pageWidth - margin, y, { align: 'right' })
             y += 4
             pdf.setFontSize(8)
             pdf.text('Aplicado a la deuda fraccionada (ya descontado en las cuotas)', margin + 3, y)
             pdf.setFontSize(10)
           } else {
             pdf.setTextColor(verde)
-            pdf.text(`-${formatPlata(p.monto)}`, pageWidth - margin, y, { align: 'right' })
+            pdf.text(`-${formatPlata(p.monto, { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
           }
           y += 5
         })
         pdf.setFont('helvetica', 'bold'); pdf.setTextColor(negro)
         pdf.text('Total aportado', margin, y)
         pdf.setTextColor(verde)
-        pdf.text(`-${formatPlata(totalPagadoSemanaPdf)}`, pageWidth - margin, y, { align: 'right' })
+        pdf.text(`-${formatPlata(totalPagadoSemanaPdf, { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
         y += 6
       }
 
@@ -1858,14 +1858,14 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
       pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(negro)
       pdf.text('Monto Total Referencial', margin, y)
-      pdf.text(formatPlata(totalAPagarPdf), pageWidth - margin, y, { align: 'right' })
+      pdf.text(formatPlata(totalAPagarPdf, { decimales: 2 }), pageWidth - margin, y, { align: 'right' })
       y += 9
 
       const pendLabelPdf = saldoPendientePdf < -0.01 ? 'SALDO A FAVOR' : 'PENDIENTE DE PAGO'
       const pendColorPdf = saldoPendientePdf > 0.01 ? rojo : verde
       pdf.setFontSize(14); pdf.setTextColor(pendColorPdf)
       pdf.text(pendLabelPdf, margin, y)
-      pdf.text(formatPlata(Math.abs(saldoPendientePdf) < 0.01 ? 0 : Math.abs(saldoPendientePdf)), pageWidth - margin, y, { align: 'right' })
+      pdf.text(formatPlata(Math.abs(saldoPendientePdf) < 0.01 ? 0 : Math.abs(saldoPendientePdf), { decimales: 2 }), pageWidth - margin, y, { align: 'right' })
 
       // Nota legal
       y += 12
@@ -2400,7 +2400,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           <span className="portal-detail-item-dot cargo" />
           <span className="portal-detail-item-text">{etiqueta}</span>
         </span>
-        <span className="portal-detail-item-amount">{formatPlata(valor)}</span>
+        <span className="portal-detail-item-amount">{formatPlata(valor, { decimales: 2 })}</span>
       </div>
     )
     // Los pagos que ya quedaron aplicados dentro del "Saldo Anterior" no deben volver a
@@ -2501,7 +2501,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                             )}
                           </span>
                         </span>
-                        <span className="portal-detail-item-amount">{formatPlata(montoNeto(item, ivaPorCodigo))}</span>
+                        <span className="portal-detail-item-amount">{formatPlata(montoNeto(item, ivaPorCodigo), { decimales: 2 })}</span>
                       </div>
                       {(() => {
                         const ivaItem = ivaDeLinea(item, ivaPorCodigo)
@@ -2516,7 +2516,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           {getConceptoLabel(item)}
                         </span>
                         <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
-                          -{formatPlata(item.total)}
+                          -{formatPlata(item.total, { decimales: 2 })}
                         </span>
                       </div>
                     ))}
@@ -2527,12 +2527,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                 <div className="portal-detail-items" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '8px', marginTop: '4px' }}>
                   <div className="portal-detail-item">
                     <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Subtotal Cargos</span>
-                    <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatPlata(subtotalCargos)}</span>
+                    <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatPlata(subtotalCargos, { decimales: 2 })}</span>
                   </div>
                   {subtotalDescuentos > 0 && (
                     <div className="portal-detail-item">
                       <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Subtotal Descuentos</span>
-                      <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatPlata(subtotalDescuentos)}</span>
+                      <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatPlata(subtotalDescuentos, { decimales: 2 })}</span>
                     </div>
                   )}
                 </div>
@@ -2547,7 +2547,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           <span className="portal-detail-item-dot" style={{ background: '#d1d5db' }} />
                           Saldo adeudado al cierre S{desgloseFrac.cierreSemana}
                         </span>
-                        <span className="portal-detail-item-amount" style={{ color: '#dc2626' }}>{formatPlata(desgloseFrac.saldoCierre)}</span>
+                        <span className="portal-detail-item-amount" style={{ color: '#dc2626' }}>{formatPlata(desgloseFrac.saldoCierre, { decimales: 2 })}</span>
                       </div>
                       {desgloseFrac.pagos.map(p => (
                         <div key={p.id} className="portal-detail-item">
@@ -2559,7 +2559,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                             </span>
                           </span>
                           <span className="portal-detail-item-amount" style={{ color: p.monto < 0 ? '#dc2626' : '#059669', fontWeight: 600 }}>
-                            {p.monto < 0 ? '+' : '-'}{formatPlata(Math.abs(p.monto))}
+                            {p.monto < 0 ? '+' : '-'}{formatPlata(Math.abs(p.monto), { decimales: 2 })}
                           </span>
                         </div>
                       ))}
@@ -2572,7 +2572,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           Fraccionamiento en {desgloseFrac.fraccionamiento.cuotas} cuotas
                         </span>
                         <span className="portal-detail-item-amount" style={{ color: '#6366F1', fontWeight: 600 }}>
-                          -{formatPlata(desgloseFrac.fraccionamiento.monto)}
+                          -{formatPlata(desgloseFrac.fraccionamiento.monto, { decimales: 2 })}
                         </span>
                       </div>
                       <div className="portal-detail-item">
@@ -2581,7 +2581,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           {saldoAnterior > 0 ? 'Resultado: deuda pendiente' : saldoAnterior < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente'}
                         </span>
                         <span className="portal-detail-item-amount" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
-                          {saldoAnterior > 0 ? '+' : saldoAnterior < 0 ? '-' : ''}{formatPlata(Math.abs(saldoAnterior))}
+                          {saldoAnterior > 0 ? '+' : saldoAnterior < 0 ? '-' : ''}{formatPlata(Math.abs(saldoAnterior), { decimales: 2 })}
                         </span>
                       </div>
                     </div>
@@ -2603,7 +2603,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                             <span className="portal-detail-item-amount" style={{
                               color: detalleSaldoBreakdown.saldoPrevio < 0 ? '#059669' : '#9ca3af', fontStyle: 'italic',
                             }}>
-                              {detalleSaldoBreakdown.saldoPrevio < 0 ? '-' : ''}{formatPlata(Math.abs(detalleSaldoBreakdown.saldoPrevio))}
+                              {detalleSaldoBreakdown.saldoPrevio < 0 ? '-' : ''}{formatPlata(Math.abs(detalleSaldoBreakdown.saldoPrevio), { decimales: 2 })}
                             </span>
                           </div>
                           {detalleSaldoBreakdown.pagos.map(p => (
@@ -2625,7 +2625,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                                 </span>
                               </span>
                               <span className="portal-detail-item-amount" style={{ color: '#059669', fontWeight: 600 }}>
-                                -{formatPlata(p.monto)}
+                                -{formatPlata(p.monto, { decimales: 2 })}
                               </span>
                             </div>
                           ))}
@@ -2639,7 +2639,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                             : (saldoAnterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior')}
                         </span>
                         <span className="portal-detail-item-amount" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
-                          {saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior))}
+                          {saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior), { decimales: 2 })}
                         </span>
                       </div>
                     </div>
@@ -2688,11 +2688,11 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                                   style={{ color: '#9ca3af' }}
                                   title="Este pago bajó tu deuda antes de fraccionarla: ya está descontado en las cuotas."
                                 >
-                                  {formatPlata(p.monto)}
+                                  {formatPlata(p.monto, { decimales: 2 })}
                                 </span>
                               ) : (
                                 <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
-                                  -{formatPlata(p.monto)}
+                                  -{formatPlata(p.monto, { decimales: 2 })}
                                 </span>
                               )}
                             </div>
@@ -2700,7 +2700,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                         })}
                         <div className="portal-detail-item" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '6px', marginTop: '4px' }}>
                           <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Total aportado</span>
-                          <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatPlata(totalPagado)}</span>
+                          <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatPlata(totalPagado, { decimales: 2 })}</span>
                         </div>
                       </div>
                     </div>
@@ -2715,31 +2715,31 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   <div className="portal-detail-items" style={{ marginBottom: '8px' }}>
                     <div className="portal-detail-item">
                       <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Subtotal Cargos</span>
-                      <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>{formatPlata(subtotalCargos)}</span>
+                      <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>{formatPlata(subtotalCargos, { decimales: 2 })}</span>
                     </div>
                     {subtotalDescuentos > 0 && (
                       <div className="portal-detail-item">
                         <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Subtotal Descuentos</span>
-                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatPlata(subtotalDescuentos)}</span>
+                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatPlata(subtotalDescuentos, { decimales: 2 })}</span>
                       </div>
                     )}
                     {saldoAnterior !== 0 && (
                       <div className="portal-detail-item">
                         <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>{saldoAnterior > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)'}</span>
                         <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>
-                          {saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior))}
+                          {saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior), { decimales: 2 })}
                         </span>
                       </div>
                     )}
                     {/* Subtotal referencial (divisor arriba) */}
                     <div className="portal-detail-item" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '6px', marginTop: '4px' }}>
                       <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Monto Total Referencial</span>
-                      <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatPlata(totalAPagar)}</span>
+                      <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatPlata(totalAPagar, { decimales: 2 })}</span>
                     </div>
                     {totalPagadoSemana > 0 && (
                       <div className="portal-detail-item">
                         <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Total aportado</span>
-                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatPlata(totalPagadoSemana)}</span>
+                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatPlata(totalPagadoSemana, { decimales: 2 })}</span>
                       </div>
                     )}
                   </div>
@@ -2747,7 +2747,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   <div style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '10px' }}>
                     <div className="portal-detail-total-label">{saldoPendiente < -0.01 ? 'Saldo a Favor' : 'Pendiente de Pago'}</div>
                     <div className={`portal-detail-total-amount ${saldoPendiente > 0.01 ? 'debit' : 'credit'}`}>
-                      {formatPlata(Math.abs(saldoPendiente) < 0.01 ? 0 : Math.abs(saldoPendiente))}
+                      {formatPlata(Math.abs(saldoPendiente) < 0.01 ? 0 : Math.abs(saldoPendiente), { decimales: 2 })}
                     </div>
                   </div>
                 </div>
@@ -2792,7 +2792,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     // Monto a mostrar: facturado para pagada/fraccionada. Para pendiente, el importe
     // depende del descuento por pago temprano (importePendiente aplica la regla de fecha).
     const pendImporte = !estado ? importePendiente(m, new Date()) : null
-    const montoStr = estado ? formatPlata(estado.montoFacturado) : (pendImporte!.texto)
+    const montoStr = estado ? formatPlata(estado.montoFacturado, { decimales: 2 }) : (pendImporte!.texto)
     // Pendiente siempre en rojo (con o sin descuento). pagada=verde, fraccionada=naranja.
     const montoClase = esPagada ? 'credit' : esFraccionada ? 'frac' : 'debit'
     const cuotasFaltan = esFraccionada ? Math.max(0, (estado!.cuotasTotal || 0) - (estado!.cuotasPagadas || 0)) : 0
@@ -2900,7 +2900,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
             )}
           </div>
           <div className="portal-km-cobro-monto-wrap">
-            <div className={`portal-week-total ${montoClase}`}>{formatPlata(c.monto)}</div>
+            <div className={`portal-week-total ${montoClase}`}>{formatPlata(c.monto, { decimales: 2 })}</div>
             {tieneCuotas && (
               <div className="portal-km-cobro-cuotas-count">{pagadas} de {total} cuotas</div>
             )}
@@ -2944,7 +2944,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     // Importe coherente con la card: facturado si pagada/fraccionada; si pendiente,
     // aplica la regla de descuento por pago temprano (mismo helper que renderMultaCard).
     const estadoFact = multasEstado.get(String(m.id))
-    const importeModal = estadoFact ? formatPlata(estadoFact.montoFacturado) : importePendiente(m, new Date()).texto
+    const importeModal = estadoFact ? formatPlata(estadoFact.montoFacturado, { decimales: 2 }) : importePendiente(m, new Date()).texto
     return (
     <div className="portal-modal-overlay" onClick={() => setSelectedMulta(null)}>
       <div className="portal-multa-modal" onClick={e => e.stopPropagation()}>
@@ -3095,7 +3095,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   Última semana
                   <span className="portal-stat-tooltip" data-tooltip="Monto referencial de la última semana registrada.">ⓘ</span>
                 </div>
-                <div className="portal-stat-value debit">{formatPlata(stats.ultima)}</div>
+                <div className="portal-stat-value debit">{formatPlata(stats.ultima, { decimales: 2 })}</div>
                 {stats.variacion !== 0 && (
                   <div className={`portal-stat-change ${stats.variacion > 0 ? 'up' : 'down'}`}>
                     {stats.variacion > 0 ? '↑' : '↓'} {formatNumero(Math.abs(stats.variacion), 1)}%
@@ -3107,7 +3107,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   Promedio semanal
                   <span className="portal-stat-tooltip" data-tooltip="Promedio de los montos referenciales de tus últimas semanas.">ⓘ</span>
                 </div>
-                <div className="portal-stat-value">{formatPlata(stats.promedio)}</div>
+                <div className="portal-stat-value">{formatPlata(stats.promedio, { decimales: 2 })}</div>
                 <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
               </div>
               <div className="portal-stat-card">
@@ -3115,7 +3115,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   Ganancia Cabify
                   <span className="portal-stat-tooltip" data-tooltip="Tu ingreso registrado por la app Cabify en la última semana.">ⓘ</span>
                 </div>
-                <div className="portal-stat-value" style={{ color: '#059669' }}>{formatPlata(stats.ultimaGanancia)}</div>
+                <div className="portal-stat-value" style={{ color: '#059669' }}>{formatPlata(stats.ultimaGanancia, { decimales: 2 })}</div>
                 <div className="portal-stat-sub">última semana</div>
               </div>
               <div className="portal-stat-card">
@@ -3124,7 +3124,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   <span className="portal-stat-tooltip" data-tooltip="Saldo referencial acumulado. En rojo si está pendiente, en verde si tienes a favor.">ⓘ</span>
                 </div>
                 <div className={`portal-stat-value ${saldoActualCalc > 1 ? 'debit' : 'credit'}`}>
-                  {formatPlata(Math.abs(saldoActualCalc) < 1 ? 0 : Math.abs(saldoActualCalc))}
+                  {formatPlata(Math.abs(saldoActualCalc) < 1 ? 0 : Math.abs(saldoActualCalc), { decimales: 2 })}
                 </div>
                 <div className="portal-stat-sub">
                   {saldoActualCalc > 1 ? 'Pendiente' : saldoActualCalc < -1 ? 'A favor' : 'Sin saldo'}
@@ -3136,7 +3136,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
             {saldo && saldo.dias_mora > 0 && (
               <div className="portal-mora-banner">
                 <span className="portal-mora-label">Mora: {saldo.dias_mora} días</span>
-                <span className="portal-mora-amount">Acumulada: {formatPlata(saldo.monto_mora_acumulada)}</span>
+                <span className="portal-mora-amount">Acumulada: {formatPlata(saldo.monto_mora_acumulada, { decimales: 2 })}</span>
               </div>
             )}
             </section>{/* /resumen (stats + mora) */}
@@ -3177,7 +3177,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`}
                         />
                         <Tooltip
-                          formatter={(value: string | number, name: string) => [formatPlata(Number(value)), name === 'facturacion' ? 'Proforma' : 'Ganancia Cabify']}
+                          formatter={(value: string | number, name: string) => [formatPlata(Number(value), { decimales: 2 }), name === 'facturacion' ? 'Proforma' : 'Ganancia Cabify']}
                           contentStyle={{
                             background: 'var(--bg-tertiary)',
                             border: '1px solid var(--border-primary)',
@@ -3240,7 +3240,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`}
                         />
                         <Tooltip
-                          formatter={(value: string | number, name: string) => [formatPlata(Number(value)), name === 'facturacion' ? 'Proforma' : 'Aportes']}
+                          formatter={(value: string | number, name: string) => [formatPlata(Number(value), { decimales: 2 }), name === 'facturacion' ? 'Proforma' : 'Aportes']}
                           contentStyle={{
                             background: 'var(--bg-tertiary)',
                             border: '1px solid var(--border-primary)',
@@ -3282,7 +3282,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                         <div key={f.id} className="portal-fraccionamiento-item">
                           <div className="portal-fraccionamiento-desc">{f.descripcion}</div>
                           <div className="portal-fraccionamiento-detail">
-                            Cuota {f.numero_cuota}/{f.total_cuotas} · {formatPlata(f.monto_cuota)} · S{f.semana}/{f.anio}
+                            Cuota {f.numero_cuota}/{f.total_cuotas} · {formatPlata(f.monto_cuota, { decimales: 2 })} · S{f.semana}/{f.anio}
                           </div>
                         </div>
                       ))}
@@ -3320,9 +3320,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                       : estado === 'favor' ? '#10b981' : '#059669'
                     const estadoColor = estado === 'pendiente' ? '#dc2626' : '#059669'
                     const estadoTexto = estado === 'pendiente'
-                      ? `Pendiente ${formatPlata(saldo)}`
+                      ? `Pendiente ${formatPlata(saldo, { decimales: 2 })}`
                       : estado === 'favor'
-                        ? `A favor ${formatPlata(Math.abs(saldo))}`
+                        ? `A favor ${formatPlata(Math.abs(saldo), { decimales: 2 })}`
                         : 'Cubierto'
                     return (
                       <div key={f.id} className="portal-week-card" onClick={() => openDetail(f)}>
@@ -3330,7 +3330,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
                             <div className="portal-week-title">Semana {p.semana} / {p.anio}</div>
                             <div className="portal-week-total" style={{ fontSize: '15px', fontWeight: 800 }}>
-                              {formatPlata(referencial)}
+                              {formatPlata(referencial, { decimales: 2 })}
                             </div>
                           </div>
                           <div className="portal-week-dates" style={{ marginBottom: '8px' }}>
@@ -3378,9 +3378,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                           return (
                             <span className="portal-multas-col-total portal-multas-col-total--doble">
                               {totalOriginal - totalVigente > 0.01 && (
-                                <span className="portal-multas-col-total-tachado">{formatPlata(totalOriginal)}</span>
+                                <span className="portal-multas-col-total-tachado">{formatPlata(totalOriginal, { decimales: 2 })}</span>
                               )}
-                              <span>{formatPlata(totalVigente)}</span>
+                              <span>{formatPlata(totalVigente, { decimales: 2 })}</span>
                             </span>
                           )
                         })()}
@@ -3395,7 +3395,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                     <div className="portal-multas-col">
                       <div className="portal-multas-col-head portal-multas-col-head--pagada">
                         <span>Pagadas <span className="portal-multas-count">{multasPagadas.length}</span></span>
-                        <span className="portal-multas-col-total">{formatPlata(multasPagadas.reduce((s, m) => s + (multasEstado.get(String(m.id))?.montoFacturado || 0), 0))}</span>
+                        <span className="portal-multas-col-total">{formatPlata(multasPagadas.reduce((s, m) => s + (multasEstado.get(String(m.id))?.montoFacturado || 0), 0), { decimales: 2 })}</span>
                       </div>
                       {multasPagadas.length > 0 ? (
                         <div className="portal-weeks">{multasPagadas.map(m => renderMultaCard(m, multasEstado.get(String(m.id))))}</div>
@@ -3407,7 +3407,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                     <div className="portal-multas-col">
                       <div className="portal-multas-col-head portal-multas-col-head--fraccionada">
                         <span>Fraccionadas <span className="portal-multas-count">{multasFraccionadas.length}</span></span>
-                        <span className="portal-multas-col-total">{formatPlata(multasFraccionadas.reduce((s, m) => s + (multasEstado.get(String(m.id))?.montoFacturado || 0), 0))}</span>
+                        <span className="portal-multas-col-total">{formatPlata(multasFraccionadas.reduce((s, m) => s + (multasEstado.get(String(m.id))?.montoFacturado || 0), 0), { decimales: 2 })}</span>
                       </div>
                       {multasFraccionadas.length > 0 ? (
                         <div className="portal-weeks">{multasFraccionadas.map(m => renderMultaCard(m, multasEstado.get(String(m.id))))}</div>
@@ -3484,7 +3484,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                       <div className="portal-multas-col">
                         <div className="portal-multas-col-head portal-multas-col-head--pendiente">
                           <span>Pendientes <span className="portal-multas-count">{kmPendientes.length}</span></span>
-                          <span className="portal-multas-col-total">{formatPlata(kmPendientes.reduce((s, c) => s + (c.monto || 0), 0))}</span>
+                          <span className="portal-multas-col-total">{formatPlata(kmPendientes.reduce((s, c) => s + (c.monto || 0), 0), { decimales: 2 })}</span>
                         </div>
                         {kmPendientes.length > 0 ? (
                           <div className="portal-weeks">{kmPendientes.map(c => renderCobroKmCard(c))}</div>
@@ -3495,7 +3495,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                       <div className="portal-multas-col">
                         <div className="portal-multas-col-head portal-multas-col-head--pagada">
                           <span>Pagados <span className="portal-multas-count">{kmPagados.length}</span></span>
-                          <span className="portal-multas-col-total">{formatPlata(kmPagados.reduce((s, c) => s + (c.monto || 0), 0))}</span>
+                          <span className="portal-multas-col-total">{formatPlata(kmPagados.reduce((s, c) => s + (c.monto || 0), 0), { decimales: 2 })}</span>
                         </div>
                         {kmPagados.length > 0 ? (
                           <div className="portal-weeks">{kmPagados.map(c => renderCobroKmCard(c))}</div>
@@ -3506,7 +3506,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                       <div className="portal-multas-col">
                         <div className="portal-multas-col-head portal-multas-col-head--fraccionada">
                           <span>Fraccionados <span className="portal-multas-count">{kmFraccionados.length}</span></span>
-                          <span className="portal-multas-col-total">{formatPlata(kmFraccionados.reduce((s, c) => s + (c.monto || 0), 0))}</span>
+                          <span className="portal-multas-col-total">{formatPlata(kmFraccionados.reduce((s, c) => s + (c.monto || 0), 0), { decimales: 2 })}</span>
                         </div>
                         {kmFraccionados.length > 0 ? (
                           <div className="portal-weeks">{kmFraccionados.map(c => renderCobroKmCard(c))}</div>
