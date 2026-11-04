@@ -1771,12 +1771,14 @@ export default function MultasModule() {
             </div>
             <button
               type="button"
+              className="multas-stat-detalle"
               disabled={!detalleHabilitado}
               onClick={() => detalleHabilitado && setShowPendienteModal(true)}
               title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-sm)', padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 600 }}
+              aria-label="Ver detalle del cálculo"
+              style={{ color: '#dc2626' }}
             >
-              <Eye size={13} /> Detalle
+              <Eye size={14} />
             </button>
           </div>
           <div className="stat-card">
@@ -1788,12 +1790,14 @@ export default function MultasModule() {
             </div>
             <button
               type="button"
+              className="multas-stat-detalle"
               disabled={!detalleHabilitado}
               onClick={() => detalleHabilitado && setShowPagadoModal(true)}
               title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-sm)', padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 600 }}
+              aria-label="Ver detalle del cálculo"
+              style={{ color: '#059669' }}
             >
-              <Eye size={13} /> Detalle
+              <Eye size={14} />
             </button>
           </div>
           <div className="stat-card">
@@ -1805,12 +1809,14 @@ export default function MultasModule() {
             </div>
             <button
               type="button"
+              className="multas-stat-detalle"
               disabled={!detalleHabilitado}
               onClick={() => detalleHabilitado && setShowProcesoModal(true)}
               title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 'var(--radius-sm)', padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}
+              aria-label="Ver detalle del cálculo"
+              style={{ color: '#d97706' }}
             >
-              <Eye size={13} /> Detalle
+              <Eye size={14} />
             </button>
           </div>
         </StatsGrid>

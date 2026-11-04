@@ -836,7 +836,7 @@
 
 /* Action Buttons - Toshify Design System */
 .dt-btn-action {
-  padding: 8px;
+  padding: 6px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -848,13 +848,13 @@
   color: var(--text-tertiary);
   position: relative;
   flex-shrink: 0;
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 26px;
+  min-height: 26px;
 }
 
 .dt-btn-action svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .dt-btn-action:hover {
@@ -2173,8 +2173,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   min-height: 0;
   padding: 0;
   border: none;
@@ -2189,7 +2189,7 @@
   background: var(--bg-tertiary);
 }
 #root td :is(button.dt-accion-icono, button:has(> svg.lucide:only-child):not([class*="btn-primary"]):not([class*="badge"])):disabled { opacity: 0.4; cursor: not-allowed; }
-#root td :is(button.dt-accion-icono, button:has(> svg.lucide:only-child)) > svg.lucide { width: 16px; height: 16px; }
+#root td :is(button.dt-accion-icono, button:has(> svg.lucide:only-child)) > svg.lucide { width: 14px; height: 14px; }
 
 #root td button:has(> svg.lucide-eye:only-child),
 #root td button:has(> svg.lucide-pen:only-child),
@@ -2198,8 +2198,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -2211,7 +2211,7 @@
 #root td button:has(> svg.lucide:only-child) > svg.lucide-eye,
 #root td button > svg.lucide-pen:only-child,
 #root td button > svg.lucide-trash-2:only-child,
-#root td button > svg.lucide-ellipsis-vertical:only-child { width: 16px; height: 16px; }
+#root td button > svg.lucide-ellipsis-vertical:only-child { width: 14px; height: 14px; }
 #root td button:has(> svg.lucide-pen:only-child):disabled,
 #root td button:has(> svg.lucide-trash-2:only-child):disabled,
 #root td button:has(> svg.lucide-eye:only-child):disabled { opacity: 0.4; cursor: not-allowed; }

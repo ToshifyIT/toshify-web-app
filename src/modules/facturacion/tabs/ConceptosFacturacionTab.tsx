@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
-import { Plus, Edit2, Trash2, Filter } from 'lucide-react'
+import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { ConceptoFacturacion } from '../../../types/facturacion.types'
@@ -10,6 +10,7 @@ import { formatCurrency, TIPOS_CONCEPTO, TIPOS_PARAMETRO } from '../../../types/
 
 import { hoyART, fechaLocalISO } from '../../../utils/fechaArgentina'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
+import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 const HTML_CAMPO_PRECIO_BASE = `
           <div class="fact-form-row" id="swal-base-group">
             <div class="fact-form-group">
@@ -154,21 +155,13 @@ export function ConceptosFacturacionTab() {
     if (!openColumnFilter) return
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn') && !target.closest('.dt-filter-dropdown') && !target.closest('.dt-filter-btn')) {
         setOpenColumnFilter(null)
       }
     }
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
   }, [openColumnFilter])
-
-  // Toggle functions
-  const toggleTipoFilter = (val: string) => setTipoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleActivoFilter = (val: string) => setActivoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
 
   // Datos filtrados
   const conceptosFiltrados = useMemo(() => {
@@ -669,32 +662,15 @@ export function ConceptosFacturacionTab() {
     {
       accessorKey: 'tipo',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'tipo' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {TIPOS_CONCEPTO.map(t => (
-                  <label key={t.value} className={`dt-column-filter-checkbox ${tipoFilter.includes(t.value) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={tipoFilter.includes(t.value)} onChange={() => toggleTipoFilter(t.value)} />
-                    <span>{t.label}</span>
-                  </label>
-                ))}
-              </div>
-              {tipoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
-                  Limpiar ({tipoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Tipo"
+          options={TIPOS_CONCEPTO.map(t => ({ value: t.value, label: t.label }))}
+          selectedValues={tipoFilter}
+          onSelectionChange={setTipoFilter}
+          filterId="tipo"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => {
         const tipo = row.original.tipo
@@ -779,35 +755,18 @@ export function ConceptosFacturacionTab() {
     {
       accessorKey: 'activo',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Estado {activoFilter.length > 0 && `(${activoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${activoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'activo' ? null : 'activo') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'activo' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {[
-                  { value: 'activo', label: 'Activo' },
-                  { value: 'inactivo', label: 'Inactivo' }
-                ].map(e => (
-                  <label key={e.value} className={`dt-column-filter-checkbox ${activoFilter.includes(e.value) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={activoFilter.includes(e.value)} onChange={() => toggleActivoFilter(e.value)} />
-                    <span>{e.label}</span>
-                  </label>
-                ))}
-              </div>
-              {activoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setActivoFilter([])}>
-                  Limpiar ({activoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Estado"
+          options={[
+            { value: 'activo', label: 'Activo' },
+            { value: 'inactivo', label: 'Inactivo' }
+          ]}
+          selectedValues={activoFilter}
+          onSelectionChange={setActivoFilter}
+          filterId="activo"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         <span style={{

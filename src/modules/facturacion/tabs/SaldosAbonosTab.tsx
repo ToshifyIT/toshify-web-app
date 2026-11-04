@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -73,6 +72,7 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 
 import { hoyART } from '../../../utils/fechaArgentina'
 import { numeroSemana, semanaISO, sumarSemanasISO } from '../../../utils/semanaISO'
+import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 /** Calcula días calendario entre una fecha y hoy (sin considerar hora) */
 function diasCalendario(desde: string | Date): number {
   const d = new Date(desde)
@@ -196,7 +196,6 @@ export function SaldosAbonosTab() {
   // Estados para filtros Excel
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
-  const [conductorSearch, setConductorSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
   const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
@@ -239,7 +238,7 @@ export function SaldosAbonosTab() {
     if (!openColumnFilter) return
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn') && !target.closest('.dt-filter-dropdown') && !target.closest('.dt-filter-btn')) {
         setOpenColumnFilter(null)
       }
     }
@@ -256,19 +255,6 @@ export function SaldosAbonosTab() {
   const conductoresUnicos = useMemo(() =>
     [...new Set(saldos.map(s => s.conductor_nombre).filter(Boolean) as string[])].sort()
   , [saldos])
-
-  const conductoresFiltrados = useMemo(() => {
-    if (!conductorSearch) return conductoresUnicos
-    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
-  }, [conductoresUnicos, conductorSearch])
-
-  // Toggle functions
-  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
 
   async function cargarAsignadosSemana() {
     const fecha = addWeeks(new Date(), semanaOffset)
@@ -2106,41 +2092,15 @@ export function SaldosAbonosTab() {
       accessorKey: 'conductor_nombre',
       meta: { info: 'Conductor y su CUIT o DNI.' },
       header: () => (
-        <div className="dt-column-filter">
-          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
-            data-filter-id="saldo-conductor"
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'conductor' && createPortal(
-            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 'var(--z-dropdown)' }} onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar conductor..."
-                value={conductorSearch}
-                onChange={(e) => setConductorSearch(e.target.value)}
-                className="dt-column-filter-input"
-              />
-              <div className="dt-excel-filter-list">
-                {conductoresFiltrados.map(c => (
-                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
-                    <span>{c}</span>
-                  </label>
-                ))}
-              </div>
-              {conductorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
-                  Limpiar ({conductorFilter.length})
-                </button>
-              )}
-            </div>,
-            document.body
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Conductor"
+          options={conductoresUnicos}
+          selectedValues={conductorFilter}
+          onSelectionChange={setConductorFilter}
+          filterId="conductor"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         // FIX 2026-05-20: padding interno para que el conductor no quede pegado al borde
@@ -2189,38 +2149,19 @@ export function SaldosAbonosTab() {
       id: 'estado_saldo',
       meta: { info: 'A favor (saldo mayor a 0), Deuda (menor a 0) o Sin saldo (igual a 0).' },
       header: () => (
-        <div className="dt-column-filter">
-          <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
-            data-filter-id="saldo-estado"
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'estado' && createPortal(
-            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 'var(--z-dropdown)' }} onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {[
-                  { value: 'favor', label: 'A Favor' },
-                  { value: 'deuda', label: 'Deuda' },
-                  { value: 'sin_saldo', label: 'Sin Saldo' }
-                ].map(e => (
-                  <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(e.value) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={estadoFilter.includes(e.value)} onChange={() => toggleEstadoFilter(e.value)} />
-                    <span>{e.label}</span>
-                  </label>
-                ))}
-              </div>
-              {estadoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setEstadoFilter([])}>
-                  Limpiar ({estadoFilter.length})
-                </button>
-              )}
-            </div>,
-            document.body
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Estado"
+          options={[
+            { value: 'favor', label: 'A Favor' },
+            { value: 'deuda', label: 'Deuda' },
+            { value: 'sin_saldo', label: 'Sin Saldo' }
+          ]}
+          selectedValues={estadoFilter}
+          onSelectionChange={setEstadoFilter}
+          filterId="estado"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => {
         const saldoVal = row.original.saldo_actual
@@ -2275,7 +2216,7 @@ export function SaldosAbonosTab() {
         )
       }
     }
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, conductoresConFraccionado])
+  ], [conductorFilter, conductoresUnicos, estadoFilter, openColumnFilter, conductoresConFraccionado])
 
   const saldosFiltrados = useMemo(() => {
     return saldos.filter(s => {
@@ -2428,7 +2369,7 @@ export function SaldosAbonosTab() {
                 </span>
               )}
               <button
-                onClick={() => { setConductorFilter([]); setEstadoFilter([]); setAsignadoFilter('todos'); setConductorSearch('') }}
+                onClick={() => { setConductorFilter([]); setEstadoFilter([]); setAsignadoFilter('todos') }}
                 style={{
                   marginLeft: 'auto', background: 'transparent', border: '1px solid var(--border-primary)',
                   borderRadius: 'var(--radius-xs)', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)'

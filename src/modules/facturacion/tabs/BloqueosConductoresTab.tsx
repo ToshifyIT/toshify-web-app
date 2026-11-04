@@ -11,7 +11,6 @@ import {
   Clock,
   CheckCircle,
   Eye,
-  Filter,
   RefreshCw,
   Settings,
   Unlock
@@ -21,6 +20,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 
 interface ConductorConDeuda {
   id: string
@@ -54,7 +54,6 @@ export function BloqueosConductoresTab() {
   // Filtros Excel
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
-  const [conductorSearch, setConductorSearch] = useState('')
 
   useEffect(() => {
     cargarParametros()
@@ -71,7 +70,7 @@ export function BloqueosConductoresTab() {
     if (!openColumnFilter) return
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn') && !target.closest('.dt-filter-dropdown') && !target.closest('.dt-filter-btn')) {
         setOpenColumnFilter(null)
       }
     }
@@ -414,15 +413,6 @@ export function BloqueosConductoresTab() {
     [...new Set(conductores.map(c => `${c.nombres} ${c.apellidos}`))].sort()
   , [conductores])
 
-  const conductoresFiltrados = useMemo(() => {
-    if (!conductorSearch) return conductoresUnicos
-    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
-  }, [conductoresUnicos, conductorSearch])
-
-  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-
   // Filtrar conductores
   const conductoresFiltradosFinal = useMemo(() => {
     return conductores.filter(c => {
@@ -465,39 +455,15 @@ export function BloqueosConductoresTab() {
     {
       accessorKey: 'nombre',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'conductor' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar..."
-                value={conductorSearch}
-                onChange={(e) => setConductorSearch(e.target.value)}
-                className="dt-column-filter-input"
-              />
-              <div className="dt-excel-filter-list">
-                {conductoresFiltrados.map(c => (
-                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
-                    <span>{c}</span>
-                  </label>
-                ))}
-              </div>
-              {conductorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
-                  Limpiar ({conductorFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Conductor"
+          options={conductoresUnicos}
+          selectedValues={conductorFilter}
+          onSelectionChange={setConductorFilter}
+          filterId="conductor"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
       ),
       cell: ({ row }) => (
         <div>
@@ -606,7 +572,7 @@ export function BloqueosConductoresTab() {
         </div>
       )
     }
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, openColumnFilter, montoLimite, diasMoraLimite])
+  ], [conductorFilter, conductoresUnicos, openColumnFilter, montoLimite, diasMoraLimite])
 
   return (
     <>

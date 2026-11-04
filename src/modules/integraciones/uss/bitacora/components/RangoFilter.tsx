@@ -97,12 +97,12 @@ function RangoFilterInner({ label, placeholder = '0,00', ayuda, describir, rango
   };
 
   return (
-    <div className="dt-column-filter">
-      <span>{label}</span>
+    <div className="dt-filter-header">
+      <span className="dt-filter-label">{label}</span>
       <button
         ref={buttonRef}
         type="button"
-        className={`dt-column-filter-btn ${isActive ? 'active' : ''}`}
+        className={`dt-filter-btn ${isActive ? 'active' : ''}`}
         onClick={(e) => { e.stopPropagation(); onOpenChange(isOpen ? null : filterId); }}
         title={`Filtrar por ${label.toLowerCase()}`}
       >
@@ -111,7 +111,7 @@ function RangoFilterInner({ label, placeholder = '0,00', ayuda, describir, rango
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="dt-column-filter-dropdown dt-filter-portal"
+          className="dt-filter-dropdown"
           style={{ position: 'fixed', top: position.top, left: position.left }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -158,7 +158,7 @@ function RangoFilterInner({ label, placeholder = '0,00', ayuda, describir, rango
             )}
           </div>
           {isActive && (
-            <button type="button" className="dt-column-filter-clear" onClick={() => actualizar('', '')}>
+            <button type="button" className="dt-filter-clear" onClick={() => actualizar('', '')}>
               Limpiar
             </button>
           )}

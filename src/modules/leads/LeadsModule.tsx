@@ -2779,7 +2779,7 @@ export function LeadsModule() {
                   title={nombre}
                   style={{
                     fontWeight: 600, color: enZonaRestringida ? 'var(--badge-red-text)' : 'var(--text-primary)',
-                    textDecoration: 'none', fontSize: '13px',
+                    textDecoration: 'none', fontSize: '12px',
                     display: 'block', maxWidth: '220px',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}

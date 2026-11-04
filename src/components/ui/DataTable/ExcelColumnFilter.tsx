@@ -34,7 +34,7 @@ interface ExcelColumnFilterProps {
   openFilterId: string | null
   /** Callback para cambiar qué filtro está abierto */
   onOpenChange: (filterId: string | null) => void
-  /** Con más de 3 opciones muestra «Seleccionar todas» (como el filtro del DataTable) */
+  /** Con más de 3 opciones muestra «Seleccionar todas» (como el filtro del DataTable). Por defecto, sí. */
   selectAll?: boolean
 }
 
@@ -51,7 +51,7 @@ export function ExcelColumnFilter({
   filterId,
   openFilterId,
   onOpenChange,
-  selectAll = false,
+  selectAll = true,
 }: ExcelColumnFilterProps) {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -198,25 +198,26 @@ export function ExcelColumnFilter({
     onSelectionChange([])
   }
 
-  // Marca o desmarca de una vez las opciones visibles (las que coinciden con la búsqueda)
-  const visibles = filteredOptions.map(opt => opt.value)
-  const todasMarcadas = visibles.length > 0 && visibles.every(v => selectedValues.includes(v))
-  const algunasMarcadas = !todasMarcadas && visibles.some(v => selectedValues.includes(v))
+  // Marcar / desmarcar todas las opciones visibles (las que coinciden con la búsqueda)
+  const todasMarcadas = filteredOptions.length > 0 && filteredOptions.every(o => selectedValues.includes(o.value))
+  const algunasMarcadas = !todasMarcadas && filteredOptions.some(o => selectedValues.includes(o.value))
   const toggleTodas = () => {
+    const visibles = filteredOptions.map(o => o.value)
     if (todasMarcadas) {
       onSelectionChange(selectedValues.filter(v => !visibles.includes(v)))
     } else {
-      onSelectionChange([...selectedValues, ...visibles.filter(v => !selectedValues.includes(v))])
+      onSelectionChange([...new Set([...selectedValues, ...visibles])])
     }
   }
 
+  // Mismo aspecto que los filtros automáticos de DataTable (dt-filter-*)
   return (
-    <div className="dt-column-filter">
-      <span>{label} {hasSelection && `(${selectedValues.length})`}</span>
+    <div className="dt-filter-header">
+      <span className="dt-filter-label">{label}</span>
       <button
         ref={buttonRef}
         type="button"
-        className={`dt-column-filter-btn ${hasSelection ? 'active' : ''}`}
+        className={`dt-filter-btn ${hasSelection ? 'active' : ''}`}
         onClick={handleToggle}
         title={`Filtrar por ${label.toLowerCase()}`}
       >
@@ -225,7 +226,7 @@ export function ExcelColumnFilter({
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="dt-column-filter-dropdown dt-excel-filter dt-filter-portal"
+          className="dt-filter-dropdown"
           style={{
             position: 'fixed',
             top: position.top,
@@ -238,12 +239,12 @@ export function ExcelColumnFilter({
             placeholder="Buscar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="dt-column-filter-input"
+            className="dt-filter-search"
             autoFocus
           />
-          <div className="dt-excel-filter-list">
+          <div className="dt-filter-options">
             {selectAll && filteredOptions.length > 3 && (
-              <label className="dt-column-filter-checkbox dt-filter-option-todas">
+              <label className="dt-filter-option dt-filter-option-todas">
                 <input
                   type="checkbox"
                   checked={todasMarcadas}
@@ -254,13 +255,10 @@ export function ExcelColumnFilter({
               </label>
             )}
             {filteredOptions.length === 0 ? (
-              <div className="dt-excel-filter-empty">Sin resultados</div>
+              <div className="dt-filter-empty">Sin resultados</div>
             ) : (
               filteredOptions.map(option => (
-                <label
-                  key={option.value}
-                  className={`dt-column-filter-checkbox ${selectedValues.includes(option.value) ? 'selected' : ''}`}
-                >
+                <label key={option.value} className="dt-filter-option">
                   <input
                     type="checkbox"
                     checked={selectedValues.includes(option.value)}
@@ -274,10 +272,10 @@ export function ExcelColumnFilter({
           {hasSelection && (
             <button
               type="button"
-              className="dt-column-filter-clear"
+              className="dt-filter-clear"
               onClick={() => { clearSelection(); setSearchTerm(''); }}
             >
-              Limpiar ({selectedValues.length})
+              Limpiar filtro
             </button>
           )}
         </div>,
