@@ -6,6 +6,7 @@ import type { Lead } from '../../../types/leads.types'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
 import { clasificarMotivoDesinteres } from '../leadMotivos'
+import { estadoMonotributo } from '../monotributo'
 import '../LeadsModule.css'
 
 const detailMapStyle = {
@@ -437,6 +438,12 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             <span className="lead-detail-item-label">Monotributo</span>
             <span className="lead-detail-item-value">{lead.monotributo || '-'}</span>
           </div>
+          {estadoMonotributo(lead.monotributo) === 'no' && (
+            <div className="lead-detail-item">
+              <span className="lead-detail-item-label">Motivo sin monotributo</span>
+              <span className="lead-detail-item-value" style={{ whiteSpace: 'pre-wrap', maxWidth: '300px', textAlign: 'right' }}>{lead.motivo_sin_monotributo || '-'}</span>
+            </div>
+          )}
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">CBU</span>
             <span className="lead-detail-item-value" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{lead.cbu || '-'}</span>

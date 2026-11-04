@@ -96,7 +96,8 @@ async function fetchClosedWeeks(
     .in('semana', semanas)
     .in('anio', anios)
     .eq('tipo_cobro', 'facturacion_semanal')
-    .ilike('referencia', 'Pago Cabify%')
+    // Cabify y DiDi ("Pago DiDi S44/2026") cuentan como cobrado
+    .or('referencia.ilike.Pago Cabify*,referencia.ilike.Pago DiDi*')
 
   // Agrupar pagos por semana_anio
   const pagosBySemAnio = new Map<string, Array<{ conductor_id: string; monto: number }>>()
@@ -185,7 +186,7 @@ function aggregateByMonth(data: FactCobDataPoint[]): FactCobDataPoint[] {
 
   return Array.from(grouped.entries())
     .sort((a, b) => a[1].order - b[1].order)
-    .map(([_key, v]) => {
+    .map(([, v]) => {
       const approxMonth = v.order % 100
       const anio = Math.floor(v.order / 100)
       return {

@@ -683,7 +683,7 @@ export function DashboardKpisV2Module() {
                 actual.cobrado !== null && actual.facturado !== null ? (
                   <Desglose
                     filas={[
-                      { label: 'Pago Cabify', valor: actual.cobradoCabify ?? 0 },
+                      { label: 'Pago Cabify / DiDi', valor: actual.cobradoCabify ?? 0 },
                       { label: 'Pago manual', valor: actual.cobradoManual ?? 0 },
                       { label: 'Pendiente', valor: Math.max(actual.facturado - actual.cobrado, 0) },
                     ]}

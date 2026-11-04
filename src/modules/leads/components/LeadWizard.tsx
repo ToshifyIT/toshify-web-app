@@ -11,6 +11,7 @@ import { normalizarCelularAR, validarCelularAR } from '../../../utils/validacion
 import { LABELS_CUENTA_APP } from '../cuentasApps'
 import { useAuth } from '../../../contexts/AuthContext'
 import { ESTADO_DESCARTADO, pedirMotivoDescarte } from '../motivoDescarte'
+import { estadoMonotributo, faltantesMonotributo } from '../monotributo'
 
 /** Cabecera de cada nota de la bitácora: "[02/11/2026 16:40 · Maria Flores]" */
 const RE_CABECERA = /^\[(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}[^\]]*)\]\s*/
@@ -252,10 +253,11 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
 
   // Estado de cada paso según sus campos obligatorios:
   //  verde = completo · amarillo = ya pasaste por ahí pero falta algo · gris = sin visitar
+  const sinMonotributo = estadoMonotributo(formData.monotributo) === 'no'
   const lleno = (v: unknown) => Array.isArray(v) ? v.length > 0 : typeof v === 'boolean' ? true : !!String(v ?? '').trim()
   const faltantesPorPaso: Record<number, string[]> = {
     1: [
-      !lleno(formData.nombre_completo) && 'Nombre completo', !lleno(formData.dni) && 'DNI', !lleno(formData.cuit) && 'CUIT',
+      !lleno(formData.nombre_completo) && 'Nombre completo', !lleno(formData.dni) && 'DNI', ...faltantesMonotributo(formData),
       !lleno(formData.fecha_de_nacimiento) && 'Fecha de nacimiento', !lleno(formData.nacionalidad) && 'Nacionalidad',
       !lleno(formData.estado_civil) && 'Estado civil', !lleno(formData.sede || formData.sede_id) && 'Sede',
     ].filter(Boolean) as string[],
@@ -365,9 +367,43 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 {errors.dni && <span className="error-text">{errors.dni}</span>}
               </div>
             </div>
+            {/* Monotributo define qué se pide: Si → DNI y CUIT; No → solo DNI y el motivo (ver ../monotributo.ts) */}
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>CUIT <span className="required">*</span></label>
+                <label>Monotributo <span className="required">*</span></label>
+                {/* En la base conviven "Sí" y "Si": los dos se muestran como Si, sin tocar el valor si no se cambia */}
+                <select
+                  className={errors.monotributo ? 'field-error' : ''}
+                  value={formData.monotributo === 'Sí' ? 'Si' : formData.monotributo || ''}
+                  onChange={e => setFormData(prev => ({
+                    ...prev,
+                    monotributo: e.target.value,
+                    ...(e.target.value === 'Si' ? { motivo_sin_monotributo: '' } : {}),
+                  }))}
+                >
+                  <option value="">Seleccionar</option>
+                  <option value="Si">Si</option>
+                  <option value="No">No</option>
+                </select>
+                {errors.monotributo && <span className="error-text">{errors.monotributo}</span>}
+              </div>
+              {sinMonotributo && (
+                <div className="lead-wizard-field">
+                  <label>Motivo sin monotributo <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    className={errors.motivo_sin_monotributo ? 'field-error' : ''}
+                    value={formData.motivo_sin_monotributo || ''}
+                    onChange={e => updateField('motivo_sin_monotributo', e.target.value)}
+                    placeholder="Por qué se le permite ingresar sin monotributo"
+                  />
+                  {errors.motivo_sin_monotributo && <span className="error-text">{errors.motivo_sin_monotributo}</span>}
+                </div>
+              )}
+            </div>
+            <div className="lead-wizard-form-group">
+              <div className="lead-wizard-field">
+                <label>CUIT {!sinMonotributo && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className={errors.cuit ? 'field-error' : ''}
