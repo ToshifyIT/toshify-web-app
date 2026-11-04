@@ -22,6 +22,7 @@ import {
   type CatalogosConversion,
   type OpcionCatalogo,
 } from '../../../leads/conversionLeadAConductor'
+import { estadoMonotributo } from '../../../leads/monotributo'
 import type { Lead } from '../../../../types/leads.types'
 import {
   validarCuit,
@@ -259,6 +260,8 @@ export function ConvertirLeadModal({
       nombre_completo: texto(l.nombre_completo),
       dni: texto(l.dni),
       cuit: texto(l.cuit),
+      monotributo: texto(l.monotributo),
+      motivo_sin_monotributo: estadoMonotributo(l.monotributo) === 'no' ? texto(l.motivo_sin_monotributo) : null,
       fecha_de_nacimiento: l.fecha_de_nacimiento || null,
       nacionalidad: texto(l.nacionalidad),
       estado_civil: texto(l.estado_civil),
@@ -292,7 +295,7 @@ export function ConvertirLeadModal({
     const a = leadOriginal.current
     if (!a || !lead) return false
     const campos: Array<keyof Lead> = [
-      'nombre_completo', 'dni', 'cuit', 'fecha_de_nacimiento', 'nacionalidad',
+      'nombre_completo', 'dni', 'cuit', 'monotributo', 'motivo_sin_monotributo', 'fecha_de_nacimiento', 'nacionalidad',
       'estado_civil', 'sede_id', 'phone', 'email', 'direccion', 'numero_licencia',
       'vencimiento_licencia', 'estado_licencia', 'tipo_licencia',
       'experiencia_previa', 'cochera', 'url_folder',
@@ -553,7 +556,29 @@ export function ConvertirLeadModal({
                 <Campo label="DNI" obligatorio error={errores.dni}>
                   <input style={inputStyle} value={lead.dni || ''} onChange={(e) => set('dni', e.target.value)} />
                 </Campo>
-                <Campo label="CUIT" obligatorio error={errores.cuit}>
+                {/* Monotributo Si → CUIT obligatorio; No → solo DNI y el motivo (ver leads/monotributo.ts) */}
+                <Campo label="Monotributo" obligatorio>
+                  <select
+                    style={inputStyle}
+                    value={lead.monotributo === 'Sí' ? 'Si' : lead.monotributo || ''}
+                    onChange={(e) => set('monotributo', e.target.value)}
+                  >
+                    <option value="">Seleccionar...</option>
+                    <option value="Si">Si</option>
+                    <option value="No">No</option>
+                  </select>
+                </Campo>
+                {estadoMonotributo(lead.monotributo) === 'no' && (
+                  <Campo label="Motivo sin monotributo" obligatorio>
+                    <input
+                      style={inputStyle}
+                      value={lead.motivo_sin_monotributo || ''}
+                      onChange={(e) => set('motivo_sin_monotributo', e.target.value)}
+                      placeholder="Por qué se le permite ingresar sin monotributo"
+                    />
+                  </Campo>
+                )}
+                <Campo label="CUIT" obligatorio={estadoMonotributo(lead.monotributo) !== 'no'} error={errores.cuit}>
                   <input style={inputStyle} value={lead.cuit || ''} onChange={(e) => set('cuit', e.target.value)} />
                 </Campo>
                 <Campo label="Fecha de nacimiento" obligatorio error={errores.fecha_de_nacimiento}>

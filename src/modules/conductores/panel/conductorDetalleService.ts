@@ -241,7 +241,7 @@ export interface ConceptoDetalle {
 }
 export interface PagoAporte {
   id: string
-  tipo: string            // pago_cabify | pago_manual | pago | pago_cuota
+  tipo: string            // pago_cabify | pago_didi | pago_manual | pago | pago_cuota
   monto: number
   referencia: string | null
   fecha: string | null
@@ -261,7 +261,7 @@ export interface SemanaDetalle {
 }
 
 // Tipos de movimiento que cuentan como aporte del conductor (mismo criterio que el portal).
-const TIPOS_APORTE = ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota']
+const TIPOS_APORTE = ['pago_cabify', 'pago_didi', 'pago_manual', 'pago', 'pago_cuota']
 
 // Detalle de una semana de facturación: conceptos (cargos/descuentos) + datos del
 // vehículo + aportes (pagos) de la semana desde el kardex (control_saldos).
@@ -508,7 +508,7 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
       .order('created_at', { ascending: false }),
   ])
 
-  const tiposAporte = ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota']
+  const tiposAporte = ['pago_cabify', 'pago_didi', 'pago_manual', 'pago', 'pago_cuota']
   // Pagos que ya quedaron dentro de una deuda fraccionada: no pagan la semana.
   const idsFraccionados = idsAportesEnFraccionamiento((pagos || []) as Array<any>)
   const pagadoPorSemana: Record<string, number> = {}

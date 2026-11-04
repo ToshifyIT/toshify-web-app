@@ -30,6 +30,7 @@ interface Props {
 const TIPO_LABEL: Record<string, string> = {
   regularizado: 'Facturación',
   pago_cabify: 'Pago Cabify',
+  pago_didi: 'Pago DiDi',
   pago: 'Pago',
   pago_manual: 'Pago Manual',
   pago_cuota: 'Pago Cuota',
@@ -44,7 +45,7 @@ const TIPO_LABEL: Record<string, string> = {
 }
 
 const CARGOS_TIPOS = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
-const ABONOS_TIPOS = new Set(['pago_cabify', 'pago', 'pago_manual', 'pago_cuota', 'abono', 'devolucion_garantia'])
+const ABONOS_TIPOS = new Set(['pago_cabify', 'pago_didi', 'pago', 'pago_manual', 'pago_cuota', 'abono', 'devolucion_garantia'])
 const ELIM_TIPOS = new Set(['eliminacion_pago', 'eliminacion_saldo'])
 
 type Clase = 'cargo' | 'abono' | 'elim' | null

@@ -100,7 +100,8 @@ async function fetchForPeriod(
     .eq('anio', anio)
     .eq('semana', semana)
     .eq('tipo_cobro', 'facturacion_semanal')
-    .ilike('referencia', 'Pago Cabify%')
+    // Cabify y DiDi ("Pago DiDi S44/2026") cuentan como cobrado
+    .or('referencia.ilike.Pago Cabify*,referencia.ilike.Pago DiDi*')
 
   let cobradoCabify = 0
   for (const p of (pagosData || []) as Array<{ conductor_id: string; monto: number }>) {

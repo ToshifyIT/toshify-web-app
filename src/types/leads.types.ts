@@ -88,6 +88,8 @@ export interface Lead {
   cochera?: string | null
   rueda?: string | null
   monotributo?: string | null
+  /** Por qué se permite ingresar sin monotributo (obligatorio si monotributo = No). */
+  motivo_sin_monotributo?: string | null
   bcra?: string | null
   experiencia_previa?: string | null
   experiencia_manejo?: string | null
@@ -231,6 +233,7 @@ export interface LeadFormData {
   cochera?: string
   rueda?: string
   monotributo?: string
+  motivo_sin_monotributo?: string
   bcra?: string
   experiencia_previa?: string
   cbu?: string

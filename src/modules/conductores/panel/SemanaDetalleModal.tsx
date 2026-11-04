@@ -21,6 +21,7 @@ function fmt(s: string | null): string {
 // Etiquetas legibles de cada tipo de aporte (igual que el portal).
 const TIPO_APORTE_LABEL: Record<string, string> = {
   pago_cabify: 'Pago Cabify',
+  pago_didi: 'Pago DiDi',
   pago_manual: 'Pago Manual',
   pago: 'Pago',
   pago_cuota: 'Pago Cuota',

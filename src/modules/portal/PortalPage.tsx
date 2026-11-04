@@ -917,7 +917,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         .order('created_at', { ascending: false })
       type PagoRow = { id: string; semana: number; anio: number; tipo_movimiento: string; monto_movimiento: number; saldo_pendiente: number | null }
       const pagosRows = (pagosData || []) as PagoRow[]
-      const tiposAporte = ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota']
+      const tiposAporte = ['pago_cabify', 'pago_didi', 'pago_manual', 'pago', 'pago_cuota']
 
       // Total pagado por semana/año (suma simple de todos los aportes) — usado como fallback.
       const map: Record<string, number> = {}
@@ -1368,7 +1368,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         .eq('conductor_id', factura.conductor_id)
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
-        .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
+        .in('tipo_movimiento', ['pago_cabify', 'pago_didi', 'pago_manual', 'pago', 'pago_cuota'])
         .order('created_at', { ascending: true }),
       // Cierres y fraccionamientos: para marcar los pagos que ya quedaron dentro de una
       // deuda fraccionada (ver utils/aportesFraccionados).
@@ -1682,7 +1682,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         if (y > pageHeight - margin - needed) { pdf.addPage(); y = 20 }
       }
       const tipoLabelPdf: Record<string, string> = {
-        pago_cabify: 'Pago Cabify', pago_manual: 'Pago Manual', pago: 'Pago',
+        pago_cabify: 'Pago Cabify', pago_didi: 'Pago DiDi', pago_manual: 'Pago Manual', pago: 'Pago',
         pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste', pago_efectivo: 'Pago en efectivo', devolucion_garantia: 'Devolución Garantía',
       }
       const fechaCorta = (iso: string) => formatFecha(iso)
@@ -2614,6 +2614,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                                   pago_manual: 'Pago Manual',
                                   pago_efectivo: 'Pago en efectivo',
                                   pago_cabify: 'Pago Cabify',
+                                  pago_didi: 'Pago DiDi',
                                   pago_cuota: 'Pago Cuota',
                                   ajuste_manual: 'Ajuste',
                                   devolucion_garantia: 'Devolución Garantía',
@@ -2651,6 +2652,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                 {pagosAportes.length > 0 && (() => {
                   const tipoLabel: Record<string, string> = {
                     pago_cabify: 'Pago Cabify',
+                    pago_didi: 'Pago DiDi',
                     pago_manual: 'Pago Manual',
                     pago: 'Pago',
                     pago_cuota: 'Pago Cuota',
