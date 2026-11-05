@@ -299,15 +299,31 @@ function asignarConductorEfectivo(tripsArr: TripEnriched[]): void {
 
 // Predicado "este trip es de este conductor", con el mismo fallback por
 // inclusion que usa el modulo interno (USS suele truncar o cambiar el formato).
+//
+// Ademas, por palabras: si todas las palabras del nombre mas corto (al menos 2)
+// estan en el otro, es la misma persona. Caso IVAN VERON: en Conductores esta
+// cargado sin el segundo nombre y Geotab lo trae como "IVAN GUSTAVO VERON"; la
+// inclusion de texto no lo encontraba y la columna KM Geo quedaba vacia. Solo se
+// compara contra viajes de las patentes asignadas al conductor esa semana.
+function palabras(s: string): string[] {
+  return s.split(' ').filter(p => p.length > 0)
+}
+
 function matcherConductor(nombres: string | null, apellidos: string | null): (condEf: string | null) => boolean {
   const full = normName(`${nombres || ''} ${apellidos || ''}`)
   const fullRev = normName(`${apellidos || ''} ${nombres || ''}`)
+  const propias = new Set(palabras(full))
   return (condEf: string | null): boolean => {
     if (!condEf) return false
     const n = normName(condEf)
     if (!n) return false
     if (n === full || n === fullRev) return true
-    return n.includes(full) || full.includes(n) || n.includes(fullRev) || fullRev.includes(n)
+    if (n.includes(full) || full.includes(n) || n.includes(fullRev) || fullRev.includes(n)) return true
+    const otras = palabras(n)
+    const [corto, largo] = otras.length <= propias.size
+      ? [otras, propias]
+      : [[...propias], new Set(otras)]
+    return corto.length >= 2 && corto.every(p => largo.has(p))
   }
 }
 

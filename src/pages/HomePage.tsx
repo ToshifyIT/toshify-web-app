@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase, UserCheck
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -26,6 +26,7 @@ import { Spinner } from '../components/ui/LoadingOverlay'
 
 const menuIcons: Record<string, LucideIcon> = {
   'estado-de-flota': Activity,
+  'agentes': UserCheck,
   'vehiculos': Car,
   'conductores': Users,
   'incidencias': AlertTriangle,
@@ -262,6 +263,7 @@ const TitularesPage = lazy(() => import('./vehiculos/TitularesPage'))
 const OfertaLocacionPage = lazy(() => import('./vehiculos/OfertaLocacionPage'))
 const InformesPage = lazy(() => import('./informes/InformesPage').then(m => ({ default: m.InformesPage })))
 const AsignacionesActivasPage = lazy(() => import('./asignaciones/AsignacionesActivasPage').then(m => ({ default: m.AsignacionesActivasPage })))
+const AgentesPage = lazy(() => import('./agentes/AgentesPage').then(m => ({ default: m.AgentesPage })))
 const ProductosPage = lazy(() => import('./productos/ProductosPage').then(m => ({ default: m.ProductosPage })))
 const ProveedoresPage = lazy(() => import('./proveedores/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })))
 const InventarioDashboardPage = lazy(() => import('./inventario/InventarioDashboardPage').then(m => ({ default: m.InventarioDashboardPage })))
@@ -284,6 +286,7 @@ const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then
 const DashboardDirectivoPage = lazy(() => import('./reportes/DashboardDirectivoPage').then(m => ({ default: m.DashboardDirectivoPage })))
 const DashboardKpisV2Page = lazy(() => import('./reportes/DashboardKpisV2Page').then(m => ({ default: m.DashboardKpisV2Page })))
 const DashboardGeneralPage = lazy(() => import('./reportes/DashboardGeneralPage').then(m => ({ default: m.DashboardGeneralPage })))
+const RendimientoAgentesPage = lazy(() => import('./reportes/RendimientoAgentesPage').then(m => ({ default: m.RendimientoAgentesPage })))
 const DashboardMarketingPage = lazy(() => import('./reportes/DashboardMarketingPage').then(m => ({ default: m.DashboardMarketingPage })))
 const RolesPage = lazy(() => import('./administracion/RolesPage').then(m => ({ default: m.RolesPage })))
 const GestionUsuariosPage = lazy(() => import('./administracion/GestionUsuariosPage').then(m => ({ default: m.GestionUsuariosPage })))
@@ -2115,9 +2118,16 @@ export function HomePage() {
                   <LazyPage><AsignacionesActivasPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              {/* Agentes se movió a Onboarding (sql/agentes_submenu_onboarding.sql) */}
+              <Route path="/agentes" element={<Navigate to="/onboarding/agentes" replace />} />
               {/* Usuario autenticado sin ningun modulo habilitado. */}
               <Route path="/sin-modulos" element={<SinModulosPage />} />
               {/* Onboarding */}
+              <Route path="/onboarding/agentes" element={
+                <ProtectedRoute submenuName="agentes" action="view">
+                  <LazyPage><AgentesPage /></LazyPage>
+                </ProtectedRoute>
+              } />
               <Route path="/onboarding/asignaciones" element={
                 <ProtectedRoute submenuName="asignaciones" action="view">
                   <LazyPage>
@@ -2246,6 +2256,11 @@ export function HomePage() {
               <Route path="/reportes/dashboard-general" element={
                 <ProtectedRoute menuName="reportes" submenuName="dashboard-general" action="view">
                   <LazyPage><DashboardGeneralPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/reportes/rendimiento-agentes" element={
+                <ProtectedRoute menuName="reportes" submenuName="rendimiento-agentes" action="view">
+                  <LazyPage><RendimientoAgentesPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/reportes/dashboard-marketing" element={

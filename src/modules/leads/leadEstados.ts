@@ -34,3 +34,12 @@ export const ESTADOS_OCULTOS_FILTRO: ReadonlySet<string> = new Set<string>([
 export const ESTADOS_LEAD_FILTRO: readonly string[] = ESTADOS_LEAD.filter(
   (e) => !ESTADOS_OCULTOS_FILTRO.has(e)
 )
+
+/**
+ * Leads que ya salieron del proceso: no se les busca pareja ni se los ofrece como
+ * compañeros (Leads, recorridos por calle). "No cumple edad" se muestra como
+ * "Descartado", así que cuenta igual que Descartado.
+ */
+export const ESTADOS_SIN_PAREJA: ReadonlySet<string> = new Set([
+  'Descartado', 'No cumple edad', 'Auto del pueblo', 'No le interesa', 'Conductor', 'Reingreso',
+])

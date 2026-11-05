@@ -16,7 +16,7 @@
 // siempre puede corregir el numero a mano.
 
 import { haversineKm } from '../distribucion-mapa-v2/utils'
-import { claveTramo, VELOCIDAD_ESTIMADA_KMH } from '../distribucion-mapa-v2/emparejamientoService'
+import { claveTramo, minutosEstimadosLineal } from '../distribucion-mapa-v2/emparejamientoService'
 import { leerMediciones } from '../distribucion-mapa-v2/medicionesCacheService'
 
 export interface Coordenada {
@@ -72,7 +72,7 @@ export async function calcularMinutosEntre(
   // 2) Estimacion local.
   const km = haversineKm(a.lat, a.lng, b.lat, b.lng)
   return {
-    minutos: Math.round((km / VELOCIDAD_ESTIMADA_KMH) * 60),
+    minutos: minutosEstimadosLineal(km),
     fuente: 'estimado',
   }
 }

@@ -110,6 +110,15 @@
   --badge-indigo-text: #3730A3;
   --badge-orange-bg: #FED7AA;
   --badge-orange-text: #9A3412;
+
+  /* Agentes de ventas (guías): tonos neutros, para no confundirse con los colores
+     de turnos (D amarillo, N azul, C violeta) ni de estados. */
+  --agente-ali-bg: #E8DCDA;
+  --agente-ali-text: #6B4A45;
+  --agente-carla-bg: #F5EEDF;
+  --agente-carla-text: #7A5A2B;
+  --agente-eunice-bg: #DEDEE1;
+  --agente-eunice-text: #44464F;
 }
 
 /* ==========================================
@@ -267,6 +276,13 @@
   --badge-indigo-text: #A5B4FC;
   --badge-orange-bg: rgba(251, 146, 60, 0.15);
   --badge-orange-text: #FED7AA;
+
+  --agente-ali-bg: rgba(214, 186, 181, 0.18);
+  --agente-ali-text: #E3CBC6;
+  --agente-carla-bg: rgba(232, 214, 176, 0.16);
+  --agente-carla-text: #E8D7B4;
+  --agente-eunice-bg: rgba(206, 206, 212, 0.16);
+  --agente-eunice-text: #D4D4D8;
 }
 
 /* ==========================================

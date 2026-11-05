@@ -2858,3 +2858,85 @@ input[type="date"].asig-status-select {
   text-decoration: none;
 }
 .asig-contacto a:hover { text-decoration: underline; }
+
+/* Guía (agente de ventas): avatar redondo con la inicial, un color por guía.
+   Redondo a propósito, para no confundirlo con las etiquetas cuadradas D / N / C. */
+.asig-guia-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.asig-guia-avatar--hueco { visibility: hidden; }
+
+/* Colores de agente del tema (--agente-*, styles/theme.css): neutros, se adaptan al
+   modo oscuro y no se confunden con D / N / C ni con los estados. */
+.asig-guia-avatar--ali { background: var(--agente-ali-bg); color: var(--agente-ali-text); }
+.asig-guia-avatar--carla { background: var(--agente-carla-bg); color: var(--agente-carla-text); }
+.asig-guia-avatar--eunice { background: var(--agente-eunice-bg); color: var(--agente-eunice-text); }
+.asig-guia-avatar--otro,
+.asig-guia-avatar--sin { background: var(--bg-tertiary); color: var(--text-tertiary); }
+
+
+/* Guía responsable de llenar los turnos del vehículo: badge del sistema (dt-badge)
+   con el color del agente. Mismo ancho para todos. */
+.asig-responsable {
+  justify-content: center;
+  min-width: 64px;
+  box-sizing: border-box;
+  cursor: default;
+}
+
+.asig-responsable--ali { background: var(--agente-ali-bg); color: var(--agente-ali-text); }
+.asig-responsable--carla { background: var(--agente-carla-bg); color: var(--agente-carla-text); }
+.asig-responsable--eunice { background: var(--agente-eunice-bg); color: var(--agente-eunice-text); }
+.asig-responsable--otro { background: var(--badge-gray-bg); color: var(--badge-gray-text); }
+
+/* Agentes: filtro por agente al lado del buscador */
+.asig-agente-select {
+  /* Misma altura y letra que el buscador del DataTable */
+  height: 32px;
+  max-width: 180px;
+  padding: 0 28px 0 10px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px 14px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Agentes: 8 tarjetas (con Altas y Bajas de la semana) en 2 filas de 4 */
+@media (min-width: 1201px) {
+  .asig-stats-grid.asig-stats-grid--agentes {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Agentes: turno vacante que ya tiene a alguien programado */
+.asig-vacante-programado {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--badge-green-bg);
+  color: var(--color-success);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}

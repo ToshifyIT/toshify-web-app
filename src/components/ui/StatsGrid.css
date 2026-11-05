@@ -9,6 +9,24 @@
 }
 #root .stats-grid-uniforme > * { flex: 1 1 auto; min-width: 0; box-sizing: border-box; }
 
+/* Más de una línea: columnas iguales (StatsGrid calcula --stats-cols), así todas
+   las tarjetas miden lo mismo en todas las filas. */
+#root .stats-grid-uniforme.stats-grid-columnas {
+  display: grid;
+  grid-template-columns: repeat(var(--stats-cols), minmax(0, 1fr));
+}
+
+/* Solo mientras StatsGrid mide el ancho natural de cada tarjeta (no se pinta) */
+#root .stats-grid-uniforme.stats-grid-midiendo {
+  display: flex;
+  flex-wrap: nowrap;
+}
+#root .stats-grid-uniforme.stats-grid-midiendo > * { flex: 0 0 auto; }
+#root .stats-grid-uniforme.stats-grid-midiendo [class*="stat-label"] { white-space: nowrap; }
+@media (max-width: 640px) {
+  #root .stats-grid-uniforme.stats-grid-columnas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* Celular: 2 columnas parejas */
 @media (max-width: 640px) {
   #root .stats-grid-uniforme { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

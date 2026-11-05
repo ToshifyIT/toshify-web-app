@@ -312,3 +312,8 @@ export const LABEL_TURNO: Record<TurnoEfectivo, string> = {
   NOCTURNO: 'Nocturno',
   SIN_PREFERENCIA: 'Sin preferencia',
 }
+
+/** Tiempo de un par: con "~" delante si es estimado en línea recta (no medido por calle). */
+export function formatTiempoPar(p: { tiempoMinutos: number; fuenteTiempo?: string | null }): string {
+  return `${p.fuenteTiempo === 'estimado' ? '~' : ''}${formatMin(p.tiempoMinutos)}`
+}

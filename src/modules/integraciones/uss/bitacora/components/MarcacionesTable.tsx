@@ -29,6 +29,35 @@ function conductorLabel(conductor: string | null | undefined): string {
   return c;
 }
 
+/** "D", "N" o "A cargo" según el horario de la asignación. */
+function letraHorario(horario: string | null | undefined): string {
+  if (horario === 'diurno') return 'D';
+  if (horario === 'nocturno') return 'N';
+  return 'A cargo';
+}
+
+/**
+ * Pista para un viaje sin conductor: el dueño del iButton que leyó Geotab (si está
+ * cargado en Conductores) o, si no, quién tenía asignada la patente a esa hora.
+ */
+function pistaConductor(m: Marcacion): { nombre: string; detalle: string; motivo: string } | null {
+  if (m.conductorId) return null;
+  if (m.ibuttonDe) {
+    return {
+      nombre: m.ibuttonDe, detalle: 'iButton',
+      motivo: `El iButton #${m.ibutton} está cargado a ${m.ibuttonDe} en Conductores, pero Geotab no lo tiene vinculado.`,
+    };
+  }
+  if (m.posibleConductor) {
+    const letra = letraHorario(m.posibleConductor.horario);
+    return {
+      nombre: m.posibleConductor.nombre, detalle: letra,
+      motivo: `Tenía asignada la patente a esa hora (${letra === 'A cargo' ? 'a cargo' : `turno ${letra}`}). Es una estimación: verificalo en Geotab.`,
+    };
+  }
+  return null;
+}
+
 interface MarcacionesTableProps {
   marcaciones: Marcacion[];
   isLoading: boolean;
@@ -536,6 +565,18 @@ export function MarcacionesTable({
               {m.ibutton && (
                 <span style={{ color: 'var(--text-tertiary)', fontSize: '10px', whiteSpace: 'nowrap' }}>#{m.ibutton}</span>
               )}
+              {(() => {
+                const p = pistaConductor(m);
+                if (!p) return null;
+                return (
+                  <span
+                    title={p.motivo}
+                    style={{ color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap', fontStyle: 'italic' }}
+                  >
+                    Posible: {p.nombre} · {p.detalle}
+                  </span>
+                );
+              })()}
               {m.conductorEstado && (() => {
                 const estilo = getEstadoConductorBadgeStyle({ codigo: m.conductorEstado });
                 return (
@@ -756,6 +797,9 @@ export function MarcacionesTable({
           return (
             <button
               type="button"
+              // "badge" la saca de la regla global de acciones-ícono de DataTable.css
+              // (el ícono es su único elemento hijo y la achicaba a 26px)
+              className="bitacora-alerta-badge"
               onClick={() => setAlertaMarcacion(m)}
               title={a.titulo}
               style={{
@@ -1126,10 +1170,34 @@ export function MarcacionesTable({
               <span><PatenteBadge patente={alertaMarcacion.patente} size="sm" /></span>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Conductor</span>
               <span style={{ color: 'var(--text-primary)' }}>{conductorLabel(alertaMarcacion.conductor)}</span>
+              {(() => {
+                const p = pistaConductor(alertaMarcacion);
+                const otros = alertaMarcacion.otrosAsignados ?? [];
+                if (alertaMarcacion.conductorId || (!p && otros.length === 0)) return null;
+                return (
+                  <>
+                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Posible conductor</span>
+                    <span style={{ color: 'var(--text-primary)' }}>
+                      {p ? <><strong>{p.nombre}</strong> · {p.detalle}</> : '—'}
+                      {p && (
+                        <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)' }}>{p.motivo}</span>
+                      )}
+                    </span>
+                    {otros.length > 0 && (
+                      <>
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>También asignado</span>
+                        <span style={{ color: 'var(--text-primary)' }}>{otros.join(', ')}</span>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Fecha del turno</span>
               <span style={{ color: 'var(--text-primary)' }}>{formatFecha(alertaMarcacion.fecha)}</span>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>iButton</span>
-              <span style={{ color: 'var(--text-primary)' }}>{alertaMarcacion.ibutton || '—'}</span>
+              <span style={{ color: 'var(--text-primary)' }}>
+                {alertaMarcacion.ibutton || 'No pasó la llave'}
+              </span>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>GPS</span>
               <span style={{ color: 'var(--text-primary)' }}>{alertaMarcacion.gpsOrigen || 'USS'}</span>
             </div>

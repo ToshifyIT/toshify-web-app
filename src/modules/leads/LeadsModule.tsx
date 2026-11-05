@@ -13,8 +13,9 @@ import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Link2,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
-  Check
+  AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
+  Handshake, CalendarCheck,
+  MapPin, CreditCard,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -25,7 +26,7 @@ import { useConductoresEmbajador } from '../../hooks/useConductoresEmbajador'
 import { Alerta } from '../../components/ui/alertas'
 import { ESTADO_DESCARTADO, lineaDescarte, pedirMotivoDescarte } from './motivoDescarte'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
-import { showError, showSuccess } from '../../utils/toast'
+import { showError, showSuccess, showWarning } from '../../utils/toast'
 import type { Lead, LeadFormData } from '../../types/leads.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -37,11 +38,18 @@ import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
 import { esGuiaActivo, GUIAS_ACTIVOS, homologarGuia } from './guias'
-import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO } from './leadEstados'
+import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO, ESTADOS_SIN_PAREJA } from './leadEstados'
 import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, MARCA_RECONTACTO_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
+import type { ConductorSinCompanero, LeadCercaHtml, ParejaLead, ProgramacionesActivas } from './parejasLeads'
+import { cargarLeadsCercaPorCalle, cargarParejasCalle, procesarLeadsNuevos } from './rutasLeadsService'
+import type { ParejasCalle } from './rutasLeadsService'
+import {
+  activarPaginacionOpciones, cargarConductoresSinCompanero, cargarProgramacionesActivas, detallePareja, htmlOpcionesPareja, mejorPareja,
+  sinTurnosTomados, textoProgramacion,
+} from './parejasLeads'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { formatNumero } from '../../utils/format'
@@ -427,6 +435,48 @@ function formatPhoneAR(raw: unknown): string | null {
   return `+549${digits}`
 }
 
+/**
+ * Columnas que trae la lista: las que usan la tabla, sus filtros, el buscador, las
+ * tarjetas, el cálculo de estado, las parejas y las zonas. La tabla `leads` tiene más
+ * de 120 columnas y traerlas todas para más de 10.000 leads eran ~35 MB; el resto se
+ * pide recién al abrir un lead (detalle, edición, conversión) o al exportar.
+ * Si una columna nueva se muestra o filtra en la tabla, hay que sumarla acá.
+ */
+const COLUMNAS_LISTA = [
+  'id', 'created_at', 'updated_at', 'sede', 'sede_id',
+  'nombre_completo', 'nombre_completo_2', 'dni', 'cuit', 'edad', 'fecha_de_nacimiento', 'email', 'phone',
+  'direccion', 'direccion_ciudad', 'direccion_pais', 'zona', 'latitud', 'longitud',
+  'direccion_geocode_estado', 'direccion_geocode_fecha',
+  'licencia', 'turno', 'cuenta_cabify', 'cuenta_didi', 'cochera', 'experiencia_previa', 'experiencia_manejo',
+  'disponibilidad', 'proceso', 'entrevista_ia', 'estado_de_lead', 'estado_manual_at', 'fase_de_preguntas',
+  'causal_de_cierre', 'entrevistador_asignado', 'observaciones', 'referido', 'embajador_id', 'ayuda_entrevista',
+  'url_folder', 'fuente_de_lead', 'companero', 'patente',
+].join(', ')
+
+/** El lead con todas sus columnas (la lista trae solo COLUMNAS_LISTA). */
+async function leadCompleto(lead: Lead): Promise<Lead> {
+  const { data, error } = await supabase.from('leads').select('*').eq('id', lead.id).maybeSingle()
+  if (error) throw error
+  return (data as Lead | null) ?? lead
+}
+
+/** Varios leads con todas sus columnas, en tandas (para exportar). */
+async function leadsCompletos(ids: string[]): Promise<Map<string, Lead>> {
+  const out = new Map<string, Lead>()
+  const TANDA = 200
+  const tandas: string[][] = []
+  for (let i = 0; i < ids.length; i += TANDA) tandas.push(ids.slice(i, i + TANDA))
+  // De a 4 pedidos a la vez
+  for (let i = 0; i < tandas.length; i += 4) {
+    const respuestas = await Promise.all(tandas.slice(i, i + 4).map(t => supabase.from('leads').select('*').in('id', t)))
+    for (const r of respuestas) {
+      if (r.error) throw r.error
+      for (const l of (r.data || []) as Lead[]) out.set(l.id, l)
+    }
+  }
+  return out
+}
+
 function leadToFormData(lead: Lead): LeadFormData {
   return {
     url_folder: lead.url_folder || '',
@@ -650,6 +700,30 @@ type LeadsCache = {
 }
 let leadsCache: LeadsCache | null = null
 
+
+/** Sección "Otros leads a 40 min o menos por calle" del popup de parejas: oculta por ahora. */
+const MOSTRAR_LEADS_CERCA = false
+
+/**
+ * Grupo de cada tarjeta: las de un mismo grupo no se combinan (se reemplazan).
+ * Sin grupo (recontacto, ya fue conductor, con pareja) se combinan con cualquiera.
+ */
+const GRUPO_TARJETA: Record<string, 'estado' | 'zona' | 'fuente' | 'vista'> = {
+  inicio: 'estado',
+  contactadoSellium: 'estado',
+  aptos: 'estado',
+  listoEmparejar: 'estado',
+  noAptos: 'estado',
+  convocatoria: 'estado',
+  autoPueblo: 'estado',
+  zonaSegura: 'zona',
+  zonaRestringida: 'zona',
+  intercom: 'fuente',
+  damaro: 'fuente',
+  descartados: 'vista',
+  todos: 'vista',
+}
+
 export function LeadsModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions()
   const { profile } = useAuth()
@@ -666,6 +740,12 @@ export function LeadsModule() {
 
   // Zonas peligrosas
   const [zonasRestringidas, setZonasPeligrosas] = useState<ZonaRestringida[]>([])
+  // Conductores a los que les falta compañero (para la etiqueta "Pareja cerca/posible")
+  const [conductoresSinCompanero, setConductoresSinCompanero] = useState<ConductorSinCompanero[]>([])
+  // Programaciones pendientes: leads ya programados y turnos que ya no hay que ofrecer
+  const [programaciones, setProgramaciones] = useState<ProgramacionesActivas | null>(null)
+  // Recorridos por calle de los leads nuevos ya procesados (parejas_lead)
+  const [parejasCalle, setParejasCalle] = useState<ParejasCalle | null>(null)
 
   // State principal — hidratar desde caché module-level si está disponible para la sede actual
   const [leads, setLeads] = useState<Lead[]>(() => cacheHit?.leads || [])
@@ -697,8 +777,10 @@ export function LeadsModule() {
   const [creacionDesde, setCreacionDesde] = useState<string | null>(() => rangoUltimoMesART().desde)
   const [creacionHasta, setCreacionHasta] = useState<string | null>(() => rangoUltimoMesART().hasta)
 
-  // Stat card filter
-  const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+  // Tarjetas activas (stat cards). Se pueden combinar (Y): ej. Zona Aprobada + Con pareja
+  // posible. Las de un mismo grupo se reemplazan entre sí (ver GRUPO_TARJETA).
+  const [activeStatCards, setActiveStatCards] = useState<string[]>([])
+  const esActiva = (card: string) => activeStatCards.includes(card)
   // Filas que el DataTable deja pasar (búsqueda + filtros) SIN la tarjeta activa: base de "Ver todos" / "Descartados".
   const [leadsMetricas, setLeadsMetricas] = useState<Lead[] | null>(null)
   // Filas visibles en la tabla (búsqueda + filtros + tarjeta activa): base de las tarjetas de métricas.
@@ -856,7 +938,7 @@ export function LeadsModule() {
       const pedirLeads = (desde: number, hasta: number, contar: boolean) =>
         aplicarFiltroSede(
           (supabase.from('leads') as any)
-            .select('*', contar ? { count: 'exact' } : undefined)
+            .select(COLUMNAS_LISTA, contar ? { count: 'exact' } : undefined)
             .or('proceso.is.null,proceso.not.in.(Convertido,Reingreso,"Ya era conductor")')
             .order('created_at', { ascending: false })
             .order('id', { ascending: true }),
@@ -1402,12 +1484,25 @@ export function LeadsModule() {
     }
   }, [sedes, loadLeads])
 
+  // Recorre todos los leads (12 pedidos seguidos): corre después de que la lista ya
+  // cargó, para no competir con ella, y como mucho cada 6 h por navegador. Lo que
+  // corrige (sede, fuente, turno, zona) cambia poco y entra por cargas masivas.
+  const sedeSincronizada = useRef(false)
   useEffect(() => {
-    if (sedes.length > 0) {
-      sincronizarSedeLeads()
+    if (sedes.length === 0 || loading || sedeSincronizada.current) return
+    sedeSincronizada.current = true
+    const CLAVE = 'leads-sincronizar-sede-at'
+    const CADA_MS = 6 * 60 * 60 * 1000
+    try {
+      const ultima = Number(localStorage.getItem(CLAVE) || 0)
+      if (Date.now() - ultima < CADA_MS) return
+      localStorage.setItem(CLAVE, String(Date.now()))
+    } catch {
+      // Sin localStorage: se sincroniza igual
     }
+    void sincronizarSedeLeads()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sedes.length > 0])
+  }, [sedes.length > 0, loading])
 
   // ---------- CARGAR ZONAS PELIGROSAS ----------
   useEffect(() => {
@@ -1420,6 +1515,27 @@ export function LeadsModule() {
     }
     loadZonas()
   }, [])
+
+  // ---------- PAREJA POSIBLE: conductores sin compañero de la sede ----------
+  useEffect(() => {
+    let activo = true
+    const filtro = aplicarFiltroSede as <T>(q: T) => T
+    cargarConductoresSinCompanero(filtro)
+      .then(lista => { if (activo) setConductoresSinCompanero(lista) })
+      .catch(err => console.error('[Leads] No se pudieron cargar los conductores sin compañero:', err))
+    cargarProgramacionesActivas(filtro)
+      .then(p => { if (activo) setProgramaciones(p) })
+      .catch(err => console.error('[Leads] No se pudieron cargar las programaciones:', err))
+    // Recorridos por calle ya guardados; después, en segundo plano, se procesan
+    // los leads nuevos pendientes (una sola vez cada uno) y se vuelve a leer.
+    const leerCalle = () => cargarParejasCalle()
+      .then(p => { if (activo) setParejasCalle(p) })
+      .catch(err => console.error('[Leads] No se pudieron cargar las parejas por calle:', err))
+    leerCalle()
+    procesarLeadsNuevos().then(r => { if (r.procesados > 0) leerCalle() })
+    return () => { activo = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sedeActualId])
 
   // ---------- MAPA: lead_id -> nombre de zona restringida ----------
   const leadsEnZona = useMemo(() => {
@@ -1441,6 +1557,27 @@ export function LeadsModule() {
     }
     return map
   }, [leads, zonasRestringidas])
+
+  // lead_id -> mejor pareja. Solo leads que siguen en el proceso, con ubicación y
+  // fuera de zona restringida (a esos no se los convoca).
+  // Los turnos que ya están programados para otra persona no se ofrecen, y a los
+  // leads ya programados no se les busca pareja (muestran "Programado").
+  const parejaPorLead = useMemo(() => {
+    const map = new Map<string, ParejaLead>()
+    const disponibles = sinTurnosTomados(conductoresSinCompanero, programaciones?.turnosTomados ?? new Set())
+    if (disponibles.length === 0) return map
+    for (const lead of leads) {
+      if (ESTADOS_SIN_PAREJA.has(lead.estado_de_lead || '')) continue
+      if (leadsEnZona.has(lead.id)) continue
+      if (programaciones?.porLead.has(lead.id)) continue
+      const porCalle = parejasCalle?.procesados.has(lead.id)
+        ? (parejasCalle.conductoresPorLead.get(lead.id) ?? new Map())
+        : null
+      const pareja = mejorPareja(lead, disponibles, porCalle)
+      if (pareja) map.set(lead.id, pareja)
+    }
+    return map
+  }, [leads, conductoresSinCompanero, programaciones, leadsEnZona, parejasCalle])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
   const uniqueZonas = useMemo(() =>
@@ -1477,16 +1614,10 @@ export function LeadsModule() {
   // ---------- FILTERED DATA ----------
   /** Texto del buscador de la tabla: si hay algo escrito, la búsqueda incluye descartados. */
   const [busqueda, setBusqueda] = useState('')
-  /** Filtro de la tarjeta activa (stat card). Se aplica encima de leadsBase. */
-  const filtroTarjeta = useCallback((l: Lead): boolean => {
-    // Los Descartados solo se ven con la tarjeta "Descartados" o al buscar algo
-    // puntual (la búsqueda recorre todos los leads). Las demás tarjetas también los
-    // excluyen, así el número de la tarjeta no cambia al clickearla
-    // (antes: 914 en la vista general → 971 al filtrar por Contactado Sellium).
-    const buscando = busqueda.trim() !== ''
-    if (!buscando && activeStatCard !== 'descartados' && activeStatCard !== 'todos' && l.estado_de_lead === 'Descartado') return false
+  /** ¿El lead cumple una tarjeta? */
+  const cumpleTarjeta = useCallback((l: Lead, card: string): boolean => {
     // Por estado_de_lead; Contactado Sellium / Intercom / Damaro también miran fuente_de_lead
-    switch (activeStatCard) {
+    switch (card) {
       case 'inicio': return l.estado_de_lead === 'Inicio conversación'
       case 'contactadoSellium': return esContactadoSellium(l)
       case 'aptos': return esAptoInduccion(l)
@@ -1500,14 +1631,31 @@ export function LeadsModule() {
       case 'autoPueblo': return l.estado_de_lead === 'Auto del pueblo'
       case 'recontacto': return tieneAlertaRecontacto(l.observaciones)
       case 'exConductor': return leadsConductorPrevio.has(l.id)
+      // Solo las parejas cerca (violeta, hasta 25 min). Las grises (más lejos) se ven en
+      // la etiqueta para tenerlas en cuenta, pero no entran en la tarjeta ni el filtro.
+      case 'conLicencia': return siNoParaFiltro(l.licencia) === 'Si'
+      case 'conPareja': return parejaPorLead.get(l.id)?.nivel === 'cerca'
       case 'descartados': return l.estado_de_lead === 'Descartado'
       // 'todos': vista general para busquedas. No filtra por estado, por lo que
       // incluye los descartados junto al resto.
       case 'todos': return true
-      // Por defecto: excluir descartados de la tabla (salvo que se esté buscando)
-      default: return buscando || l.estado_de_lead !== 'Descartado'
+      default: return true
     }
-  }, [activeStatCard, leadsEnZona, leadsConductorPrevio, busqueda])
+  }, [leadsEnZona, leadsConductorPrevio, parejaPorLead])
+
+  /** Filtro de las tarjetas activas (stat cards, se combinan con Y). Se aplica encima de leadsBase. */
+  const filtroTarjeta = useCallback((l: Lead): boolean => {
+    // Los Descartados solo se ven con la tarjeta "Descartados" o al buscar algo
+    // puntual (la búsqueda recorre todos los leads). Las demás tarjetas también los
+    // excluyen, así el número de la tarjeta no cambia al clickearla
+    // (antes: 914 en la vista general → 971 al filtrar por Contactado Sellium).
+    const buscando = busqueda.trim() !== ''
+    const conDescartados = activeStatCards.includes('descartados') || activeStatCards.includes('todos')
+    if (!buscando && !conDescartados && l.estado_de_lead === 'Descartado') return false
+    if (activeStatCards.length === 0) return buscando || l.estado_de_lead !== 'Descartado'
+    // Varias tarjetas: el lead tiene que cumplir todas
+    return activeStatCards.every(card => cumpleTarjeta(l, card))
+  }, [activeStatCards, busqueda, cumpleTarjeta])
 
   /** Leads con los filtros propios del módulo (columnas y fechas), SIN la tarjeta activa. */
   const leadsBase = useMemo(() => {
@@ -1568,25 +1716,46 @@ export function LeadsModule() {
   const stats = useMemo(() => {
     const base = leadsVisibles ?? filteredLeads
     const sinTarjeta = leadsMetricas ?? leadsBase
-    const total = base.length
-    const contactadoSellium = base.filter(esContactadoSellium).length
-    const aptos = base.filter(esAptoInduccion).length
-    const noAptos = base.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
-    const conCoordenadas = base.filter(l => l.latitud != null && l.longitud != null)
-    const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
-    const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
-    const convocatoria = base.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
-    const listoEmparejar = base.filter(l => l.estado_de_lead === ESTADO_LISTO_EMPAREJAR).length
-    const intercom = base.filter(esFuenteIntercom).length
-    const damaro = base.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
-    const autoPueblo = base.filter(l => l.estado_de_lead === 'Auto del pueblo').length
-    const descartados = sinTarjeta.filter(l => l.estado_de_lead === 'Descartado').length
-    // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
-    const todos = sinTarjeta.length
-    const recontacto = base.filter(l => tieneAlertaRecontacto(l.observaciones)).length
-    const exConductor = base.filter(l => leadsConductorPrevio.has(l.id)).length
-    return { total, contactadoSellium, aptos, noAptos, convocatoria, listoEmparejar, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, exConductor, todos }
-  }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona, leadsConductorPrevio])
+    const buscando = busqueda.trim() !== ''
+    // Cada tarjeta cuenta lo que mostraría la tabla AL TOCARLA: con las demás tarjetas
+    // activas que se combinan con ella, pero sin las de su mismo grupo (esas se
+    // reemplazan) ni las vistas Descartados/Todos (tocar otra tarjeta las quita).
+    // Así el número coincide con las filas que aparecen al hacer clic.
+    const contar = (card: string): number => {
+      const grupo = GRUPO_TARJETA[card]
+      const otras = grupo === 'vista'
+        ? []
+        : activeStatCards.filter(c => c !== card && GRUPO_TARJETA[c] !== 'vista' && (!grupo || GRUPO_TARJETA[c] !== grupo))
+      const conDescartados = card === 'descartados' || card === 'todos'
+      let n = 0
+      for (const l of sinTarjeta) {
+        if (!buscando && !conDescartados && l.estado_de_lead === 'Descartado') continue
+        if (!otras.every(c => cumpleTarjeta(l, c))) continue
+        if (cumpleTarjeta(l, card)) n++
+      }
+      return n
+    }
+    return {
+      total: base.length,
+      contactadoSellium: contar('contactadoSellium'),
+      aptos: contar('aptos'),
+      noAptos: contar('noAptos'),
+      convocatoria: contar('convocatoria'),
+      listoEmparejar: contar('listoEmparejar'),
+      enZonaRestringida: contar('zonaRestringida'),
+      enZonaSegura: contar('zonaSegura'),
+      intercom: contar('intercom'),
+      damaro: contar('damaro'),
+      autoPueblo: contar('autoPueblo'),
+      descartados: contar('descartados'),
+      recontacto: contar('recontacto'),
+      exConductor: contar('exConductor'),
+      conPareja: contar('conPareja'),
+      conLicencia: contar('conLicencia'),
+      // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
+      todos: sinTarjeta.length,
+    }
+  }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, busqueda, activeStatCards, cumpleTarjeta])
 
   // Foto diaria de las tarjetas (traza) y la de hace 7 días para las flechas.
   // Solo con la vista por defecto (último mes, sin filtros, búsqueda ni tarjeta activa):
@@ -1594,10 +1763,10 @@ export function LeadsModule() {
   const vistaPorDefecto = useMemo(() => {
     const def = rangoUltimoMesART()
     return !nombreFilter.length && !zonaFilter.length && !turnoFilter.length && !disponibilidadFilter.length
-      && !fuenteFilter.length && !estadoFilter.length && !activeStatCard
+      && !fuenteFilter.length && !estadoFilter.length && activeStatCards.length === 0
       && creacionDesde === def.desde && creacionHasta === def.hasta
       && (leadsVisibles === null || leadsVisibles.length === filteredLeads.length)
-  }, [nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCard,
+  }, [nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCards,
     creacionDesde, creacionHasta, leadsVisibles, filteredLeads])
   const fotoAnteriorLeads = useFotoSemanaAnterior('leads', {
     contactadoSellium: stats.contactadoSellium,
@@ -1611,16 +1780,53 @@ export function LeadsModule() {
   const fotoAnterior = vistaPorDefecto ? fotoAnteriorLeads : null
 
   // ---------- HANDLERS ----------
-  function handleOpenDetails(lead: Lead) {
-    setSelectedLead(lead)
-    setShowDetailsModal(true)
+  /** La lista trae solo algunas columnas: el detalle, la edición y la conversión piden el lead completo. */
+  async function conLeadCompleto(lead: Lead, accion: (completo: Lead) => void | Promise<void>) {
+    let completo: Lead
+    try {
+      completo = await leadCompleto(lead)
+    } catch (err) {
+      console.error('No se pudo cargar el lead completo:', err)
+      showError('Error', 'No se pudo cargar el lead')
+      return
+    }
+    await accion(completo)
   }
 
+  function handleOpenDetails(lead: Lead) {
+    void conLeadCompleto(lead, completo => {
+      setSelectedLead(completo)
+      setShowDetailsModal(true)
+    })
+  }
+
+  // Abierto desde la ficha de Distribución en mapa: /leads?editar=<id> abre el
+  // formulario de edición de ese lead apenas cargan los leads.
+  const editarDesdeUrlRef = useRef(new URLSearchParams(window.location.search).get('editar'))
+  useEffect(() => {
+    const id = editarDesdeUrlRef.current
+    if (!id || leads.length === 0) return
+    editarDesdeUrlRef.current = null
+    const url = new URL(window.location.href)
+    url.searchParams.delete('editar')
+    window.history.replaceState(window.history.state, '', url.pathname + url.search)
+    if (!canEdit) {
+      showWarning('No tenés permiso para editar leads')
+      return
+    }
+    const lead = leads.find(l => l.id === id)
+    if (lead) handleOpenEdit(lead)
+    else showWarning('No se encontró el lead para editar')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads])
+
   function handleOpenEdit(lead: Lead) {
-    setSelectedLead(lead)
-    setFormData(leadToFormData(lead))
-    setEditErrors({})
-    setShowEditModal(true)
+    void conLeadCompleto(lead, completo => {
+      setSelectedLead(completo)
+      setFormData(leadToFormData(completo))
+      setEditErrors({})
+      setShowEditModal(true)
+    })
   }
 
   function handleOpenCreate() {
@@ -1787,7 +1993,14 @@ export function LeadsModule() {
   // La conversion vive en ./conversionLeadAConductor. Aca queda solo la
   // presentacion: validar, avisar que falta, preguntar y contar como salio.
 
-  async function handleConvertir(lead: Lead) {
+  async function handleConvertir(leadLista: Lead) {
+    let lead: Lead
+    try {
+      lead = await leadCompleto(leadLista)
+    } catch {
+      showError('Error', 'No se pudo cargar el lead')
+      return
+    }
     const camposFaltantes = validarCamposConversion(lead)
 
     if (camposFaltantes.length > 0) {
@@ -1892,7 +2105,14 @@ export function LeadsModule() {
   // teléfono o nombre). No crea un conductor nuevo: completa los datos vacíos,
   // lo pasa a ACTIVO con fecha de reincorporación y deja el lead como
   // «Reingreso», que no suma como conversión de marketing.
-  async function handleReactivar(lead: Lead, previo: CoincidenciaConductor) {
+  async function handleReactivar(leadLista: Lead, previo: CoincidenciaConductor) {
+    let lead: Lead
+    try {
+      lead = await leadCompleto(leadLista)
+    } catch {
+      showError('Error', 'No se pudo cargar el lead')
+      return
+    }
     const { data: conductor, error: errC } = await supabase
       .from('conductores').select('*').eq('id', previo.conductor.id).maybeSingle()
     if (errC || !conductor) {
@@ -1954,7 +2174,10 @@ export function LeadsModule() {
         didOpen: () => Alerta.showLoading(),
       })
       const XLSX = await import('xlsx')
-      const data = filteredLeads.map(l => {
+      // La lista trae solo algunas columnas: para el Excel se piden completos
+      const completos = await leadsCompletos(filteredLeads.map(l => l.id))
+      const data = filteredLeads.map(base => {
+        const l = completos.get(base.id) ?? base
         const zonaRestringida = leadsEnZona.get(l.id) || ''
         const tieneCoordenadas = l.latitud != null && l.longitud != null
         return {
@@ -2680,8 +2903,16 @@ export function LeadsModule() {
   }
 
   // ---------- STAT CARD CLICK ----------
+  // Se pueden combinar tarjetas (Y). Las de un mismo grupo se excluyen entre sí (no
+  // hay lead que esté en dos estados a la vez): elegir una reemplaza a la otra.
+  // "Descartados" y "Todos" son vistas: reemplazan a todas las demás.
   function handleStatClick(card: string) {
-    setActiveStatCard(prev => prev === card ? null : card)
+    setActiveStatCards(prev => {
+      if (prev.includes(card)) return prev.filter(c => c !== card)
+      const grupo = GRUPO_TARJETA[card]
+      if (grupo === 'vista') return [card]
+      return [...prev.filter(c => GRUPO_TARJETA[c] !== 'vista' && (!grupo || GRUPO_TARJETA[c] !== grupo)), card]
+    })
   }
 
   // ---------- COLUMNS ----------
@@ -2826,6 +3057,8 @@ export function LeadsModule() {
                   </span>
                 )}
               </span>
+              {/* Zona, programado y pareja en una misma línea (bajan si no entran) */}
+              <div className="lead-etiquetas">
               {enZonaRestringida && (
                 <span
                   className="lead-zona-badge"
@@ -2842,9 +3075,9 @@ export function LeadsModule() {
                     cursor: 'default',
                     position: 'relative',
                   }}
-                  data-tooltip={direccion || undefined}
+                  title={`Zona Restringida: ${zonaRestringida}${direccion ? ` · ${direccion}` : ''}`}
                 >
-                  <AlertTriangle size={12} className="ico-inline" />Zona Restringida: {zonaRestringida}
+                  <MapPin size={12} />
                 </span>
               )}
               {tieneCoordenadas && !enZonaRestringida && (
@@ -2863,11 +3096,81 @@ export function LeadsModule() {
                     cursor: 'default',
                     position: 'relative',
                   }}
-                  data-tooltip={direccion || undefined}
+                  title={`Zona Aprobada${direccion ? ` · ${direccion}` : ''}`}
                 >
-                  <Check size={12} className="ico-inline" />Zona Aprobada
+                  <MapPin size={12} />
                 </span>
               )}
+              {(() => {
+                const prog = programaciones?.porLead.get(row.original.id)
+                if (!prog) return null
+                const { etiqueta, detalle } = textoProgramacion(prog)
+                return (
+                  <span className="lead-pareja-badge lead-pareja-badge--programado" title={detalle}>
+                    <CalendarCheck size={12} className="ico-inline" />{etiqueta}
+                  </span>
+                )
+              })()}
+              {(() => {
+                const pareja = parejaPorLead.get(row.original.id)
+                if (!pareja) return null
+                return (
+                  <button
+                    type="button"
+                    className={`lead-pareja-badge lead-pareja-badge--${pareja.nivel}`}
+                    title={`${detallePareja(pareja)} · Click para ver ${pareja.opciones > 1 ? `las ${pareja.opciones} opciones` : 'el detalle'}`}
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      // Otros leads cerca por calle (sólo si el lead ya se procesó)
+                      let leadsCerca: LeadCercaHtml[] = []
+                      if (MOSTRAR_LEADS_CERCA && parejasCalle?.procesados.has(row.original.id)) {
+                        try {
+                          const porId = new Map(leads.map(l => [l.id, l]))
+                          leadsCerca = (await cargarLeadsCercaPorCalle(row.original.id))
+                            .map(x => ({ x, l: porId.get(x.leadId) }))
+                            .filter(({ l }) => l && !ESTADOS_SIN_PAREJA.has(l.estado_de_lead || ''))
+                            .map(({ x, l }) => ({
+                              nombre: (l!.nombre_completo || '').toUpperCase(),
+                              zona: l!.zona ?? null,
+                              turno: l!.turno ?? null,
+                              estado: l!.estado_de_lead ?? null,
+                              km: x.km,
+                              minutos: x.minutos,
+                            }))
+                        } catch (err) {
+                          console.error('[Leads] No se pudieron leer los leads cerca:', err)
+                        }
+                      }
+                      Alerta.fire({
+                        title: `Parejas posibles · ${(row.original.nombre_completo || '').toUpperCase()}`,
+                        html: htmlOpcionesPareja(pareja, row.original.id, leadsCerca),
+                        width: 860,
+                        confirmButtonText: 'Cerrar',
+                        didOpen: (popup) => {
+                          activarPaginacionOpciones(popup)
+                          // "Ver en mapa": abre Distribución en mapa en otra pestaña
+                          popup.querySelectorAll<HTMLAnchorElement>('a[data-mapa]').forEach(a => {
+                            a.addEventListener('click', (ev) => {
+                              ev.preventDefault()
+                              const ruta = a.dataset.mapa
+                              // En otra pestaña, para no perder los filtros de Leads.
+                              // Con el prefijo del router (modo demo) si lo hay.
+                              const base = window.location.pathname.startsWith('/demo') ? '/demo' : ''
+                              if (ruta) window.open(`${base}${ruta}`, '_blank', 'noopener')
+                            })
+                          })
+                        },
+                      })
+                    }}
+                  >
+                    {/* Compacto: manitos + minutos; el detalle va en el title y en el popup */}
+                    <Handshake size={12} className="ico-inline" />
+                    {pareja.fuente === 'calle' ? '' : '~'}{pareja.minutos} min
+                    {pareja.opciones > 1 ? ` · ${pareja.opciones}` : ''}
+                  </button>
+                )
+              })()}
+              </div>
             </div>
           </div>
         )
@@ -3240,12 +3543,12 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
     zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 ||
-    creacionDesde !== null || creacionHasta !== null || activeStatCard !== null
+    creacionDesde !== null || creacionHasta !== null || activeStatCards.length > 0
 
   function clearAllFilters() {
     setNombreFilter([])
@@ -3256,7 +3559,7 @@ export function LeadsModule() {
     setFuenteFilter([])
     setCreacionDesde(null)
     setCreacionHasta(null)
-    setActiveStatCard(null)
+    setActiveStatCards([])
   }
 
   const externalFilters = useMemo(() => {
@@ -3287,7 +3590,7 @@ export function LeadsModule() {
         },
       })
     }
-    if (activeStatCard) {
+    if (activeStatCards.length > 0) {
       const labelMap: Record<string, string> = {
         inicio: 'Inicio conversación',
         contactadoSellium: 'Contactado Sellium',
@@ -3298,17 +3601,21 @@ export function LeadsModule() {
         zonaRestringida: 'Zona Restringida',
         autoPueblo: 'Auto del pueblo',
         exConductor: 'Ya fue conductor',
+        conPareja: 'Con pareja cerca (≤ 25 min)',
+        conLicencia: 'Con licencia',
         descartados: 'Descartados',
         todos: 'Todos (incluye descartados)',
       }
-      filters.push({
-        id: `stat-${activeStatCard}`,
-        label: labelMap[activeStatCard] || activeStatCard,
-        onClear: () => setActiveStatCard(null),
-      })
+      for (const card of activeStatCards) {
+        filters.push({
+          id: `stat-${card}`,
+          label: labelMap[card] || card,
+          onClear: () => setActiveStatCards(prev => prev.filter(c => c !== card)),
+        })
+      }
     }
     return filters
-  }, [hasActiveFilters, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, activeStatCard])
+  }, [hasActiveFilters, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, activeStatCards])
 
   // ---------- RENDER ----------
   return (
@@ -3319,7 +3626,7 @@ export function LeadsModule() {
       <div className="leads-stats">
         <StatsGrid className="leads-stats-grid" storageKey="LeadsModule" max={9}>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'contactadoSellium' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('contactadoSellium') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('contactadoSellium')}
           >
             <PhoneCall size={18} className="stat-icon" style={{ color: '#DB2777' }} />
@@ -3330,19 +3637,18 @@ export function LeadsModule() {
             <ComparacionSemana actual={stats.contactadoSellium} anterior={fotoAnterior?.contactadoSellium} />
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'aptos' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('aptos')}
-            title="Leads en estado Apto Inducción (aprobaron la inducción)"
+            className={`stat-card stat-card-clickable ${esActiva('conLicencia') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('conLicencia')}
+            title="Leads que tienen licencia de conducir (Licencia = Sí)"
           >
-            <CheckCircle size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+            <CreditCard size={18} className="stat-icon" style={{ color: '#16a34a' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.aptos}</span>
-              <span className="stat-label">Aptos</span>
+              <span className="stat-value">{stats.conLicencia}</span>
+              <span className="stat-label">Con licencia</span>
             </div>
-            <ComparacionSemana actual={stats.aptos} anterior={fotoAnterior?.aptos} />
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'listoEmparejar' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('listoEmparejar') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('listoEmparejar')}
             title="Leads en estado Listo Emparejar (listos para asignarles compañero)"
           >
@@ -3354,7 +3660,7 @@ export function LeadsModule() {
             <ComparacionSemana actual={stats.listoEmparejar} anterior={fotoAnterior?.listoEmparejar} />
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'convocatoria' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('convocatoria') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('convocatoria')}
           >
             <UserPlus size={18} className="stat-icon" style={{ color: '#8b5cf6' }} />
@@ -3365,10 +3671,10 @@ export function LeadsModule() {
             <ComparacionSemana actual={stats.convocatoria} anterior={fotoAnterior?.convocatoria} />
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'zonaSegura' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('zonaSegura') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('zonaSegura')}
           >
-            <CheckCircle size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+            <MapPin size={18} className="stat-icon" style={{ color: '#16a34a' }} />
             <div className="stat-content">
               <span className="stat-value">{stats.enZonaSegura}</span>
               <span className="stat-label">Zona Aprobada</span>
@@ -3376,7 +3682,7 @@ export function LeadsModule() {
             <ComparacionSemana actual={stats.enZonaSegura} anterior={fotoAnterior?.enZonaSegura} />
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'autoPueblo' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('autoPueblo') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('autoPueblo')}
           >
             <Car size={18} className="stat-icon" style={{ color: '#d97706' }} />
@@ -3387,7 +3693,7 @@ export function LeadsModule() {
             <ComparacionSemana actual={stats.autoPueblo} anterior={fotoAnterior?.autoPueblo} invertido />
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'recontacto' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('recontacto') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('recontacto')}
           >
             <Bell size={18} className="stat-icon" style={{ color: '#dc2626' }} />
@@ -3398,7 +3704,7 @@ export function LeadsModule() {
             <ComparacionSemana actual={stats.recontacto} anterior={fotoAnterior?.recontacto} invertido />
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'exConductor' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('exConductor') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('exConductor')}
             title="Leads con el mismo DNI, teléfono o nombre que un conductor (actual o antiguo)"
           >
@@ -3409,7 +3715,18 @@ export function LeadsModule() {
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'descartados' ? 'stat-card-active' : ''}`}
+            className={`stat-card stat-card-clickable ${esActiva('conPareja') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('conPareja')}
+            title="Leads con un conductor sin compañero a 25 min o menos y con el turno que le falta al auto"
+          >
+            <Handshake size={18} className="stat-icon" style={{ color: '#7c3aed' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.conPareja}</span>
+              <span className="stat-label" title="Leads con un conductor sin compañero a 25 min o menos por calle (etiqueta violeta). Los de más lejos (gris) no se cuentan.">Con pareja cerca</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${esActiva('descartados') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('descartados')}
             title="Leads descartados. No aparecen en la vista general, pero sí al buscar un lead puntual"
           >
@@ -3598,6 +3915,10 @@ export function LeadsModule() {
             <div className="modal-body">
               <LeadDetailView
                 lead={selectedLead}
+                onEdit={canEdit ? () => {
+                  setShowDetailsModal(false)
+                  handleOpenEdit(selectedLead)
+                } : undefined}
                 zonasRestringidas={zonasRestringidas}
                 enZonaRestringida={leadsEnZona.get(selectedLead.id) || null}
                 onRecalcularUbicacion={recalcularUbicacionLead}
