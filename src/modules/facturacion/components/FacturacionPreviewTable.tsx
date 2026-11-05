@@ -14,6 +14,7 @@ import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { formatNumero } from '../../../utils/format'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
+import { esFacturaA } from '../utils/tipoFactura'
 
 // Tipo para conceptos pendientes de enlazar
 export interface ConceptoPendiente {
@@ -281,17 +282,18 @@ export function FacturacionPreviewTable({
     // Traer TODOS los conductores de la BD
     const { data: todosLosConductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos, numero_dni, numero_cuit, email'))
+      .select('id, nombres, apellidos, numero_dni, numero_cuit, email, monotributo'))
       .order('apellidos')
       .limit(2000)
 
     // Mapear conductores de la BD
-    const conductoresBD = (todosLosConductores || []).map((c: { id: string; nombres: string; apellidos: string; numero_dni: string; numero_cuit: string | null; email: string | null }) => ({
+    const conductoresBD = (todosLosConductores || []).map((c: { id: string; nombres: string; apellidos: string; numero_dni: string; numero_cuit: string | null; email: string | null; monotributo: boolean | null }) => ({
       id: c.id,
       nombre: `${(c.nombres || '').toUpperCase()} ${(c.apellidos || '').toUpperCase()}`.trim(),
       dni: c.numero_dni || '',
       cuit: c.numero_cuit || '',
       email: c.email || '',
+      monotributo: c.monotributo === true,
       display: `${(c.nombres || '').toUpperCase()} ${(c.apellidos || '').toUpperCase()}`.trim() + ` (${c.numero_dni || ''})`
     }))
 
@@ -305,6 +307,7 @@ export function FacturacionPreviewTable({
         dni: c.dni,
         cuit: c.cuit,
         email: c.email,
+        monotributo: c.tipoFactura === 'FACTURA_A',
         display: `${c.nombre} (${c.dni})`
       }))
 
@@ -508,8 +511,8 @@ export function FacturacionPreviewTable({
         nombre: conductorBD.nombre,
         cuit: conductorBD.cuit,
         dni: conductorBD.dni,
-        tipoFactura: conductorBD.cuit ? 'FACTURA_A' : 'FACTURA_B',
-        condicionIva: conductorBD.cuit ? 'RI' : 'CF',
+        tipoFactura: esFacturaA(conductorBD.cuit, conductorBD.monotributo) ? 'FACTURA_A' : 'FACTURA_B',
+        condicionIva: esFacturaA(conductorBD.cuit, conductorBD.monotributo) ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL',
         email: conductorBD.email,
         facturacionId: undefined
       }

@@ -14,6 +14,7 @@ import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambio
 import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE } from '../utils/descuentoReferido'
 import { cruzarPagosDidi, leerExcelDidi, palabrasNombreDidi, type CandidatoDidi, type MetodoCruceDidi, type NoCruzadoDidi } from '../utils/pagosDidi'
 import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
+import { esFacturaA } from '../utils/tipoFactura'
 import {
   Users,
   DollarSign,
@@ -97,7 +98,7 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
-import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
+import { semanaISO, semanasDelAnio, sumarSemanasISO } from '../../../utils/semanaISO'
 import { formatNumero } from '../../../utils/format'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
@@ -607,6 +608,16 @@ export function ReporteFacturacionTab() {
 
   // Filtro por grupo de flota (null = todos)
   const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>(null)
+  // Chips Cabify / DiDi: conductores con esa etiqueta (appsPorConductor). Se pueden
+  // marcar los dos: muestra los que tienen cualquiera de las dos.
+  const [filtroApp, setFiltroApp] = useState<Array<'cabify' | 'didi'>>([])
+  const toggleFiltroApp = (app: 'cabify' | 'didi') =>
+    setFiltroApp(prev => prev.includes(app) ? prev.filter(a => a !== app) : [...prev, app])
+  const pasaFiltroApp = (conductorId: string) => {
+    if (filtroApp.length === 0) return true
+    const apps = appsPorConductor.get(conductorId)
+    return !!apps && filtroApp.some(a => apps[a])
+  }
   // Mapa de grupo ganador por DNI (vista previa) - ref para compartir entre funciones
   const grupoFlotaGanadorVPRef = useRef<Map<string, string | null>>(new Map())
 
@@ -914,6 +925,68 @@ export function ReporteFacturacionTab() {
     })()
     return () => { cancelado = true }
   }, [facturaciones, semanaActual])
+
+  // Apps con las que pagó cada conductor (etiquetas "Cabify" / "DiDi" bajo el nombre).
+  // Solo visual. En la semana N cuentan:
+  //   - Las cargas de los botones Pagos Cabify / Pagos DiDi al cerrar la semana N-1
+  //     ("Pago Cabify S44/2026" se ve en la S45), con monto > 0.
+  //   - Los pagos manuales registrados dentro de la semana N cuya referencia nombra la
+  //     app ("Pago en efectivo | Ingreso por DiDi").
+  const [appsPorConductor, setAppsPorConductor] = useState<Map<string, { cabify: boolean; didi: boolean }>>(new Map())
+  useEffect(() => {
+    let cancelado = false
+    if (facturaciones.length === 0 || modoVistaPrevia) {
+      setAppsPorConductor(new Map())
+      return
+    }
+    const inicio = new Date(`${format(semanaActual.inicio, 'yyyy-MM-dd')}T00:00:00-03:00`)
+    const fin = new Date(`${format(semanaActual.fin, 'yyyy-MM-dd')}T23:59:59.999-03:00`)
+    const ids = [...new Set(facturaciones.map(f => f.conductor_id))]
+    const { semana, anio } = semanaISO(format(semanaActual.inicio, 'yyyy-MM-dd'))
+    const previa = sumarSemanasISO(semana, anio, -1)
+    const refsCierrePrevio = [`Pago Cabify S${previa.semana}/${previa.anio}`, `Pago DiDi S${previa.semana}/${previa.anio}`]
+    void (async () => {
+      try {
+        const resultado = new Map<string, { cabify: boolean; didi: boolean }>()
+        const marcar = (conductorId: string | undefined, referencia: string | null) => {
+          if (!conductorId) return
+          const ref = (referencia || '').toLowerCase()
+          const cabify = ref.includes('cabify')
+          const didi = ref.includes('didi')
+          if (!cabify && !didi) return
+          const previo = resultado.get(conductorId) || { cabify: false, didi: false }
+          resultado.set(conductorId, { cabify: previo.cabify || cabify, didi: previo.didi || didi })
+        }
+        for (let k = 0; k < ids.length; k += 200) {
+          const { data, error } = await (supabase.from('pagos_conductores') as any)
+            .select('conductor_id, referencia')
+            .in('conductor_id', ids.slice(k, k + 200))
+            .eq('tipo_cobro', 'facturacion_semanal')
+            .in('referencia', refsCierrePrevio)
+            .gt('monto', 0)
+          if (error) throw error
+          for (const p of data || []) marcar(p.conductor_id, p.referencia)
+        }
+        for (let k = 0; k < ids.length; k += 200) {
+          const { data, error } = await (supabase.from('control_saldos') as any)
+            .select('conductor_id, referencia')
+            .in('conductor_id', ids.slice(k, k + 200))
+            .in('tipo_movimiento', ['pago_manual', 'pago_efectivo'])
+            .gt('monto_movimiento', 0)
+            .gte('created_at', inicio.toISOString())
+            .lte('created_at', fin.toISOString())
+            .or('referencia.ilike.*cabify*,referencia.ilike.*didi*')
+          if (error) throw error
+          for (const m of data || []) marcar(m.conductor_id, m.referencia)
+        }
+        if (!cancelado) setAppsPorConductor(resultado)
+      } catch (error) {
+        console.error('Error cargando pagos por app:', error)
+        if (!cancelado) setAppsPorConductor(new Map())
+      }
+    })()
+    return () => { cancelado = true }
+  }, [facturaciones, semanaActual, modoVistaPrevia])
 
   // Cargar conceptos de nómina y parámetros de descuento al montar
   useEffect(() => {
@@ -8283,10 +8356,11 @@ export function ReporteFacturacionTab() {
       const dnis = [...new Set(facturacionesFiltradas.map(f => f.conductor_dni).filter(Boolean))]
       const { data: conductoresData } = await supabase
         .from('conductores')
-        .select('numero_dni, email')
+        .select('numero_dni, email, monotributo')
         .in('numero_dni', dnis)
 
       const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
+      const monotributoMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.monotributo === true]))
 
       // Obtener IDs de detalles ya insertados (para comparar)
       const detallesReferencias = new Set(
@@ -8531,8 +8605,8 @@ export function ReporteFacturacionTab() {
         // Redondear total a 2 decimales para evitar errores de punto flotante
         total = Math.round(total * 100) / 100
 
-        // Determinar tipo de factura según CUIT
-        const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
+        // Tipo de factura: A solo con monotributo y CUIT completo (ver utils/tipoFactura)
+        const tieneCuit = esFacturaA(fact.conductor_cuit, monotributoMap.get(normalizeDni(fact.conductor_dni)))
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
         const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
         const email = emailMap.get(normalizeDni(fact.conductor_dni)) || ''
@@ -8836,10 +8910,11 @@ export function ReporteFacturacionTab() {
       const dnis = [...new Set(vistaPreviaData.map(f => f.conductor_dni).filter(Boolean))]
       const { data: conductoresData } = await supabase
         .from('conductores')
-        .select('id, numero_dni, email')
+        .select('id, numero_dni, email, monotributo')
         .in('numero_dni', dnis)
 
       const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
+      const monotributoMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.monotributo === true]))
 
       // 2. Cargar garantías activas
       const { data: garantiasData } = await supabase
@@ -9105,7 +9180,8 @@ export function ReporteFacturacionTab() {
         // Redondear total a 2 decimales para evitar errores de punto flotante
         total = Math.round(total * 100) / 100
 
-        const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
+        // Tipo de factura: A solo con monotributo y CUIT completo (ver utils/tipoFactura)
+        const tieneCuit = esFacturaA(fact.conductor_cuit, monotributoMap.get(normalizeDni(fact.conductor_dni)))
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
         const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
         const email = emailMap.get(normalizeDni(fact.conductor_dni)) || ''
@@ -9994,8 +10070,17 @@ export function ReporteFacturacionTab() {
       const getIvaPct = (codigo: string) => conceptosNomina.find(c => c.codigo === codigo)?.iva_porcentaje || 0
       const extraerNeto = (total: number, ivaPct: number) => ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total
 
+      // Monotributo de cada conductor (define factura A o B)
+      const dnisExport = [...new Set(dataToExport.map(f => f.conductor_dni).filter(Boolean))]
+      const { data: monotributoData } = await supabase
+        .from('conductores')
+        .select('numero_dni, monotributo')
+        .in('numero_dni', dnisExport)
+      const monotributoMap = new Map((monotributoData || []).map((c: { numero_dni: string; monotributo: boolean | null }) => [normalizeDni(c.numero_dni), c.monotributo === true]))
+
       dataToExport.forEach(f => {
-        const tieneCuit = !!f.conductor_cuit
+        // Tipo de factura: A solo con monotributo y CUIT completo (ver utils/tipoFactura)
+        const tieneCuit = esFacturaA(f.conductor_cuit, monotributoMap.get(normalizeDni(f.conductor_dni)))
         const tipoFactura = tieneCuit ? 'A' : 'B'
         const condicionIva = tieneCuit ? 'Responsable Inscripto' : 'Consumidor Final'
 
@@ -10699,6 +10784,9 @@ export function ReporteFacturacionTab() {
       if (filtroGrupoFlota) {
         result = result.filter(f => (f.grupo_flota || '') === filtroGrupoFlota)
       }
+      if (!modoVistaPrevia) {
+        result = result.filter(f => pasaFiltroApp(f.conductor_id))
+      }
       return result
     }
 
@@ -10740,7 +10828,7 @@ export function ReporteFacturacionTab() {
       conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
       ...contarCoberturaToshipass(srcToshipass),
     }
-  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroGrupoFlota, pagosCabifyMap])
+  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroGrupoFlota, filtroApp, appsPorConductor, pagosCabifyMap])
 
   // Detalle por conductor del Total Proyectado (se abre desde "Ver detalle").
   // Usa exactamente los mismos campos que el total: proyectado_alquiler +
@@ -11465,6 +11553,13 @@ export function ReporteFacturacionTab() {
                 <span key={p} style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>{p}</span>
               ))
             })()}
+            {/* Pagó con Cabify y/o DiDi en la semana (ver appsPorConductor) */}
+            {appsPorConductor.get(row.original.conductor_id)?.cabify && (
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(124, 58, 237, 0.12)', color: '#7c3aed' }}>Cabify</span>
+            )}
+            {appsPorConductor.get(row.original.conductor_id)?.didi && (
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(249, 115, 22, 0.14)', color: '#c2410c' }}>DiDi</span>
+            )}
           </div>
         </div>
       ),
@@ -11961,7 +12056,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, conductoresUnicos, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados])
+  ], [excesos, modoVistaPrevia, conductorFilter, conductoresUnicos, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados, appsPorConductor])
 
   // Info de la semana
   const infoSemana = useMemo(() => {
@@ -13114,6 +13209,8 @@ export function ReporteFacturacionTab() {
                 gruposFlotaMap.set(g, (gruposFlotaMap.get(g) || 0) + 1)
               })
               const gruposFlotaList = Array.from(gruposFlotaMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+              const countCabify = src.filter(f => appsPorConductor.get(f.conductor_id)?.cabify).length
+              const countDidi = src.filter(f => appsPorConductor.get(f.conductor_id)?.didi).length
               const btnStyle = (active: boolean, bg: string, color: string) => ({
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
                 padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600 as const,
@@ -13174,9 +13271,21 @@ export function ReporteFacturacionTab() {
                       {grupo} <span style={{ opacity: 0.7 }}>{count}</span>
                     </button>
                   ))}
-                  {(filtroAlerta || filtroGrupoFlota) && (
+                  {countCabify > 0 && (
+                    <button style={btnStyle(filtroApp.includes('cabify'), 'rgba(124,58,237,0.12)', '#7c3aed')}
+                      onClick={() => toggleFiltroApp('cabify')}>
+                      Cabify <span style={{ opacity: 0.7 }}>{countCabify}</span>
+                    </button>
+                  )}
+                  {countDidi > 0 && (
+                    <button style={btnStyle(filtroApp.includes('didi'), 'rgba(249,115,22,0.14)', '#c2410c')}
+                      onClick={() => toggleFiltroApp('didi')}>
+                      DiDi <span style={{ opacity: 0.7 }}>{countDidi}</span>
+                    </button>
+                  )}
+                  {(filtroAlerta || filtroGrupoFlota || filtroApp.length > 0) && (
                     <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
-                      onClick={() => { setFiltroAlerta(null); setFiltroGrupoFlota(null) }}>
+                      onClick={() => { setFiltroAlerta(null); setFiltroGrupoFlota(null); setFiltroApp([]) }}>
                       <X size={10} /> Limpiar
                     </button>
                   )}
@@ -13202,6 +13311,7 @@ export function ReporteFacturacionTab() {
                 if (filtroGrupoFlota) {
                   result = result.filter(f => (f.grupo_flota || '') === filtroGrupoFlota)
                 }
+                result = result.filter(f => pasaFiltroApp(f.conductor_id))
                 return result
               })()}
               columns={columns}
