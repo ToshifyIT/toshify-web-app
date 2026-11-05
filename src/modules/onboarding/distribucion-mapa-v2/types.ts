@@ -151,6 +151,12 @@ export interface ResultadoSugerencias {
    * sin pareja dentro del umbral, para que el operador los vea y decida.
    */
   sinPareja?: EntidadMapa[]
+  /**
+   * Sólo con una persona seleccionada: cuántos de sus candidatos (dentro del
+   * radio, del más cercano al más lejano) ya se midieron y cuántos hay. Si
+   * quedan sin medir, el panel ofrece "Ver más compañeros".
+   */
+  continuacion?: { medidos: number; total: number }
 }
 
 /**

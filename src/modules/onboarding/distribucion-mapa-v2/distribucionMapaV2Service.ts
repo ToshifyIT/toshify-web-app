@@ -68,10 +68,12 @@ export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción
  * no se los ubica, no se los empareja, no se los cuenta, y tampoco se ofrecen
  * en el filtro "Estado de lead". Se comparan literal contra estado_de_lead.
  *  - Descartado: misma definición que el contador "Descartados" de Leads.
+ *  - No cumple edad: en Leads se muestra como "Descartado".
  *  - Auto del pueblo / No le interesa: no se convocan (pedido de operación).
  */
 export const ESTADOS_LEAD_EXCLUIDOS: ReadonlySet<string> = new Set([
   'Descartado',
+  'No cumple edad',
   'Auto del pueblo',
   'No le interesa',
 ])

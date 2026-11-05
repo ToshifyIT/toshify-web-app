@@ -5,31 +5,39 @@
 // - Conductores: altas, bajas, neto, licencias, deuda y multas; motivos de baja por
 //   tema y conductores con más multas.
 // - Ventas: embudo del período (get_dashboard_marketing, como Dashboard Marketing).
-// - Conductores también muestra los turnos que quedaron libres (por bajas y autos nuevos).
+// - Conductores (título «Agentes») también muestra los turnos que quedaron libres (por bajas
+//   y autos nuevos) y los autos por llenar de cada agente (hoy).
 // - Vehículos: estado de la flota hoy (misma clasificación que el módulo Vehículos).
 // (2026-10-28: se quitaron por ahora Multas y km, Siniestros y Garantías y deuda.)
 // Todo se pide una vez al abrir la pantalla y queda en memoria unos minutos.
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Eye } from 'lucide-react'
 import type { Diferencia, Motivo, Periodo } from './kpisV2Types'
 import type { MarketingRaw } from '../marketing/marketingTypes'
-import type { IndicadoresConductores, IndicadoresMultas, IndicadoresTurnos, IndicadoresVehiculos, Rango, Ranking } from './indicadoresModulosService'
+import type {
+  AltasBajasGuia, GuiasConductores, IndicadoresConductores, IndicadoresMultas, IndicadoresTurnos, IndicadoresVehiculos,
+  Llenado, MovimientoConductor, Rango, Ranking, VehiculosPorLlenar,
+} from './indicadoresModulosService'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
-import { useDashboardStats } from '../../../hooks/useDashboardStats'
+import { GUIAS_ACTIVOS } from '../../leads/guias'
 import { embudoDe } from '../marketing/marketingTypes'
 import { DetalleBajasModal } from './DetalleBajasModal'
-import { cargarConductores, cargarMultas, cargarTurnosGenerados, cargarVehiculos } from './indicadoresModulosService'
+import { DetalleHabilitadosModal } from './DetalleHabilitadosModal'
 import {
-  INICIO_DATOS, difPuntos, difRelativa, difUnidades, fechaCorta, fmtInt, fmtMonedaCorta, fmtPct, sumarDias,
+  armarFiltroGuia, cargarAltasBajasGuia, cargarConductores, cargarGuiasConductores, cargarMultas, cargarTurnosGenerados,
+  cargarLlenados, cargarVehiculos, cargarVehiculosPorLlenar,
+} from './indicadoresModulosService'
+import {
+  INICIO_DATOS, difPuntos, difRelativa, difUnidades, fechaCorta, fmtInt, fmtMonedaCorta, fmtPct, resumenMotivos, sumarDias,
 } from './kpisV2Types'
 
 type Pestana = 'conductores' | 'ventas' | 'vehiculos'
 
 const PESTANAS: { id: Pestana; label: string }[] = [
-  { id: 'conductores', label: 'Conductores' },
+  { id: 'conductores', label: 'Agentes' },
   { id: 'ventas', label: 'Ventas' },
   { id: 'vehiculos', label: 'Vehículos' },
 ]
@@ -39,6 +47,8 @@ interface Dato {
   value: string
   detalle?: string
   dif?: Diferencia | null
+  /** Si viene, muestra "Ver detalle" en la tarjeta. */
+  onVerDetalle?: () => void
 }
 
 /** Para indicadores donde subir es malo (bajas, multas, deuda…). */
@@ -65,6 +75,11 @@ function Tarjetas({ datos }: { datos: Dato[] }) {
             {d.dif ? <span className={`dkv2-dif dkv2-dif--${d.dif.tono}`}>{d.dif.texto} vs anterior</span> : null}
           </span>
           {d.detalle ? <span className="dkv2-mod-detalle">{d.detalle}</span> : null}
+          {d.onVerDetalle ? (
+            <button type="button" className="dkv2-ver-detalle dkv2-mod-ver-detalle" onClick={d.onVerDetalle}>
+              <Eye size={14} /> Ver detalle
+            </button>
+          ) : null}
         </div>
       ))}
     </div>
@@ -231,14 +246,86 @@ function ListaRanking({ titulo, unidad, filas }: { titulo: string; unidad: strin
   )
 }
 
-function Conductores({ periodo, anterior, general, carga, multas, turnos }: {
+/** Selector del guía (agente de ventas) que onboardeó a los conductores. */
+function SelectorGuia({ guia, opciones, onChange }: { guia: string; opciones: string[] | null; onChange: (g: string) => void }) {
+  return (
+    <select
+      className="dkv2-periodo-select"
+      value={guia}
+      onChange={e => onChange(e.target.value)}
+      disabled={!opciones}
+      aria-label="Filtrar por agente"
+      title="Agente (guía) que onboardeó a los conductores y responsable de llenar los autos"
+    >
+      <option value="">Todos los agentes</option>
+      {(opciones ?? []).map(g => <option key={g} value={g}>{g}</option>)}
+    </select>
+  )
+}
+
+/** Altas, bajas y motivos de un período contados solo con los conductores del guía. */
+function conductoresDeGuia(datos: AltasBajasGuia, p: Periodo) {
+  const enPeriodo = (x: MovimientoConductor) => x.f >= p.inicio && x.f <= p.fin
+  const bajas = datos.bajas.filter(enPeriodo)
+  return {
+    altas: datos.altas.filter(enPeriodo).length,
+    bajas: bajas.length,
+    motivos: resumenMotivos(bajas.map(b => ({ f: b.f, m: b.m }))),
+  }
+}
+
+/** "Ali 5 · Carla 4 · Eunice 6": autos por llenar de cada agente, por primer nombre. */
+function porLlenarPorAgente(v: VehiculosPorLlenar): string {
+  return [...v.porAgente.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'es'))
+    .map(([agente, x]) => `${agente.trim().split(/\s+/)[0]} ${fmtInt(x.vehiculos)}`)
+    .join(' · ')
+}
+
+const nfDias = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+
+/** Promedio de días para llenar los turnos de un período (y de un agente, si viene). */
+function promedioLlenado(llenados: Llenado[], p: { inicio: string; fin: string }, agente?: string): { dias: number; n: number } | null {
+  const lista = llenados.filter(l => l.dia >= p.inicio && l.dia <= p.fin && (!agente || l.guiaResponsable === agente))
+  if (lista.length === 0) return null
+  return { dias: lista.reduce((s, l) => s + l.dias, 0) / lista.length, n: lista.length }
+}
+
+/** Diferencia en días donde bajar es bueno: "−1,2 días". */
+function difDias(real: number | null, ref: number | null): Diferencia | null {
+  if (real === null || ref === null) return null
+  const dif = real - ref
+  if (Math.abs(dif) < 0.05) return { texto: '0,0 días', tono: 'neutro' }
+  return { texto: `${dif > 0 ? '+' : '−'}${nfDias.format(Math.abs(dif))} días`, tono: dif < 0 ? 'bueno' : 'malo' }
+}
+
+function Conductores({ periodo, anterior, general, carga, multas, turnos, guia, altasBajas, porLlenar, llenados }: {
   periodo: Periodo
   anterior: Periodo | null
   general: Motivo[]
   carga: Carga<IndicadoresConductores>
   multas: Carga<IndicadoresMultas>
   turnos: Carga<IndicadoresTurnos>
+  /** Guía elegido ('' = todos) y sus altas/bajas una por una. */
+  guia: string
+  altasBajas: Carga<AltasBajasGuia | null>
+  /** Autos con turnos sin conductor hoy, por agente responsable */
+  porLlenar: Carga<VehiculosPorLlenar>
+  /** Turnos que se llenaron y cuántos días estuvieron libres antes */
+  llenados: Carga<Llenado[]>
 }) {
+  const ll = llenados.data
+  const llActual = ll ? promedioLlenado(ll, periodo, guia || undefined) : null
+  const llAnterior = ll && anterior ? promedioLlenado(ll, anterior, guia || undefined) : null
+  const llPorAgente = ll && !guia
+    ? GUIAS_ACTIVOS
+      .map(a => ({ a, r: promedioLlenado(ll, periodo, a) }))
+      .filter(x => x.r)
+      .map(x => `${x.a.split(/\s+/)[0]} ${nfDias.format(x.r!.dias)}`)
+      .join(' · ')
+    : ''
+  const pl = porLlenar.data
+  const plAgente = pl ? (guia ? pl.porAgente.get(guia) ?? { vehiculos: 0, turnosD: 0, turnosN: 0 } : pl.total) : null
   const m = multas.data
   const t = turnos.data
   const sinDato = turnos.error ? '—' : '…'
@@ -250,16 +337,29 @@ function Conductores({ periodo, anterior, general, carga, multas, turnos }: {
       ].filter(Boolean).join(' · ') || 'Sin bajas con auto en el período'
     : undefined
   const [verBajas, setVerBajas] = useState(false)
-  const c = periodo.conductores
-  const a = anterior?.conductores ?? null
+  const [verHabilitados, setVerHabilitados] = useState(false)
+  // Con guía elegido, altas/bajas/motivos salen de sus conductores; si no, del dashboard
+  const ab = guia ? altasBajas.data : null
+  const pendienteGuia = !!guia && !ab
+  // Si falló (p. ej. falta correr sql/kpi_altas_conductores.sql) se muestra "—", no "…" eterno
+  const errorGuia = pendienteGuia && !!altasBajas.error
+  const sinValor = errorGuia ? '—' : '…'
+  const c = ab ? conductoresDeGuia(ab, periodo) : periodo.conductores
+  const a = ab ? (anterior ? conductoresDeGuia(ab, anterior) : null) : anterior?.conductores ?? null
+  const motivosGeneral = ab ? resumenMotivos(ab.bajas.map(b => ({ f: b.f, m: b.m }))) : general
   const neto = c.altas - c.bajas
   const extra = carga.data
   const datos: Dato[] = [
-    { label: 'ALTAS', value: fmtInt(c.altas), dif: difUnidades(c.altas, a?.altas ?? null), detalle: 'Primer turno en el período' },
-    { label: 'BAJAS', value: fmtInt(c.bajas), dif: alReves(difUnidades(c.bajas, a?.bajas ?? null)) },
+    {
+      label: 'ALTAS',
+      value: pendienteGuia ? sinValor : fmtInt(c.altas),
+      dif: pendienteGuia ? null : difUnidades(c.altas, a?.altas ?? null),
+      detalle: errorGuia ? 'No se pudieron cargar las altas del guía' : 'Primer turno en el período',
+    },
+    { label: 'BAJAS', value: pendienteGuia ? sinValor : fmtInt(c.bajas), dif: pendienteGuia ? null : alReves(difUnidades(c.bajas, a?.bajas ?? null)) },
     {
       label: 'CRECIMIENTO NETO',
-      value: `${neto > 0 ? '+' : ''}${fmtInt(neto)}`,
+      value: pendienteGuia ? sinValor : `${neto > 0 ? '+' : ''}${fmtInt(neto)}`,
       dif: a ? difUnidades(neto, a.altas - a.bajas) : null,
     },
     {
@@ -287,11 +387,46 @@ function Conductores({ periodo, anterior, general, carga, multas, turnos }: {
       detalle: detalleBajas,
     },
     {
-      label: 'TURNOS POR VEHÍCULOS NUEVOS',
+      // Autos que se sumaron a la flota operativa: nuevos o que volvieron (taller,
+      // robo, PKG OFF... -> PKG ON / En uso). 2 turnos cada uno.
+      label: 'TURNOS POR VEHÍCULOS HABILITADOS',
       value: t ? fmtInt(t.actual.porVehiculosNuevos) : sinDato,
       dif: t ? difUnidades(t.actual.porVehiculosNuevos, t.anterior.porVehiculosNuevos) : null,
-      detalle: t
-        ? `${fmtInt(t.actual.vehiculosNuevos)} ${t.actual.vehiculosNuevos === 1 ? 'auto nuevo' : 'autos nuevos'} · ${fmtInt(t.actual.nuevosYaAsignados)} ya asignados`
+      detalle: t && guia
+        ? 'Toda la flota: no depende del guía'
+        : t
+        ? [
+            `${fmtInt(t.actual.vehiculosNuevos)} ${t.actual.vehiculosNuevos === 1 ? 'nuevo' : 'nuevos'}`,
+            t.conReincorporados
+              ? `${fmtInt(t.actual.vehiculosReincorporados)} ${t.actual.vehiculosReincorporados === 1 ? 'volvió' : 'volvieron'} a operar`
+              : '',
+            `${fmtInt(t.actual.nuevosYaAsignados)} ya asignados`,
+          ].filter(Boolean).join(' · ')
+        : undefined,
+      onVerDetalle: t && t.actual.vehiculosNuevos + t.actual.vehiculosReincorporados > 0
+        ? () => setVerHabilitados(true)
+        : undefined,
+    },
+    {
+      // Promedio de días que estuvo libre cada turno que se llenó en el período
+      label: 'DÍAS PARA LLENAR UN TURNO',
+      value: llActual ? nfDias.format(llActual.dias) : ll ? '-' : llenados.error ? '—' : '…',
+      dif: llActual ? difDias(llActual.dias, llAnterior?.dias ?? null) : null,
+      detalle: ll
+        ? llActual
+          ? [`promedio de ${fmtInt(llActual.n)} ${llActual.n === 1 ? 'turno llenado' : 'turnos llenados'}`, llPorAgente].filter(Boolean).join(' · ')
+          : 'No se llenaron turnos en el período'
+        : undefined,
+    },
+    {
+      // Hoy: autos con al menos un turno sin conductor, del agente responsable de llenarlos
+      label: 'VEHÍCULOS POR LLENAR',
+      value: plAgente ? fmtInt(plAgente.vehiculos) : porLlenar.error ? '—' : '…',
+      detalle: pl && plAgente
+        ? [
+            `${fmtInt(plAgente.turnosD + plAgente.turnosN)} turnos libres (${fmtInt(plAgente.turnosD)} D · ${fmtInt(plAgente.turnosN)} N)`,
+            guia ? 'hoy' : porLlenarPorAgente(pl),
+          ].filter(Boolean).join(' · ')
         : undefined,
     },
   ]
@@ -308,17 +443,25 @@ function Conductores({ periodo, anterior, general, carga, multas, turnos }: {
         <ListaMotivos
           titulo="General"
           subtitulo={`desde ${fechaCorta(INICIO_DATOS)}/${INICIO_DATOS.slice(2, 4)}`}
-          motivos={general}
+          motivos={motivosGeneral}
         />
       </div>
       <div className="dkv2-motivos-grid dkv2-mod-motivos">
         <ListaRanking titulo={`Conductores con más multas · ${periodo.labelLargo}`} unidad="" filas={m?.topMultas ?? []} />
       </div>
       <Pie
-        nota={`Altas, bajas, multas y turnos: ${periodo.labelLargo} contra el período anterior. Licencias: hoy.`}
+        nota={`${guia ? `Conductores y autos de ${guia}. ` : ''}Altas, bajas, multas y turnos: ${periodo.labelLargo} contra el período anterior. Licencias y vehículos por llenar: hoy.`}
         ruta="/conductores"
       />
-      {verBajas ? <DetalleBajasModal periodo={periodo} onClose={() => setVerBajas(false)} /> : null}
+      {verHabilitados && t ? (
+        <DetalleHabilitadosModal
+          periodo={periodo}
+          filas={t.habilitados.filter(h => h.fecha >= periodo.inicio && h.fecha <= periodo.fin)}
+          conReincorporados={t.conReincorporados}
+          onClose={() => setVerHabilitados(false)}
+        />
+      ) : null}
+      {verBajas ? <DetalleBajasModal periodo={periodo} guia={guia || null} onClose={() => setVerBajas(false)} /> : null}
     </Cuerpo>
   )
 }
@@ -355,7 +498,7 @@ function Vehiculos({ v, turnosLibres }: { v: IndicadoresVehiculos; turnosLibres:
       datos={[
         { label: 'TOTAL FLOTA', value: fmtInt(v.total), detalle: 'Sin robados, destruidos ni devueltos' },
         { label: 'EN USO', value: fmtInt(v.enUso), detalle: v.total ? `${fmtPct(v.enUso / v.total)} de la flota` : undefined },
-        { label: 'DISPONIBLES', value: fmtInt(v.disponibles), detalle: turnosLibres !== null ? `PKG ON · ${turnosLibres} turnos libres` : 'PKG ON' },
+        { label: 'DISPONIBLES', value: fmtInt(v.disponibles), detalle: turnosLibres !== null ? `PKG ON · ${turnosLibres} turnos libres en la flota` : 'PKG ON' },
         { label: 'TALLER MECÁNICO', value: fmtInt(v.tallerMecanico) },
         { label: 'CHAPA Y PINTURA', value: fmtInt(v.chapaPintura) },
         { label: 'PKG OFF', value: fmtInt(v.pkgOff) },
@@ -372,7 +515,7 @@ function Vehiculos({ v, turnosLibres }: { v: IndicadoresVehiculos; turnosLibres:
 
 /** Subtítulo de cada módulo en la vista completa (Dashboard General). */
 const DESCRIPCION: Record<Pestana, string> = {
-  conductores: 'Altas, bajas, licencias, multas, turnos que quedaron libres y por qué se van los conductores.',
+  conductores: 'Altas, bajas, licencias, multas, turnos libres, autos por llenar y por qué se van los conductores.',
   ventas: 'Embudo de leads del período, como en Dashboard Marketing.',
   vehiculos: 'Estado de la flota hoy.',
 }
@@ -389,9 +532,26 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
   completo?: boolean
 }) {
   const [pestana, setPestana] = useState<Pestana>('conductores')
+  const [guia, setGuia] = useState('')
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const filtroSede = aplicarFiltroSede as <T>(q: T) => T
   const sede = sedeActualId ?? 'todas'
+
+  // Filtro por guía (agente de ventas que onboardeó al conductor: conductores.guia)
+  // La tabla de conductores se lee solo al elegir un guía (las opciones son fijas)
+  const guias = useCarga<GuiasConductores | null>(
+    `guias|${sede}|${guia ? 'con' : 'sin'}`,
+    async () => (guia ? cargarGuiasConductores(filtroSede) : null),
+    'No se pudieron cargar los guías.',
+  )
+  useEffect(() => {
+    setGuia('')
+  }, [sedeActualId])
+  const filtroGuia = useMemo(
+    () => (guia && guias.data ? armarFiltroGuia(guias.data, guia) : null),
+    [guia, guias.data],
+  )
+  const g = filtroGuia?.guia ?? ''
 
   // Período actual (hasta hoy si está en curso) y el anterior con la misma cantidad de días
   const actual: Rango = { desde: periodo.inicio, hasta: periodo.fin < hoy ? periodo.fin : hoy }
@@ -409,19 +569,39 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
     },
     'No se pudieron cargar los datos de Ventas.',
   )
-  const conductores = useCarga(`conductores|${sede}|${hoy}`, () => cargarConductores(filtroSede, hoy), 'No se pudieron cargar los datos de conductores.')
+  const conductores = useCarga(`conductores|${sede}|${hoy}|${g}`, () => cargarConductores(filtroSede, hoy, filtroGuia), 'No se pudieron cargar los datos de conductores.')
   const vehiculos = useCarga(`vehiculos|${sede}`, () => cargarVehiculos(filtroSede), 'No se pudieron cargar los vehículos.')
-  const multas = useCarga(`multas|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}`, () => cargarMultas(filtroSede, actual, previo), 'No se pudieron cargar las multas.')
-  const turnos = useCarga(`turnos|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}`, () => cargarTurnosGenerados(filtroSede, actual, previo), 'No se pudieron calcular los turnos generados.')
-  const foto = useDashboardStats()
-  const stats = foto.stats
+  const porLlenar = useCarga(`porllenar|${sede}`, () => cargarVehiculosPorLlenar(filtroSede), 'No se pudieron cargar los vehículos por llenar.')
+  const llenados = useCarga(`llenados|${sede}|${previo.desde}|${hoy}`, () => cargarLlenados(filtroSede, previo.desde), 'No se pudo calcular el tiempo para llenar turnos.')
+  const multas = useCarga(`multas|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}|${g}`, () => cargarMultas(filtroSede, actual, previo, filtroGuia), 'No se pudieron cargar las multas.')
+  const turnos = useCarga(`turnos|${sede}|${actual.desde}|${actual.hasta}|${previo.desde}|${g}`, () => cargarTurnosGenerados(filtroSede, actual, previo, filtroGuia, sedeActualId ?? null), 'No se pudieron calcular los turnos generados.')
+  // Altas y bajas una por una desde el inicio de los datos (también para "General")
+  const altasBajas = useCarga<AltasBajasGuia | null>(
+    `altasbajas|${sede}|${hoy}|${g}`,
+    async () => (filtroGuia ? cargarAltasBajasGuia(filtroSede, sedeActualId ?? null, filtroGuia, INICIO_DATOS, hoy) : null),
+    'No se pudieron cargar las altas y bajas del guía.',
+  )
+  const selectorGuia = <SelectorGuia guia={guia} opciones={[...GUIAS_ACTIVOS]} onChange={setGuia} />
+  // Turnos libres de toda la flota (como "Turnos Disponibles" de Estado de Flota): salen
+  // de porLlenar, que ya se carga. Antes se pedía useDashboardStats entero solo por este número.
+  const turnosLibres = porLlenar.data
+    ? String(porLlenar.data.total.turnosD + porLlenar.data.total.turnosN)
+    : null
 
   const contenidoDe = (pestana: Pestana): ReactNode => {
     if (pestana === 'conductores') {
-      return <Conductores periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} multas={multas} turnos={turnos} />
+      // Guía elegido pero sus conductores todavía cargando: no mostrar los números de
+      // toda la empresa como si fueran del guía
+      if (guia && !filtroGuia) return guias.error ? <Aviso texto={guias.error} /> : <Cargando />
+      return (
+        <Conductores
+          periodo={periodo} anterior={anterior} general={motivosGeneral} carga={conductores} multas={multas} turnos={turnos}
+          guia={g} altasBajas={altasBajas} porLlenar={porLlenar} llenados={llenados}
+        />
+      )
     }
     if (pestana === 'ventas') return usarCarga(ventas, d => <Ventas periodo={periodo} data={d} />)
-    return usarCarga(vehiculos, v => <Vehiculos v={v} turnosLibres={stats?.turnosDisponibles.value ?? null} />)
+    return usarCarga(vehiculos, v => <Vehiculos v={v} turnosLibres={turnosLibres} />)
   }
 
   if (completo) {
@@ -434,6 +614,7 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
                 <h2 className="dkv2-card-title">{p.label}</h2>
                 <p className="dkv2-card-subtitle">{DESCRIPCION[p.id]}</p>
               </div>
+              {p.id === 'conductores' ? selectorGuia : null}
             </header>
             {contenidoDe(p.id)}
           </section>
@@ -449,6 +630,7 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
           <h2 className="dkv2-card-title">Indicadores por módulo</h2>
           <p className="dkv2-card-subtitle">Un vistazo a cada área sin entrar al módulo.</p>
         </div>
+        {pestana === 'conductores' ? selectorGuia : null}
         <div className="dkv2-seg" role="tablist" aria-label="Módulo">
           {PESTANAS.map(p => (
             <button

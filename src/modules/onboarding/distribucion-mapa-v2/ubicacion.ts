@@ -22,6 +22,29 @@
 /** Etiqueta única para lo que no se pudo determinar. */
 export const SIN_UBICACION = 'Sin dato'
 
+/** Ciudad de quien vive en Capital o Gran Buenos Aires (filtro "Ciudad"). */
+export const CIUDAD_AMBA = 'Buenos Aires'
+
+/**
+ * Rectángulo de Capital y Gran Buenos Aires: de Pilar/Escobar a La Plata y de
+ * General Rodríguez/Marcos Paz al río. Lo que cae adentro es CIUDAD_AMBA.
+ */
+const AMBA = { latMin: -35.05, latMax: -34.3, lngMin: -59.05, lngMax: -57.85 }
+
+/**
+ * Ciudad para el filtro País → Ciudad → Localidad: AMBA si las coordenadas caen
+ * en el rectángulo; si no, la localidad de la dirección (ej. Bariloche).
+ */
+export function ciudadDe(e: { lat: number; lng: number; ciudad: string | null }): string {
+  if (
+    Number.isFinite(e.lat) && Number.isFinite(e.lng) &&
+    e.lat >= AMBA.latMin && e.lat <= AMBA.latMax && e.lng >= AMBA.lngMin && e.lng <= AMBA.lngMax
+  ) {
+    return CIUDAD_AMBA
+  }
+  return e.ciudad || SIN_UBICACION
+}
+
 /**
  * Países que pueden aparecer como último segmento. Se compara normalizado
  * (sin acentos ni mayúsculas), por eso las claves van en minúscula sin tildes.

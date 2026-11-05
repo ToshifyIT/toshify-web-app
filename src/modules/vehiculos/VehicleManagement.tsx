@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2, Fuel, CalendarClock, ShieldCheck, ClipboardList } from 'lucide-react'
+import { AlertTriangle, Eye, Trash2, UserCheck, Shuffle, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2, Fuel, CalendarClock, ShieldCheck, ClipboardList } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 
 import { HistorialModal } from '../../components/ui/HistorialModal'
@@ -32,6 +32,7 @@ import { EmptyState } from '../../components/ui/EstadosVista'
 import './VehicleManagement.css'
 import { formatNumero } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { GUIAS_ACTIVOS } from '../leads/guias'
 import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
 import { formatFecha, formatFechaHora } from '../../utils/format'
 
@@ -420,7 +421,7 @@ export function VehicleManagement() {
           .select(`
             id, patente, provisoria, marca, modelo, anio, color, kilometraje_actual, kilometraje_geotab, kilometraje_geotab_updated_at, estado_id, created_at,
             drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular, grupo_flota, categoria,
-            cantidad_llaves, lugar_radicacion, vencimiento_seguro,
+            cantidad_llaves, lugar_radicacion, vencimiento_seguro, guia_responsable,
             vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha,
             vehiculos_estados (id, codigo, descripcion),
             vehiculos_titulares!left (id, activo, titular_id, titulares (id, tipo, nombres, apellidos, razon_social))
@@ -1937,6 +1938,66 @@ export function VehicleManagement() {
   }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter, telepaseFilter, categoriaFilter, categoriaColFilter])
 
 
+  // Cambia a mano el guía responsable de llenar los turnos del vehículo.
+  const handleCambiarResponsable = async (vehiculo: VehiculoWithRelations) => {
+    const actual = ((vehiculo as any).guia_responsable as string | null) || ''
+    const r = await Alerta.fire({
+      title: `Responsable de ${vehiculo.patente}`,
+      text: 'Guía que se encarga de llenar los turnos de este vehículo.',
+      input: 'select',
+      inputOptions: Object.fromEntries(GUIAS_ACTIVOS.map(g => [g, g])),
+      inputValue: actual || GUIAS_ACTIVOS[0],
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!r.isConfirmed || !r.value || r.value === actual) return
+    try {
+      const { error } = await supabase
+        .from('vehiculos')
+        .update({ guia_responsable: r.value })
+        .eq('id', vehiculo.id)
+      if (error) throw error
+      setVehiculos(prev => prev.map(v => (v.id === vehiculo.id ? { ...v, guia_responsable: r.value } as any : v)))
+      showSuccess('Responsable actualizado', `${vehiculo.patente}: ${r.value}`)
+    } catch (err) {
+      console.error('Error al cambiar responsable:', err)
+      showError('Error', 'No se pudo cambiar el responsable')
+    }
+  }
+
+  // Reparte los vehículos PKG ON / EN USO entre los guías por turnos: cada uno con la
+  // misma parte, contando lo que ya llenó. Lo hace repartir_guias_vehiculos de la base.
+  const handleRepartirResponsables = async () => {
+    const r = await Alerta.fire({
+      title: 'Repartir responsables',
+      html: 'Cada guía queda con la <b>misma parte de los turnos</b> (2 por auto), contando los que ya '
+        + 'llenó con sus conductores: quien llenó más recibe menos turnos libres. Los autos sin '
+        + 'responsable van al guía con <b>menos turnos por llenar</b>.<br><br>'
+        + '<b>Reacomodar por turnos</b> recalcula el reparto moviendo la menor cantidad de autos '
+        + '(también puede mover los cambios a mano).',
+      icon: 'question',
+      showCancelButton: true,
+      showDenyButton: true,
+      confirmButtonText: 'Solo sin responsable',
+      denyButtonText: 'Reacomodar por turnos',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!r.isConfirmed && !r.isDenied) return
+    try {
+      const { data, error } = await supabase.rpc('repartir_guias_vehiculos', {
+        p_sede_id: sedeActualId || null,
+        p_rehacer: r.isDenied,
+      })
+      if (error) throw error
+      showSuccess('Reparto listo', `${data ?? 0} vehículo(s) asignados`)
+      await loadAllData()
+    } catch (err) {
+      console.error('Error al repartir responsables:', err)
+      showError('Error', 'No se pudo repartir los vehículos')
+    }
+  }
+
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<VehiculoWithRelations>[]>(
     () => [
@@ -2286,6 +2347,21 @@ export function VehicleManagement() {
         enableSorting: true,
       },
       {
+        // Guía de ventas responsable de llenar los turnos del auto (solo PKG ON / EN USO).
+        // Es organización de la flota: no tiene que ver con el guía de cada conductor.
+        id: 'guia_responsable',
+        header: 'Responsable',
+        accessorFn: (row) => (row as any).guia_responsable || 'Sin responsable',
+        cell: ({ row }) => {
+          const guia = (row.original as any).guia_responsable as string | null
+          return guia
+            ? <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{guia}</span>
+            : <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+        },
+        meta: { mobileLabel: 'Responsable' },
+        enableSorting: true,
+      },
+      {
         // Fecha de alta del vehículo (vehiculos.created_at), en hora argentina.
         // Header como función a propósito: así el DataTable no le agrega su
         // filtro de fechas automático, que compara en la zona horaria del
@@ -2329,6 +2405,14 @@ export function VehicleManagement() {
                   icon: <Edit2 size={15} />,
                   label: 'Editar',
                   onClick: () => openEditModal(row.original),
+                  disabled: !canUpdate,
+                  variant: 'info'
+                },
+                {
+                  icon: <UserCheck size={15} />,
+                  label: 'Cambiar responsable',
+                  onClick: () => handleCambiarResponsable(row.original),
+                  hidden: !['PKG_ON_BASE', 'EN_USO'].includes(row.original.vehiculos_estados?.codigo || ''),
                   disabled: !canUpdate,
                   variant: 'info'
                 },
@@ -2594,6 +2678,16 @@ export function VehicleManagement() {
             >
               <Download size={14} /> Exportar
             </button>
+            {isAdmin() && (
+              <button
+                className="btn-secondary"
+                onClick={handleRepartirResponsables}
+                title="Repartir los vehículos PKG ON y EN USO entre los guías"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Shuffle size={14} /> Repartir responsables
+              </button>
+            )}
             <button
               className="btn-primary"
               onClick={handleOpenCreateModal}

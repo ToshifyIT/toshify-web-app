@@ -1186,3 +1186,111 @@
 .lead-wizard-step.incompleto .lead-wizard-step-label {
   color: #b45309;
 }
+
+/* Pareja posible: conductor sin compañero cerca y con el turno que le falta al auto */
+.lead-pareja-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  margin-top: 2px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lead-pareja-badge--cerca { background: #EDE9FE; color: #6D28D9; }
+.lead-pareja-badge--posible { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+[data-theme="dark"] .lead-pareja-badge--cerca { background: rgba(139, 92, 246, 0.22); color: #C4B5FD; }
+
+/* La etiqueta de pareja es un botón: abre la lista de opciones */
+button.lead-pareja-badge {
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.lead-pareja-badge:hover { filter: brightness(0.95); text-decoration: underline; }
+
+.lead-pareja-ojo { margin-left: 4px; opacity: 0.8; }
+
+/* Lead ya programado (Programación de onboarding) */
+.lead-pareja-badge--programado { background: var(--badge-blue-bg); color: var(--badge-blue-text); cursor: default; }
+
+/* Ficha del lead: resumen arriba + pestañas como el formulario de carga */
+.lead-detail-resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.lead-detail-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  min-width: 0;
+}
+.lead-detail-dato-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.lead-detail-dato-valor {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lead-detail-dato--bien .lead-detail-dato-valor { color: var(--badge-green-text); }
+.lead-detail-dato--mal .lead-detail-dato-valor { color: var(--badge-red-text); }
+.lead-detail .tabs-bar { margin-bottom: 12px; }
+.lead-detail-item-value--vacio { color: var(--text-tertiary); font-weight: 400; }
+.lead-detail-item--largo .lead-detail-item-value {
+  white-space: pre-wrap;
+  max-width: 340px;
+  text-align: right;
+}
+.lead-detail-subtitulo {
+  margin: 14px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+/* Ficha compacta y siempre del mismo alto: lo que no entra scrollea adentro */
+.lead-detail { gap: 10px; }
+.lead-detail .lead-detail-cards {
+  height: 360px;
+  overflow-y: auto;
+  align-content: start;
+  gap: 12px;
+}
+.lead-detail .lead-detail-card { padding: 10px 14px; }
+.lead-detail .lead-detail-card-title { margin-bottom: 4px; }
+.lead-detail .lead-detail-item { padding: 4px 0; font-size: 12px; }
+.lead-detail .lead-detail-resumen { margin-bottom: 0; }
+.lead-detail .lead-detail-dato { padding: 6px 10px; }
+.lead-detail .tabs-bar { margin-bottom: 0; }
+
+/* Etiquetas del candidato (zona, programado, pareja) en una sola línea */
+.lead-etiquetas {
+  display: flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+.lead-etiquetas > * { margin-top: 0 !important; }

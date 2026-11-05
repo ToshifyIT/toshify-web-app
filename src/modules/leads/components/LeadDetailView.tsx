@@ -1,8 +1,9 @@
 // src/modules/leads/components/LeadDetailView.tsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import type { Lead } from '../../../types/leads.types'
+import { TabsBar, type TabsBarItem } from '../../../components/ui/TabsBar'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
 import { clasificarMotivoDesinteres } from '../leadMotivos'
@@ -11,7 +12,7 @@ import '../LeadsModule.css'
 
 const detailMapStyle = {
   width: '100%',
-  height: '220px',
+  height: '170px',
   borderRadius: 'var(--radius-md)',
 }
 
@@ -117,6 +118,59 @@ function displayEstadoLead(estado: string | undefined | null): string {
   return estado || '-'
 }
 
+type PestanaFicha = 'personal' | 'contacto' | 'documentos' | 'operativo' | 'proceso'
+
+/** Mismas partes y orden que el formulario de carga (LeadWizard). */
+const PESTANAS_FICHA: TabsBarItem<PestanaFicha>[] = [
+  { id: 'personal', label: 'Personal' },
+  { id: 'contacto', label: 'Contacto' },
+  { id: 'documentos', label: 'Documentos' },
+  { id: 'operativo', label: 'Operativo' },
+  { id: 'proceso', label: 'Proceso' },
+]
+
+const siNo = (v: boolean | null | undefined) => (v === true ? 'Sí' : v === false ? 'No' : null)
+
+function Tarjeta({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <div className="lead-detail-card">
+      <div className="lead-detail-card-title">{titulo}</div>
+      {children}
+    </div>
+  )
+}
+
+/** Fila etiqueta / valor. `largo`: textos de varias líneas. Vacío = guion. */
+function Item({ label, valor, largo, mono }: {
+  label: string
+  valor: ReactNode | null | undefined
+  largo?: boolean
+  mono?: boolean
+}) {
+  const vacio = valor === null || valor === undefined || valor === '' || valor === '-'
+  return (
+    <div className={`lead-detail-item${largo ? ' lead-detail-item--largo' : ''}`}>
+      <span className="lead-detail-item-label">{label}</span>
+      <span
+        className={`lead-detail-item-value${vacio ? ' lead-detail-item-value--vacio' : ''}`}
+        style={mono ? { fontSize: '11px', fontFamily: 'var(--font-mono)' } : undefined}
+      >
+        {vacio ? '-' : valor}
+      </span>
+    </div>
+  )
+}
+
+/** Dato del resumen de arriba. */
+function Dato({ label, valor, tono }: { label: string; valor: ReactNode; tono?: 'bien' | 'mal' }) {
+  return (
+    <div className={`lead-detail-dato${tono ? ` lead-detail-dato--${tono}` : ''}`}>
+      <span className="lead-detail-dato-label">{label}</span>
+      <span className="lead-detail-dato-valor" title={typeof valor === 'string' ? valor : undefined}>{valor}</span>
+    </div>
+  )
+}
+
 interface LeadDetailViewProps {
   lead: Lead
   onEdit?: () => void
@@ -132,6 +186,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
   const mapRef = useRef<google.maps.Map | null>(null)
   const [recalculando, setRecalculando] = useState(false)
   const { nombrePorId: embajadorPorId } = useConductoresEmbajador()
+  const [pestana, setPestana] = useState<PestanaFicha>('personal')
 
   const handleRecenter = () => {
     if (mapRef.current && lead.latitud != null && lead.longitud != null) {
@@ -149,6 +204,60 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
       setRecalculando(false)
     }
   }
+
+  const mapaYUbicacion = (
+    <>
+      {lead.latitud != null && lead.longitud != null && (
+        <>
+          <LeadDetailMap
+            lat={lead.latitud}
+            lng={lead.longitud}
+            zonasRestringidas={zonasRestringidas}
+            enZonaRestringida={!!enZonaRestringida}
+            nombreZona={enZonaRestringida || undefined}
+            mapRef={mapRef}
+          />
+          {lead.direccion && onRecalcularUbicacion && (
+            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleRecalcular}
+                disabled={recalculando}
+                style={{ fontSize: '11px', color: 'var(--color-primary)', background: 'none', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Recalcular ubicación'}
+              </button>
+              {lead.direccion_geocode_estado === 'aproximado' && (
+                <span style={{ fontSize: '11px', color: '#B45309' }}>Ubicación aproximada</span>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado !== 'sin_resultado' && (
+        <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: 'var(--radius-sm)', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <MapPin size={12} /> Geocodificando dirección...
+        </div>
+      )}
+      {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado === 'sin_resultado' && (
+        <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: 'var(--radius-sm)', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <MapPin size={12} /> No se pudo ubicar la dirección
+          </span>
+          {onRecalcularUbicacion && (
+            <button
+              type="button"
+              onClick={handleRecalcular}
+              disabled={recalculando}
+              style={{ fontSize: '11px', color: '#92400E', background: 'none', border: '1px solid #92400E', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Reintentar'}
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  )
 
   return (
     <div className="lead-detail">
@@ -203,277 +312,151 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
         </div>
       </div>
 
-      <div className="lead-detail-cards">
-        {/* Datos Personales */}
-        <div className="lead-detail-card">
-          <div className="lead-detail-card-title">Datos Personales</div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">DNI</span>
-            <span className="lead-detail-item-value">{lead.dni || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">CUIT</span>
-            <span className="lead-detail-item-value">{lead.cuit || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Edad</span>
-            <span className="lead-detail-item-value">{calcularEdad(lead.fecha_de_nacimiento) ?? lead.edad ?? '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Fecha Nacimiento</span>
-            <span className="lead-detail-item-value">{formatDateOnly(lead.fecha_de_nacimiento)}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Nacionalidad</span>
-            <span className="lead-detail-item-value">{lead.nacionalidad || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Estado Civil</span>
-            <span className="lead-detail-item-value">{lead.estado_civil || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Antecedentes Penales</span>
-            <span className="lead-detail-item-value">{lead.antecedentes_penales === true ? 'Si' : lead.antecedentes_penales === false ? 'No' : '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Experiencia Previa</span>
-            <span className="lead-detail-item-value">{lead.experiencia_previa || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Experiencia Manejo</span>
-            <span className="lead-detail-item-value">{lead.experiencia_manejo || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Disponibilidad</span>
-            <span className="lead-detail-item-value">{lead.disponibilidad || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">BCRA</span>
-            <span className="lead-detail-item-value">{lead.bcra || '-'}</span>
-          </div>
-        </div>
-
-        {/* Contacto */}
-        <div className="lead-detail-card">
-          <div className="lead-detail-card-title">Contacto y Dirección</div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Teléfono (WhatsApp)</span>
-            <span className="lead-detail-item-value">{lead.phone || lead.whatsapp_number || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Teléfono secundario (personal / otra app)</span>
-            <span className="lead-detail-item-value">{lead.telefono_secundario || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Email app móvil (Cabify)</span>
-            <span className="lead-detail-item-value">{lead.email || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Mail personal / respaldo</span>
-            <span className="lead-detail-item-value">{lead.mail_de_respaldo || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Zona</span>
-            <span className="lead-detail-item-value">{lead.zona || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Dirección</span>
-            <span className="lead-detail-item-value" style={{ fontSize: '12px' }}>
-              {lead.direccion && lead.latitud != null && lead.longitud != null ? (
-                <span
-                  onClick={handleRecenter}
-                  style={{ color: 'var(--color-primary)', cursor: 'pointer' }}
-                >
-                  {lead.direccion}
-                </span>
-              ) : (lead.direccion || '-')}
-            </span>
-          </div>
-          {lead.latitud != null && lead.longitud != null && (
-            <>
-              <LeadDetailMap
-                lat={lead.latitud}
-                lng={lead.longitud}
-                zonasRestringidas={zonasRestringidas}
-                enZonaRestringida={!!enZonaRestringida}
-                nombreZona={enZonaRestringida || undefined}
-                mapRef={mapRef}
-              />
-              {lead.direccion && onRecalcularUbicacion && (
-                <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={handleRecalcular}
-                    disabled={recalculando}
-                    style={{ fontSize: '11px', color: 'var(--color-primary)', background: 'none', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Recalcular ubicación'}
-                  </button>
-                  {lead.direccion_geocode_estado === 'aproximado' && (
-                    <span style={{ fontSize: '11px', color: '#B45309' }}>Ubicación aproximada</span>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado !== 'sin_resultado' && (
-            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: 'var(--radius-sm)', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <MapPin size={12} /> Geocodificando dirección...
-            </div>
-          )}
-          {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado === 'sin_resultado' && (
-            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: 'var(--radius-sm)', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <MapPin size={12} /> No se pudo ubicar la dirección
-              </span>
-              {onRecalcularUbicacion && (
-                <button
-                  type="button"
-                  onClick={handleRecalcular}
-                  disabled={recalculando}
-                  style={{ fontSize: '11px', color: '#92400E', background: 'none', border: '1px solid #92400E', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Reintentar'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Proceso */}
-        <div className="lead-detail-card">
-          <div className="lead-detail-card-title">Proceso y Evaluación</div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Estado de Lead</span>
-            <span className="lead-detail-item-value">{displayEstadoLead(lead.estado_de_lead)}</span>
-          </div>
-          {lead.estado_de_lead === 'No le interesa' && (
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Motivo Desinterés</span>
-            <span className="lead-detail-item-value">
-              {clasificarMotivoDesinteres(lead.causal_de_cierre)}
-              {lead.motivo_desinteres && (
-                <span> - {lead.motivo_desinteres}</span>
-              )}
-              {lead.causal_de_cierre && lead.causal_de_cierre !== clasificarMotivoDesinteres(lead.causal_de_cierre) && (
-                <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>({lead.causal_de_cierre})</span>
-              )}
-            </span>
-          </div>
-          )}
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Fuente</span>
-            <span className="lead-detail-item-value">{lead.fuente_de_lead || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Fuente Pauta</span>
-            <span className="lead-detail-item-value">{lead.fuente_pauta || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Id Fuente</span>
-            <span className="lead-detail-item-value" style={{ maxWidth: '300px', textAlign: 'right', wordBreak: 'break-all' }}>
-              {lead.id_fuente
-                ? <a href={lead.id_fuente} target="_blank" rel="noopener noreferrer">{lead.id_fuente}</a>
-                : '-'}
-            </span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Referido</span>
-            <span className="lead-detail-item-value">
-              {lead.referido === true ? 'Si' : lead.referido === false ? 'No' : '-'}
-            </span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Embajador</span>
-            <span className="lead-detail-item-value">
-              {lead.embajador_id ? embajadorPorId.get(lead.embajador_id) || '-' : '-'}
-            </span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Guia</span>
-            <span className="lead-detail-item-value">{lead.entrevistador_asignado || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Detalle Hireflix</span>
-            <span className="lead-detail-item-value" style={{ whiteSpace: 'pre-wrap', maxWidth: '300px', textAlign: 'right' }}>{lead.resumen_hireflix || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Observaciones</span>
-            <span className="lead-detail-item-value" style={{ whiteSpace: 'pre-wrap', maxWidth: '300px', textAlign: 'right' }}>{lead.observaciones || '-'}</span>
-          </div>
-        </div>
-
-        {/* Documentación */}
-        <div className="lead-detail-card">
-          <div className="lead-detail-card-title">Documentación</div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Licencia</span>
-            <span className="lead-detail-item-value">{lead.licencia || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Nro. Licencia</span>
-            <span className="lead-detail-item-value">{lead.numero_licencia || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Categorías</span>
-            <span className="lead-detail-item-value">{lead.categorias_licencia?.length ? lead.categorias_licencia.join(', ') : '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Estado Licencia</span>
-            <span className="lead-detail-item-value">{lead.estado_licencia || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Tipo Licencia</span>
-            <span className="lead-detail-item-value">{lead.tipo_licencia || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Venc. Licencia</span>
-            <span className="lead-detail-item-value">{formatDateOnly(lead.vencimiento_licencia)}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">RNR</span>
-            <span className="lead-detail-item-value">{lead.rnr || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Monotributo</span>
-            <span className="lead-detail-item-value">{lead.monotributo || '-'}</span>
-          </div>
-          {estadoMonotributo(lead.monotributo) === 'no' && (
-            <div className="lead-detail-item">
-              <span className="lead-detail-item-label">Motivo sin monotributo</span>
-              <span className="lead-detail-item-value" style={{ whiteSpace: 'pre-wrap', maxWidth: '300px', textAlign: 'right' }}>{lead.motivo_sin_monotributo || '-'}</span>
-            </div>
-          )}
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">CBU</span>
-            <span className="lead-detail-item-value" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{lead.cbu || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Cta. Cabify</span>
-            <span className="lead-detail-item-value">{lead.cuenta_cabify || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Cta. DiDi</span>
-            <span className="lead-detail-item-value">{lead.cuenta_didi || '-'}</span>
-          </div>
-        </div>
+      {/* Resumen: lo que más se mira, visible en todas las pestañas */}
+      <div className="lead-detail-resumen">
+        <Dato label="Estado" valor={displayEstadoLead(lead.estado_de_lead)} />
+        <Dato
+          label="Zona"
+          valor={lead.latitud != null && lead.longitud != null
+            ? (enZonaRestringida ? `Restringida · ${lead.zona || '-'}` : `Aprobada · ${lead.zona || '-'}`)
+            : (lead.zona || '-')}
+          tono={lead.latitud != null && lead.longitud != null ? (enZonaRestringida ? 'mal' : 'bien') : undefined}
+        />
+        <Dato label="Turno" valor={lead.turno || '-'} />
+        <Dato label="Licencia" valor={lead.licencia || '-'} />
+        <Dato label="Teléfono" valor={lead.phone || lead.whatsapp_number || '-'} />
+        <Dato label="Guía" valor={lead.entrevistador_asignado || '-'} />
       </div>
 
-      {/* Emergencia */}
-      {(lead.datos_de_emergencia || lead.telefono_emergencia || lead.contacto_de_emergencia || lead.direccion_emergencia || lead.verificacion_emergencia != null) && (
-        <div className="lead-detail-description">
-          <div className="lead-detail-description-title">Contacto de Emergencia</div>
-          <p>
-            {lead.datos_de_emergencia || lead.contacto_de_emergencia || '-'}
-            {lead.telefono_emergencia ? ` · Tel: ${lead.telefono_emergencia}` : ''}
-            {lead.parentesco_emergencia ? ` · ${lead.parentesco_emergencia}` : ''}
-            {lead.direccion_emergencia ? ` · Dir: ${lead.direccion_emergencia}` : ''}
-          </p>
-          <p style={{ marginTop: '4px', fontSize: '12px', color: lead.verificacion_emergencia ? '#16a34a' : '#dc2626' }}>
-            Verificación de contacto de emergencia: {lead.verificacion_emergencia ? 'Sí' : 'No'}
-          </p>
-        </div>
-      )}
+      {/* Mismas partes que el formulario de carga (LeadWizard) */}
+      <TabsBar tabs={PESTANAS_FICHA} active={pestana} onChange={setPestana} className="tabs-bar--modal" ariaLabel="Secciones del lead" />
+
+      <div className="lead-detail-cards">
+        {pestana === 'personal' && (
+          <>
+            <Tarjeta titulo="Identidad">
+              <Item label="DNI" valor={lead.dni} />
+              <Item label="CUIT" valor={lead.cuit} />
+              <Item label="Fecha de nacimiento" valor={formatDateOnly(lead.fecha_de_nacimiento)} />
+              <Item label="Edad" valor={calcularEdad(lead.fecha_de_nacimiento) ?? lead.edad} />
+              <Item label="Nacionalidad" valor={lead.nacionalidad} />
+              <Item label="Estado civil" valor={lead.estado_civil} />
+              <Item label="Sede" valor={lead.sede} />
+            </Tarjeta>
+            <Tarjeta titulo="Perfil">
+              <Item label="Antecedentes penales" valor={siNo(lead.antecedentes_penales)} />
+              <Item label="Experiencia previa" valor={lead.experiencia_previa} />
+              <Item label="Experiencia de manejo" valor={lead.experiencia_manejo} largo />
+              <Item label="Disponibilidad" valor={lead.disponibilidad} />
+              <Item label="BCRA" valor={lead.bcra} />
+              <Item label="Monotributo" valor={lead.monotributo} />
+              {estadoMonotributo(lead.monotributo) === 'no' && (
+                <Item label="Motivo sin monotributo" valor={lead.motivo_sin_monotributo} largo />
+              )}
+            </Tarjeta>
+          </>
+        )}
+
+        {pestana === 'contacto' && (
+          <>
+            <Tarjeta titulo="Contacto">
+              <Item label="Teléfono (WhatsApp)" valor={lead.phone || lead.whatsapp_number} />
+              <Item label="Teléfono secundario" valor={lead.telefono_secundario} />
+              <Item label="Email app (Cabify)" valor={lead.email} />
+              <Item label="Mail de respaldo" valor={lead.mail_de_respaldo} />
+              <div className="lead-detail-subtitulo">Contacto de emergencia</div>
+              <Item label="Nombre" valor={lead.contacto_de_emergencia || lead.datos_de_emergencia} />
+              <Item label="Teléfono" valor={lead.telefono_emergencia} />
+              <Item label="Parentesco" valor={lead.parentesco_emergencia} />
+              <Item label="Dirección" valor={lead.direccion_emergencia} largo />
+              <Item
+                label="Verificado"
+                valor={lead.verificacion_emergencia == null ? null : lead.verificacion_emergencia ? 'Sí' : 'No'}
+              />
+            </Tarjeta>
+            <Tarjeta titulo="Dirección">
+              <Item label="Zona" valor={lead.zona} />
+              <div className="lead-detail-item">
+                <span className="lead-detail-item-label">Dirección</span>
+                <span className="lead-detail-item-value">
+                  {lead.direccion && lead.latitud != null && lead.longitud != null ? (
+                    <span onClick={handleRecenter} style={{ color: 'var(--color-primary)', cursor: 'pointer' }}>
+                      {lead.direccion}
+                    </span>
+                  ) : (lead.direccion || '-')}
+                </span>
+              </div>
+              <Item label="Complemento" valor={lead.direccion_complementaria} />
+              {mapaYUbicacion}
+            </Tarjeta>
+          </>
+        )}
+
+        {pestana === 'documentos' && (
+          <>
+            <Tarjeta titulo="Licencia">
+              <Item label="Licencia" valor={lead.licencia} />
+              <Item label="Nro. licencia" valor={lead.numero_licencia} />
+              <Item label="Categorías" valor={lead.categorias_licencia?.length ? lead.categorias_licencia.join(', ') : null} />
+              <Item label="Estado" valor={lead.estado_licencia} />
+              <Item label="Tipo" valor={lead.tipo_licencia} />
+              <Item label="Vencimiento" valor={formatDateOnly(lead.vencimiento_licencia)} />
+            </Tarjeta>
+            <Tarjeta titulo="Otros documentos">
+              <Item label="RNR" valor={lead.rnr} />
+              <Item label="Fecha RNR" valor={formatDateOnly(lead.fecha_rnr)} />
+              <Item label="Certificado de dirección" valor={lead.certificado_direccion} />
+              <Item label="CBU" valor={lead.cbu} mono />
+            </Tarjeta>
+          </>
+        )}
+
+        {pestana === 'operativo' && (
+          <Tarjeta titulo="Datos operativos">
+            <Item label="Turno" valor={lead.turno} />
+            <Item label="Cuenta Cabify" valor={lead.cuenta_cabify} />
+            <Item label="Cuenta DiDi" valor={lead.cuenta_didi} />
+            <Item label="Cochera" valor={lead.cochera} />
+          </Tarjeta>
+        )}
+
+        {pestana === 'proceso' && (
+          <>
+            <Tarjeta titulo="Proceso">
+              <Item label="Estado de lead" valor={displayEstadoLead(lead.estado_de_lead)} />
+              {lead.estado_de_lead === 'No le interesa' && (
+                <div className="lead-detail-item">
+                  <span className="lead-detail-item-label">Motivo desinterés</span>
+                  <span className="lead-detail-item-value">
+                    {clasificarMotivoDesinteres(lead.causal_de_cierre)}
+                    {lead.motivo_desinteres && <span> - {lead.motivo_desinteres}</span>}
+                    {lead.causal_de_cierre && lead.causal_de_cierre !== clasificarMotivoDesinteres(lead.causal_de_cierre) && (
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>({lead.causal_de_cierre})</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              <Item label="Guía" valor={lead.entrevistador_asignado} />
+              <Item label="Fuente" valor={lead.fuente_de_lead} />
+              <Item label="Fuente pauta" valor={lead.fuente_pauta} />
+              <div className="lead-detail-item">
+                <span className="lead-detail-item-label">Id fuente</span>
+                <span className="lead-detail-item-value" style={{ maxWidth: '300px', textAlign: 'right', wordBreak: 'break-all' }}>
+                  {lead.id_fuente
+                    ? <a href={lead.id_fuente} target="_blank" rel="noopener noreferrer">{lead.id_fuente}</a>
+                    : '-'}
+                </span>
+              </div>
+              <Item label="Referido" valor={siNo(lead.referido)} />
+              <Item label="Embajador" valor={lead.embajador_id ? embajadorPorId.get(lead.embajador_id) : null} />
+            </Tarjeta>
+            <Tarjeta titulo="Notas">
+              <Item label="Detalle Hireflix" valor={lead.resumen_hireflix} largo />
+              <Item label="Observaciones" valor={lead.observaciones} largo />
+            </Tarjeta>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -505,7 +488,7 @@ function LeadDetailMap({ lat, lng, zonasRestringidas, enZonaRestringida, nombreZ
 
   if (!mapsReady) {
     return (
-      <div style={{ marginTop: '8px', height: '220px', borderRadius: 'var(--radius-md)', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
+      <div style={{ marginTop: '8px', height: '170px', borderRadius: 'var(--radius-md)', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Cargando mapa...</span>
       </div>
     )

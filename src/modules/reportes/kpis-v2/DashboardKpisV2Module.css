@@ -940,3 +940,10 @@
   min-width: 260px;
   line-height: 1.4;
 }
+
+/* "Ver detalle" dentro de una tarjeta de indicadores por módulo */
+.dkv2-mod-ver-detalle {
+  align-self: flex-start;
+  margin-left: 0;
+  margin-top: 2px;
+}

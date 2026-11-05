@@ -9,6 +9,7 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { fechaCorta, temaDeBaja } from './kpisV2Types'
 import { guiaParaConductor } from '../../leads/guias'
+import { etiquetaGuia } from './indicadoresModulosService'
 
 interface FilaBaja {
   fecha: string
@@ -34,7 +35,8 @@ function diaCorto(dia: string): string {
   return `${fechaCorta(dia)}/${dia.slice(2, 4)}`
 }
 
-export function DetalleBajasModal({ periodo, onClose }: { periodo: Periodo; onClose: () => void }) {
+/** `guia`: si viene, solo las bajas de los conductores de ese guía (filtro del dashboard). */
+export function DetalleBajasModal({ periodo, guia = null, onClose }: { periodo: Periodo; guia?: string | null; onClose: () => void }) {
   const { aplicarFiltroSede } = useSede()
   const [filas, setFilas] = useState<FilaBaja[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -113,7 +115,7 @@ export function DetalleBajasModal({ periodo, onClose }: { periodo: Periodo; onCl
           }
         }
         if (!activo) return
-        setFilas(lista.map(b => ({
+        const todas: FilaBaja[] = lista.map(b => ({
           fecha: b.fecha,
           conductorId: b.conductor_id,
           nombre: nombres.get(b.conductor_id)?.nombre || 'Sin nombre',
@@ -123,7 +125,8 @@ export function DetalleBajasModal({ periodo, onClose }: { periodo: Periodo; onCl
           creado: nombres.get(b.conductor_id)?.creado ?? null,
           asignado: primeraAsignacion.get(b.conductor_id) ?? null,
           guia: guiaDe(b.conductor_id),
-        })))
+        }))
+        setFilas(guia ? todas.filter(f => etiquetaGuia(f.guia) === guia) : todas)
       } catch (err) {
         console.error('[DashboardGeneral] Error cargando el detalle de bajas', err)
         if (activo) setError('No se pudo cargar el detalle de las bajas.')
@@ -132,7 +135,7 @@ export function DetalleBajasModal({ periodo, onClose }: { periodo: Periodo; onCl
     return () => {
       activo = false
     }
-  }, [periodo.inicio, periodo.fin, aplicarFiltroSede])
+  }, [periodo.inicio, periodo.fin, aplicarFiltroSede, guia])
 
   useEffect(() => {
     const cerrar = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -148,7 +151,7 @@ export function DetalleBajasModal({ periodo, onClose }: { periodo: Periodo; onCl
       <div className="dkv2-modal dkv2-modal--ancho" role="dialog" aria-modal="true" aria-labelledby="dkv2-bajas-titulo">
         <header className="dkv2-modal-header">
           <div>
-            <h2 id="dkv2-bajas-titulo">Bajas · {periodo.labelLargo}</h2>
+            <h2 id="dkv2-bajas-titulo">Bajas · {periodo.labelLargo}{guia ? ` · ${guia}` : ''}</h2>
             <p>
               {filas ? `${filas.length} ${filas.length === 1 ? 'conductor dejó' : 'conductores dejaron'} la empresa en el período.` : 'Cargando…'}
             </p>

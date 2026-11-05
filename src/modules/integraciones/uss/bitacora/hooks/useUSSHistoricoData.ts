@@ -71,6 +71,14 @@ export interface Marcacion {
   tieneCompanero?: boolean | null;
   /** Nombre(s) del compañero, cuando lo hay. */
   companero?: string | null;
+  /** Viaje sin conductor identificado: quién tenía asignada la patente a esa hora
+   *  (por turno D/N o a cargo). Es solo una pista para corregirlo en Geotab: no se usa
+   *  para km ni excesos (ver ESTIMAR_CONDUCTOR_SIN_LLAVE en useExcesoKmData). */
+  posibleConductor?: { nombre: string; horario: string | null } | null;
+  /** Otros conductores asignados a la patente ese día (el compañero de turno). */
+  otrosAsignados?: string[];
+  /** Conductor de Toshify que tiene cargado ese número de iButton (si hay). */
+  ibuttonDe?: string | null;
   /** Tarifa de la asignación vigente en la semana (solo Control de exceso de km). */
   tipoTarifa?: 'antigua' | 'nueva' | null;
   /** Conductor estimado por asignación + horario, no identificado por el GPS (solo Control de exceso de km). */
@@ -241,7 +249,7 @@ export function useUSSHistoricoData(
         supabase
           .from('parametros_sistema')
           .select('clave, valor')
-          .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo']),
+          .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo', 'bitacora_turno_diurno_inicio', 'bitacora_turno_diurno_fin']),
         // Viajes crudos de Geotab: con ellos las cards se rearman en 1 fila por jornada.
         // Se pide un dia mas: la ultima jornada nocturna cierra al dia siguiente a las 12:00.
         wialonBitacoraService.getViajesGeotab(dateRange.startDate, diaSiguiente(dateRange.endDate), {
@@ -301,9 +309,18 @@ export function useUSSHistoricoData(
       // la grilla y quedan EXCLUIDOS del acumulado semanal y de la alerta de exceso.
       //
       // Cargar asignaciones (conductor -> patentes con su vigencia) una sola vez para cruzar.
-      const { data: asigData } = await supabase
-        .from('asignaciones_conductores')
-        .select('conductor_id, estado, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(estado, vehiculos!inner(patente))');
+      // Paginado: Supabase corta en 1000 filas y la tabla ya tiene más
+      const asigData: any[] = [];
+      for (let desde = 0; ; desde += 1000) {
+        const { data: pagina, error: errAsig } = await supabase
+          .from('asignaciones_conductores')
+          .select('id, conductor_id, estado, horario, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(estado, modalidad, vehiculos!inner(patente))')
+          .order('id')
+          .range(desde, desde + 999);
+        if (errAsig) { console.warn('[Bitacora] asignaciones incompletas:', errAsig); break; }
+        asigData.push(...(pagina || []));
+        if (!pagina || pagina.length < 1000) break;
+      }
       const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim();
       const normPat = (p: string) => (p || '').replace(/[\s\-.%]/g, '').toUpperCase();
       // Índice: "patenteNorm|claveConductor" -> lista de rangos [ini, fin]. La clave de
@@ -330,7 +347,10 @@ export function useUSSHistoricoData(
       // Ocupantes por patente (para la columna Compañero). Se descartan las
       // asignaciones canceladas; el resto se cruza por vigencia en la fecha.
       const esCancelado = (e: unknown) => e === 'cancelado' || e === 'cancelada';
-      const ocupantesPorPatente = new Map<string, { id: string | null; clave: string; nombre: string; ini: number; fin: number }[]>();
+      const ocupantesPorPatente = new Map<string, {
+        id: string | null; clave: string; nombre: string; ini: number; fin: number
+        horario: string | null; modalidad: string | null
+      }[]>();
       for (const ac of (asigData || []) as any[]) {
         if (esCancelado(ac?.estado) || esCancelado(ac?.asignaciones?.estado)) continue;
         const pat = normPat(ac?.asignaciones?.vehiculos?.patente || '');
@@ -343,6 +363,8 @@ export function useUSSHistoricoData(
           id,
           clave: id || normNombre(nombre),
           nombre,
+          horario: ac.horario ?? null,
+          modalidad: ac?.asignaciones?.modalidad ?? null,
           ini: ac.fecha_inicio ? new Date(ac.fecha_inicio).getTime() : 0,
           fin: ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY,
         });
@@ -434,11 +456,46 @@ export function useUSSHistoricoData(
         console.warn('[Bitacora] checklist no disponible:', err);
       }
 
+      // Posible conductor de un viaje sin conductor: quién tenía la patente asignada a la
+      // hora de la entrada. A cargo / todo el día gana; si no, el turno de esa franja
+      // (diurno entre bitacora_turno_diurno_inicio y _fin, nocturno el resto). Mismo
+      // criterio que Control de exceso de km, pero acá solo se muestra como pista.
+      const valorParam = (clave: string) =>
+        ((limiteParamsRes.data || []) as any[]).find(p => p.clave === clave)?.valor;
+      const horaParam = (v: unknown, def: number) => {
+        const h = parseInt(String(v ?? '').split(':')[0], 10);
+        return Number.isInteger(h) && h >= 0 && h <= 23 ? h : def;
+      };
+      const diurnoDesde = horaParam(valorParam('bitacora_turno_diurno_inicio'), 6);
+      const diurnoHasta = horaParam(valorParam('bitacora_turno_diurno_fin'), 18);
+      const estimarPosibleConductor = (m: Marcacion) => {
+        const inicio = m.inicioGmt3 || m.periodoInicio;
+        let t = inicio ? new Date(inicio).getTime() : NaN;
+        if (Number.isNaN(t)) t = new Date(m.fecha + 'T12:00:00-03:00').getTime();
+        const vigentes = (ocupantesPorPatente.get(normPat(m.patenteNormalizada || m.patente)) || [])
+          .filter(o => t >= o.ini && t <= o.fin && o.nombre)
+          .sort((a, b) => b.ini - a.ini);
+        if (vigentes.length === 0) { m.posibleConductor = null; m.otrosAsignados = []; return; }
+        const hora = parseInt(new Date(t).toLocaleTimeString('en-GB', {
+          timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', hour12: false,
+        }), 10);
+        const franja = hora >= diurnoDesde && hora < diurnoHasta ? 'diurno' : 'nocturno';
+        const elegido = vigentes.find(o => o.modalidad === 'a_cargo' || o.horario === 'todo_dia')
+          ?? vigentes.find(o => o.horario === franja)
+          ?? null;
+        m.posibleConductor = elegido ? { nombre: elegido.nombre, horario: elegido.horario } : null;
+        m.otrosAsignados = [...new Set(vigentes.filter(o => o !== elegido).map(o => o.nombre))];
+      };
+
       // Compañero: otro conductor asignado a la misma patente en la fecha de la marcación.
       // Solo se informa si el conductor de la fila está asignado a esa patente ese día.
       for (const m of marcacionesTransformadas) {
         const sinConductor = !m.conductorId && (!m.conductor || m.conductor === 'Sin conductor');
-        if (sinConductor) { m.tieneCompanero = null; m.companero = null; continue; }
+        if (sinConductor) {
+          m.tieneCompanero = null; m.companero = null;
+          estimarPosibleConductor(m);
+          continue;
+        }
         const t = new Date(m.fecha + 'T12:00:00-03:00').getTime();
         const vigentes = (ocupantesPorPatente.get(normPat(m.patenteNormalizada || m.patente)) || [])
           .filter(o => t >= o.ini && t <= o.fin);
@@ -450,6 +507,28 @@ export function useUSSHistoricoData(
         for (const o of vigentes) if (!esElMismo(o) && o.clave) otros.set(o.clave, o.nombre);
         m.tieneCompanero = otros.size > 0;
         m.companero = otros.size > 0 ? [...otros.values()].filter(Boolean).join(', ') || null : null;
+      }
+
+      // iButton que Geotab leyó pero no vinculó a nadie: ¿de quién es en Toshify?
+      const ibuttonsSinConductor = [...new Set(marcacionesTransformadas
+        .filter(m => !m.conductorId && m.ibutton)
+        .map(m => String(m.ibutton).trim()))].filter(Boolean);
+      if (ibuttonsSinConductor.length > 0) {
+        try {
+          const { data: duenos } = await supabase
+            .from('conductores')
+            .select('nombres, apellidos, numero_ibutton')
+            .in('numero_ibutton', ibuttonsSinConductor);
+          const porIbutton = new Map(((duenos || []) as any[]).map(c => [
+            String(c.numero_ibutton).trim(),
+            `${c.nombres || ''} ${c.apellidos || ''}`.replace(/\s+/g, ' ').trim(),
+          ]));
+          for (const m of marcacionesTransformadas) {
+            if (!m.conductorId && m.ibutton) m.ibuttonDe = porIbutton.get(String(m.ibutton).trim()) || null;
+          }
+        } catch (err) {
+          console.warn('[Bitacora] No se pudo buscar el dueño del iButton:', err);
+        }
       }
 
       // Lookup DNIs + horario asignado en batch

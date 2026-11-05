@@ -7,6 +7,11 @@
 import { supabase } from '../../../lib/supabase'
 import { lunesDeSemana, sumarDias } from './kpisV2Types'
 import { formatPlata } from '../../../utils/format'
+import { normalizarTexto } from '../../../utils/sedeMatch'
+import { GUIAS_ACTIVOS, homologarGuia } from '../../leads/guias'
+import { VEHICULO_ESTADO_LABELS } from '../../../types/vehiculo.types'
+import { calcularLlenados, cargarHistorialFlota } from '../../asignaciones/historialFlota'
+import type { Llenado } from '../../asignaciones/historialFlota'
 
 type FiltroSede = <T>(q: T) => T
 
@@ -65,7 +70,7 @@ export interface IndicadoresSiniestros {
 
 const PAGINA = 1000
 
-async function leerTodo<T>(consulta: (desde: number, hasta: number) => PromiseLike<{ data: unknown; error: unknown }>): Promise<T[]> {
+export async function leerTodo<T>(consulta: (desde: number, hasta: number) => PromiseLike<{ data: unknown; error: unknown }>): Promise<T[]> {
   const filas: T[] = []
   for (let desde = 0; ; desde += PAGINA) {
     const { data, error } = await consulta(desde, desde + PAGINA - 1)
@@ -75,6 +80,13 @@ async function leerTodo<T>(consulta: (desde: number, hasta: number) => PromiseLi
     if (lote.length < PAGINA) break
   }
   return filas
+}
+
+/** Corre una consulta por lote de ids (de a `tamano`) en paralelo y junta las filas. */
+async function porLotes<T>(ids: string[], consulta: (lote: string[]) => Promise<T[]>, tamano = 100): Promise<T[]> {
+  const lotes: string[][] = []
+  for (let i = 0; i < ids.length; i += tamano) lotes.push(ids.slice(i, i + tamano))
+  return (await Promise.all(lotes.map(consulta))).flat()
 }
 
 function fecha(v: string | null | undefined): string | null {
@@ -105,9 +117,104 @@ function aNumero(v: unknown): number {
   return isNaN(n) ? 0 : n
 }
 
+// ───────────── Filtro por guía (agente de ventas) ─────────────
+
+export const SIN_GUIA = 'Sin guía'
+
+/** Guía de un conductor tal como se muestra en el filtro (homologado). */
+export function etiquetaGuia(guia: string | null | undefined): string {
+  return homologarGuia(guia) ?? SIN_GUIA
+}
+
+/** Conductores de un guía: por id y por nombre (las multas se relacionan por nombre). */
+export interface FiltroGuia {
+  guia: string
+  ids: Set<string>
+  nombres: Set<string>
+}
+
+export interface GuiasConductores {
+  /** Guías que se ofrecen en el filtro (solo los activos). */
+  opciones: string[]
+  conductores: { id: string; guia: string; nombre: string }[]
+}
+
+export async function cargarGuiasConductores(filtroSede: FiltroSede): Promise<GuiasConductores> {
+  const filas = await leerTodo<{ id: string; nombres: string | null; apellidos: string | null; guia: string | null }>(
+    (a, b) => filtroSede((supabase.from('conductores') as any)
+      .select('id, nombres, apellidos, guia'))
+      .range(a, b),
+  )
+  const conductores = filas.map(c => ({
+    id: c.id,
+    guia: etiquetaGuia(c.guia),
+    nombre: `${c.nombres || ''} ${c.apellidos || ''}`,
+  }))
+  // Solo los guías activos (Ali, Carla y Eunice), aunque haya conductores con otros
+  return { opciones: [...GUIAS_ACTIVOS], conductores }
+}
+
+export function armarFiltroGuia(datos: GuiasConductores, guia: string): FiltroGuia {
+  const ids = new Set<string>()
+  const nombres = new Set<string>()
+  for (const c of datos.conductores) {
+    if (c.guia !== guia) continue
+    ids.add(c.id)
+    nombres.add(normalizarTexto(c.nombre))
+  }
+  return { guia, ids, nombres }
+}
+
+/** Multas: el conductor viene como texto; se compara en cualquier orden de palabras. */
+export function claveNombre(nombre: string | null | undefined): string {
+  return normalizarTexto(nombre).split(' ').filter(Boolean).sort().join(' ')
+}
+
+function nombresComoClaves(filtro: FiltroGuia): Set<string> {
+  return new Set([...filtro.nombres].map(claveNombre))
+}
+
+export interface MovimientoConductor { f: string; id: string; m: string | null }
+
+/** Altas y bajas una por una (para contarlas solo de los conductores de un guía). */
+export interface AltasBajasGuia {
+  altas: MovimientoConductor[]
+  bajas: MovimientoConductor[]
+}
+
+export async function cargarAltasBajasGuia(
+  filtroSede: FiltroSede,
+  sedeId: string | null,
+  filtro: FiltroGuia,
+  desde: string,
+  hasta: string,
+): Promise<AltasBajasGuia> {
+  const [altas, bajas] = await Promise.all([
+    leerTodo<{ fecha: string; conductor_id: string }>(
+      (a, b) => (supabase.rpc as any)('kpi_altas_conductores', { p_sede_id: sedeId, p_desde: desde, p_hasta: hasta })
+        .range(a, b),
+    ),
+    leerTodo<{ fecha: string; conductor_id: string | null; motivo: string | null }>(
+      (a, b) => filtroSede((supabase.from('kpi_bajas' as any) as any)
+        .select('fecha, conductor_id, motivo')
+        .gte('fecha', desde)
+        .lte('fecha', hasta))
+        .range(a, b),
+    ),
+  ])
+  return {
+    altas: altas
+      .filter(x => filtro.ids.has(x.conductor_id))
+      .map(x => ({ f: String(x.fecha).slice(0, 10), id: x.conductor_id, m: null })),
+    bajas: bajas
+      .filter(x => x.conductor_id && filtro.ids.has(x.conductor_id))
+      .map(x => ({ f: String(x.fecha).slice(0, 10), id: x.conductor_id as string, m: x.motivo })),
+  }
+}
+
 // ───────────── Conductores ─────────────
 
-export async function cargarConductores(filtroSede: FiltroSede, hoy: string): Promise<IndicadoresConductores> {
+export async function cargarConductores(filtroSede: FiltroSede, hoy: string, filtro: FiltroGuia | null = null): Promise<IndicadoresConductores> {
   const conductores = await leerTodo<{ id: string; apellidos: string | null; licencia_vencimiento: string | null; conductores_estados: { codigo: string | null } | null }>(
     (a, b) => filtroSede((supabase.from('conductores') as any)
       .select('id, apellidos, licencia_vencimiento, conductores_estados(codigo)'))
@@ -115,7 +222,8 @@ export async function cargarConductores(filtroSede: FiltroSede, hoy: string): Pr
   )
   const activos = conductores.filter(c =>
     String(c.conductores_estados?.codigo || '').toUpperCase() === 'ACTIVO'
-    && !String(c.apellidos || '').toUpperCase().includes('INTERNO'))
+    && !String(c.apellidos || '').toUpperCase().includes('INTERNO')
+    && (!filtro || filtro.ids.has(c.id)))
   const en30 = sumarDias(hoy, 30)
   let licenciasVencidas = 0
   let licenciasPorVencer = 0
@@ -173,6 +281,96 @@ export async function cargarVehiculos(filtroSede: FiltroSede): Promise<Indicador
   return r
 }
 
+// ───────────── Vehículos por llenar (hoy) ─────────────
+// Autos con al menos un turno sin conductor, por agente responsable de llenarlos
+// (vehiculos.guia_responsable). Mismo criterio que Estado de Flota / Agentes: los
+// autos con asignación activa (D y N en turno, o el conductor a cargo) y los PKG ON
+// sin asignación (2 turnos libres cada uno).
+
+export interface PorLlenarAgente {
+  vehiculos: number
+  turnosD: number
+  turnosN: number
+}
+
+export interface VehiculosPorLlenar {
+  /** Por agente responsable; 'Sin responsable' para los que no tienen */
+  porAgente: Map<string, PorLlenarAgente>
+  total: PorLlenarAgente
+}
+
+const SIN_RESPONSABLE = 'Sin responsable'
+const INACTIVOS = ['cancelado', 'completado', 'finalizado']
+
+export async function cargarVehiculosPorLlenar(filtroSede: FiltroSede): Promise<VehiculosPorLlenar> {
+  const [asignaciones, vehiculos] = await Promise.all([
+    leerTodo<{
+      vehiculo_id: string | null
+      horario: string | null
+      vehiculos: { guia_responsable: string | null } | null
+      asignaciones_conductores: { horario: string | null; estado: string | null; conductor_id: string | null }[] | null
+    }>(
+      (a, b) => filtroSede((supabase.from('asignaciones') as any)
+        .select('vehiculo_id, horario, vehiculos(guia_responsable), asignaciones_conductores(horario, estado, conductor_id)')
+        .in('estado', ['activo', 'activa']))
+        .range(a, b),
+    ),
+    leerTodo<{ id: string; guia_responsable: string | null; vehiculos_estados: { codigo: string | null } | null }>(
+      (a, b) => filtroSede((supabase.from('vehiculos') as any)
+        .select('id, guia_responsable, vehiculos_estados(codigo)')
+        .is('deleted_at', null))
+        .range(a, b),
+    ),
+  ])
+
+  const porAgente = new Map<string, PorLlenarAgente>()
+  const total: PorLlenarAgente = { vehiculos: 0, turnosD: 0, turnosN: 0 }
+  const sumar = (guia: string | null | undefined, d: number, n: number) => {
+    if (d + n === 0) return
+    const clave = guia || SIN_RESPONSABLE
+    const x = porAgente.get(clave) ?? { vehiculos: 0, turnosD: 0, turnosN: 0 }
+    x.vehiculos++
+    x.turnosD += d
+    x.turnosN += n
+    porAgente.set(clave, x)
+    total.vehiculos++
+    total.turnosD += d
+    total.turnosN += n
+  }
+
+  const conAsignacion = new Set<string>()
+  for (const a of asignaciones) {
+    if (a.vehiculo_id) conAsignacion.add(a.vehiculo_id)
+    const activos = (a.asignaciones_conductores || []).filter(ac => ac.conductor_id && !INACTIVOS.includes(ac.estado || ''))
+    const tiene = (h: string) => activos.some(ac => (ac.horario || '').toLowerCase() === h)
+    if (a.horario === 'turno') {
+      sumar(a.vehiculos?.guia_responsable, tiene('diurno') ? 0 : 1, tiene('nocturno') ? 0 : 1)
+    } else if (activos.length === 0) {
+      // A cargo sin conductor: el auto entero libre (1 D + 1 N, como en Asignaciones)
+      sumar(a.vehiculos?.guia_responsable, 1, 1)
+    }
+  }
+  for (const v of vehiculos) {
+    if (v.vehiculos_estados?.codigo === 'PKG_ON_BASE' && !conAsignacion.has(v.id)) sumar(v.guia_responsable, 1, 1)
+  }
+  return { porAgente, total }
+}
+
+// ───────────── Días para llenar un turno ─────────────
+// Cada vez que entra un conductor a un auto: cuántos días estuvo libre ese turno, desde
+// la salida anterior o desde que el auto volvió a estar disponible (los días en taller
+// no cuentan). Ver asignaciones/historialFlota.ts. Se mira hasta 180 días antes del
+// período para encontrar desde cuándo estaba libre.
+
+export type { Llenado }
+
+const DIAS_ANTES_LLENADO = 180
+
+export async function cargarLlenados(filtroSede: FiltroSede, desde: string): Promise<Llenado[]> {
+  const h = await cargarHistorialFlota(filtroSede, `${sumarDias(desde, -DIAS_ANTES_LLENADO)}T00:00:00-03:00`)
+  return calcularLlenados(h)
+}
+
 // ───────────── Turnos disponibles que se generaron ─────────────
 // Por bajas: el último turno de cada conductor dado de baja en el período. Si manejaba
 // en turno libera 1 turno (diurno o nocturno); si tenía el auto todo el día, el auto
@@ -187,17 +385,64 @@ export interface PeriodoTurnos {
   bajasNocturno: number
   bajasACargo: number
   vehiculosNuevos: number
+  /** Vehículos que volvieron a estar operativos (taller, robo, PKG OFF... -> PKG ON / En uso). */
+  vehiculosReincorporados: number
+  /** 2 turnos por cada vehículo nuevo o que volvió a operar. */
   porVehiculosNuevos: number
+  /** De esos vehículos, cuántos ya recibieron asignación después de habilitarse. */
   nuevosYaAsignados: number
 }
 
-export interface IndicadoresTurnos { actual: PeriodoTurnos; anterior: PeriodoTurnos }
+/** Un vehículo que habilitó turnos: nuevo o que volvió a operar. */
+export interface VehiculoHabilitado {
+  fecha: string
+  vehiculoId: string
+  patente: string
+  /** 'Nuevo' o 'Volvió de <estado anterior>'. */
+  motivo: string
+  esNuevo: boolean
+  yaAsignado: boolean
+}
+
+export interface IndicadoresTurnos {
+  actual: PeriodoTurnos
+  anterior: PeriodoTurnos
+  /** Vehículos que habilitaron turnos en ambos períodos (el detalle filtra por fecha). */
+  habilitados: VehiculoHabilitado[]
+  /** false si falta correr sql/kpi_vehiculos_reincorporados.sql (solo cuenta los nuevos). */
+  conReincorporados: boolean
+}
+
+/** Etiqueta legible de un estado guardado como código (TALLER_AXIS) o descripción. */
+function etiquetaEstado(estado: string | null | undefined): string {
+  const t = (estado || '').trim()
+  if (!t) return 'otro estado'
+  return VEHICULO_ESTADO_LABELS[t.toUpperCase()] ?? t
+}
 
 const DIAS_TOLERANCIA_BAJA = 30
 
-export async function cargarTurnosGenerados(filtroSede: FiltroSede, actual: Rango, anterior: Rango): Promise<IndicadoresTurnos> {
+export async function cargarTurnosGenerados(
+  filtroSede: FiltroSede,
+  actual: Rango,
+  anterior: Rango,
+  filtro: FiltroGuia | null = null,
+  sedeId: string | null = null,
+): Promise<IndicadoresTurnos> {
   const desde = anterior.desde < actual.desde ? anterior.desde : actual.desde
-  const [bajas, vehiculos] = await Promise.all([
+  // Vehículos que volvieron a operar (si la función todavía no existe, se sigue sin ellos)
+  const reincorporadosPromesa = (async () => {
+    try {
+      return await leerTodo<{ fecha: string; vehiculo_id: string; patente: string | null; estado_anterior: string | null }>(
+        (a, b) => (supabase.rpc as any)('kpi_vehiculos_reincorporados', { p_sede_id: sedeId, p_desde: desde, p_hasta: actual.hasta })
+          .range(a, b),
+      )
+    } catch (err) {
+      console.warn('[DashboardGeneral] Sin vehículos reincorporados (falta sql/kpi_vehiculos_reincorporados.sql?)', err)
+      return null
+    }
+  })()
+  const [bajasTodas, vehiculos, reincorporados] = await Promise.all([
     leerTodo<{ fecha: string; conductor_id: string | null }>(
       (a, b) => filtroSede((supabase.from('kpi_bajas' as any) as any)
         .select('fecha, conductor_id')
@@ -213,44 +458,93 @@ export async function cargarTurnosGenerados(filtroSede: FiltroSede, actual: Rang
         .lte('created_at', `${actual.hasta}T23:59:59-03:00`))
         .range(a, b),
     ),
+    reincorporadosPromesa,
   ])
+
+  // Con guía elegido: solo las bajas de sus conductores (los autos nuevos no dependen del guía)
+  const bajas = filtro ? bajasTodas.filter(b => b.conductor_id && filtro.ids.has(b.conductor_id)) : bajasTodas
 
   // Asignaciones de los conductores dados de baja
   type FilaAc = { conductor_id: string; horario: string | null; fecha_inicio: string | null; fecha_fin: string | null; asignaciones: { horario: string | null } | null }
   const ids = [...new Set(bajas.map(b => b.conductor_id).filter((x): x is string => !!x))]
-  const porConductor = new Map<string, FilaAc[]>()
-  for (let i = 0; i < ids.length; i += 100) {
-    const lote = ids.slice(i, i + 100)
-    const filas = await leerTodo<FilaAc>(
+  // Vehículos que habilitaron turnos: nuevos (alta en el período) y los que volvieron a operar
+  const nuevos = vehiculos.filter(v => !/^PRB/i.test(String(v.patente || '').trim()))
+  const idsNuevos = new Set(nuevos.map(v => v.id))
+  const habilitados: Omit<VehiculoHabilitado, 'yaAsignado'>[] = [
+    ...nuevos.flatMap(v => {
+      const f = fechaART(v.created_at)
+      return f ? [{ fecha: f, vehiculoId: v.id, patente: v.patente || '', motivo: 'Nuevo', esNuevo: true }] : []
+    }),
+    ...(reincorporados ?? [])
+      // Un auto nuevo que pasa a PKG ON el mismo período ya cuenta como nuevo
+      .filter(x => !idsNuevos.has(x.vehiculo_id))
+      .map(x => ({
+        fecha: String(x.fecha).slice(0, 10),
+        vehiculoId: x.vehiculo_id,
+        patente: x.patente || '',
+        motivo: `Volvió de ${etiquetaEstado(x.estado_anterior)}`,
+        esNuevo: false,
+      })),
+  ]
+
+  // En paralelo: asignaciones de los conductores dados de baja (qué turno liberaron) y
+  // de los vehículos habilitados (¿ya recibieron asignación después de habilitarse?)
+  const idsHabilitados = [...new Set(habilitados.map(h => h.vehiculoId))]
+  const [filasAc, filasAsig] = await Promise.all([
+    porLotes(ids, lote => leerTodo<FilaAc>(
       (a, b) => (supabase.from('asignaciones_conductores') as any)
         .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(horario)')
         .in('conductor_id', lote)
         .range(a, b),
-    )
-    for (const f of filas) {
-      const lista = porConductor.get(f.conductor_id) ?? []
-      lista.push(f)
-      porConductor.set(f.conductor_id, lista)
-    }
-  }
-
-  // Autos nuevos que ya recibieron asignación
-  const nuevos = vehiculos.filter(v => !/^PRB/i.test(String(v.patente || '').trim()))
-  const asignados = new Set<string>()
-  const idsNuevos = nuevos.map(v => v.id)
-  for (let i = 0; i < idsNuevos.length; i += 100) {
-    const filas = await leerTodo<{ vehiculo_id: string }>(
+    )),
+    porLotes(idsHabilitados, lote => leerTodo<{ vehiculo_id: string; fecha_inicio: string | null; fecha_fin: string | null; estado: string | null }>(
       (a, b) => (supabase.from('asignaciones') as any)
-        .select('vehiculo_id')
-        .in('vehiculo_id', idsNuevos.slice(i, i + 100))
+        .select('vehiculo_id, fecha_inicio, fecha_fin, estado')
+        .in('vehiculo_id', lote)
         .not('fecha_inicio', 'is', null)
         .range(a, b),
-    )
-    for (const f of filas) asignados.add(f.vehiculo_id)
+    )),
+  ])
+  const porConductor = new Map<string, FilaAc[]>()
+  for (const f of filasAc) {
+    const lista = porConductor.get(f.conductor_id) ?? []
+    lista.push(f)
+    porConductor.set(f.conductor_id, lista)
   }
+  const iniciosPorVehiculo = new Map<string, string[]>()
+  for (const f of filasAsig) {
+    const dia = fechaART(f.fecha_inicio)
+    if (!dia) continue
+    const lista = iniciosPorVehiculo.get(f.vehiculo_id) ?? []
+    lista.push(dia)
+    iniciosPorVehiculo.set(f.vehiculo_id, lista)
+  }
+  // Un auto que vuelve (de taller, robo, etc.) solo habilita turnos si vuelve VACÍO: si
+  // seguía con una asignación vigente (sus conductores lo esperan), no se liberó nada.
+  // Vigente = empezó antes del día de la vuelta y no terminó antes de ese día.
+  const asignacionesPorVehiculo = new Map<string, { ini: string; fin: string | null }[]>()
+  for (const f of filasAsig) {
+    if (/^(cancel|program|pendient)/i.test(String(f.estado || ''))) continue
+    const ini = fechaART(f.fecha_inicio)
+    if (!ini) continue
+    const lista = asignacionesPorVehiculo.get(f.vehiculo_id) ?? []
+    lista.push({ ini, fin: fechaART(f.fecha_fin) })
+    asignacionesPorVehiculo.set(f.vehiculo_id, lista)
+  }
+  const volvioOcupado = (h: Omit<VehiculoHabilitado, 'yaAsignado'>) =>
+    !h.esNuevo && (asignacionesPorVehiculo.get(h.vehiculoId) ?? [])
+      .some(a => a.ini < h.fecha && (!a.fin || a.fin >= h.fecha))
+
+  const conAsignacion: VehiculoHabilitado[] = habilitados.filter(h => !volvioOcupado(h)).map(h => ({
+    ...h,
+    yaAsignado: (iniciosPorVehiculo.get(h.vehiculoId) ?? []).some(d => d >= h.fecha),
+  }))
 
   const calcular = (r: Rango): PeriodoTurnos => {
-    const t: PeriodoTurnos = { porBajas: 0, bajasDiurno: 0, bajasNocturno: 0, bajasACargo: 0, vehiculosNuevos: 0, porVehiculosNuevos: 0, nuevosYaAsignados: 0 }
+    const t: PeriodoTurnos = {
+      porBajas: 0, bajasDiurno: 0, bajasNocturno: 0, bajasACargo: 0,
+      vehiculosNuevos: 0, vehiculosReincorporados: 0, porVehiculosNuevos: 0, nuevosYaAsignados: 0,
+    }
     const vistos = new Set<string>()
     for (const b of bajas) {
       if (!b.conductor_id || !enRango(fecha(b.fecha), r) || vistos.has(b.conductor_id)) continue
@@ -273,22 +567,33 @@ export async function cargarTurnosGenerados(filtroSede: FiltroSede, actual: Rang
         t.bajasACargo++
       }
     }
-    for (const v of nuevos) {
-      if (!enRango(fechaART(v.created_at), r)) continue
-      t.vehiculosNuevos++
+    for (const h of conAsignacion) {
+      if (!enRango(h.fecha, r)) continue
+      if (h.esNuevo) t.vehiculosNuevos++
+      else t.vehiculosReincorporados++
       t.porVehiculosNuevos += 2
-      if (asignados.has(v.id)) t.nuevosYaAsignados++
+      if (h.yaAsignado) t.nuevosYaAsignados++
     }
     return t
   }
-  return { actual: calcular(actual), anterior: calcular(anterior) }
+  return {
+    actual: calcular(actual),
+    anterior: calcular(anterior),
+    habilitados: conAsignacion.sort((x, y) => y.fecha.localeCompare(x.fecha) || x.patente.localeCompare(y.patente)),
+    conReincorporados: reincorporados !== null,
+  }
 }
 
 // ───────────── Multas y excesos de km ─────────────
 
-export async function cargarMultas(filtroSede: FiltroSede, actual: Rango, anterior: Rango): Promise<IndicadoresMultas> {
+export async function cargarMultas(
+  filtroSede: FiltroSede,
+  actual: Rango,
+  anterior: Rango,
+  filtro: FiltroGuia | null = null,
+): Promise<IndicadoresMultas> {
   const desde = anterior.desde < actual.desde ? anterior.desde : actual.desde
-  const [multas, excesos] = await Promise.all([
+  const [multasTodas, excesosTodos] = await Promise.all([
     // Por FECHA DE CARGA (created_at), como el módulo Multas: las multas llegan semanas
     // después de la infracción, así que por fecha de infracción la semana en curso
     // siempre daba 0. Así se ven las que entraron en el período.
@@ -308,11 +613,19 @@ export async function cargarMultas(filtroSede: FiltroSede, actual: Rango, anteri
       periodos_facturacion: { semana: number; anio: number } | null
       conductores: { nombres: string | null; apellidos: string | null } | null
     }>(
+      // Solo los cargados desde el inicio del período anterior (se cargan al facturar la
+      // semana, después de que empieza): antes se traía todo el historial.
       (a, b) => filtroSede((supabase.from('excesos_kilometraje') as any)
-        .select('conductor_id, km_exceso, monto_total, periodos_facturacion:periodo_id(semana, anio), conductores:conductor_id(nombres, apellidos)'))
+        .select('conductor_id, km_exceso, monto_total, periodos_facturacion:periodo_id(semana, anio), conductores:conductor_id(nombres, apellidos)')
+        .gte('created_at', `${desde}T00:00:00-03:00`))
         .range(a, b),
     ),
   ])
+
+  // Con guía elegido: multas por nombre del conductor, excesos por id
+  const clavesGuia = filtro ? nombresComoClaves(filtro) : null
+  const multas = clavesGuia ? multasTodas.filter(x => clavesGuia.has(claveNombre(x.conductor_responsable))) : multasTodas
+  const excesos = filtro ? excesosTodos.filter(x => x.conductor_id && filtro.ids.has(x.conductor_id)) : excesosTodos
 
   const multasDe = (r: Rango) => multas.filter(x => enRango(fechaART(x.created_at), r))
   // Exceso de km: cuenta en la semana facturada (por el lunes de esa semana)

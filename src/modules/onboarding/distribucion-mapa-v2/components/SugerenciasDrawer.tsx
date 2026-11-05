@@ -13,7 +13,7 @@ import { Badge, BotonPrimario, BotonSecundario, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { colorEntidad } from './colores'
 import type { EntidadMapa, ParSugerido } from '../types'
-import { clavePersona, formatKm, formatMin, LABEL_TURNO, turnoDeEntidad } from '../utils'
+import { clavePersona, formatKm, formatTiempoPar, LABEL_TURNO, turnoDeEntidad } from '../utils'
 import { UMBRAL_MINUTOS_MAX, UMBRAL_MINUTOS_MIN } from '../emparejamientoService'
 
 interface Props {
@@ -44,6 +44,15 @@ interface Props {
    * cuando involucra a la base, para comparar las sugerencias contra lo que hay.
    */
   parActual?: ParSugerido | null
+  /**
+   * Con una persona seleccionada: 'hay' si quedan candidatos sin medir dentro
+   * del radio (muestra "Ver más compañeros"), 'agotado' si ya se midieron todos.
+   */
+  masCandidatos?: 'hay' | 'agotado' | null
+  /** Candidatos dentro del radio que todavía no se midieron (con masCandidatos 'hay'). */
+  candidatosPorMedir?: number
+  cargandoMas?: boolean
+  onVerMas?: () => void
 }
 
 export function SugerenciasDrawer({
@@ -66,6 +75,10 @@ export function SugerenciasDrawer({
   onCerrar,
   onRecalcular,
   parActual = null,
+  masCandidatos = null,
+  cargandoMas = false,
+  candidatosPorMedir = 0,
+  onVerMas,
 }: Props) {
   // Sólo tiene sentido con una base concreta y si el par es de esa base.
   const actualDeLaBase =
@@ -115,7 +128,16 @@ export function SugerenciasDrawer({
             Compañeros sugeridos
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Badge tono="neutro">{paresVisibles.length} pares</Badge>
+            {/* Mientras queden candidatos sin medir, el número es parcial: "8+" */}
+            <span
+              title={masCandidatos === 'hay'
+                ? `${paresVisibles.length} pares medidos hasta ahora. Quedan ${candidatosPorMedir} candidatos cerca por revisar con "Ver más compañeros".`
+                : undefined}
+            >
+              <Badge tono="neutro">
+                {paresVisibles.length}{masCandidatos === 'hay' ? '+' : ''} pares
+              </Badge>
+            </span>
             <button
               type="button"
               onClick={onCerrar}
@@ -326,6 +348,29 @@ export function SugerenciasDrawer({
           )
         })}
 
+        {/* Más candidatos, de a tandas: sólo se mide cuando se pide. */}
+        {!cargando && masCandidatos === 'hay' && (
+          <div style={{ marginTop: 4 }}>
+            <BotonSecundario onClick={cargandoMas ? undefined : onVerMas} full>
+              {cargandoMas ? (
+                <>
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  Buscando...
+                </>
+              ) : (
+                candidatosPorMedir > 0
+                  ? `Ver más compañeros (${candidatosPorMedir} por revisar)`
+                  : 'Ver más compañeros'
+              )}
+            </BotonSecundario>
+          </div>
+        )}
+        {!cargando && masCandidatos === 'agotado' && paresVisibles.length > 0 && (
+          <div style={{ padding: '6px 4px', textAlign: 'center' }}>
+            <Hint>No hay más candidatos dentro de {umbral} min.</Hint>
+          </div>
+        )}
+
         {/* Modo lead↔lead: quiénes quedaron afuera, para que se vea y se decida. */}
         {modoLeads && !cargando && sinPareja.length > 0 && (
           <div
@@ -436,9 +481,9 @@ function TarjetaPar({
           </span>
           <span
             style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)' }}
-            title="Tiempo habitual del recorrido en auto, sin depender del tráfico de un momento puntual"
+            title="Tiempo habitual del recorrido en auto. Con ~ es estimado en línea recta (todavía no medido por calle)."
           >
-            {formatMin(par.tiempoMinutos)}
+            {formatTiempoPar(par)}
           </span>
         </span>
         <span style={{ flex: 1, borderTop: '2px dashed var(--border-primary)' }} />
@@ -450,7 +495,6 @@ function TarjetaPar({
       {!soloCandidato && <ExtremoTarjeta entidad={par.b} />}
 
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
-        {par.fuenteTiempo === 'estimado' && <Badge tono="warn">Tiempo estimado</Badge>}
         {par.motivos.map((m, i) => (
           <Badge key={`${par.id}-m${i}`} tono={m.tipo === 'ok' ? 'ok' : m.tipo === 'warn' ? 'warn' : 'bad'}>
             {m.texto}

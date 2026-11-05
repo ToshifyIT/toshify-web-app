@@ -22,7 +22,7 @@ import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
 import type { EntidadMapa, ParSugerido, Radar } from '../types'
 import type { ZonaPeligrosa } from '../distribucionMapaV2Service'
-import { formatKm, formatMin, LABEL_TURNO, LABEL_TURNO_CONDUCTOR, turnoConductor } from '../utils'
+import { formatKm, formatTiempoPar, LABEL_TURNO, LABEL_TURNO_CONDUCTOR, turnoConductor } from '../utils'
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
@@ -67,6 +67,11 @@ interface Props {
   parActual?: ParSugerido | null
   /** El compañero actual, para dibujarlo aunque un filtro lo oculte. */
   companeroActual?: EntidadMapa | null
+  /**
+   * Enfoque pedido desde afuera (Leads > "Ver en mapa"): encuadra estos puntos apenas
+   * el mapa está listo, aunque cargue después que los datos. `tick` distingue pedidos.
+   */
+  enfoqueForzado?: { puntos: { lat: number; lng: number }[]; tick: number } | null
 }
 
 export function MapaCanvas({
@@ -92,6 +97,7 @@ export function MapaCanvas({
   onCopiarPar,
   onProgramarPar,
   parActual = null,
+  enfoqueForzado = null,
   companeroActual = null,
 }: Props) {
   const mapRef = useRef<google.maps.Map | null>(null)
@@ -127,13 +133,39 @@ export function MapaCanvas({
     return centro && entidadActiva.lng > centro.lng() ? 'izquierda' : 'derecha'
   }, [entidadActiva, parDestacado, parActual, baseManual, radar])
 
+  // true cuando Google Maps terminó de crear el mapa (para el enfoque forzado)
+  const [mapaListo, setMapaListo] = useState(false)
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map
+    setMapaListo(true)
   }, [])
 
-  // Encuadre automático sobre lo visible.
+  /** Encuadra los puntos del enfoque pedido desde Leads (lead y su pareja). */
+  const aplicarEnfoqueForzado = useCallback(() => {
+    const map = mapRef.current
+    if (!map || !enfoqueForzado || enfoqueForzado.puntos.length === 0) return false
+    if (enfoqueForzado.puntos.length === 1) {
+      map.panTo(enfoqueForzado.puntos[0])
+      map.setZoom(15)
+      return true
+    }
+    const bounds = new google.maps.LatLngBounds()
+    enfoqueForzado.puntos.forEach((p) => bounds.extend(p))
+    map.fitBounds(bounds, 140)
+    return true
+  }, [enfoqueForzado])
+  // Espejo para usarlo en el auto-encuadre sin re-ejecutarlo cuando cambia el enfoque
+  const aplicarEnfoqueForzadoRef = useRef(aplicarEnfoqueForzado)
+  useEffect(() => {
+    aplicarEnfoqueForzadoRef.current = aplicarEnfoqueForzado
+  }, [aplicarEnfoqueForzado])
+
+  // Encuadre automático sobre lo visible. Con un enfoque pedido desde Leads
+  // vigente, en vez de abrir a todo lo visible (que puede ser todo el país) se
+  // vuelve a enfocar al lead y su pareja: los datos se recargan después de abrir.
   useEffect(() => {
     if (!mapRef.current || entidades.length === 0) return
+    if (aplicarEnfoqueForzadoRef.current()) return
     const bounds = new google.maps.LatLngBounds()
     entidades.forEach((e) => bounds.extend({ lat: e.lat, lng: e.lng }))
     mapRef.current.fitBounds(bounds, 60)
@@ -148,8 +180,17 @@ export function MapaCanvas({
   // clic cuenta como una intención de enfoque.
   useEffect(() => {
     if (!mapRef.current || !entidadActiva) return
-    mapRef.current.panTo({ lat: entidadActiva.lat, lng: entidadActiva.lng })
-    if ((mapRef.current.getZoom() || 0) < 13) mapRef.current.setZoom(14)
+    const map = mapRef.current
+    if ((map.getZoom() || 0) < 13) map.setZoom(14)
+    map.panTo({ lat: entidadActiva.lat, lng: entidadActiva.lng })
+    // Centrar el conjunto pin + ficha (no sólo el pin): si no, la ficha queda cortada
+    // contra el borde del mapa. Se corre el centro media ficha hacia su lado.
+    const dx = (ANCHO_FICHA + SEPARACION_FICHA) / 2
+    const escucha = google.maps.event.addListenerOnce(map, 'idle', () => {
+      map.panBy(ladoFicha === 'derecha' ? dx : -dx, 0)
+    })
+    return () => google.maps.event.removeListener(escucha)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entidadActiva, enfoqueTick])
 
   // Al dibujar pares, encuadrar sobre todos sus extremos.
@@ -171,6 +212,14 @@ export function MapaCanvas({
     radar.conexiones.forEach((c) => bounds.extend({ lat: c.entidad.lat, lng: c.entidad.lng }))
     mapRef.current.fitBounds(bounds, 90)
   }, [radar])
+
+  // Enfoque pedido desde Leads: va después de los demás encuadres para ganarles
+  // (el auto-encuadre sobre lo visible se dispara con el mismo cambio de filtros).
+  useEffect(() => {
+    if (!mapaListo) return
+    aplicarEnfoqueForzado()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enfoqueForzado?.tick, mapaListo])
 
   // Si el compañero actual queda fuera de la vista, se encuadra a los dos. Sólo
   // cuando está afuera: si ya se ve, se respeta el zoom que eligió el operador.
@@ -269,7 +318,7 @@ export function MapaCanvas({
             zIndex={3}
             icon={{
               url: urlEtiquetaPill(
-                `${formatKm(c.distanciaKm)} · ${formatMin(c.tiempoMinutos)}`,
+                `${formatKm(c.distanciaKm)} · ${formatTiempoPar(c)}`,
                 c.dentroDelUmbral ? COLOR_CONEXION_CERCA : '#6B7280'
               ),
               anchor: new google.maps.Point(0, 10),
@@ -319,7 +368,7 @@ export function MapaCanvas({
               zIndex={5}
               icon={{
                 url: urlEtiquetaPill(
-                  `${formatKm(p.distanciaKm)} · ${formatMin(p.tiempoMinutos)}`,
+                  `${formatKm(p.distanciaKm)} · ${formatTiempoPar(p)}`,
                   '#ff0033'
                 ),
                 anchor: new google.maps.Point(0, 10),
@@ -366,7 +415,7 @@ export function MapaCanvas({
             zIndex={5}
             icon={{
               url: urlEtiquetaPill(
-                `Compañero actual · ${formatKm(parActual.distanciaKm)} · ${formatMin(parActual.tiempoMinutos)}`,
+                `Compañero actual · ${formatKm(parActual.distanciaKm)} · ${formatTiempoPar(parActual)}`,
                 '#ff0033'
               ),
               anchor: new google.maps.Point(0, 10),
@@ -739,7 +788,7 @@ function InfoEntidad({
           {parActual && (
             <span style={{ color: '#6B7280' }}>
               {' · '}
-              {formatKm(parActual.distanciaKm)} · {formatMin(parActual.tiempoMinutos)}
+              {formatKm(parActual.distanciaKm)} · {formatTiempoPar(parActual)}
               {parActual.fuenteTiempo === 'estimado' && ' (estimado)'}
             </span>
           )}
@@ -789,7 +838,7 @@ function InfoEntidad({
         >
           <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             Emparejando con <b>{(parEnCurso.a.id === e.id ? parEnCurso.b : parEnCurso.a).nombre}</b>
-            {' · '}{formatKm(parEnCurso.distanciaKm)} · {formatMin(parEnCurso.tiempoMinutos)}
+            {' · '}{formatKm(parEnCurso.distanciaKm)} · {formatTiempoPar(parEnCurso)}
           </span>
           <BotonQuitar onClick={onLimpiarPar} />
         </div>
@@ -821,7 +870,7 @@ function InfoEntidad({
                   {formatKm(parConBase.distanciaKm)}
                 </span>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: '#6B7280' }}>
-                  {formatMin(parConBase.tiempoMinutos)}
+                  {formatTiempoPar(parConBase)}
                 </span>
                 <span style={{ marginLeft: 'auto' }}>
                   <Badge tono={parConBase.score >= 70 ? 'ok' : parConBase.score >= 45 ? 'warn' : 'bad'}>
@@ -830,7 +879,6 @@ function InfoEntidad({
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-                {parConBase.fuenteTiempo === 'estimado' && <Badge tono="warn">Tiempo estimado</Badge>}
                 {parConBase.motivos.map((m, i) => (
                   <Badge key={`pm-${i}`} tono={m.tipo === 'ok' ? 'ok' : m.tipo === 'warn' ? 'warn' : 'bad'}>
                     {m.texto}
@@ -935,6 +983,8 @@ function BotonIcono({
 
 /** Separación (px) entre el pin y el costado de la ficha flotante. */
 const SEPARACION_FICHA = 22
+/** Ancho de la ficha flotante: compacta para que entre junto al pin en el mapa. */
+const ANCHO_FICHA = 290
 
 /**
  * Contenedor de la ficha flotante del mapa: tarjeta blanca de ancho fijo con una
@@ -962,7 +1012,7 @@ function FichaFlotante({ lado, children }: { lado: 'izquierda' | 'derecha'; chil
       ref={ref}
       style={{
         position: 'relative',
-        width: 344,
+        width: ANCHO_FICHA,
         boxSizing: 'border-box',
         padding: '10px 12px 12px',
         background: '#fff',

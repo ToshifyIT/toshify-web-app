@@ -5,6 +5,7 @@
 
 import { LABEL_TURNO, LABEL_TURNO_CONDUCTOR, type TurnoConductor } from '../utils'
 import { ESTADOS_LEAD_DEFAULT } from '../distribucionMapaV2Service'
+import { CIUDAD_AMBA } from '../ubicacion'
 import type { TurnoEfectivo } from '../types'
 
 export type SegmentoV2 = 'conductores' | 'leads' | 'ambos'
@@ -103,6 +104,13 @@ export interface FiltrosV2 {
    * no corresponden. Vacío = todos.
    */
   paises: Set<string>
+  /**
+   * Ciudad (nivel entre País y Localidad): "Buenos Aires" para Capital y
+   * Gran Buenos Aires, o la localidad para el resto (ej. Bariloche). Arranca en
+   * AMBA. Ver ciudadDe() en ubicacion.ts.
+   */
+  regiones: Set<string>
+  /** Localidad (ej. Berazategui). */
   ciudades: Set<string>
   /** Antecedentes penales: 'no' | 'si' | 'sin_dato'. Vacío = no filtra. */
   antecedentes: Set<string>
@@ -146,7 +154,9 @@ export function filtrosIniciales(): FiltrosV2 {
     // Leads creados en el último mes: con más de 10.000 leads, sin rango el
     // mapa y la lista se llenan. Se puede ampliar o vaciar desde el filtro.
     ...rangoCreacionPorDefecto(),
-    paises: new Set(),
+    // Por defecto Argentina y, dentro, sólo Capital y Gran Buenos Aires
+    paises: new Set(['Argentina']),
+    regiones: new Set([CIUDAD_AMBA]),
     ciudades: new Set(),
     antecedentes: new Set(),
     // A diferencia del v1 (que arrancaba fijado en CABA), acá zona arranca vacío
@@ -184,7 +194,9 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (f.guias.size > 0) n++
   // El último mes es el valor inicial: sólo cuenta si se lo cambió.
   if (f.creadoDesde !== base.creadoDesde || f.creadoHasta !== base.creadoHasta) n++
-  if (f.paises.size > 0) n++
+  // Argentina y Buenos Aires son el valor inicial: sólo cuentan si se los cambió.
+  if (!mismoSet(f.paises, base.paises)) n++
+  if (!mismoSet(f.regiones, base.regiones)) n++
   if (f.ciudades.size > 0) n++
   if (f.antecedentes.size > 0) n++
   if (f.zonas.size > 0) n++

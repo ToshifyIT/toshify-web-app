@@ -24,7 +24,7 @@
 // Sigue siendo de sólo lectura: propone pares, no crea ni modifica asignaciones.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
 import { Alerta } from '../../../components/ui/alertas'
 import {
@@ -69,8 +69,10 @@ import {
   estimarPlanConductores,
   estimarPlanLeads,
   medirPar,
+  sugerirMasPares,
   sugerirPares,
   UMBRAL_MINUTOS_DEFAULT,
+  UMBRAL_MINUTOS_MAX,
 } from './emparejamientoService'
 import { coincideBusqueda, coordsValidas, mismaPersona, turnoLeadATurno, turnoConductor } from './utils'
 import type {
@@ -82,7 +84,7 @@ import type { PersonaPrecargaPar, PrecargaParMapa } from '../../../types/program
 import { guardarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
 import { claveGuia, contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
-import { SIN_UBICACION } from './ubicacion'
+import { ciudadDe, SIN_UBICACION } from './ubicacion'
 import { API_GEOCODING, API_MAPA } from './apisGoogle'
 import {
   claveCelda,
@@ -96,6 +98,7 @@ import { MenuFiltro } from './components/MenuFiltro'
 import { SugerenciasDrawer } from './components/SugerenciasDrawer'
 import { IconoEntidad } from './components/iconos'
 import { Chip } from './components/ui'
+import { procesarLeadsNuevos } from '../../leads/rutasLeadsService'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 
@@ -271,16 +274,27 @@ export function DistribucionMapaV2Module() {
   const aplicarPatch = useCallback((patch: Partial<FiltrosV2>) => {
     setFiltros((prev) => ({ ...prev, ...patch }))
   }, [])
+  // Abierto desde Leads ("Mapa" en Parejas posibles): de los leads sólo se muestra ese.
+  // Se quita con "Limpiar filtros".
+  const [soloLeadId, setSoloLeadId] = useState<string | null>(null)
   const limpiarFiltros = useCallback(() => {
     setFiltros((prev) => ({ ...filtrosIniciales(), segmento: prev.segmento }))
+    setSoloLeadId(null)
   }, [])
-  const filtrosActivos = useMemo(() => contarFiltrosActivos(filtros), [filtros])
+  const filtrosActivos = useMemo(
+    () => contarFiltrosActivos(filtros) + (soloLeadId ? 1 : 0),
+    [filtros, soloLeadId],
+  )
 
   // Emparejamiento
   const [drawerAbierto, setDrawerAbierto] = useState(false)
   const [baseSugerencias, setBaseSugerencias] = useState<EntidadMapa | null>(null)
   const [pares, setPares] = useState<ParSugerido[]>([])
   const [avisoPares, setAvisoPares] = useState<string | null>(null)
+  // Con una persona seleccionada: cuántos candidatos ya se midieron y cuántos
+  // hay dentro del radio, para "Ver más compañeros".
+  const [continuacion, setContinuacion] = useState<{ medidos: number; total: number } | null>(null)
+  const [cargandoMas, setCargandoMas] = useState(false)
   // Sólo en modo lead↔lead: quiénes quedaron sin pareja dentro del umbral.
   const [sinPareja, setSinPareja] = useState<EntidadMapa[]>([])
   const [calculando, setCalculando] = useState(false)
@@ -351,11 +365,26 @@ export function DistribucionMapaV2Module() {
   const [fichaLoading, setFichaLoading] = useState(false)
 
   const [toast, setToast] = useState<string | null>(null)
+
+  // Apertura desde Leads ("Ver en mapa" de una pareja posible):
+  // /onboarding/distribucion-mapa-v2?lead=<id>&conductor=<id>
+  const [searchParams, setSearchParams] = useSearchParams()
+  const pedidoUrlRef = useRef<{ lead: string; conductor: string | null } | null>(
+    searchParams.get('lead') ? { lead: searchParams.get('lead') as string, conductor: searchParams.get('conductor') } : null
+  )
+  const [enfoquePendiente, setEnfoquePendiente] = useState<{ lead: EntidadMapa; conductor: EntidadMapa | null } | null>(null)
+  const [enfoqueForzado, setEnfoqueForzado] = useState<{ puntos: { lat: number; lng: number }[]; tick: number } | null>(null)
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 2600)
     return () => clearTimeout(t)
   }, [toast])
+
+  // Leads nuevos: se les busca pareja por calle una sola vez, en segundo plano.
+  // Los tramos quedan en mediciones_rutas y el mapa los usa sin volver a pagarlos.
+  useEffect(() => {
+    void procesarLeadsNuevos()
+  }, [])
 
   // ---------- Carga de datos ----------
 
@@ -531,10 +560,11 @@ export function DistribucionMapaV2Module() {
   const matchUbicacion = useCallback(
     (e: EntidadMapa) => {
       if (filtros.paises.size > 0 && !filtros.paises.has(e.pais || SIN_UBICACION)) return false
+      if (filtros.regiones.size > 0 && !filtros.regiones.has(ciudadDe(e))) return false
       if (filtros.ciudades.size > 0 && !filtros.ciudades.has(e.ciudad || SIN_UBICACION)) return false
       return true
     },
-    [filtros.paises, filtros.ciudades]
+    [filtros.paises, filtros.regiones, filtros.ciudades]
   )
 
   const matchRequisitos = useCallback((e: EntidadMapa, reqs: Set<string>) => {
@@ -613,6 +643,7 @@ export function DistribucionMapaV2Module() {
 
   const pasaFiltrosLeadSinUbicacion = useCallback(
     (l: EntidadMapa) => {
+      if (soloLeadId) return l.id === soloLeadId
       if (
         filtros.estadosLead.size > 0 &&
         !filtros.estadosLead.has(l.estadoLead || SIN_ESTADO_LEAD)
@@ -632,7 +663,7 @@ export function DistribucionMapaV2Module() {
       if (!matchZona(l)) return false
       return coincideBusqueda(l, filtros.busqueda)
     },
-    [filtros, matchZona, matchAntecedentes, matchTieneLicencia]
+    [filtros, matchZona, matchAntecedentes, matchTieneLicencia, soloLeadId]
   )
 
   /**
@@ -739,13 +770,17 @@ export function DistribucionMapaV2Module() {
     }
 
     const porPais = new Map<string, number>()
+    const porRegion = new Map<string, number>()
     const porCiudad = new Map<string, number>()
 
     for (const e of universo) {
       const pais = e.pais || SIN_UBICACION
       porPais.set(pais, (porPais.get(pais) || 0) + 1)
-      // Ciudad cuelga de País: se cuentan sólo las de los países tildados.
+      // Ciudad cuelga de País y Localidad de Ciudad: se cuentan sólo las de lo tildado.
       if (filtros.paises.size > 0 && !filtros.paises.has(pais)) continue
+      const region = ciudadDe(e)
+      porRegion.set(region, (porRegion.get(region) || 0) + 1)
+      if (filtros.regiones.size > 0 && !filtros.regiones.has(region)) continue
       const ciudad = e.ciudad || SIN_UBICACION
       porCiudad.set(ciudad, (porCiudad.get(ciudad) || 0) + 1)
     }
@@ -762,11 +797,12 @@ export function DistribucionMapaV2Module() {
         })
         .map(([valor, cantidad]) => ({ valor, cantidad }))
 
-    return { paises: ordenar(porPais), ciudades: ordenar(porCiudad) }
+    return { paises: ordenar(porPais), regiones: ordenar(porRegion), ciudades: ordenar(porCiudad) }
   }, [
     conUbicacion,
     filtros.segmento,
     filtros.paises,
+    filtros.regiones,
     pasaFiltrosConductorSinUbicacion,
     pasaFiltrosLeadSinUbicacion,
   ])
@@ -888,6 +924,8 @@ export function DistribucionMapaV2Module() {
   )
 
   const fijarBase = useCallback((e: EntidadMapa) => {
+    // Otra base: el enfoque pedido desde Leads deja de valer
+    setEnfoqueForzado(null)
     setBaseManual(e)
     setParSeleccionado(null)
     setRadar(null)
@@ -900,6 +938,7 @@ export function DistribucionMapaV2Module() {
   // Soltar la base vuelve al estado inicial: sin selección (cierra la ficha y
   // el aro), sin línea medida, sin radar ni "ver todos".
   const soltarBase = useCallback(() => {
+    setEnfoqueForzado(null)
     setBaseManual(null)
     setParSeleccionado(null)
     setRadar(null)
@@ -941,6 +980,7 @@ export function DistribucionMapaV2Module() {
         setPares([])
         setSinPareja([])
         setAvisoPares(null)
+        setContinuacion(null)
         setParesDesactualizados(false)
         setBaseSugerencias(null)
         setDrawerAbierto(false)
@@ -988,6 +1028,7 @@ export function DistribucionMapaV2Module() {
       setCalculando(true)
       setAvisoPares(null)
       setSinPareja([])
+      setContinuacion(null)
       try {
         // Segmento Leads sin nadie elegido: parejas ENTRE leads (asignación
         // única, zona dura, turnos compatibles). Los conductores no entran.
@@ -1033,6 +1074,7 @@ export function DistribucionMapaV2Module() {
 
         const resultado = await sugerirPares(bases, visibles, umbral)
         setPares(resultado.pares)
+        setContinuacion(base ? resultado.continuacion ?? null : null)
         setAvisoPares(resultado.aviso)
         setParesDesactualizados(false)
       } catch (err) {
@@ -1045,6 +1087,28 @@ export function DistribucionMapaV2Module() {
     },
     [visibles, umbral, filtros.segmento, confirmarCosto]
   )
+
+  /** "Ver más compañeros": mide la tanda siguiente y la suma abajo de la lista. */
+  const verMasPares = useCallback(async () => {
+    if (!baseSugerencias || !continuacion || cargandoMas) return
+    setCargandoMas(true)
+    try {
+      const resultado = await sugerirMasPares(baseSugerencias, visibles, umbral, continuacion.medidos)
+      setPares((previos) => {
+        const ya = new Set(previos.map((p) => p.id))
+        return [...previos, ...resultado.pares.filter((p) => !ya.has(p.id))]
+      })
+      setContinuacion({ medidos: resultado.medidos, total: resultado.total })
+      if (resultado.pares.length === 0 && resultado.medidos < resultado.total) {
+        setToast(`Nadie más dentro de ${umbral} min en esta tanda: podés seguir buscando.`)
+      }
+    } catch (err) {
+      console.error('[DistribucionMapaV2] Error buscando más compañeros:', err)
+      setToast('No se pudieron buscar más compañeros')
+    } finally {
+      setCargandoMas(false)
+    }
+  }, [baseSugerencias, continuacion, cargandoMas, visibles, umbral])
 
   const abrirSugerencias = useCallback(
     (base: EntidadMapa | null) => {
@@ -1135,6 +1199,62 @@ export function DistribucionMapaV2Module() {
     setParesDesactualizados((prev) => prev || pares.length > 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtros, umbral])
+
+  // Apertura desde Leads, paso 1: con los datos cargados, ajustar los filtros para
+  // que el lead se vea (conductores y leads, su estado, cualquier fecha de creación).
+  useEffect(() => {
+    const pedido = pedidoUrlRef.current
+    if (!pedido || loading) return
+    pedidoUrlRef.current = null
+    setSearchParams({}, { replace: true })
+    const lead = leadsCrudos.find((l) => l.id === pedido.lead)
+    if (!lead || !coordsValidas(lead.lat, lead.lng)) {
+      setToast('Ese lead no está en el mapa (no tiene ubicación o su estado no se muestra)')
+      return
+    }
+    const conductor = pedido.conductor
+      ? conductoresCrudos.find((c) => c.id === pedido.conductor && coordsValidas(c.lat, c.lng)) ?? null
+      : null
+    setFiltros({
+      ...filtrosIniciales(),
+      segmento: 'ambos',
+      // Todos los estados (como "Parejas posibles" de Leads); los descartados
+      // igual no entran al mapa.
+      estadosLead: new Set<string>(),
+      creadoDesde: '',
+      creadoHasta: '',
+      // Sólo los conductores que buscan compañero (como "Parejas posibles" de Leads)
+      companero: new Set<string>(['sin']),
+      // Sin el filtro de país/ciudad por defecto (AMBA): si no, un lead del interior
+      // o sin país detectado quedaría oculto y sin sugerencias
+      paises: new Set<string>(),
+      regiones: new Set<string>(),
+      ciudades: new Set<string>(),
+    })
+    // De los leads, sólo el que se abrió
+    setSoloLeadId(lead.id)
+    // Mismo tope que Leads: 40 min
+    setUmbral(UMBRAL_MINUTOS_MAX)
+    // Más lugar para el mapa: el panel de filtros arranca plegado
+    setMostrarFiltros(false)
+    setEnfoquePendiente({ lead, conductor })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, leadsCrudos, conductoresCrudos])
+
+  // Paso 2 (después de que el cambio de filtros limpió las líneas): fijar el lead como
+  // base, abrir "Compañeros sugeridos" para él y medir hasta el conductor elegido.
+  useEffect(() => {
+    if (!enfoquePendiente) return
+    const { lead, conductor } = enfoquePendiente
+    setEnfoquePendiente(null)
+    fijarBase(lead)
+    setEnfoqueForzado({
+      puntos: [lead, ...(conductor ? [conductor] : [])].map((e) => ({ lat: e.lat, lng: e.lng })),
+      tick: Date.now(),
+    })
+    abrirSugerencias(lead)
+    if (conductor) void medirManual(lead, conductor)
+  }, [enfoquePendiente, fijarBase, medirManual, abrirSugerencias])
 
   /**
    * Pares dibujados sobre el mapa: todos cuando está activo "Mostrar todos", o
@@ -1232,7 +1352,7 @@ export function DistribucionMapaV2Module() {
 
   const abrirFicha = useCallback(
     async (e: EntidadMapa) => {
-      setActivo(null)
+      // La selección se conserva: al cerrar la ficha se vuelve a la misma persona
       setFichaLoading(true)
       try {
         if (e.tipo === 'conductor') {
@@ -1298,8 +1418,15 @@ export function DistribucionMapaV2Module() {
             onChange={(paises) =>
               // Las ciudades cuelgan del país: al cambiarlo se limpian, porque
               // las tildadas podrían ya no existir en la lista nueva.
-              setFiltros((f) => ({ ...f, paises, ciudades: new Set<string>() }))
+              setFiltros((f) => ({ ...f, paises, regiones: new Set<string>(), ciudades: new Set<string>() }))
             }
+          />
+          <MenuFiltro
+            titulo="Ciudad"
+            opciones={ubicacionesDisponibles.regiones}
+            seleccion={filtros.regiones}
+            onChange={(regiones) => setFiltros((f) => ({ ...f, regiones, ciudades: new Set<string>() }))}
+            anchoPanel={260}
           />
           <MenuFiltro
             titulo="Localidad"
@@ -1482,6 +1609,7 @@ export function DistribucionMapaV2Module() {
                 onSeleccionar={seleccionar}
                 entidadActiva={entidadActiva}
                 enfoqueTick={enfoqueTick}
+                enfoqueForzado={enfoqueForzado}
                 paresDibujados={paresDibujados}
                 parDestacado={parSeleccionado}
                 onLimpiarPar={() => {
@@ -1589,6 +1717,16 @@ export function DistribucionMapaV2Module() {
               setMostrarTodosPares(false)
             }}
             onRecalcular={() => correrSugerencias(baseSugerencias)}
+            masCandidatos={
+              !baseSugerencias || !continuacion || paresDesactualizados
+                ? null
+                : continuacion.medidos < continuacion.total
+                  ? 'hay'
+                  : 'agotado'
+            }
+            cargandoMas={cargandoMas}
+            candidatosPorMedir={continuacion ? Math.max(0, continuacion.total - continuacion.medidos) : 0}
+            onVerMas={verMasPares}
           />
             </div>
           </div>
