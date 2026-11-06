@@ -286,7 +286,7 @@ const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then
 const DashboardDirectivoPage = lazy(() => import('./reportes/DashboardDirectivoPage').then(m => ({ default: m.DashboardDirectivoPage })))
 const DashboardKpisV2Page = lazy(() => import('./reportes/DashboardKpisV2Page').then(m => ({ default: m.DashboardKpisV2Page })))
 const DashboardGeneralPage = lazy(() => import('./reportes/DashboardGeneralPage').then(m => ({ default: m.DashboardGeneralPage })))
-const RendimientoAgentesPage = lazy(() => import('./reportes/RendimientoAgentesPage').then(m => ({ default: m.RendimientoAgentesPage })))
+const ControlGestoresPage = lazy(() => import('./reportes/ControlGestoresPage').then(m => ({ default: m.ControlGestoresPage })))
 const DashboardMarketingPage = lazy(() => import('./reportes/DashboardMarketingPage').then(m => ({ default: m.DashboardMarketingPage })))
 const RolesPage = lazy(() => import('./administracion/RolesPage').then(m => ({ default: m.RolesPage })))
 const GestionUsuariosPage = lazy(() => import('./administracion/GestionUsuariosPage').then(m => ({ default: m.GestionUsuariosPage })))
@@ -2258,9 +2258,9 @@ export function HomePage() {
                   <LazyPage><DashboardGeneralPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/reportes/rendimiento-agentes" element={
-                <ProtectedRoute menuName="reportes" submenuName="rendimiento-agentes" action="view">
-                  <LazyPage><RendimientoAgentesPage /></LazyPage>
+              <Route path="/reportes/control-gestores" element={
+                <ProtectedRoute menuName="reportes" submenuName="control-gestores" action="view">
+                  <LazyPage><ControlGestoresPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/reportes/dashboard-marketing" element={
