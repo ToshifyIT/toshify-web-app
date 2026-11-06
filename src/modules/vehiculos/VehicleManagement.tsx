@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Trash2, UserCheck, Shuffle, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2, Fuel, CalendarClock, ShieldCheck, ClipboardList } from 'lucide-react'
+import { AlertTriangle, Eye, Trash2, UserCheck, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2, Fuel, CalendarClock, ShieldCheck, ClipboardList } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 
 import { HistorialModal } from '../../components/ui/HistorialModal'
@@ -14,6 +14,9 @@ import { Alerta } from '../../components/ui/alertas'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
 import { showError, showSuccess } from '../../utils/toast'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
+import { esFaltaColumnaMotivo } from '../../services/vehiculoEstadoService'
+import { HistorialEstadosVehiculo } from './components/HistorialEstadosVehiculo'
+import { BitacoraNotasVehiculo } from './components/BitacoraNotasVehiculo'
 import type {
   VehiculoWithRelations,
   VehiculoEstado
@@ -133,6 +136,14 @@ const PESTANAS_VEHICULO: TabsBarItem<PestanaVehiculo>[] = [
   { id: 'adicional', label: 'Adicional', icon: ClipboardList },
 ]
 
+type PestanaDetalleVehiculo = PestanaVehiculo | 'estados'
+
+/** Detalle del vehículo: las de Editar + el historial de estados. */
+const PESTANAS_DETALLE_VEHICULO: TabsBarItem<PestanaDetalleVehiculo>[] = [
+  ...PESTANAS_VEHICULO,
+  { id: 'estados', label: 'Estados', icon: History },
+]
+
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const { grupos: gruposFlotaDB } = useGruposFlota()
@@ -142,11 +153,15 @@ export function VehicleManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [pestanaVeh, setPestanaVeh] = useState<PestanaVehiculo>('basica')
+  // Motivo del cambio de estado (obligatorio si se cambia el estado al editar).
+  // Lo guarda el trigger de sql/vehiculos_estado_historial.sql.
+  const [motivoEstado, setMotivoEstado] = useState('')
   const [showEditTitularDropdown, setShowEditTitularDropdown] = useState(false)
   const editTitularInputRef = useRef<HTMLInputElement>(null)
   const editTitularDropdownRef = useRef<HTMLDivElement>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [pestanaDetalle, setPestanaDetalle] = useState<PestanaDetalleVehiculo>('basica')
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
   const [lastAuditLog, setLastAuditLog] = useState<{ usuario_nombre: string | null; campos_modificados: string[] | null } | null>(null)
@@ -515,6 +530,7 @@ export function VehicleManagement() {
       setLastAuditLog(auditData || null)
 
       setShowHistorialModal(null)
+      setPestanaDetalle('basica')
       setShowDetailsModal(true)
     } catch {
       // silently ignored
@@ -928,6 +944,13 @@ export function VehicleManagement() {
       return
     }
 
+    const cambiaEstado = (formData.estado_id || null) !== (selectedVehiculo.estado_id || null)
+    if (cambiaEstado && !motivoEstado.trim()) {
+      setPestanaVeh('estado')
+      showError('Falta el motivo', 'Indicá por qué cambia el estado del vehículo')
+      return
+    }
+
     setSaving(true)
     try {
       // Estados que NO finalizan asignaciones (el vehículo sigue operativo con conductores)
@@ -978,7 +1001,7 @@ export function VehicleManagement() {
             nuevoEstadoCodigo,
             fechaFinalizacion: ahoraArg.fecha,
             horaFinalizacion: ahoraArg.hora,
-            motivo: '',
+            motivo: motivoEstado.trim(),
           })
           setShowFinalizarModal(true)
 
@@ -1028,9 +1051,7 @@ export function VehicleManagement() {
         }
       }
 
-      const { error: updateError } = await supabase
-        .from('vehiculos')
-        .update({
+      const datosVehiculo = {
           patente: formData.patente.toUpperCase(),
           marca: formData.marca || null,
           modelo: formData.modelo || null,
@@ -1052,7 +1073,7 @@ export function VehicleManagement() {
           seguro_numero: formData.seguro_numero || null,
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
-          notas: formData.notas || null,
+          // notas: no se pisa; la mantiene la bitácora (sql/vehiculos_notas.sql)
           gnc: formData.gnc || false,
           telepase: formData.telepase || false,
           url_documentacion: formData.url_documentacion || null,
@@ -1070,8 +1091,16 @@ export function VehicleManagement() {
           vto_matafuego_fecha: formData.vto_matafuego_aplica && formData.vto_matafuego_fecha ? formData.vto_matafuego_fecha : null,
           updated_at: new Date().toISOString(),
           updated_by: profile?.full_name || 'Sistema'
-        })
+        }
+      // El motivo va solo si cambia el estado (lo guarda el trigger de
+      // sql/vehiculos_estado_historial.sql). Si la columna todavía no existe, se guarda sin él.
+      const tablaVehiculos = () => supabase.from('vehiculos') as any
+      let { error: updateError } = await tablaVehiculos()
+        .update(cambiaEstado ? { ...datosVehiculo, motivo_cambio_estado: motivoEstado.trim() } : datosVehiculo)
         .eq('id', selectedVehiculo.id)
+      if (cambiaEstado && esFaltaColumnaMotivo(updateError)) {
+        ({ error: updateError } = await tablaVehiculos().update(datosVehiculo).eq('id', selectedVehiculo.id))
+      }
 
       if (updateError) throw updateError
 
@@ -1135,6 +1164,7 @@ export function VehicleManagement() {
           detalles: {
             patente: formData.patente.toUpperCase(),
             asignaciones_finalizadas: debeFinalizarAsignaciones,
+            motivo: motivoEstado.trim() || undefined,
           },
           modulo: 'vehiculos',
           sedeId: formData.sede_id,
@@ -1402,6 +1432,7 @@ export function VehicleManagement() {
       }
 
       setPestanaVeh('basica')
+      setMotivoEstado('')
       setShowEditModal(true)
     } catch {
       // silently ignored
@@ -1963,38 +1994,6 @@ export function VehicleManagement() {
     } catch (err) {
       console.error('Error al cambiar responsable:', err)
       showError('Error', 'No se pudo cambiar el responsable')
-    }
-  }
-
-  // Reparte los vehículos PKG ON / EN USO entre los guías por turnos: cada uno con la
-  // misma parte, contando lo que ya llenó. Lo hace repartir_guias_vehiculos de la base.
-  const handleRepartirResponsables = async () => {
-    const r = await Alerta.fire({
-      title: 'Repartir responsables',
-      html: 'Cada guía queda con la <b>misma parte de los turnos</b> (2 por auto), contando los que ya '
-        + 'llenó con sus conductores: quien llenó más recibe menos turnos libres. Los autos sin '
-        + 'responsable van al guía con <b>menos turnos por llenar</b>.<br><br>'
-        + '<b>Reacomodar por turnos</b> recalcula el reparto moviendo la menor cantidad de autos '
-        + '(también puede mover los cambios a mano).',
-      icon: 'question',
-      showCancelButton: true,
-      showDenyButton: true,
-      confirmButtonText: 'Solo sin responsable',
-      denyButtonText: 'Reacomodar por turnos',
-      cancelButtonText: 'Cancelar',
-    })
-    if (!r.isConfirmed && !r.isDenied) return
-    try {
-      const { data, error } = await supabase.rpc('repartir_guias_vehiculos', {
-        p_sede_id: sedeActualId || null,
-        p_rehacer: r.isDenied,
-      })
-      if (error) throw error
-      showSuccess('Reparto listo', `${data ?? 0} vehículo(s) asignados`)
-      await loadAllData()
-    } catch (err) {
-      console.error('Error al repartir responsables:', err)
-      showError('Error', 'No se pudo repartir los vehículos')
     }
   }
 
@@ -2678,16 +2677,6 @@ export function VehicleManagement() {
             >
               <Download size={14} /> Exportar
             </button>
-            {isAdmin() && (
-              <button
-                className="btn-secondary"
-                onClick={handleRepartirResponsables}
-                title="Repartir los vehículos PKG ON y EN USO entre los guías"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Shuffle size={14} /> Repartir responsables
-              </button>
-            )}
             <button
               className="btn-primary"
               onClick={handleOpenCreateModal}
@@ -3016,6 +3005,21 @@ export function VehicleManagement() {
                 </select>
               </div>
             </div>
+
+            {/* Si cambia el estado al editar, el motivo es obligatorio (queda en el historial de estados) */}
+            {selectedVehiculo && (formData.estado_id || null) !== (selectedVehiculo.estado_id || null) && (
+              <div className="form-group">
+                <label className="form-label">Motivo del cambio de estado *</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  value={motivoEstado}
+                  onChange={(e) => setMotivoEstado(e.target.value)}
+                  placeholder="Ej.: entra a taller por choque, vuelve de taller, devuelto al proveedor..."
+                  disabled={saving}
+                />
+              </div>
+            )}
 
             <div className="form-row">
               <div className="form-group">
@@ -3363,17 +3367,12 @@ export function VehicleManagement() {
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Notas</label>
-              <textarea
-                className="form-input"
-                value={formData.notas}
-                onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
-                disabled={saving}
-                rows={3}
-                style={{ resize: 'vertical' }}
-              />
-            </div>
+            {/* Notas: bitácora (cada nota con fecha y autor), se agregan al momento */}
+            <BitacoraNotasVehiculo
+              vehiculoId={selectedVehiculo.id}
+              canAdd={canUpdate}
+              notaAnterior={selectedVehiculo.notas}
+            />
 
             </>)}
             </div>
@@ -3400,7 +3399,7 @@ export function VehicleManagement() {
       {/* Modal Ver Detalles */}
       {showDetailsModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => { setShowDetailsModal(false); setLastAuditLog(null) }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+          <div className="modal-content edit-tabs-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
             <div className="modal-header">
               <h2>Detalles del Vehículo</h2>
               <button
@@ -3411,7 +3410,16 @@ export function VehicleManagement() {
                 ×
               </button>
             </div>
-            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+            {/* Mismas pestañas que Editar vehículo; alto fijo y cada pestaña se desplaza adentro */}
+            <TabsBar
+              className="tabs-bar--modal"
+              ariaLabel="Detalle del vehículo"
+              tabs={PESTANAS_DETALLE_VEHICULO}
+              active={pestanaDetalle}
+              onChange={setPestanaDetalle}
+            />
+            <div className="modal-body">
+            {pestanaDetalle === 'basica' && (<>
             {/* Información Básica */}
             <div className="section-title">Información Básica</div>
             <div className="details-grid">
@@ -3446,6 +3454,9 @@ export function VehicleManagement() {
             </div>
 
             {/* Combustible y GPS */}
+            </>)}
+
+            {pestanaDetalle === 'tecnico' && (<>
             <div className="section-title">Combustible y GPS</div>
             <div className="details-grid">
               <div>
@@ -3573,6 +3584,9 @@ export function VehicleManagement() {
             </div>
 
             {/* Fechas e Inspecciones */}
+            </>)}
+
+            {pestanaDetalle === 'estado' && (<>
             <div className="section-title">Fechas e Inspecciones</div>
             <div className="details-grid">
               <div>
@@ -3590,6 +3604,9 @@ export function VehicleManagement() {
             </div>
 
             {/* Seguro */}
+            </>)}
+
+            {pestanaDetalle === 'seguro' && (<>
             <div className="section-title">Seguro</div>
             <div className="details-grid">
               <div>
@@ -3631,6 +3648,9 @@ export function VehicleManagement() {
             </div>
 
             {/* Vencimientos opcionales */}
+            </>)}
+
+            {pestanaDetalle === 'estado' && (<>
             <div className="section-title">Vencimientos</div>
             <div className="details-grid">
               <div>
@@ -3659,13 +3679,15 @@ export function VehicleManagement() {
               </div>
             </div>
 
-            {/* Notas */}
-            {selectedVehiculo.notas && (
-              <>
-                <div className="section-title">Notas</div>
-                <div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{selectedVehiculo.notas}</div>
-              </>
-            )}
+            </>)}
+
+            {pestanaDetalle === 'adicional' && (<>
+            {/* Notas: bitácora con fecha y autor */}
+            <BitacoraNotasVehiculo
+              vehiculoId={selectedVehiculo.id}
+              canAdd={canUpdate}
+              notaAnterior={selectedVehiculo.notas}
+            />
 
             {/* Registro */}
             <div className="section-title">Registro</div>
@@ -3689,6 +3711,11 @@ export function VehicleManagement() {
                 )}
               </div>
             </div>
+            </>)}
+
+            {pestanaDetalle === 'estados' && (
+              <HistorialEstadosVehiculo vehiculoId={selectedVehiculo.id} />
+            )}
             </div>
             {(() => {
               const folderUrl = (selectedVehiculo as any).drive_folder_url || (selectedVehiculo as any).url_documentacion

@@ -56,7 +56,7 @@
 .veh-stats {
   background: var(--bg-primary);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 10px;
   border: 1px solid var(--border-primary);
 }
 
@@ -96,6 +96,29 @@
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
+}
+
+/* Tarjetas bajas y parejas: la comparación con la semana anterior va arriba a la
+   derecha (no le quita ancho a la etiqueta) y la etiqueta queda en un renglón.
+   Antes la etiqueta se partía en dos y estiraba toda la fila. */
+#root .veh-stats .stat-card {
+  position: relative;
+}
+#root .veh-stats .stat-card .cmp-sem {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+#root .veh-stats .stat-content {
+  flex: 1 1 auto;
+}
+#root .veh-stats-grid [class*="stat-label"] {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 /* Stat Cards Clickeables */

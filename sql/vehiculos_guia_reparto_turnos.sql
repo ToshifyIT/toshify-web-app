@@ -368,6 +368,8 @@ SELECT aplicar_reparto_guias_turnos((SELECT id FROM sedes WHERE codigo = 'BSAS')
 -- Regla nueva para los autos que entran (nuevos o que vuelven de taller, robo...):
 -- van a la agente con MENOS turnos por llenar en su sede. Empate: la de los conductores
 -- del auto, después la que tiene menos autos.
+-- OJO (2026-11-06): reemplazada por sql/vehiculos_guia_por_cantidad.sql (va a la guía
+-- con MENOS AUTOS). Si se vuelve a correr este paso, correr ese archivo después.
 CREATE OR REPLACE FUNCTION elegir_guia_vehiculo(p_vehiculo_id uuid, p_sede_id uuid)
 RETURNS text LANGUAGE sql STABLE AS $$
   SELECT g.guia

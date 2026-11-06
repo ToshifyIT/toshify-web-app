@@ -6,6 +6,7 @@ import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
+import { actualizarEstadoVehiculo } from '../../services/vehiculoEstadoService'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
@@ -2115,10 +2116,7 @@ export function AsignacionesModule() {
         .single() as { data: { id: string } | null }
 
       if (estadoPkgOn && asig.vehiculo_id) {
-        await (supabase as any)
-          .from('vehiculos')
-          .update({ estado_id: estadoPkgOn.id })
-          .eq('id', asig.vehiculo_id)
+        await actualizarEstadoVehiculo(asig.vehiculo_id, estadoPkgOn.id, 'Devolución del vehículo: asignación finalizada')
       }
 
       showSuccess('Devolución Confirmada', `${asig.vehiculos?.patente} ahora está en PKG ON BASE`)
@@ -2211,7 +2209,7 @@ export function AsignacionesModule() {
           .single() as { data: { id: string } | null }
 
         if (estadoPkgOn) {
-          await (supabase as any).from('vehiculos').update({ estado_id: estadoPkgOn.id }).eq('id', asignacion.vehiculo_id)
+          await actualizarEstadoVehiculo(asignacion.vehiculo_id, estadoPkgOn.id, 'Asignación eliminada')
         }
       }
 
@@ -2288,10 +2286,7 @@ export function AsignacionesModule() {
           .single() as { data: { id: string } | null }
 
         if (estadoPkgOn && selectedAsignacion.vehiculo_id) {
-          await (supabase as any)
-            .from('vehiculos')
-            .update({ estado_id: estadoPkgOn.id })
-            .eq('id', selectedAsignacion.vehiculo_id)
+          await actualizarEstadoVehiculo(selectedAsignacion.vehiculo_id, estadoPkgOn.id, 'Vehículo devuelto a base')
         }
 
         showSuccess('Devolución Confirmada', `${selectedAsignacion.vehiculos?.patente} ahora está en PKG ON BASE`)
@@ -2478,10 +2473,8 @@ export function AsignacionesModule() {
           .single()
 
         if (estadoEnUso && selectedAsignacion.vehiculo_id) {
-          const { error: errEnUso } = await (supabase
-            .from('vehiculos') as any)
-            .update({ estado_id: (estadoEnUso as any).id })
-            .eq('id', selectedAsignacion.vehiculo_id)
+          const { error: errEnUso } = await actualizarEstadoVehiculo(
+            selectedAsignacion.vehiculo_id, (estadoEnUso as any).id, 'Asignación activada')
           if (errEnUso) avisos.push(`No se pudo pasar el vehículo a EN USO (${errEnUso.message}).`)
         } else if (selectedAsignacion.vehiculo_id) {
           avisos.push('No se pudo pasar el vehículo a EN USO.')
@@ -2516,10 +2509,8 @@ export function AsignacionesModule() {
               .single()
 
             if (estadoPkgOn) {
-              await (supabase
-                .from('vehiculos') as any)
-                .update({ estado_id: (estadoPkgOn as any).id })
-                .eq('id', vehiculoViejoId)
+              await actualizarEstadoVehiculo(vehiculoViejoId, (estadoPkgOn as any).id,
+                'Cambio de vehículo en la asignación: queda libre')
               }
           }
           // Si tiene asignaciones activas → se deja en EN_USO (no se modifica)
@@ -3275,10 +3266,8 @@ export function AsignacionesModule() {
         .single() as unknown as { data: { id: string } | null }
 
       if (estadoEnUso && selectedAsignacion.vehiculo_id) {
-        const { error: errEnUso } = await (supabase as any)
-          .from('vehiculos')
-          .update({ estado_id: estadoEnUso.id })
-          .eq('id', selectedAsignacion.vehiculo_id)
+        const { error: errEnUso } = await actualizarEstadoVehiculo(
+          selectedAsignacion.vehiculo_id, estadoEnUso.id, 'Asignación activada')
         if (errEnUso) avisos.push(`No se pudo pasar el vehículo a EN USO (${errEnUso.message}).`)
       } else if (selectedAsignacion.vehiculo_id) {
         avisos.push('No se pudo pasar el vehículo a EN USO.')

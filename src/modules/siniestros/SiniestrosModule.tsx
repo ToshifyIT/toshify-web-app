@@ -1,6 +1,7 @@
 // src/modules/siniestros/SiniestrosModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { actualizarEstadoVehiculo } from '../../services/vehiculoEstadoService'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
@@ -702,13 +703,8 @@ export function SiniestrosModule() {
         if (estado_vehiculo && formDataClean.vehiculo_id) {
           const estadoSeleccionado = vehiculosEstados.find(e => e.codigo === estado_vehiculo)
           if (estadoSeleccionado) {
-            await (supabase as any)
-              .from('vehiculos')
-              .update({
-                estado_id: estadoSeleccionado.id,
-                updated_by: profile?.full_name || 'Sistema'
-              })
-              .eq('id', formDataClean.vehiculo_id)
+            await actualizarEstadoVehiculo(formDataClean.vehiculo_id, estadoSeleccionado.id,
+              'Siniestro registrado', { updated_by: profile?.full_name || 'Sistema' })
           }
 
           // Historial: registrar cambio de estado del vehículo por siniestro
@@ -810,13 +806,8 @@ export function SiniestrosModule() {
         if (estado_vehiculo && formDataClean.vehiculo_id) {
           const estadoSeleccionado = vehiculosEstados.find(e => e.codigo === estado_vehiculo)
           if (estadoSeleccionado) {
-            await (supabase as any)
-              .from('vehiculos')
-              .update({
-                estado_id: estadoSeleccionado.id,
-                updated_by: profile?.full_name || 'Sistema'
-              })
-              .eq('id', formDataClean.vehiculo_id)
+            await actualizarEstadoVehiculo(formDataClean.vehiculo_id, estadoSeleccionado.id,
+              'Siniestro editado', { updated_by: profile?.full_name || 'Sistema' })
           }
 
           // Historial: registrar cambio de estado del vehículo por siniestro (edición)
@@ -944,9 +935,8 @@ export function SiniestrosModule() {
       // Actualizar el estado del vehículo directamente (las columnas estado_vehiculo y habilitado_circular no existen en siniestros)
       const estadoPkgOn = vehiculosEstados.find(e => e.codigo === 'PKG_ON_BASE')
       if (estadoPkgOn) {
-        const { error } = await (supabase.from('vehiculos') as any).update({
-          estado_id: estadoPkgOn.id
-        }).eq('id', siniestro.vehiculo_id)
+        const { error } = await actualizarEstadoVehiculo(siniestro.vehiculo_id, estadoPkgOn.id,
+          'Habilitado para circular después del siniestro')
 
         if (error) throw error
 
