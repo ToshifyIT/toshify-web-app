@@ -1211,6 +1211,7 @@ const AVAILABLE_PERMISSIONS = [
   { value: 'leads:update', label: 'Leads: Escritura', desc: 'Actualizar campos de leads' },
   { value: 'leads:delete', label: 'Leads: Eliminar', desc: 'Eliminar leads' },
   { value: 'hireflix:read', label: 'Hireflix: Lectura', desc: 'Buscar y ver registros de Hireflix' },
+  { value: 'datos:read', label: 'Datos de operación: Lectura', desc: 'Solo lectura de conductores, vehículos, asignaciones, leads, onboarding, incidencias, siniestros, multas, telepase, inventario, visitas, guías, telemetría e indicadores. Sin facturación ni parámetros. Para conectar Claude u otro asistente.' },
   { value: 'hireflix:create', label: 'Hireflix: Crear', desc: 'Crear registros de Hireflix' },
   { value: 'hireflix:update', label: 'Hireflix: Escritura', desc: 'Actualizar registros de Hireflix' },
   { value: 'hireflix:delete', label: 'Hireflix: Eliminar', desc: 'Eliminar registros de Hireflix' },
@@ -1352,8 +1353,9 @@ function McpTab() {
           <span style={{ fontWeight: 700, fontSize: '15px' }}>MCP Server - Model Context Protocol</span>
         </div>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
-          Servidor MCP para que chatbots accedan a datos de leads y hireflix_historico.
-          Solo tiene acceso a estas dos tablas. Cada API key tiene permisos granulares.
+          Servidor MCP para que chatbots y asistentes (como Claude) accedan a datos de Toshify.
+          Cada API key tiene permisos granulares. Con "Datos de operación: Lectura" el asistente
+          solo puede consultar datos de operación (sin facturación ni parámetros) y nunca modificarlos.
         </p>
         <div style={{
           display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap',

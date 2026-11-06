@@ -29,3 +29,27 @@ export function registrarRequest({ apiKeyData, req, status, filas }) {
     // nunca romper la request por el log
   }
 }
+
+/**
+ * Log de las herramientas MCP de datos (consultar_datos, contar_datos, etc.).
+ * Misma tabla que la API REST; el endpoint queda como "mcp/<herramienta>".
+ */
+export function registrarConsultaMcp({ apiKeyData, herramienta, params, status, filas }) {
+  try {
+    supabaseRequest('api_request_log', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        api_key_id: apiKeyData?.id ?? null,
+        api_key_name: apiKeyData?.name ?? null,
+        endpoint: `mcp/${herramienta}`,
+        query: params ?? {},
+        status,
+        filas: filas ?? null,
+        ip: null,
+      }),
+    }).catch(() => {});
+  } catch {
+    // nunca romper la consulta por el log
+  }
+}

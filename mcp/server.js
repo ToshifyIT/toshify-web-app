@@ -1,8 +1,8 @@
 /**
  * Toshify MCP Server
  * Model Context Protocol server para que chatbots accedan a datos de leads.
- * Transporte: Streamable HTTP con SSE fallback
- * Autenticacion: API key estatica via header x-api-key
+ * Transporte: Streamable HTTP en /mcp (claude.ai, Claude Desktop) y SSE en /sse (legacy)
+ * Autenticacion: API key estatica via header x-api-key o query ?apiKey=
  */
 
 import { fileURLToPath } from 'node:url';
@@ -10,10 +10,16 @@ import { dirname, join } from 'node:path';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { rateLimit } from 'express-rate-limit';
 import { supabaseRequest } from './lib/supabase.js';
 import { validateApiKey, hasPermission } from './lib/auth.js';
+import { registrarConsultaMcp } from './lib/audit.js';
+import {
+  ErrorDatos, OPERADORES, PERIODOS, LIMITE_DEFAULT, LIMITE_MAX, MAX_FILAS_AGRUPAR,
+  listarDatasets, modulos, describirDataset, consultar, contar,
+} from './lib/datos.js';
 import leadsRouter from './routes/leads.js';
 import vehiculosRouter from './routes/vehiculos.js';
 import conductoresRouter from './routes/conductores.js';
@@ -659,6 +665,94 @@ function createMcpServer(apiKeyData) {
     );
   }
 
+  // =====================================================
+  // Datos de operación (solo lectura) — permiso datos:read
+  // Catálogo en lib/catalogoDatos.js; consultas en lib/datos.js.
+  // =====================================================
+  if (hasPermission(apiKeyData, 'datos:read')) {
+    const responder = (herramienta, params, resultado) => {
+      registrarConsultaMcp({ apiKeyData, herramienta, params, status: 200, filas: resultado.filas?.length ?? resultado.grupos?.length ?? null });
+      return { content: [{ type: 'text', text: JSON.stringify(resultado, null, 2) }] };
+    };
+    const fallar = (herramienta, params, error) => {
+      const mensaje = error instanceof ErrorDatos ? error.message : 'No se pudo completar la consulta.';
+      if (!(error instanceof ErrorDatos)) console.error(`[MCP ${herramienta}]`, error);
+      registrarConsultaMcp({ apiKeyData, herramienta, params, status: 400, filas: null });
+      return { content: [{ type: 'text', text: mensaje }], isError: true };
+    };
+    const esquemaFiltros = z.array(z.object({
+      campo: z.string().describe('Nombre del campo (ver describir_datos)'),
+      operador: z.enum(OPERADORES).describe('igual, distinto, mayor, mayor_igual, menor, menor_igual, contiene (texto parcial), en (lista), es_nulo'),
+      valor: z.union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))]).optional()
+        .describe('Valor a comparar. Fechas en formato AAAA-MM-DD. Para "en", una lista. Para "es_nulo", true o false'),
+    })).optional().describe('Condiciones que deben cumplirse todas (Y)');
+
+    server.tool(
+      'listar_datos',
+      `Lista los conjuntos de datos de operación de Toshify que se pueden consultar, con su módulo y descripción. Empezá por acá. Módulos: ${modulos().join(', ')}. Solo lectura.`,
+      { modulo: z.string().optional().describe('Filtrar por módulo') },
+      async (params) => {
+        try {
+          return responder('listar_datos', params, { datasets: listarDatasets(params.modulo) });
+        } catch (error) {
+          return fallar('listar_datos', params, error);
+        }
+      }
+    );
+
+    server.tool(
+      'describir_datos',
+      'Muestra los campos de un conjunto de datos y su tipo (texto, numero, fecha, booleano, id, json). Usalo antes de consultar para saber qué campos filtrar.',
+      { dataset: z.string().describe('Nombre del conjunto de datos (ver listar_datos)') },
+      async (params) => {
+        try {
+          return responder('describir_datos', params, describirDataset(params.dataset));
+        } catch (error) {
+          return fallar('describir_datos', params, error);
+        }
+      }
+    );
+
+    server.tool(
+      'consultar_datos',
+      `Devuelve registros de un conjunto de datos, con filtros, orden y paginación (máximo ${LIMITE_MAX} por página). Incluye el total de registros que cumplen los filtros. Los campos que terminan en _id se cruzan con el id de otro conjunto (por ejemplo conductor_id con conductores, vehiculo_id con vehiculos, sede_id con sedes). Solo lectura.`,
+      {
+        dataset: z.string().describe('Nombre del conjunto de datos'),
+        campos: z.array(z.string()).optional().describe('Campos a devolver (por defecto todos)'),
+        filtros: esquemaFiltros,
+        orden: z.string().optional().describe('Campo por el que ordenar'),
+        descendente: z.boolean().optional().describe('Orden descendente (default false)'),
+        limite: z.number().optional().describe(`Registros por página (default ${LIMITE_DEFAULT}, máximo ${LIMITE_MAX})`),
+        pagina: z.number().optional().describe('Página (default 1)'),
+      },
+      async (params) => {
+        try {
+          return responder('consultar_datos', params, await consultar(params));
+        } catch (error) {
+          return fallar('consultar_datos', params, error);
+        }
+      }
+    );
+
+    server.tool(
+      'contar_datos',
+      `Cuenta registros de un conjunto de datos que cumplen los filtros. Con agrupar_por devuelve la cantidad por cada valor de ese campo; si el campo es una fecha se puede agrupar por día, mes o año (periodo). Para agrupar se recorren hasta ${MAX_FILAS_AGRUPAR} registros. Ideal para indicadores. Solo lectura.`,
+      {
+        dataset: z.string().describe('Nombre del conjunto de datos'),
+        filtros: esquemaFiltros,
+        agrupar_por: z.string().optional().describe('Campo por el que agrupar'),
+        periodo: z.enum(PERIODOS).optional().describe('Si agrupar_por es una fecha: dia, mes o anio'),
+      },
+      async (params) => {
+        try {
+          return responder('contar_datos', params, await contar(params));
+        } catch (error) {
+          return fallar('contar_datos', params, error);
+        }
+      }
+    );
+  }
+
   return server;
 }
 
@@ -764,11 +858,70 @@ app.post('/messages', async (req, res) => {
 });
 
 // =====================================================
+// Streamable HTTP (/mcp) - transporte actual del protocolo
+// =====================================================
+// claude.ai y Claude Desktop ya no conectan por /sse (SSE esta deprecado): al
+// verificar el conector hacen POST a la URL y con /sse reciben 404. /mcp es el
+// mismo servidor, con las mismas herramientas y permisos; /sse queda para los
+// clientes que ya lo usan.
+//
+// Modo sin sesion: cada POST crea su servidor y su transporte y los cierra al
+// terminar. No guarda estado en memoria, asi que sobrevive a reinicios del
+// contenedor y no depende de que todas las requests caigan en la misma instancia.
+
+const mcpLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => String(apiKeyDeRequest(req) || 'sin-key'),
+  validate: { keyGeneratorIpFallback: false },
+  message: { jsonrpc: '2.0', error: { code: -32000, message: 'Demasiadas requests. Limite: 120 por minuto.' }, id: null },
+});
+
+// La key se acepta por header x-api-key, Authorization: Bearer o query ?apiKey=
+// (claude.ai solo deja configurar la URL del conector, sin headers propios).
+function apiKeyDeRequest(req) {
+  const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  return req.headers['x-api-key'] || bearer?.[1] || req.query.apiKey;
+}
+
+function errorJsonRpc(res, status, message) {
+  res.status(status).json({ jsonrpc: '2.0', error: { code: -32000, message }, id: null });
+}
+
+// express.json() solo en esta ruta: a nivel global rompe /messages (ver arriba).
+app.post('/mcp', mcpLimiter, express.json({ limit: '1mb' }), async (req, res) => {
+  const apiKeyData = await validateApiKey(apiKeyDeRequest(req));
+  if (!apiKeyData) return errorJsonRpc(res, 401, 'API key invalida o inactiva');
+
+  const server = createMcpServer(apiKeyData);
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on('close', () => {
+    transport.close();
+    server.close();
+  });
+
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('[MCP] Error en /mcp:', error);
+    if (!res.headersSent) errorJsonRpc(res, 500, 'Error interno del servidor');
+  }
+});
+
+// Sin sesion no hay stream de notificaciones (GET) ni sesion que cerrar (DELETE).
+app.get('/mcp', (req, res) => errorJsonRpc(res, 405, 'Metodo no permitido'));
+app.delete('/mcp', (req, res) => errorJsonRpc(res, 405, 'Metodo no permitido'));
+
+// =====================================================
 // Start server
 // =====================================================
 
 app.listen(PORT, () => {
   console.log(`Toshify MCP Server running on port ${PORT}`);
+  console.log(`  MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`  SSE endpoint: http://localhost:${PORT}/sse`);
   console.log(`  Health check: http://localhost:${PORT}/health`);
 });

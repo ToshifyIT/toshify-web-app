@@ -4,7 +4,12 @@ Servidor MCP (Model Context Protocol) para conectar chatbots y asistentes de IA.
 
 ## Conexion
 
-**URL SSE:** `https://mcp.toshify.com.ar/sse`
+**URL MCP (Streamable HTTP):** `https://mcp.toshify.com.ar/mcp` — la que usan claude.ai,
+Claude Desktop y los clientes actuales.
+
+**URL SSE (legacy):** `https://mcp.toshify.com.ar/sse` — transporte deprecado del protocolo.
+Se mantiene para los clientes que ya lo usan; claude.ai no conecta por aca (devuelve 404 al
+verificar el conector).
 
 **Documentacion:** `https://mcp.toshify.com.ar/docs`
 
@@ -14,7 +19,17 @@ Se requiere una **API key** para conectarse. Las API keys se generan desde la ap
 
 Enviar la API key de una de estas formas:
 - Header: `x-api-key: TU_API_KEY`
-- Query param: `/sse?apiKey=TU_API_KEY`
+- Header: `Authorization: Bearer TU_API_KEY` (solo `/mcp`)
+- Query param: `/mcp?apiKey=TU_API_KEY` o `/sse?apiKey=TU_API_KEY`
+
+## Conectarlo a Claude
+
+- **claude.ai / Claude Desktop:** Configuracion > Conectores > Agregar conector personalizado,
+  URL `https://mcp.toshify.com.ar/mcp?apiKey=TU_API_KEY`, sin OAuth.
+- **Claude Code:** `claude mcp add --transport http toshify "https://mcp.toshify.com.ar/mcp?apiKey=TU_API_KEY"`
+
+`/mcp` funciona sin sesion: cada request crea y cierra su propio servidor, no guarda estado
+en memoria. Rate limit: 120 requests por minuto por key.
 
 ## Configuracion del cliente
 
@@ -22,7 +37,7 @@ Enviar la API key de una de estas formas:
 {
   "mcpServers": {
     "toshify-leads": {
-      "url": "https://mcp.toshify.com.ar/sse?apiKey=TU_API_KEY"
+      "url": "https://mcp.toshify.com.ar/mcp?apiKey=TU_API_KEY"
     }
   }
 }
@@ -36,6 +51,24 @@ Enviar la API key de una de estas formas:
 | `obtener_lead` | leads:read | Ver todos los datos de un lead por ID |
 | `actualizar_lead` | leads:update | Actualizar estado y datos de un lead |
 | `buscar_hireflix` | hireflix:read | Buscar registros historicos de Hireflix |
+| `listar_datos` | datos:read | Conjuntos de datos de operacion disponibles (modulo y descripcion) |
+| `describir_datos` | datos:read | Campos y tipos de un conjunto de datos |
+| `consultar_datos` | datos:read | Registros con filtros, orden y paginacion (max 200 por pagina) |
+| `contar_datos` | datos:read | Totales y cantidades agrupadas por campo o por dia/mes/anio |
+
+### Datos de operacion (`datos:read`)
+
+Solo lectura sobre ~96 conjuntos de datos de operacion (conductores, vehiculos,
+asignaciones, leads, onboarding, incidencias y penalidades, siniestros, multas y
+telepase, inventario, visitas, guias, Cabify, telemetria e indicadores). El
+catalogo es fijo en el servidor (`lib/catalogoDatos.js`): el cliente no puede leer
+otra tabla ni otra columna, y nunca puede escribir.
+
+Quedan afuera la facturacion (y saldos, pagos, garantias, cobros fraccionados),
+la contabilidad, todo lo de Parametros, usuarios/roles/permisos/keys/logs,
+respaldos y temporales, y las columnas sensibles (ver `COLUMNAS_EXCLUIDAS`).
+Los errores de la base no se le muestran al cliente. Cada llamada queda en
+`api_request_log` con endpoint `mcp/<herramienta>`.
 
 ## Permisos
 
