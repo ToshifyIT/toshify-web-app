@@ -57,7 +57,6 @@ import { normalizeDni, normalizePatente, normalizeCuit } from '../../../utils/no
 import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
 import {
-  HEARTBEAT_CADA,
   camposLockLiberado,
   lockVencidoAntesDe,
   lockHuerfano,
@@ -392,6 +391,9 @@ async function upsertSaldoConductor(params: {
  * métricas cuentan como pagado / cubierto. Ej.: un saldo pendiente de $0,03 no "debe".
  */
 const TOLERANCIA_PESOS = 1
+/** Recalcular: facturaciones por llamada al guardar en bloque, y conductores por llamada al guardar el detalle. */
+const LOTE_FACTURACIONES = 100
+const LOTE_DETALLE_CONDUCTORES = 50
 
 function coberturaToshipass(f: { monto_toshipass?: number; subtotal_alquiler?: number; ganancia_cabify?: number }): 'cubrio' | 'no_cubrio' | 'sin_datos' | null {
   const toshipass = f.monto_toshipass || 0
@@ -488,6 +490,8 @@ interface SaldoSeparado { saldoCierre: number; pagos: PagoSemana[]; totalPagos: 
  * Los ajustes manuales del saldo también se listan (esAjuste): su monto en el kardex va sin
  * signo, así que el efecto se toma de la diferencia con el movimiento anterior. Si no está
  * ese movimiento en la lista, no se separa.
+ * Con saldo_anterior 0 también se separa: si pagó toda la deuda en la semana, se muestra
+ * cuánto debía al cierre y los pagos que la dejaron en 0.
  * `movsDesc`: movimientos del conductor, más recientes primero. Signos: saldo_anterior
  * positivo = deuda; saldo_pendiente del kardex positivo = a favor.
  */
@@ -496,7 +500,6 @@ function separarPagosSemana(
   movsDesc: Array<{ tipo_movimiento: string; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null; created_at: string }>,
   inicioSemanaMs: number,
 ): SaldoSeparado | null {
-  if (!saldoAnterior) return null
   const centavos = (n: number) => Math.round(n * 100)
   const corte = movsDesc.find(m => centavos(m.saldo_pendiente || 0) === centavos(-saldoAnterior))
   if (!corte) return null
@@ -885,7 +888,8 @@ export function ReporteFacturacionTab() {
   const [saldosSeparados, setSaldosSeparados] = useState<Map<string, SaldoSeparado>>(new Map())
   useEffect(() => {
     let cancelado = false
-    const conSaldo = facturaciones.filter(f => Math.abs(f.saldo_anterior || 0) >= 0.01)
+    // Todos: también los de saldo 0, que pueden haber pagado toda la deuda en la semana
+    const conSaldo = facturaciones
     if (conSaldo.length === 0) {
       setSaldosSeparados(new Map())
       return
@@ -4636,14 +4640,20 @@ export function ReporteFacturacionTab() {
       const conductorIds = conductoresProcesados.map(c => c.conductor_id)
       // Régimen Toshipass (tarifa nueva desde el corte): pagan Toshipass en lugar de garantía.
       // Incluye conductores nuevos y cambios de tarifa (desde la semana del cambio).
-      const reglaToshipass = await cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
-      const devolucionesGarantia = await cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       // Referidos: días de esta semana dentro de su primera semana (descuento 5%)
-      const diasDescuentoReferido = await cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin })
-
-      // 4. Obtener conceptos (precios actuales)
-      const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
+      // 4. Conceptos (precios actuales) y flags de vehículo por patente (snapshot al recalcular)
+      // Son independientes entre sí: se piden juntas.
+      const patentesRecalc = [...new Set(conductoresProcesados.map(c => c.vehiculo_patente).filter(Boolean))] as string[]
+      const [reglaToshipass, devolucionesGarantia, diasDescuentoReferido, { data: conceptos }, { data: vehiculosFlagsRecalc }] = await Promise.all([
+        cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+        cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+        cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+        supabase.from('conceptos_nomina').select('*').eq('activo', true),
+        patentesRecalc.length > 0
+          ? supabase.from('vehiculos').select('patente, gnc, telepase').in('patente', patentesRecalc)
+          : Promise.resolve({ data: [] as Array<{ patente: string; gnc: boolean | null; telepase: boolean | null }> }),
+      ])
 
       // Precios DIARIOS (precio_final con IVA = precio real ingresado)
       const conceptosPorCodigo = new Map<string, any>()
@@ -4669,17 +4679,10 @@ export function ReporteFacturacionTab() {
       }
 
       // Flags de vehículo por patente (snapshot al momento de recalcular)
-      const patentesRecalc = [...new Set(conductoresProcesados.map(c => c.vehiculo_patente).filter(Boolean))] as string[]
       const flagsVehiculoMap = new Map<string, { gnc: boolean; telepase: boolean }>()
-      if (patentesRecalc.length > 0) {
-        const { data: vehiculosFlagsRecalc } = await supabase
-          .from('vehiculos')
-          .select('patente, gnc, telepase')
-          .in('patente', patentesRecalc)
-        ;(vehiculosFlagsRecalc || []).forEach((v: any) => {
-          flagsVehiculoMap.set(v.patente, { gnc: v.gnc === true, telepase: v.telepase === true })
-        })
-      }
+      ;(vehiculosFlagsRecalc || []).forEach((v: any) => {
+        flagsVehiculoMap.set(v.patente, { gnc: v.gnc === true, telepase: v.telepase === true })
+      })
 
       // Precios diarios para alquiler por modalidad + GNC
       const getCodigoAlquiler = (modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO', tieneGnc: boolean, tipoTarifa: 'antigua' | 'nueva' = 'antigua'): string => {
@@ -4923,13 +4926,19 @@ export function ReporteFacturacionTab() {
       // en el aviso final (antes solo se mostraba "N fallaron" y el primer error).
       const conductoresConProblema: Array<{ nombre: string; motivo: string }> = []
       setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
+      // Lo calculado de cada conductor; se guarda todo junto en el paso 6b
+      interface PendienteGuardar {
+        nombre: string
+        fila: { conductor_id: string } & Record<string, unknown>
+        detalles: any[]
+        ticketIds: string[]
+        excesoIds: string[]
+      }
+      const pendientesGuardar: PendienteGuardar[] = []
 
       for (const conductor of conductoresProcesados) {
         const flagsVeh = conductor.vehiculo_patente ? flagsVehiculoMap.get(conductor.vehiculo_patente) : undefined
         const tieneTelepaseVehiculo = flagsVeh ? flagsVeh.telepase : conductor.tiene_telepase
-
-        // Mostrar progreso con nombre del conductor actual
-        setRecalculandoProgreso({ actual: conductoresProcesadosCount + 1, total: conductoresProcesados.length, nombre: conductor.conductor_nombre })
 
         // Calcular alquiler con precio diario × días
         let alquilerTotal = 0
@@ -5131,56 +5140,31 @@ export function ReporteFacturacionTab() {
           proyectadoAlquiler = 0
         }
 
-        // UPSERT facturacion_conductores (actualiza si ya existe)
-        const { data: factConductor, error: errFact } = await (supabase
-          .from('facturacion_conductores') as any)
-          .upsert({
-            periodo_id: periodoId,
-            conductor_id: conductor.conductor_id,
-            conductor_nombre: conductor.conductor_nombre,
-            conductor_dni: conductor.conductor_dni,
-            conductor_cuit: conductor.conductor_cuit,
-            vehiculo_id: null,
-            vehiculo_patente: conductor.vehiculo_patente,
-            tipo_alquiler: tipoAlquilerPrincipal,
-            turnos_base: 7,
-            turnos_cobrados: conductor.total_dias,
-            factor_proporcional: factorProporcional,
-            subtotal_alquiler: alquilerTotal,
-            proyectado_alquiler: proyectadoAlquiler,
-            subtotal_garantia: cuotaGarantiaProporcional,
-            subtotal_cargos: subtotalCargos,
-            subtotal_descuentos: subtotalDescuentos,
-            subtotal_neto: subtotalNeto,
-            saldo_anterior: saldoAnterior,
-            dias_mora: diasMora,
-            monto_mora: montoMora,
-            total_a_pagar: totalAPagar,
-            estado: 'calculado'
-          }, { onConflict: 'periodo_id,conductor_id' })
-          .select()
-          .single()
-
-        if (errFact) {
-          totalErrores++
-          erroresConsecutivos++
-          if (!primerError) primerError = errFact.message || 'Error desconocido al insertar conductor'
-          conductoresConProblema.push({
-            nombre: conductor.conductor_nombre || 'Sin nombre',
-            motivo: `no se pudo guardar la facturación (${errFact.message || 'error desconocido'})`,
-          })
-          // Si los primeros 3 inserts fallan consecutivamente, es un problema sistémico - abortar
-          if (erroresConsecutivos >= 3 && conductoresProcesadosCount === 0) {
-            throw new Error(`Error sistémico al insertar conductores (${erroresConsecutivos} fallos consecutivos): ${primerError}`)
-          }
-          continue
+        // Fila de facturacion_conductores: se guarda en bloque después del bucle (6b)
+        const filaFacturacion = {
+          periodo_id: periodoId,
+          conductor_id: conductor.conductor_id,
+          conductor_nombre: conductor.conductor_nombre,
+          conductor_dni: conductor.conductor_dni,
+          conductor_cuit: conductor.conductor_cuit,
+          vehiculo_id: null,
+          vehiculo_patente: conductor.vehiculo_patente,
+          tipo_alquiler: tipoAlquilerPrincipal,
+          turnos_base: 7,
+          turnos_cobrados: conductor.total_dias,
+          factor_proporcional: factorProporcional,
+          subtotal_alquiler: alquilerTotal,
+          proyectado_alquiler: proyectadoAlquiler,
+          subtotal_garantia: cuotaGarantiaProporcional,
+          subtotal_cargos: subtotalCargos,
+          subtotal_descuentos: subtotalDescuentos,
+          subtotal_neto: subtotalNeto,
+          saldo_anterior: saldoAnterior,
+          dias_mora: diasMora,
+          monto_mora: montoMora,
+          total_a_pagar: totalAPagar,
+          estado: 'calculado'
         }
-        erroresConsecutivos = 0 // Reset al tener un éxito
-
-        const facturacionId = (factConductor as any).id
-
-        // Limpiar detalle viejo antes de insertar el nuevo
-        await supabase.from('facturacion_detalle').delete().eq('facturacion_id', facturacionId)
 
         // ═══ BATCH: Recopilar todos los detalles en un array, insertar de una sola vez ═══
         const todosDetalles: any[] = []
@@ -5193,7 +5177,7 @@ export function ReporteFacturacionTab() {
         for (const detalle of detallesAlquiler) {
           const precioUnitario = preciosActuales[detalle.codigo] || (detalle.dias > 0 ? (detalle.monto / detalle.dias) : detalle.monto)
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: detalle.codigo,
+            concepto_codigo: detalle.codigo,
             concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
             precio_unitario: precioUnitario, subtotal: detalle.monto, total: detalle.monto, es_descuento: false
           })
@@ -5202,7 +5186,7 @@ export function ReporteFacturacionTab() {
         // P004 - Descuento 5% primera semana del referido
         if (montoDescuentoReferido > 0) {
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P004',
+            concepto_codigo: 'P004',
             concepto_descripcion: descripcionDescuentoReferido(diasDescuentoReferidoConductor),
             cantidad: 1, precio_unitario: montoDescuentoReferido,
             subtotal: montoDescuentoReferido, total: montoDescuentoReferido, es_descuento: true
@@ -5212,7 +5196,7 @@ export function ReporteFacturacionTab() {
         // P028 - Devolución de garantía por cambio de tarifa (descuento)
         if (montoDevolucionGarantia > 0) {
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: CODIGO_DEVOLUCION_GARANTIA, concepto_descripcion: DESCRIPCION_DEVOLUCION_GARANTIA,
+            concepto_codigo: CODIGO_DEVOLUCION_GARANTIA, concepto_descripcion: DESCRIPCION_DEVOLUCION_GARANTIA,
             cantidad: 1, precio_unitario: montoDevolucionGarantia,
             subtotal: montoDevolucionGarantia, total: montoDevolucionGarantia, es_descuento: true
           })
@@ -5222,7 +5206,7 @@ export function ReporteFacturacionTab() {
           // P027 - Toshipass (en lugar de la garantía)
           if (montoToshipass > 0) {
             todosDetalles.push({
-              facturacion_id: facturacionId, concepto_codigo: CODIGO_TOSHIPASS, concepto_descripcion: 'Toshipass',
+              concepto_codigo: CODIGO_TOSHIPASS, concepto_descripcion: 'Toshipass',
               cantidad: 1, precio_unitario: montoToshipass,
               subtotal: montoToshipass, total: montoToshipass, es_descuento: false
             })
@@ -5233,7 +5217,7 @@ export function ReporteFacturacionTab() {
             ? 'Garantía completada'
             : `Cuota de Garantía ${cuotaActual}`
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
+            concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
             cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
             subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
           })
@@ -5256,7 +5240,7 @@ export function ReporteFacturacionTab() {
                 ? `Exceso KM: ${detalleCompleto}`
                 : `Cargo: ${detalleCompleto}`
             todosDetalles.push({
-              facturacion_id: facturacionId, concepto_codigo: grupo.codigo,
+              concepto_codigo: grupo.codigo,
               concepto_descripcion: descripcion,
               cantidad: 1, precio_unitario: (pen as any).monto,
               subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
@@ -5268,7 +5252,7 @@ export function ReporteFacturacionTab() {
         // P004 - Tickets a Favor (descuentos)
         for (const ticket of ticketsConductor) {
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P004',
+            concepto_codigo: 'P004',
             concepto_descripcion: (ticket as any).descripcion
               ? `${(ticket as any).tipo || 'Ticket'} – ${(ticket as any).descripcion}`
               : `${(ticket as any).tipo || 'Ticket'}`,
@@ -5282,7 +5266,7 @@ export function ReporteFacturacionTab() {
         // P006 - Excesos de kilometraje
         for (const exceso of excesosConductor) {
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P006',
+            concepto_codigo: 'P006',
             concepto_descripcion: `Exceso KM: ${(exceso as any).km_exceso || 0} km`,
             cantidad: 1, precio_unitario: (exceso as any).monto_base || 0,
             iva_porcentaje: (exceso as any).iva_porcentaje || 21,
@@ -5297,7 +5281,7 @@ export function ReporteFacturacionTab() {
         // P005 - Peajes de Cabify
         if (totalPeajes > 0) {
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P005', concepto_descripcion: 'Peajes',
+            concepto_codigo: 'P005', concepto_descripcion: 'Peajes',
             cantidad: 1, precio_unitario: totalPeajes,
             subtotal: totalPeajes, total: totalPeajes, es_descuento: false,
             referencia_tipo: 'cabify_peajes'
@@ -5307,7 +5291,7 @@ export function ReporteFacturacionTab() {
         // P008 - Multas de tránsito
         if (montoMultas > 0) {
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P008',
+            concepto_codigo: 'P008',
             concepto_descripcion: `Multas de Tránsito (${cantidadMultas})`,
             cantidad: cantidadMultas, precio_unitario: Math.round((montoMultas / cantidadMultas) * 100) / 100,
             subtotal: montoMultas, total: montoMultas, es_descuento: false,
@@ -5318,7 +5302,7 @@ export function ReporteFacturacionTab() {
         // P009 - Mora
         if (montoMora > 0) {
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P009',
+            concepto_codigo: 'P009',
             concepto_descripcion: `Mora (${diasMora} días al 1%)`,
             cantidad: diasMora, precio_unitario: Math.round(saldoAnterior * 0.01 * 100) / 100,
             subtotal: montoMora, total: montoMora, es_descuento: false
@@ -5330,7 +5314,7 @@ export function ReporteFacturacionTab() {
           const montoCuotaReal = calcularMontoCuota(cobro)
           const descripcionCobro = (cobro as any).descripcion || `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
           todosDetalles.push({
-            facturacion_id: facturacionId, concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
+            concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
             cantidad: 1, precio_unitario: montoCuotaReal,
             subtotal: montoCuotaReal, total: montoCuotaReal, es_descuento: false,
             referencia_id: (cobro as any).id, referencia_tipo: 'cobro_fraccionado'
@@ -5346,7 +5330,6 @@ export function ReporteFacturacionTab() {
           const tipoNombre = penPadre?.tipos_cobro_descuento?.nombre || penPadre?.detalle || 'Penalidad fraccionada'
           const descripcionCuota = `Cuota ${cuota.numero_cuota} - ${tipoNombre} (Total: ${penPadre?.cantidad_cuotas || '?'} cuotas)`
           todosDetalles.push({
-            facturacion_id: facturacionId,
             concepto_codigo: esDescuento ? 'P004' : categoria,
             concepto_descripcion: descripcionCuota,
             cantidad: 1, precio_unitario: cuota.monto_cuota,
@@ -5356,68 +5339,126 @@ export function ReporteFacturacionTab() {
           // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
         }
 
-        // ═══ EJECUTAR: 1 batch insert + updates en paralelo (reduce ~20 calls a 3-5) ═══
-        if (todosDetalles.length > 0) {
-          // Antes el error de este insert se ignoraba: la facturación quedaba
-          // sin conceptos y el recálculo informaba "completado".
-          const { error: errDetalle } = await (supabase.from('facturacion_detalle') as any).insert(todosDetalles)
-          if (errDetalle) {
-            totalErrores++
-            if (!primerError) primerError = errDetalle.message || 'Error al guardar el detalle'
-            conductoresConProblema.push({
-              nombre: conductor.conductor_nombre || 'Sin nombre',
-              motivo: `no se guardó el detalle de conceptos (${errDetalle.message || 'error desconocido'})`,
-            })
-          }
-        }
-
-        // Marcar registros como aplicados en paralelo
-        const batchUpdates: Promise<any>[] = []
-        // Penalidades: ya vienen con aplicado=true, no se necesita marcar
-        if (ticketIdsAplicar.length > 0) {
-          batchUpdates.push(
-            (supabase.from('tickets_favor') as any)
-              .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
-              .in('id', ticketIdsAplicar)
-          )
-        }
-        if (excesoIdsAplicar.length > 0) {
-          batchUpdates.push(
-            (supabase.from('excesos_kilometraje') as any)
-              .update({ aplicado: true, fecha_aplicacion: new Date().toISOString(), periodo_id: periodoId })
-              .in('id', excesoIdsAplicar)
-          )
-        }
         // cobros_fraccionados: NO se marcan como aplicados aquí.
         // Solo se marcan al CERRAR el periodo (PeriodosTab) o al PAGAR (CobrosFraccionadosTab).
         void cobroIdsAplicar
-        if (batchUpdates.length > 0) {
-          await Promise.all(batchUpdates)
-        }
 
         // El kardex (control_saldos) + saldos_conductores se materializan al CERRAR
         // el período (cerrarPeriodo), no aquí. Durante recalcular el período sigue
         // abierto y el total_a_pagar es un preview en curso.
 
-        conductoresProcesadosCount++
-        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length, nombre: '' })
-
-        // ═══ HEARTBEAT ═══
-        // Refresca la antigüedad del candado (para que una corrida legítima
-        // larga no se auto-cancele por TTL) y publica el progreso, así quien
-        // espera del otro lado ve avanzar el contador en vivo.
-        // Sin await: es telemetría, no debe frenar el bucle.
-        if (conductoresProcesadosCount % HEARTBEAT_CADA === 0) {
-          void (supabase.from('periodos_facturacion') as any)
-            .update({
-              procesando_desde: new Date().toISOString(),
-              procesando_actual: conductoresProcesadosCount,
-              procesando_total: conductoresProcesados.length
-            })
-            .eq('id', periodoId)
-            .eq('lock_token', miToken)
-        }
+        pendientesGuardar.push({
+          nombre: conductor.conductor_nombre || 'Sin nombre',
+          fila: filaFacturacion,
+          detalles: todosDetalles,
+          ticketIds: ticketIdsAplicar,
+          excesoIds: excesoIdsAplicar,
+        })
       }
+
+      // 6b. GUARDAR EN BLOQUE (antes: 3-4 llamadas en fila por conductor, ~2 min con 70).
+      // Facturaciones en lotes; si un lote falla se reintenta conductor por conductor
+      // para nombrar al que falla (un lote con error no guarda nada, todo o nada).
+      // El paso 2 ya borró la facturación y el detalle del período: no hay detalle viejo.
+      const latido = () => {
+        // Sin await: es telemetría (mantiene vivo el candado y publica el progreso).
+        void (supabase.from('periodos_facturacion') as any)
+          .update({
+            procesando_desde: new Date().toISOString(),
+            procesando_actual: conductoresProcesadosCount,
+            procesando_total: pendientesGuardar.length
+          })
+          .eq('id', periodoId)
+          .eq('lock_token', miToken)
+      }
+      const fallaFacturacion = (nombre: string, mensaje: string) => {
+        totalErrores++
+        erroresConsecutivos++
+        if (!primerError) primerError = mensaje
+        conductoresConProblema.push({ nombre, motivo: `no se pudo guardar la facturación (${mensaje})` })
+      }
+      const guardados: Array<{ pendiente: PendienteGuardar; facturacionId: string }> = []
+      for (let i = 0; i < pendientesGuardar.length; i += LOTE_FACTURACIONES) {
+        const lote = pendientesGuardar.slice(i, i + LOTE_FACTURACIONES)
+        const { data: filas, error: errLote } = await (supabase.from('facturacion_conductores') as any)
+          .upsert(lote.map(p => p.fila), { onConflict: 'periodo_id,conductor_id' })
+          .select('id, conductor_id')
+        if (!errLote) {
+          const idPorConductor = new Map(((filas || []) as Array<{ id: string; conductor_id: string }>).map(f => [f.conductor_id, f.id]))
+          for (const p of lote) {
+            const id = idPorConductor.get(p.fila.conductor_id)
+            if (id) {
+              guardados.push({ pendiente: p, facturacionId: id })
+              erroresConsecutivos = 0
+            } else {
+              fallaFacturacion(p.nombre, 'la base no devolvió la facturación guardada')
+            }
+          }
+        } else {
+          for (const p of lote) {
+            const { data: fila, error: errFact } = await (supabase.from('facturacion_conductores') as any)
+              .upsert(p.fila, { onConflict: 'periodo_id,conductor_id' })
+              .select('id')
+              .single()
+            if (errFact || !fila) {
+              fallaFacturacion(p.nombre, errFact?.message || 'error desconocido')
+              // Si los primeros 3 fallan seguidos, es un problema sistémico - abortar
+              if (erroresConsecutivos >= 3 && guardados.length === 0) {
+                throw new Error(`Error sistémico al insertar conductores (${erroresConsecutivos} fallos consecutivos): ${primerError}`)
+              }
+              continue
+            }
+            erroresConsecutivos = 0
+            guardados.push({ pendiente: p, facturacionId: (fila as any).id })
+          }
+        }
+        conductoresProcesadosCount = guardados.length
+        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: pendientesGuardar.length, nombre: 'Guardando facturaciones...' })
+        latido()
+      }
+
+      // Detalle de conceptos: un insert por lote de conductores; si falla, uno por uno.
+      // Antes el error de este insert se ignoraba: la facturación quedaba sin conceptos
+      // y el recálculo informaba "completado".
+      const fallaDetalle = (nombre: string, mensaje: string) => {
+        totalErrores++
+        if (!primerError) primerError = mensaje
+        conductoresConProblema.push({ nombre, motivo: `no se guardó el detalle de conceptos (${mensaje})` })
+      }
+      const conDetalle = guardados.filter(g => g.pendiente.detalles.length > 0)
+      for (let i = 0; i < conDetalle.length; i += LOTE_DETALLE_CONDUCTORES) {
+        const lote = conDetalle.slice(i, i + LOTE_DETALLE_CONDUCTORES)
+        const filasDetalle = (g: typeof lote[number]) => g.pendiente.detalles.map(d => ({ ...d, facturacion_id: g.facturacionId }))
+        const { error: errLote } = await (supabase.from('facturacion_detalle') as any).insert(lote.flatMap(filasDetalle))
+        if (errLote) {
+          for (const g of lote) {
+            const { error: errDetalle } = await (supabase.from('facturacion_detalle') as any).insert(filasDetalle(g))
+            if (errDetalle) fallaDetalle(g.pendiente.nombre, errDetalle.message || 'error desconocido')
+          }
+        }
+        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: pendientesGuardar.length, nombre: 'Guardando conceptos...' })
+        latido()
+      }
+
+      // Marcar tickets y excesos como aplicados (solo de las facturaciones guardadas)
+      const ticketIdsAplicados = guardados.flatMap(g => g.pendiente.ticketIds)
+      const excesoIdsAplicados = guardados.flatMap(g => g.pendiente.excesoIds)
+      const marcarAplicados: Promise<any>[] = []
+      for (let i = 0; i < ticketIdsAplicados.length; i += 200) {
+        marcarAplicados.push(
+          (supabase.from('tickets_favor') as any)
+            .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
+            .in('id', ticketIdsAplicados.slice(i, i + 200))
+        )
+      }
+      for (let i = 0; i < excesoIdsAplicados.length; i += 200) {
+        marcarAplicados.push(
+          (supabase.from('excesos_kilometraje') as any)
+            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString(), periodo_id: periodoId })
+            .in('id', excesoIdsAplicados.slice(i, i + 200))
+        )
+      }
+      if (marcarAplicados.length > 0) await Promise.all(marcarAplicados)
 
       // 7. Validar que se procesó al menos un conductor
       if (conductoresProcesadosCount === 0) {
@@ -5608,14 +5649,17 @@ export function ReporteFacturacionTab() {
         pagosPorNueva.set(nueva.id, lista)
       }
 
+      // Una actualización por facturación nueva, todas a la vez
       let reasignados = 0
-      for (const [nuevaId, pagoIds] of pagosPorNueva) {
+      const resultados = await Promise.all([...pagosPorNueva].map(async ([nuevaId, pagoIds]) => {
         const { error } = await (supabase.from('pagos_conductores') as any)
           .update({ referencia_id: nuevaId })
           .in('id', pagoIds)
-        if (error) throw error
-        reasignados += pagoIds.length
-      }
+        if (!error) reasignados += pagoIds.length
+        return error
+      }))
+      const errorReasignar = resultados.find(Boolean)
+      if (errorReasignar) throw errorReasignar
 
       // Estado 'pagado' si lo cobrado cubre el total (misma regla que el resto del módulo)
       const idsNuevas = [...pagosPorNueva.keys()]
@@ -6394,7 +6438,7 @@ export function ReporteFacturacionTab() {
             cierreSemana: desgloseFrac.cierreSemana,
             fraccionamiento: desgloseFrac.fraccionamiento,
           })
-        } else if (saldoAnt !== 0) {
+        } else {
           const { data: movs } = await (supabase.from('control_saldos') as any)
             .select('tipo_movimiento, saldo_adeudado, saldo_a_favor, saldo_pendiente, monto_movimiento, referencia, created_at')
             .eq('conductor_id', facturacion.conductor_id)
@@ -6416,7 +6460,7 @@ export function ReporteFacturacionTab() {
               resultado: objetivo,
               cierreSemana: getISOWeek(subWeeks(semanaActual.inicio, 1)),
             })
-          } else {
+          } else if (saldoAnt !== 0) {
             // b) Sin pagos en la semana: el pago manual que dejó el saldo (de antes de la semana).
             const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
             const match = lista.find(m =>
@@ -14294,8 +14338,9 @@ export function ReporteFacturacionTab() {
                   )}
 
                   {/* Saldo Anterior (si existe y no está ya incluido en los items).
-                      Con fraccionamiento se muestra aunque quede en $0, para explicar la cuota P010. */}
-                  {(conceptosFaltantes.saldo !== 0 || !!detalleSaldoBreakdown?.fraccionamiento) && (
+                      Con fraccionamiento o pagos en la semana se muestra aunque quede en $0,
+                      para explicar la cuota P010 o de dónde sale el 0. */}
+                  {(conceptosFaltantes.saldo !== 0 || !!detalleSaldoBreakdown?.fraccionamiento || (detalleSaldoBreakdown?.pagos.length ?? 0) > 0) && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{
                         fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',

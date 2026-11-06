@@ -2805,7 +2805,7 @@ export function SaldosAbonosTab() {
                                   })()}
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: redondear a entero para evitar decimales tipo $0,03 */}
-                                    {monto > 0 ? `${montoSigno}${formatCurrency(Math.round(monto))}` : '-'}
+                                    {monto > 0 ? `${montoSigno}${formatCurrency(monto)}` : '-'}
                                   </td>
                                   {/* FIX 2026-05-20: columna "Saldo previo" oculta */}
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>

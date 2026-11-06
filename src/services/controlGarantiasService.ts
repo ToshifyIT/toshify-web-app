@@ -195,6 +195,9 @@ export async function insertMovimientoGarantia(params: {
   return { ok: true, id: data?.id }
 }
 
+/** syncKardexForPeriodo: conductores que se sincronizan a la vez. */
+const SYNC_EN_PARALELO = 8
+
 /**
  * Sincroniza el kardex de garantías para un período recién cerrado.
  *
@@ -288,11 +291,13 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
   let skipped = 0
   let errors = 0
 
-  for (const f of facturas as any[]) {
+  // Cada conductor es independiente (su kardex lee solo su propia garantía): se
+  // procesan de a SYNC_EN_PARALELO a la vez en lugar de uno por uno.
+  const procesar = async (f: any) => {
     const g = garMap.get(f.conductor_id)
     if (!g) {
       skipped++
-      continue
+      return
     }
 
     const cuota = Math.min(Number(f.subtotal_garantia) || 0, Number(g.monto_cuota_semanal) || 50000)
@@ -319,7 +324,7 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
       } else {
         skipped++
       }
-      continue
+      return
     }
 
     // No existe: insertar nuevo
@@ -351,6 +356,12 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
       console.error(`Error creando kardex para ${f.conductor_id} S${semana}/${anio}:`, result.error)
     }
   }
+
+  const pendientes = [...(facturas as any[])]
+  const trabajadores = Array.from({ length: Math.min(SYNC_EN_PARALELO, pendientes.length) }, async () => {
+    for (let f = pendientes.shift(); f; f = pendientes.shift()) await procesar(f)
+  })
+  await Promise.all(trabajadores)
 
   return { created, updated, skipped, errors, deleted } as any
 }
