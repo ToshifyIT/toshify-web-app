@@ -28,8 +28,10 @@
  *   Inducción, Listo Emparejar o Descartado (ESTADOS_PROTEGIDOS): esos no se pisan. Excepción:
  *   created_at y fecha_carga, que siempre toman la fecha de creación del Excel.
  * - Leads NUEVOS: fuente SELLIUM, created_at y fecha_carga = fecha de creación del Excel.
- * - Fecha de creación (2026-10-28): si viene "Llegó por pauta el" (fecha Y hora) se usa
- *   esa; si no, "Fecha de creación" (solo día → 00:00 hora Argentina).
+ * - Fecha de creación (2026-11-06): se usa "Fecha y hora de alta" (fecha Y hora). Si no
+ *   viene, "Llegó por pauta el" (2026-10-28); si tampoco, "Fecha de creación" (solo día →
+ *   00:00 hora Argentina). Como en leads existentes created_at siempre se toma del Excel,
+ *   volver a subir el reporte corrige la hora de los que habían quedado a las 00:00.
  * - Guía (2026-10-07): "Propietario del contacto" → entrevistador_asignado, solo si es
  *   Ali, Eunice o Carla (por primer nombre). Otro propietario: no se carga. En leads
  *   existentes sigue la regla general (solo si la Guía está vacía).
@@ -104,6 +106,7 @@ export function leerLibroExcel(XLSX: typeof import('xlsx'), buffer: ArrayBuffer)
 /** Encabezados del reporte, normalizados (minúsculas, sin tildes). */
 const COL = {
   fecha: 'fecha de creacion',
+  alta: 'fecha y hora de alta',
   nombre: 'nombre',
   apellidos: 'apellidos',
   movil: 'movil',
@@ -390,6 +393,8 @@ export interface FilaSellium {
   causal: string | null
   estado: ResultadoEstado
   fechaCreacion: string | null
+  /** "Fecha y hora de alta" (ISO con -03:00); manda sobre llegadaPauta y fechaCreacion. */
+  altaConHora: string | null
   /** "Llegó por pauta el" con hora (ISO con -03:00); manda sobre fechaCreacion. */
   llegadaPauta: string | null
   /** Datos para inferir sede (no se guardan ciudad/provincia por separado). */
@@ -462,6 +467,8 @@ export function mapearFilasSellium(filas: Fila[], headers: string[]): FilaSelliu
       causal,
       estado: calcularEstado(causal, tieneVehiculo, t(COL.docStatus), t(COL.estado)),
       fechaCreacion: fechaISO(leer(fila, COL.fecha)),
+      // Si "Fecha de creación" trae hora (algunos reportes la exportan así), también sirve.
+      altaConHora: fechaHoraISO(leer(fila, COL.alta)) ?? fechaHoraISO(leer(fila, COL.fecha)),
       llegadaPauta: fechaHoraISO(leer(fila, COL.llegoPauta)),
       ubicacion: { sede: t(COL.sede), zona: t(COL.zona), direccion, city: ciudad, region: provincia },
       campos,
@@ -607,10 +614,14 @@ function lineaRecontacto(fecha: string | null, fuenteAnterior: string, estadoAnt
 }
 
 /**
- * Creación del lead según el Excel: "Llegó por pauta el" (con hora) si viene; si no,
- * "Fecha de creación" a las 00:00. fecha_carga = el día de esa misma fecha.
+ * Creación del lead según el Excel: "Fecha y hora de alta" si viene; si no, "Llegó por
+ * pauta el" (con hora); si no, "Fecha de creación" a las 00:00. fecha_carga = el día de
+ * esa misma fecha.
  */
-export function creacionDeFila(f: Pick<FilaSellium, 'fechaCreacion' | 'llegadaPauta'>): { createdAt: string; fecha: string } | null {
+export function creacionDeFila(
+  f: Pick<FilaSellium, 'fechaCreacion' | 'altaConHora' | 'llegadaPauta'>,
+): { createdAt: string; fecha: string } | null {
+  if (f.altaConHora) return { createdAt: f.altaConHora, fecha: f.altaConHora.slice(0, 10) }
   if (f.llegadaPauta) return { createdAt: f.llegadaPauta, fecha: f.llegadaPauta.slice(0, 10) }
   if (f.fechaCreacion) return { createdAt: createdAtDesdeFecha(f.fechaCreacion), fecha: f.fechaCreacion }
   return null

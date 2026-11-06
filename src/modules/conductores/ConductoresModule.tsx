@@ -8,6 +8,7 @@ import { ActionsMenu } from "../../components/ui/ActionsMenu";
 
 import { HistorialModal } from "../../components/ui/HistorialModal";
 import { supabase } from "../../lib/supabase";
+import { actualizarEstadoVehiculo } from "../../services/vehiculoEstadoService";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSede } from "../../contexts/SedeContext";
@@ -1714,10 +1715,7 @@ export function ConductoresModule() {
       .single();
 
     if (estadoPkgOn && asignacion.vehiculo_id) {
-      await (supabase as any)
-        .from('vehiculos')
-        .update({ estado_id: estadoPkgOn.id })
-        .eq('id', asignacion.vehiculo_id);
+      await actualizarEstadoVehiculo(asignacion.vehiculo_id, estadoPkgOn.id, 'Cancelación de asignación a cargo del conductor');
     }
 
     // 4. Limpiar turnos ocupados
@@ -1854,10 +1852,7 @@ export function ConductoresModule() {
       .single();
 
     if (estadoPkgOn && asignacion.vehiculo_id) {
-      await (supabase as any)
-        .from('vehiculos')
-        .update({ estado_id: estadoPkgOn.id })
-        .eq('id', asignacion.vehiculo_id);
+      await actualizarEstadoVehiculo(asignacion.vehiculo_id, estadoPkgOn.id, 'Cancelación del turno del conductor');
     }
 
     // Registrar historial para vehículo (vuelve a PKG_ON_BASE)
@@ -2138,10 +2133,7 @@ export function ConductoresModule() {
 
           // Vehículo a PKG_ON_BASE
           if (estadoPkgOn && asignacion.vehiculo_id) {
-            await (supabase as any)
-              .from('vehiculos')
-              .update({ estado_id: estadoPkgOn.id })
-              .eq('id', asignacion.vehiculo_id);
+            await actualizarEstadoVehiculo(asignacion.vehiculo_id, estadoPkgOn.id, 'Baja del conductor: asignación finalizada');
           }
 
           // Historial vehículo
@@ -5299,6 +5291,16 @@ function ModalEliminar({
   );
 }
 
+type PestanaDetalle = 'personal' | 'licencia' | 'contacto' | 'estado' | 'historial'
+
+const PESTANAS_DETALLE: TabsBarItem<PestanaDetalle>[] = [
+  { id: 'personal', label: 'Personal', icon: User },
+  { id: 'licencia', label: 'Licencia', icon: IdCard },
+  { id: 'contacto', label: 'Contacto', icon: Phone },
+  { id: 'estado', label: 'Estado', icon: Briefcase },
+  { id: 'historial', label: 'Historial', icon: History },
+]
+
 function ModalDetalles({
   selectedConductor,
   setShowDetailsModal,
@@ -5313,6 +5315,7 @@ function ModalDetalles({
   const [conductorEmail, setConductorEmail] = useState<string>(selectedConductor?.email || '');
   const [editingEmail, setEditingEmail] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
+  const [pestana, setPestana] = useState<PestanaDetalle>('personal');
 
   const saveEmail = async () => {
     if (!selectedConductor) return;
@@ -5502,7 +5505,7 @@ function ModalDetalles({
 
   return (
     <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+      <div className="modal-content cond-edit-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '760px' }}>
         <div className="modal-header">
           <div className="cond-detalle-header-titulo">
             <h2>Detalles del Conductor</h2>
@@ -5522,7 +5525,20 @@ function ModalDetalles({
             ×
           </button>
         </div>
+        {/* Pestañas por sección; el modal tiene alto fijo y cada pestaña se desplaza adentro */}
+        <TabsBar
+          className="tabs-bar--modal"
+          ariaLabel="Detalle del conductor"
+          tabs={PESTANAS_DETALLE.map(t => (
+            t.id === 'historial' && !loadingVehiculos && !loadingBajas
+              ? { ...t, count: vehiculosAsignados.length + historialBajas.length }
+              : t
+          ))}
+          active={pestana}
+          onChange={setPestana}
+        />
         <div className="modal-body">
+        {pestana === 'personal' && (<>
         <div className="section-title">Información Personal</div>
         <div className="details-grid">
           <div>
@@ -5618,6 +5634,9 @@ function ModalDetalles({
           </div>
         </div>
 
+        </>)}
+
+        {pestana === 'licencia' && (<>
         <div className="section-title">Licencia de Conducir</div>
         <div className="details-grid">
           <div>
@@ -5669,6 +5688,9 @@ function ModalDetalles({
           </div>
         </div>
 
+        </>)}
+
+        {pestana === 'contacto' && (<>
         <div className="section-title">Contacto</div>
         <div className="details-grid">
           <div>
@@ -5683,18 +5705,19 @@ function ModalDetalles({
               <div className="detail-value">{(selectedConductor as any).guia}</div>
             </div>
           ) : null}
-          {(selectedConductor as any).telefono_secundario ? (
+          {/* Siempre visibles (N/A si están vacíos); solo se ocultan si la columna no existe */}
+          {'telefono_secundario' in selectedConductor && (
             <div>
               <label className="detail-label">Teléfono secundario (personal / otra app)</label>
-              <div className="detail-value">{(selectedConductor as any).telefono_secundario}</div>
+              <div className="detail-value">{(selectedConductor as any).telefono_secundario || 'N/A'}</div>
             </div>
-          ) : null}
-          {(selectedConductor as any).correo_personal ? (
+          )}
+          {'correo_personal' in selectedConductor && (
             <div>
               <label className="detail-label">Mail personal / respaldo</label>
-              <div className="detail-value">{(selectedConductor as any).correo_personal}</div>
+              <div className="detail-value">{(selectedConductor as any).correo_personal || 'N/A'}</div>
             </div>
-          ) : null}
+          )}
           <div>
             <label className="detail-label">Email app móvil (Cabify)</label>
             <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -5782,6 +5805,9 @@ function ModalDetalles({
           </div>
         </div>
 
+        </>)}
+
+        {pestana === 'estado' && (<>
         <div className="section-title">Estado</div>
         <div className="details-grid">
           <div>
@@ -5896,6 +5922,9 @@ function ModalDetalles({
           </div>
         </div>
 
+        </>)}
+
+        {pestana === 'historial' && (<>
         {/* Historial de Vehículos Asignados */}
         <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           Historial de Vehículos
@@ -6029,6 +6058,7 @@ function ModalDetalles({
             </div>
           )}
         </div>
+        </>)}
         </div>
         {(() => {
           const folderUrl = (selectedConductor as any).url_documentacion;

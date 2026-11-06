@@ -1,0 +1,88 @@
+/* Detalle del vehículo > pestaña Estados */
+
+.hev-totales {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.hev-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.hev-total strong {
+  color: var(--text-primary);
+}
+
+.hev-tabla-wrap {
+  overflow-x: auto;
+}
+
+.hev-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.hev-tabla th {
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+}
+
+.hev-tabla td {
+  padding: 8px;
+  vertical-align: top;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.hev-tabla td:nth-child(2),
+.hev-tabla td:nth-child(3),
+.hev-tabla td:nth-child(4) {
+  white-space: nowrap;
+}
+
+.hev-estado {
+  font-weight: 600;
+}
+
+.hev-actual td {
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.hev-hoy {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.hev-sin-motivo {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.hev-usuario {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.hev-nota {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
