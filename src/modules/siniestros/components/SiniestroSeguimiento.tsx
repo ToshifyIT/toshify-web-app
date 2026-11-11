@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { showError, showSuccess } from '../../../utils/toast'
@@ -167,7 +168,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
           .select('id, patente, marca, modelo').is('deleted_at', null))
           .order('patente'),
         aplicarFiltroSede(supabase.from('conductores')
-          .select('id, nombres, apellidos, estado_id'))
+          .select('id, nombres, apellidos, estado_id').not(...FILTRO_SIN_INTERNOS))
           .order('apellidos'),
       ])
 

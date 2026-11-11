@@ -1,0 +1,1167 @@
+// src/modules/siniestros/components/SiniestroSeguimientoV2.tsx (Siniestros v2)
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
+import { useAuth } from '../../../contexts/AuthContext'
+import { usePermissions } from '../../../contexts/PermissionsContext'
+import { useSede } from '../../../contexts/SedeContext'
+import { showError, showSuccess, showWarning } from '../../../utils/toast'
+import { Plus, Clock, FileText, DollarSign, AlertTriangle, X, ExternalLink, CheckCircle, Undo2 } from 'lucide-react'
+import type { SiniestroSeguimientoConEstados, SiniestroCompleto } from '../../../types/siniestros.types'
+import type { VehiculoSimple, ConductorSimple } from '../../../types/incidencias.types'
+import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { EmptyState } from '../../../components/ui/EstadosVista'
+
+import { numeroSemana } from '../../../utils/semanaISO'
+import { formatPlata, formatFecha, formatFechaHora } from '../../../utils/format'
+import { Alerta } from '../../../components/ui/alertas'
+import { cargarCobrosConductor, confirmarPagoCobro, textoEstadoCobro } from './cobrosConductor'
+import type { InfoCobro } from './cobrosConductor'
+interface SiniestroSeguimientoProps {
+  siniestro: SiniestroCompleto
+  onReload: () => void
+  readonly?: boolean
+}
+
+interface SeguimientoFormData {
+  tipo_evento: 'nota' | 'pago' | 'cobro_conductor'
+  descripcion: string
+  notas?: string
+  monto?: number
+  cobrar_conductor: boolean
+}
+
+interface IncidenciaFormData {
+  vehiculo_id?: string
+  conductor_id?: string
+  estado_id: string
+  fecha: string
+  turno?: string
+  area?: string
+  estado_vehiculo?: string
+  descripcion?: string
+  notas?: string
+  monto?: number
+  tipo_cobro_descuento_id?: string
+}
+
+interface TipoCobroDescuento {
+  id: string
+  codigo: string
+  nombre: string
+  categoria?: string
+  es_a_favor?: boolean
+}
+
+interface IncidenciaEstado {
+  id: string
+  codigo: string
+  nombre: string
+  color?: string
+}
+
+const TIPO_EVENTO_LABELS: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  nota: { label: 'Nota', icon: <FileText size={14} />, color: '#6366f1' },
+  pago: { label: 'Pago Recibido', icon: <DollarSign size={14} />, color: '#10b981' },
+  cobro_conductor: { label: 'Cobro a Conductor', icon: <AlertTriangle size={14} />, color: '#ef4444' },
+  estado_cambio: { label: 'Cambio de Estado', icon: <Clock size={14} />, color: '#f59e0b' },
+  documento: { label: 'Documento', icon: <FileText size={14} />, color: '#8b5cf6' }
+}
+
+// Helper para obtener fecha local en formato YYYY-MM-DD
+function getLocalDateString() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+
+export function SiniestroSeguimientoV2({ siniestro, onReload, readonly = false }: SiniestroSeguimientoProps) {
+  const { user, profile } = useAuth()
+  // Confirmar el pago de un cobro se puede también desde el detalle (readonly), pero
+  // solo con permiso de edición en Siniestros.
+  const { canEditInSubmenu, isAdmin } = usePermissions()
+  const puedeConfirmar = isAdmin() || canEditInSubmenu('siniestros')
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
+  const navigate = useNavigate()
+  const [seguimientos, setSeguimientos] = useState<SiniestroSeguimientoConEstados[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // Modal de "Ver detalle incidencia" (solo lectura).
+  const [showDetalleIncidencia, setShowDetalleIncidencia] = useState(false)
+  const [incidenciaDetalle, setIncidenciaDetalle] = useState<any | null>(null)
+  const [loadingDetalleInc, setLoadingDetalleInc] = useState(false)
+
+  const verDetalleIncidencia = async (incidenciaId: string) => {
+    setShowDetalleIncidencia(true)
+    setLoadingDetalleInc(true)
+    setIncidenciaDetalle(null)
+    try {
+      const { data } = await (supabase.from('incidencias' as any) as any)
+        .select('id, fecha, semana, turno, area, tipo, descripcion, notas, monto, km_exceso, conductor_nombre, vehiculo_patente, created_by_name, created_at, incidencias_estados(codigo, nombre), tipos_cobro_descuento(codigo, nombre)')
+        .eq('id', incidenciaId)
+        .maybeSingle()
+      setIncidenciaDetalle(data)
+    } catch {
+      setIncidenciaDetalle(null)
+    } finally {
+      setLoadingDetalleInc(false)
+    }
+  }
+
+  const fmtFechaInc = (s: string | null) => s ? formatFecha(s) : '—'
+  const fmtFechaHoraInc = (s: string | null) => s ? formatFechaHora(s) : ''
+  const fmtMontoInc = (m: any) => (m == null || m === '') ? '—' : formatPlata(m)
+  const [formData, setFormData] = useState<SeguimientoFormData>({
+    tipo_evento: 'nota',
+    descripcion: '',
+    notas: '',
+    cobrar_conductor: false
+  })
+
+  // Estados para modal de incidencia
+  const [showIncidenciaModal, setShowIncidenciaModal] = useState(false)
+  const [incidenciaForm, setIncidenciaForm] = useState<IncidenciaFormData>({
+    fecha: getLocalDateString(),
+    estado_id: '',
+    area: 'Siniestros'
+  })
+  const [tiposCobroDescuento, setTiposCobroDescuento] = useState<TipoCobroDescuento[]>([])
+  const [incidenciasEstados, setIncidenciasEstados] = useState<IncidenciaEstado[]>([])
+  const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
+  const [conductores, setConductores] = useState<ConductorSimple[]>([])
+  const [savingIncidencia, setSavingIncidencia] = useState(false)
+  // Total pagado del siniestro; se actualiza al registrar un "Pago recibido"
+  const [totalPagado, setTotalPagado] = useState<number>(siniestro.total_pagado || 0)
+
+  useEffect(() => {
+    setTotalPagado(siniestro.total_pagado || 0)
+  }, [siniestro.id, siniestro.total_pagado])
+
+  // Estado de cada cobro a conductor (por id de seguimiento) y si se puede confirmar
+  // el pago (falta sql/siniestros_cobro_confirmado.sql → no).
+  const [cobros, setCobros] = useState<Map<string, InfoCobro>>(new Map())
+  const [hayConfirmacion, setHayConfirmacion] = useState(false)
+  const [confirmando, setConfirmando] = useState<string | null>(null)
+
+  useEffect(() => {
+    cargarSeguimientos()
+    cargarDatosParaIncidencia()
+  }, [siniestro.id])
+
+  async function cargarCobros() {
+    try {
+      const { porSiniestro, hayConfirmacion: ok } = await cargarCobrosConductor([siniestro.id])
+      setCobros(new Map((porSiniestro.get(siniestro.id) || []).map(c => [c.seguimientoId, c])))
+      setHayConfirmacion(ok)
+    } catch (error) {
+      console.error('No se pudo cargar el estado de los cobros a conductor:', error)
+    }
+  }
+
+  /** Confirma lo efectivamente cobrado de un cobro a conductor (o lo deshace). */
+  async function handleConfirmarPago(cobro: InfoCobro, deshacer = false) {
+    let monto: number | null = null
+    if (deshacer) {
+      const r = await Alerta.fire({
+        title: 'Deshacer confirmación',
+        text: `Se va a restar ${formatPlata(cobro.confirmadoMonto || 0)} del Cobrado al conductor.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Deshacer',
+        cancelButtonText: 'Cancelar',
+      })
+      if (!r.isConfirmed) return
+    } else {
+      const r = await Alerta.fire({
+        title: 'Confirmar pago del conductor',
+        text: cobro.conductorDeBaja
+          ? 'El conductor está de baja: el sistema puede dar el cobro por pagado al cruzarlo con la garantía. Confirmá solo lo que administración te dijo que realmente se cobró.'
+          : 'Monto efectivamente cobrado. Si pagó una parte, poné solo esa parte.',
+        input: 'number',
+        inputValue: cobro.monto || '',
+        showCancelButton: true,
+        confirmButtonText: 'Confirmar pago',
+        cancelButtonText: 'Cancelar',
+        inputValidator: (v: string) => {
+          const n = Number(v)
+          if (!v || !(n > 0)) return 'Ingresá un monto mayor a 0'
+          return null
+        },
+      })
+      if (!r.isConfirmed) return
+      monto = Number(r.value)
+    }
+    setConfirmando(cobro.seguimientoId)
+    try {
+      const total = await confirmarPagoCobro(cobro.seguimientoId, siniestro.id, monto, {
+        id: user?.id,
+        nombre: profile?.full_name || undefined,
+      })
+      showSuccess(deshacer ? 'Confirmación deshecha' : 'Pago confirmado', `Cobrado al conductor: ${formatPlata(total)}`)
+      await cargarCobros()
+      onReload?.()
+    } catch (error) {
+      console.error('No se pudo confirmar el pago:', error)
+      showError('Error', 'No se pudo guardar la confirmación del pago')
+    } finally {
+      setConfirmando(null)
+    }
+  }
+
+  async function cargarSeguimientos() {
+    setLoading(true)
+    try {
+      const { data, error } = await (supabase
+        .from('siniestros_seguimientos' as any) as any)
+        .select('*')
+        .eq('siniestro_id', siniestro.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setSeguimientos(data || [])
+      cargarCobros()
+    } catch {
+      // silently ignored
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function cargarDatosParaIncidencia() {
+    try {
+      // Cargar todos los catálogos en paralelo
+      const [
+        { data: tiposData },
+        { data: estadosData },
+        { data: vehData },
+        { data: condData },
+      ] = await Promise.all([
+        (supabase.from('tipos_cobro_descuento' as any) as any)
+          .select('*').eq('is_active', true).order('orden'),
+        (supabase.from('incidencias_estados' as any) as any)
+          .select('*').eq('is_active', true).order('orden'),
+        aplicarFiltroSede(supabase.from('vehiculos')
+          .select('id, patente, marca, modelo').is('deleted_at', null))
+          .order('patente'),
+        aplicarFiltroSede(supabase.from('conductores')
+          .select('id, nombres, apellidos, estado_id').not(...FILTRO_SIN_INTERNOS))
+          .order('apellidos'),
+      ])
+
+      // Mapa de estados para marcar conductores BAJA con etiqueta visual
+      const { data: estadosCond } = await supabase.from('conductores_estados').select('id, codigo')
+      const estadosCondMap = new Map<string, string>()
+      for (const e of (estadosCond || [])) estadosCondMap.set((e as any).id, (e as any).codigo)
+
+      setTiposCobroDescuento(tiposData || [])
+      setIncidenciasEstados(estadosData || [])
+
+      // Pre-seleccionar estado "Pendiente" si existe
+      const estadoPendiente = (estadosData || []).find((e: IncidenciaEstado) => 
+        e.codigo?.toLowerCase() === 'pendiente' || e.nombre?.toLowerCase() === 'pendiente'
+      )
+      if (estadoPendiente) {
+        setIncidenciaForm(prev => ({ ...prev, estado_id: estadoPendiente.id }))
+      }
+
+      let vehiculosList: VehiculoSimple[] = (vehData || []) as VehiculoSimple[]
+      if (siniestro.vehiculo_id && !vehiculosList.find(v => v.id === siniestro.vehiculo_id)) {
+        vehiculosList = [{
+          id: siniestro.vehiculo_id,
+          patente: siniestro.vehiculo_patente || '',
+          marca: siniestro.vehiculo_marca || '',
+          modelo: siniestro.vehiculo_modelo || ''
+        }, ...vehiculosList]
+      }
+      setVehiculos(vehiculosList)
+
+      let conductoresFormatted: ConductorSimple[] = (condData || []).map((c: any) => {
+        const estadoCodigo = c.estado_id ? estadosCondMap.get(c.estado_id) : undefined
+        const isBaja = estadoCodigo?.toUpperCase() === 'BAJA'
+        return {
+          id: c.id,
+          nombres: c.nombres,
+          apellidos: c.apellidos,
+          nombre_completo: isBaja
+            ? `${c.nombres} ${c.apellidos} [BAJA]`
+            : `${c.nombres} ${c.apellidos}`,
+          estado_codigo: estadoCodigo,
+        }
+      })
+
+      if (siniestro.conductor_id && !conductoresFormatted.find(c => c.id === siniestro.conductor_id)) {
+        conductoresFormatted = [{
+          id: siniestro.conductor_id,
+          nombres: siniestro.conductor_display?.split(' ')[0] || '',
+          apellidos: siniestro.conductor_display?.split(' ').slice(1).join(' ') || '',
+          nombre_completo: siniestro.conductor_display || ''
+        }, ...conductoresFormatted]
+      }
+      setConductores(conductoresFormatted)
+    } catch {
+      // silently ignored
+    }
+  }
+
+  function resetForm() {
+    setFormData({
+      tipo_evento: 'nota',
+      descripcion: '',
+      notas: '',
+      cobrar_conductor: false
+    })
+    setShowForm(false)
+  }
+
+  async function handleAbrirModalIncidencia() {
+    // Buscar el tipo "Reparación Siniestro" para pre-seleccionarlo
+    const tipoReparacionSiniestro = tiposCobroDescuento.find(t =>
+      t.nombre?.toLowerCase().includes('reparaci') && t.nombre?.toLowerCase().includes('siniestro')
+    )
+
+    // Auto-detectar turno del conductor desde su asignacion activa
+    let turnoDetectado: string | undefined
+    if (siniestro.conductor_id) {
+      try {
+        const { data: asigs } = await (supabase
+          .from('asignaciones')
+          .select('id, modalidad, asignaciones_conductores!inner(conductor_id, horario)')
+          .eq('estado', 'activa')
+          .eq('asignaciones_conductores.conductor_id', siniestro.conductor_id) as any)
+        const asig = (asigs || [])[0]
+        if (asig) {
+          if (asig.modalidad === 'a_cargo') {
+            turnoDetectado = 'A cargo'
+          } else {
+            const ac = (asig.asignaciones_conductores || [])[0]
+            turnoDetectado = ac?.horario === 'nocturno' ? 'Nocturno' : 'Diurno'
+          }
+        }
+      } catch { /* silently ignored */ }
+    }
+
+    // Pre-cargar datos del siniestro en el formulario de incidencia
+    setIncidenciaForm({
+      vehiculo_id: siniestro.vehiculo_id || undefined,
+      conductor_id: siniestro.conductor_id || undefined,
+      fecha: getLocalDateString(),
+      monto: formData.monto || undefined,
+      descripcion: formData.descripcion,
+      notas: formData.notas,
+      area: 'Siniestros',
+      turno: turnoDetectado,
+      estado_id: incidenciaForm.estado_id, // Mantener el estado pre-seleccionado
+      tipo_cobro_descuento_id: tipoReparacionSiniestro?.id || undefined
+    })
+    setShowIncidenciaModal(true)
+    setShowForm(false)
+  }
+
+  async function handleGuardar() {
+    if (!formData.descripcion.trim()) {
+      showError('Error', 'La descripcion es requerida')
+      return
+    }
+
+    if (formData.cobrar_conductor && (!formData.monto || formData.monto <= 0)) {
+      showError('Error', 'Debe ingresar un monto para cobrar al conductor')
+      return
+    }
+
+    if (formData.cobrar_conductor && !siniestro.conductor_id) {
+      showError('Error', 'El siniestro debe tener un conductor asignado para generar el cobro')
+      return
+    }
+
+    if (formData.cobrar_conductor && !siniestro.vehiculo_id) {
+      showError('Error', 'El siniestro debe tener un vehiculo asignado para generar el cobro')
+      return
+    }
+
+    // Si es cobro a conductor, abrir modal de incidencia
+    if (formData.cobrar_conductor) {
+      handleAbrirModalIncidencia()
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error: segError } = await (supabase
+        .from('siniestros_seguimientos' as any) as any)
+        .insert({
+          siniestro_id: siniestro.id,
+          tipo_evento: formData.tipo_evento,
+          descripcion: formData.descripcion,
+          monto: formData.monto || null,
+          cobrar_conductor: false,
+          created_by: user?.id,
+          created_by_name: profile?.full_name || 'Sistema'
+        })
+
+      if (segError) throw segError
+
+      // Un "Pago recibido" con monto se suma al Total pagado del siniestro
+      if (formData.tipo_evento === 'pago' && formData.monto && formData.monto > 0) {
+        const nuevoTotal = await sumarAMonto('total_pagado', formData.monto)
+        if (nuevoTotal === null) {
+          showWarning(
+            'Seguimiento registrado',
+            'No se pudo actualizar el Total pagado del siniestro: cargalo a mano en Editar',
+          )
+        } else {
+          setTotalPagado(nuevoTotal)
+          showSuccess('Pago registrado', `Total pagado del siniestro: ${formatPlata(nuevoTotal)}`)
+        }
+      } else {
+        showSuccess('Seguimiento registrado')
+      }
+
+      resetForm()
+      cargarSeguimientos()
+      onReload()
+    } catch (error: any) {
+      showError('Error', error?.message || 'No se pudo guardar el seguimiento')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /**
+   * Suma el monto a un total del siniestro (leído de la base, no del listado):
+   * total_pagado (pago del seguro) o cobrado_conductor (sql/siniestros_montos.sql).
+   */
+  async function sumarAMonto(campo: 'total_pagado', monto: number): Promise<number | null> {
+    try {
+      const { data, error } = await (supabase.from('siniestros' as any) as any)
+        .select(campo)
+        .eq('id', siniestro.id)
+        .single()
+      if (error) throw error
+      const nuevoTotal = (Number(data?.[campo]) || 0) + monto
+      const { error: updError } = await (supabase.from('siniestros' as any) as any)
+        .update({ [campo]: nuevoTotal })
+        .eq('id', siniestro.id)
+      if (updError) throw updError
+      return nuevoTotal
+    } catch (error) {
+      console.error(`No se pudo actualizar ${campo} del siniestro:`, error)
+      return null
+    }
+  }
+
+  async function handleGuardarIncidencia() {
+    if (!incidenciaForm.conductor_id) {
+      showError('Error', 'Debe seleccionar un conductor')
+      return
+    }
+    if (!incidenciaForm.fecha) {
+      showError('Error', 'La fecha es requerida')
+      return
+    }
+    if (!incidenciaForm.estado_id) {
+      showError('Error', 'Debe seleccionar un estado')
+      return
+    }
+    if (!incidenciaForm.tipo_cobro_descuento_id) {
+      showError('Error', 'Debe seleccionar un tipo de incidencia')
+      return
+    }
+    if (!incidenciaForm.turno) {
+      showError('Error', 'Debe seleccionar una modalidad (turno)')
+      return
+    }
+
+    setSavingIncidencia(true)
+    try {
+      // Obtener datos del conductor y vehículo para guardar nombres
+      const selectedConductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
+      const selectedVehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
+      const semana = numeroSemana(incidenciaForm.fecha)
+
+      // Crear la incidencia
+      const { data: incidenciaData, error: incError } = await (supabase
+        .from('incidencias' as any) as any)
+        .insert({
+          vehiculo_id: incidenciaForm.vehiculo_id || null,
+          conductor_id: incidenciaForm.conductor_id,
+          estado_id: incidenciaForm.estado_id,
+          sede_id: sedeActualId || sedeUsuario?.id,
+          semana: semana,
+          fecha: incidenciaForm.fecha,
+          turno: incidenciaForm.turno || null,
+          area: incidenciaForm.area || 'Siniestros',
+          estado_vehiculo: incidenciaForm.estado_vehiculo || null,
+          descripcion: incidenciaForm.descripcion || null,
+          notas: incidenciaForm.notas?.trim() || formData.notas?.trim() || null,
+          conductor_nombre: selectedConductor?.nombre_completo || null,
+          vehiculo_patente: selectedVehiculo?.patente || null,
+          tipo: 'cobro',
+          tipo_cobro_descuento_id: incidenciaForm.tipo_cobro_descuento_id,
+          monto: incidenciaForm.monto || null,
+          siniestro_id: siniestro.id,
+          created_by: user?.id,
+          created_by_name: profile?.full_name || 'Sistema'
+        })
+        .select('id')
+        .single()
+
+      if (incError) throw incError
+
+      // Crear seguimiento vinculado a la incidencia
+      const { error: segError } = await (supabase
+        .from('siniestros_seguimientos' as any) as any)
+        .insert({
+          siniestro_id: siniestro.id,
+          tipo_evento: 'cobro_conductor',
+          descripcion: incidenciaForm.descripcion || 'Cobro a conductor generado',
+          monto: incidenciaForm.monto || null,
+          cobrar_conductor: true,
+          incidencia_id: (incidenciaData as any)?.id || null,
+          created_by: user?.id,
+          created_by_name: profile?.full_name || 'Sistema'
+        })
+
+      if (segError) throw segError
+
+      // El cobro NO se suma al "Cobrado al conductor": enviar la incidencia no quiere
+      // decir que pagó. Se suma recién cuando se confirma el pago en el historial.
+
+      // Auto-crear penalidad para que la incidencia vaya directo a "Por Aplicar"
+      if ((incidenciaData as any)?.id) {
+        const { error: penError } = await (supabase.from('penalidades' as any) as any)
+          .insert({
+            incidencia_id: (incidenciaData as any).id,
+            vehiculo_id: incidenciaForm.vehiculo_id || null,
+            conductor_id: incidenciaForm.conductor_id,
+            tipo_cobro_descuento_id: incidenciaForm.tipo_cobro_descuento_id || null,
+            semana: semana,
+            fecha: incidenciaForm.fecha,
+            turno: incidenciaForm.turno || null,
+            area_responsable: incidenciaForm.area || 'Siniestros',
+            detalle: incidenciaForm.descripcion || 'Cobro por siniestro',
+            monto: incidenciaForm.monto || 0,
+            observaciones: incidenciaForm.notas?.trim() || formData.notas?.trim() || '',
+            aplicado: false,
+            rechazado: false,
+            conductor_nombre: selectedConductor?.nombre_completo || null,
+            vehiculo_patente: selectedVehiculo?.patente || null,
+            created_by: user?.id,
+            created_by_name: profile?.full_name || 'Sistema',
+            sede_id: sedeActualId || sedeUsuario?.id,
+          })
+
+        if (penError) throw penError
+      }
+
+      showSuccess('Incidencia registrada', 'Se ha creado la incidencia y enviado a facturación')
+
+      setShowIncidenciaModal(false)
+      setIncidenciaForm({
+        fecha: getLocalDateString(),
+        estado_id: incidenciasEstados.find(e => e.codigo?.toLowerCase() === 'pendiente')?.id || '',
+        area: 'Siniestros'
+      })
+      resetForm()
+      cargarSeguimientos()
+      onReload()
+    } catch (error: any) {
+      showError('Error', error?.message || 'No se pudo guardar la incidencia')
+    } finally {
+      setSavingIncidencia(false)
+    }
+  }
+
+  function formatDate(dateStr: string) {
+    return formatFechaHora(dateStr)
+  }
+
+  function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
+
+  // Datos pre-seleccionados para mostrar en el formulario
+  const selectedVehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
+  const selectedConductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
+  const semanaCalculada = numeroSemana(incidenciaForm.fecha)
+
+  // Categorizar tipos de cobro/descuento
+  const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useMemo(() => ({
+    tiposP006: tiposCobroDescuento.filter(t => t.categoria === 'P006'),
+    tiposP004: tiposCobroDescuento.filter(t => t.categoria === 'P004'),
+    tiposP007: tiposCobroDescuento.filter(t => t.categoria === 'P007'),
+    tiposSinCategoria: tiposCobroDescuento.filter(t => !t.categoria),
+  }), [tiposCobroDescuento])
+
+  const esCobro = formData.tipo_evento === 'cobro_conductor'
+  const llevaMonto = formData.tipo_evento === 'pago' || esCobro
+
+  return (
+    <div className="siniestro-seguimiento ss">
+      {/* Encabezado */}
+      <div className="ss-header">
+        <div className="ss-header-texto">
+          <span className="ss-titulo">Historial de gestión</span>
+          <span className="ss-subtitulo">
+            {[siniestro.vehiculo_patente, siniestro.conductor_display].filter(Boolean).join(' · ') || 'Notas, pagos y cobros del siniestro'}
+          </span>
+        </div>
+        {!readonly && !showForm && (
+          <button className="btn-primary ss-btn" onClick={() => setShowForm(true)}>
+            <Plus size={14} />
+            Agregar
+          </button>
+        )}
+      </div>
+
+      {/* Formulario nuevo seguimiento */}
+      {showForm && (
+        <div className="ss-form">
+          <div className="ss-form-head">
+            <span className="ss-form-titulo">Nuevo registro</span>
+            <button type="button" className="ss-icon-btn" onClick={resetForm} title="Cerrar">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className={`ss-grid${llevaMonto ? '' : ' ss-grid-1'}`}>
+            <label className="ss-field">
+              <span className="ss-label">Tipo de evento</span>
+              <select
+                className="ss-input"
+                value={formData.tipo_evento}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  tipo_evento: e.target.value as any,
+                  cobrar_conductor: e.target.value === 'cobro_conductor'
+                }))}
+              >
+                <option value="nota">Nota / Observación</option>
+                <option value="pago">Pago recibido</option>
+                <option value="cobro_conductor">Cobro a conductor (genera incidencia)</option>
+              </select>
+            </label>
+            {llevaMonto && (
+              <label className="ss-field">
+                <span className="ss-label">Monto {esCobro && <span className="ss-req">*</span>}</span>
+                <input
+                  className="ss-input"
+                  type="number"
+                  value={formData.monto || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, monto: Number(e.target.value) || undefined }))}
+                  placeholder="0"
+                />
+              </label>
+            )}
+          </div>
+
+          {formData.tipo_evento === 'pago' && (
+            <div className="ss-ayuda">
+              {formData.monto && formData.monto > 0
+                ? <>Se suma al Total pagado del siniestro: {formatPlata(totalPagado)} → <strong>{formatPlata(totalPagado + formData.monto)}</strong></>
+                : <>El monto se suma al Total pagado del siniestro (hoy {formatPlata(totalPagado)}).</>}
+            </div>
+          )}
+
+          <label className="ss-field">
+            <span className="ss-label">Descripción <span className="ss-req">*</span></span>
+            <textarea
+              className="ss-input"
+              value={formData.descripcion}
+              onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
+              placeholder={esCobro ? 'Detalle del siniestro...' : 'Detalle de la gestión realizada...'}
+              rows={2}
+            />
+          </label>
+
+          {esCobro && (
+            <label className="ss-field">
+              <span className="ss-label">Notas <span className="ss-opcional">(opcional, mensaje para administración)</span></span>
+              <textarea
+                className="ss-input"
+                value={formData.notas || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, notas: e.target.value }))}
+                placeholder="Mensaje adicional para administración..."
+                rows={2}
+              />
+            </label>
+          )}
+
+          {esCobro && (
+            <div className="ss-aviso">
+              <AlertTriangle size={14} />
+              <span>
+                Al continuar se abre el formulario de incidencias para crear el cobro a <strong>{siniestro.conductor_display || 'el conductor del siniestro'}</strong>.
+              </span>
+            </div>
+          )}
+
+          <div className="ss-form-acciones">
+            <button type="button" onClick={resetForm} disabled={saving} className="btn-secondary ss-btn">
+              Cancelar
+            </button>
+            <button type="button" onClick={handleGuardar} disabled={saving} className="btn-primary ss-btn">
+              {saving ? 'Guardando...' : esCobro ? 'Continuar' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Historial */}
+      <div className="seguimiento-timeline ss-lista">
+        {loading ? (
+          <Spinner size="sm" message="Cargando..." />
+        ) : seguimientos.length === 0 ? (
+          <div className="ss-vacio">
+            <Clock size={22} />
+            <span>Todavía no hay registros de seguimiento</span>
+            {!readonly && !showForm && <span className="ss-vacio-sub">Usá "Agregar" para cargar el primero</span>}
+          </div>
+        ) : (
+          seguimientos.map((seg) => {
+            const tipoConfig = TIPO_EVENTO_LABELS[seg.tipo_evento] || TIPO_EVENTO_LABELS.nota
+            return (
+              <div key={seg.id} className="seguimiento-item ss-item" style={{ borderLeftColor: tipoConfig.color }}>
+                <div className="ss-item-head">
+                  <span className="ss-tipo" style={{ background: `${tipoConfig.color}1f`, color: tipoConfig.color }}>
+                    {tipoConfig.icon}
+                    {tipoConfig.label}
+                  </span>
+                  {seg.monto ? (
+                    <span className="ss-monto" style={{ color: seg.tipo_evento === 'cobro_conductor' ? '#dc2626' : '#059669' }}>
+                      {formatMoney(seg.monto)}
+                    </span>
+                  ) : null}
+                  <span className="ss-meta">{formatDate(seg.created_at)} · {seg.created_by_name || 'Sistema'}</span>
+                </div>
+                <p className="ss-desc">{seg.descripcion}</p>
+                {seg.tipo_evento === 'cobro_conductor' && cobros.get(seg.id) && (() => {
+                  const cobro = cobros.get(seg.id) as InfoCobro
+                  const ocupado = confirmando === cobro.seguimientoId
+                  return (
+                    <div className="ss-cobro">
+                      <div className="ss-cobro-fila">
+                        <span className={`ss-cobro-estado ss-cobro-estado--${cobro.estado}`} title="Estado según facturación (de referencia, igual que en Multas)">
+                          {textoEstadoCobro(cobro)}
+                        </span>
+                        {cobro.confirmadoMonto != null ? (
+                          <span className="ss-cobro-confirmado" title={cobro.confirmadoAt ? `Confirmado el ${formatFechaHora(cobro.confirmadoAt)}` : undefined}>
+                            <CheckCircle size={13} />
+                            Cobrado {formatPlata(cobro.confirmadoMonto)}
+                            {cobro.confirmadoPor && <> · {cobro.confirmadoPor}</>}
+                          </span>
+                        ) : (
+                          <span className="ss-cobro-sin-confirmar">Sin confirmar: no suma al recupero</span>
+                        )}
+                        {puedeConfirmar && hayConfirmacion && (
+                          cobro.confirmadoMonto == null ? (
+                            <button type="button" className="ss-cobro-btn" disabled={ocupado} onClick={() => handleConfirmarPago(cobro)}>
+                              <CheckCircle size={13} />
+                              {ocupado ? 'Guardando...' : 'Confirmar pago'}
+                            </button>
+                          ) : (
+                            <button type="button" className="ss-cobro-btn ss-cobro-btn--sec" disabled={ocupado} onClick={() => handleConfirmarPago(cobro, true)}>
+                              <Undo2 size={13} />
+                              Deshacer
+                            </button>
+                          )
+                        )}
+                      </div>
+                      {cobro.conductorDeBaja && (
+                        <div className="ss-cobro-baja">
+                          <AlertTriangle size={13} />
+                          Conductor de baja: el sistema puede darlo por pagado al cruzarlo con la garantía. Confirmá con administración cuánto se cobró de verdad.
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+                {(seg.incidencia_id || seg.penalidad_id) && (
+                  <div className="ss-item-links">
+                    {seg.incidencia_id && (
+                      <button type="button" className="ss-link" onClick={() => verDetalleIncidencia(seg.incidencia_id as string)}>
+                        <FileText size={12} />
+                        Ver detalle de la incidencia
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="ss-link"
+                      onClick={() => {
+                        if (seg.incidencia_id) {
+                          // Navegar dejando la incidencia como filtro en la tabla
+                          // (param `buscar`), en vez de abrir el modal de detalle.
+                          navigate(`/incidencias?buscar=${seg.incidencia_id}`)
+                        } else if (seg.penalidad_id) {
+                          navigate(`/incidencias?penalidad_id=${seg.penalidad_id}`)
+                        }
+                      }}
+                    >
+                      <ExternalLink size={12} />
+                      {seg.incidencia_id ? 'Ir a Incidencias' : 'Ir a la penalidad'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Modal "Ver detalle incidencia" (solo lectura) */}
+      {showDetalleIncidencia && (
+        <div onClick={() => setShowDetalleIncidencia(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'calc(var(--z-modal-nested) + 1)', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 640, maxHeight: '88vh', overflow: 'auto', border: '1px solid var(--border-primary)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid var(--border-primary)' }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Detalle de la incidencia</h2>
+              <button onClick={() => setShowDetalleIncidencia(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4 }}><X size={18} /></button>
+            </div>
+            <div style={{ padding: 22 }}>
+              {loadingDetalleInc ? (
+                <Spinner size="sm" message="Cargando…" />
+              ) : !incidenciaDetalle ? (
+                <EmptyState size="sm" title="No se encontró la incidencia." />
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+                    {incidenciaDetalle.incidencias_estados?.nombre && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#6366f1', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}>{incidenciaDetalle.incidencias_estados.nombre}</span>
+                    )}
+                    {incidenciaDetalle.tipo && <span style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>Tipo: {incidenciaDetalle.tipo}</span>}
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtFechaInc(incidenciaDetalle.fecha)}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+                    {[
+                      ['Área', incidenciaDetalle.area],
+                      ['Semana', incidenciaDetalle.semana],
+                      ['Turno', incidenciaDetalle.turno],
+                      ['Tipo de cobro/descuento', incidenciaDetalle.tipos_cobro_descuento?.nombre],
+                      ['Conductor', incidenciaDetalle.conductor_nombre],
+                      ['Vehículo', incidenciaDetalle.vehiculo_patente],
+                      ['Monto', fmtMontoInc(incidenciaDetalle.monto)],
+                      ...(incidenciaDetalle.km_exceso != null ? [['Km exceso', incidenciaDetalle.km_exceso]] : []),
+                    ].map(([label, value], i) => (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-tertiary)', fontWeight: 600 }}>{label}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{value === null || value === undefined || value === '' ? '—' : String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: 4 }}>Descripción</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{incidenciaDetalle.descripcion || '—'}</div>
+                  </div>
+                  {incidenciaDetalle.notas && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: 4 }}>Notas</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{incidenciaDetalle.notas}</div>
+                    </div>
+                  )}
+                  <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-tertiary)', borderTop: '1px solid var(--border-primary)', paddingTop: 10 }}>
+                    Creada por {incidenciaDetalle.created_by_name || '—'}{incidenciaDetalle.created_at ? ` · ${fmtFechaHoraInc(incidenciaDetalle.created_at)}` : ''}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Incidencia */}
+      {showIncidenciaModal && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 'var(--z-modal-nested)'
+        }}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{
+            background: 'var(--bg-primary)',
+            borderRadius: 'var(--radius-lg)',
+            width: '100%',
+            maxWidth: '700px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            border: '1px solid var(--border-primary)'
+          }}>
+            <div className="modal-header" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '20px 24px',
+              borderBottom: '1px solid var(--border-primary)'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>Nueva Incidencia</h2>
+              <button
+                className="modal-close"
+                onClick={() => setShowIncidenciaModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  color: 'var(--text-tertiary)'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '24px' }}>
+              {/* Formulario de Incidencia */}
+              <div className="form-section">
+                <div className="form-section-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Datos de la Incidencia
+                </div>
+
+                {/* Patente y Conductor (solo lectura, pre-llenados) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>Patente</label>
+                    <input
+                      type="text"
+                      value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : '-'}
+                      readOnly
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>Conductor</label>
+                    <input
+                      type="text"
+                      value={selectedConductor?.nombre_completo || '-'}
+                      readOnly
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Fecha, Semana, Turno */}
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
+                      Fecha <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={incidenciaForm.fecha}
+                      onChange={e => setIncidenciaForm(prev => ({ ...prev, fecha: e.target.value }))}
+                      disabled={savingIncidencia}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>Semana</label>
+                    <input
+                      type="text"
+                      value={semanaCalculada || '-'}
+                      readOnly
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>Turno</label>
+                    <input
+                      type="text"
+                      value={incidenciaForm.turno || '-'}
+                      readOnly
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Tipo de Incidencia, Área, Estado */}
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
+                      Tipo de Incidencia <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <select
+                      value={incidenciaForm.tipo_cobro_descuento_id || ''}
+                      onChange={e => setIncidenciaForm(prev => ({ ...prev, tipo_cobro_descuento_id: e.target.value || undefined }))}
+                      disabled={savingIncidencia}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      <option value="">Seleccionar</option>
+                      {/* P006 - Exceso KM */}
+                      {tiposP006.length > 0 && (
+                        <optgroup label="P006 - Exceso KM">
+                          {tiposP006.map(tipo => (
+                            <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {/* P004 - Tickets a Favor */}
+                      {tiposP004.length > 0 && (
+                        <optgroup label="P004 - Tickets a Favor">
+                          {tiposP004.map(tipo => (
+                            <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {/* P007 - Multas/Penalidades */}
+                      {tiposP007.length > 0 && (
+                        <optgroup label="P007 - Multas/Penalidades">
+                          {tiposP007.map(tipo => (
+                            <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {/* Sin categoría */}
+                      {tiposSinCategoria.map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
+                      Área <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <select
+                      value={incidenciaForm.area || ''}
+                      onChange={e => setIncidenciaForm(prev => ({ ...prev, area: e.target.value }))}
+                      disabled={savingIncidencia}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      <option value="">Seleccionar</option>
+                      <option value="Logística">Logística</option>
+                      <option value="Data Entry">Data Entry</option>
+                      <option value="Administración">Administración</option>
+                      <option value="Siniestros">Siniestros</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
+                      Estado <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <select
+                      value={incidenciaForm.estado_id}
+                      onChange={e => setIncidenciaForm(prev => ({ ...prev, estado_id: e.target.value }))}
+                      disabled={savingIncidencia}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      <option value="">Seleccionar</option>
+                      {incidenciasEstados.map(e => (
+                        <option key={e.id} value={e.id}>{e.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Monto y Estado del Vehículo */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
+                      Monto <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={incidenciaForm.monto || ''}
+                      onChange={e => setIncidenciaForm(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      placeholder="0.00"
+                      disabled={savingIncidencia}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>Estado del Vehículo</label>
+                    <select
+                      value={incidenciaForm.estado_vehiculo || ''}
+                      onChange={e => setIncidenciaForm(prev => ({ ...prev, estado_vehiculo: e.target.value }))}
+                      disabled={savingIncidencia}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      <option value="">Seleccionar</option>
+                      <option value="Operativo">Operativo</option>
+                      <option value="En taller">En taller</option>
+                      <option value="Siniestrado">Siniestrado</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Registrado por (solo lectura) */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>Registrado por</label>
+                    <input
+                      type="text"
+                      value={profile?.full_name || 'Sistema'}
+                      readOnly
+                      style={{ width: '300px', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Descripción */}
+                <div className="form-section-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '12px', marginTop: '24px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Descripción
+                </div>
+                <div className="form-group">
+                  <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>Descripción del Problema</label>
+                  <textarea
+                    value={incidenciaForm.descripcion || ''}
+                    onChange={e => setIncidenciaForm(prev => ({ ...prev, descripcion: e.target.value }))}
+                    placeholder="Describa la incidencia..."
+                    rows={4}
+                    disabled={savingIncidencia}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginTop: '16px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
+                    Notas <span style={{ color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 400 }}>(opcional, mensaje para administración)</span>
+                  </label>
+                  <textarea
+                    value={incidenciaForm.notas || ''}
+                    onChange={e => setIncidenciaForm(prev => ({ ...prev, notas: e.target.value }))}
+                    placeholder="Mensaje adicional para administración..."
+                    rows={2}
+                    disabled={savingIncidencia}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px',
+              padding: '16px 24px',
+              borderTop: '1px solid var(--border-primary)',
+              background: 'var(--bg-secondary)'
+            }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowIncidenciaModal(false)}
+                disabled={savingIncidencia}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleGuardarIncidencia}
+                disabled={savingIncidencia}
+              >
+                {savingIncidencia ? 'Guardando...' : 'Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}

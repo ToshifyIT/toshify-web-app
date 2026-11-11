@@ -73,6 +73,16 @@ export interface Siniestro {
   estado_vehiculo?: string
   costos_reparacion?: number
   total_reparacion_pagada?: number
+  /** Lo que ofreció el seguro (sql/siniestros_montos.sql) */
+  oferta_seguro?: number
+  /** Lo que se le cobró al conductor (sql/siniestros_montos.sql) */
+  cobrado_conductor?: number
+  /** Quién gestiona: sancor | rda | legal | toshify (sql/siniestros_gestionado_por.sql) */
+  gestionado_por?: string
+  /** Qué se está esperando (sql/siniestros_tramite.sql) */
+  situacion_tramite?: string
+  /** Por qué se cerró (sql/siniestros_tramite.sql) */
+  motivo_cierre?: string
   fecha_cierre?: string
   created_by?: string
   created_at: string
@@ -178,6 +188,16 @@ export interface SiniestroFormData {
   estado_vehiculo?: string
   costos_reparacion?: number
   total_reparacion_pagada?: number
+  /** Lo que ofreció el seguro (sql/siniestros_montos.sql) */
+  oferta_seguro?: number
+  /** Lo que se le cobró al conductor (sql/siniestros_montos.sql) */
+  cobrado_conductor?: number
+  /** Quién gestiona: sancor | rda | legal | toshify (sql/siniestros_gestionado_por.sql) */
+  gestionado_por?: string
+  /** Qué se está esperando (sql/siniestros_tramite.sql) */
+  situacion_tramite?: string
+  /** Por qué se cerró (sql/siniestros_tramite.sql) */
+  motivo_cierre?: string
   fecha_cierre?: string
   sede_id?: string
 }
@@ -202,7 +222,8 @@ export interface SiniestroStats {
   total_cobrado: number
   con_lesionados: number
   total_recuperados: number
-  procesando_pago_total: number
+  /** Solo lo usa /siniestros (la v2 sacó la tarjeta "Procesando pago") */
+  procesando_pago_total?: number
   dias_desde_ultimo_robo: number | null
   dias_entre_ultimos_robos: number | null
   dias_desde_ultimo_siniestro: number | null

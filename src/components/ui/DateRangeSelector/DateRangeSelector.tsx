@@ -5,7 +5,8 @@
  * Incluye atajos rápidos (Esta semana, Semana pasada, etc.)
  */
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { numeroSemana } from '../../../utils/semanaISO'
 import './DateRangeSelector.css'
@@ -35,6 +36,9 @@ interface DateRangeSelectorProps {
   // siempre cubre semanas COMPLETAS lunes-domingo (se extiende hacia atrás/adelante
   // para no cortar la semana borde). Los datos se siguen mostrando por semana.
   allowMonthYear?: boolean
+  // Con allowMonthYear: Mes y Año toman solo sus días (1 al último / 1-ene al 31-dic),
+  // sin extenderse a semanas completas. Para módulos que no desglosan por semana.
+  mesCalendario?: boolean
 }
 
 // Días de la semana (Lunes a Domingo)
@@ -115,6 +119,7 @@ export function DateRangeSelector({
   extraShortcuts = [],
   weekOnly = false,
   allowMonthYear = false,
+  mesCalendario = false,
 }: DateRangeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [viewDate, setViewDate] = useState(new Date())
@@ -183,10 +188,54 @@ export function DateRangeSelector({
     )
   }, [isOpen, selectedRange])
 
+  // Que el panel no quede cortado por el borde de la pantalla: si abajo no entra y
+  // arriba hay más lugar, abre hacia arriba; si tampoco entra, scrollea por dentro.
+  // Si se sale por la derecha, se alinea al borde derecho del botón.
+  const panelRef = useRef<HTMLDivElement>(null)
+  // El panel se dibuja fuera del módulo (portal, posición fija) para que ningún
+  // contenedor con scroll lo recorte. Se ubica debajo del botón; si no entra, arriba;
+  // si no entra en ningún lado, con scroll interno. Celular: centrado por CSS.
+  const [ubicacion, setUbicacion] = useState<{ top: number; left: number; maxAlto?: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!isOpen) return
+    const ubicar = () => {
+      const btn = dropdownRef.current?.getBoundingClientRect()
+      const panel = panelRef.current
+      if (!btn || !panel) return
+      if (window.innerWidth <= 480) {
+        setUbicacion(null)
+        return
+      }
+      const margen = 8
+      const alto = panel.scrollHeight
+      const ancho = panel.offsetWidth
+      const abajo = window.innerHeight - btn.bottom - margen * 2
+      const arribaLugar = btn.top - margen * 2
+      const arriba = alto > abajo && arribaLugar > abajo
+      const disponible = arriba ? arribaLugar : abajo
+      const altoFinal = Math.min(alto, Math.max(200, disponible))
+      const top = arriba ? Math.max(margen, btn.top - margen - altoFinal) : btn.bottom + margen
+      let left = btn.left
+      if (left + ancho > window.innerWidth - margen) left = Math.max(margen, btn.right - ancho)
+      setUbicacion({ top, left, maxAlto: alto > disponible ? altoFinal : undefined })
+    }
+    ubicar()
+    window.addEventListener('resize', ubicar)
+    window.addEventListener('scroll', ubicar, true)
+    return () => {
+      window.removeEventListener('resize', ubicar)
+      window.removeEventListener('scroll', ubicar, true)
+    }
+  }, [isOpen])
+
   // Cerrar al hacer clic fuera
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const destino = event.target as Node
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(destino) &&
+        !panelRef.current?.contains(destino)
+      ) {
         setIsOpen(false)
         // Descartar un ancla a medio elegir al cerrar sin completar el rango,
         // y salir del modo "eligiendo" para que al reabrir se vea el rango vigente.
@@ -265,7 +314,12 @@ export function DateRangeSelector({
   // Construir el rango de un MES completo (semanas lunes-domingo). No cierra el dropdown:
   // se reutiliza tanto al clicar un día como al cambiar de pestaña / navegar.
   const emitMonthRange = (year: number, month: number, close = true) => {
-    const { start, end } = getMonthWeekRange(year, month)
+    const { start, end } = mesCalendario
+      ? {
+        start: { year, month, day: 1 },
+        end: { year, month, day: new Date(year, month + 1, 0).getDate() },
+      }
+      : getMonthWeekRange(year, month)
     onRangeChange({
       startDate: toISODateString(start.year, start.month, start.day),
       endDate: toISODateString(end.year, end.month, end.day),
@@ -277,7 +331,9 @@ export function DateRangeSelector({
 
   // Construir el rango de un AÑO completo (semanas lunes-domingo).
   const emitYearRange = (year: number, close = true) => {
-    const { start, end } = getYearWeekRange(year)
+    const { start, end } = mesCalendario
+      ? { start: { year, month: 0, day: 1 }, end: { year, month: 11, day: 31 } }
+      : getYearWeekRange(year)
     onRangeChange({
       startDate: toISODateString(start.year, start.month, start.day),
       endDate: toISODateString(end.year, end.month, end.day),
@@ -531,8 +587,21 @@ export function DateRangeSelector({
         <ChevronDown size={14} className={isOpen ? 'rotate' : ''} />
       </button>
 
-      {isOpen && (
-        <div className="date-range-dropdown">
+      {isOpen && createPortal(
+        <div
+          ref={panelRef}
+          className="date-range-dropdown date-range-dropdown--flotante"
+          style={ubicacion ? {
+            position: 'fixed',
+            top: ubicacion.top,
+            left: ubicacion.left,
+            right: 'auto',
+            bottom: 'auto',
+            ...(ubicacion.maxAlto ? { maxHeight: ubicacion.maxAlto, overflowY: 'auto' as const } : {}),
+          } : undefined}
+        >
+          {/* Calendario a un lado y atajos al otro (en pantallas angostas, uno debajo del otro) */}
+          <div className="date-range-calendario">
           {/* Pestañas Día/Semana (modo Bitácora) */}
           {!weekOnly && !allowMonthYear && (
           <div className="date-range-tabs">
@@ -672,6 +741,8 @@ export function DateRangeSelector({
             </div>
           )}
 
+          </div>
+
           {/* Atajos rápidos */}
           <div className="date-range-shortcuts">
             {extraShortcuts.map(shortcut => (
@@ -718,7 +789,8 @@ export function DateRangeSelector({
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        document.getElementById('root') ?? document.body,
       )}
     </div>
   )

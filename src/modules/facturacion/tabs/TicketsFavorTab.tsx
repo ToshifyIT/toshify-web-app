@@ -15,7 +15,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import type { TicketFavor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, TIPOS_TICKET_FAVOR } from '../../../types/facturacion.types'
 import { useSede } from '../../../contexts/SedeContext'
-import { formatNombreCompleto } from '../../../utils/conductorUtils'
+import { formatNombreCompleto, FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 
@@ -74,7 +74,7 @@ export function TicketsFavorTab() {
   async function crearTicket() {
     const { data: conductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos, numero_dni'))
+      .select('id, nombres, apellidos, numero_dni').not(...FILTRO_SIN_INTERNOS))
       .order('apellidos')
 
     // Guardar conductores en variable global temporal para el modal

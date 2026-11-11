@@ -18,7 +18,7 @@ import {
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { ExcesoKilometraje, PeriodoFacturacion } from '../../../types/facturacion.types'
-import { formatNombreCompleto } from '../../../utils/conductorUtils'
+import { formatNombreCompleto, FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import {
   formatCurrency,
   formatDate,
@@ -122,7 +122,7 @@ export function ExcesosKmTab() {
       // Cargar conductores activos para crear excesos
       const { data: conductoresData } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('id, nombres, apellidos, dni'))
+        .select('id, nombres, apellidos, dni').not(...FILTRO_SIN_INTERNOS))
         .eq('estado', 'ACTIVO')
         .order('apellidos')
 

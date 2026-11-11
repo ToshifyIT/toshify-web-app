@@ -1,0 +1,833 @@
+/* Siniestros v2 (/siniestros-v2): estilos que se suman a SiniestrosModule.css */
+/* Ayuda del "Pago recibido": cómo queda el Total pagado */
+.ss-ayuda {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--badge-green-bg, rgba(16, 185, 129, 0.1));
+  color: var(--badge-green-text, #047857);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sd-negativo {
+  color: #dc2626;
+}
+
+/* Resultado del siniestro en el formulario (solo lectura, calculado) */
+.siniestro-resultado {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-primary);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.siniestro-resultado--recupero {
+  color: #059669;
+}
+
+.siniestro-resultado--perdida {
+  color: #dc2626;
+}
+
+
+/* Columna "Última gestión": último registro del seguimiento, en una línea */
+.siniestros-module .ultima-gestion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 280px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.siniestros-module .ultima-gestion-texto {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.siniestros-module .ultima-gestion:hover .ultima-gestion-texto {
+  color: var(--color-primary, #dc2626);
+  text-decoration: underline;
+}
+
+.siniestros-module .ultima-gestion-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.siniestros-module .sin-ultima-gestion {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Quién gestiona el siniestro (columna "Gestiona") */
+.gestiona-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.gestiona-sancor { background: rgba(37, 99, 235, 0.12); color: #1d4ed8; }
+.gestiona-rda { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+.gestiona-legal { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
+.gestiona-toshify { background: rgba(220, 38, 38, 0.1); color: #b91c1c; }
+
+/* Columna Estado: situación del trámite o motivo de cierre debajo del estado */
+.estado-celda {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.estado-celda-extra {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Fila resumen sobre la tabla: totales / en trámite / cerrados / monto en reclamo */
+.siniestros-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.resumen-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.resumen-chip:hover:not(:disabled) {
+  border-color: var(--color-primary, #dc2626);
+}
+
+button.resumen-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.resumen-chip.activo {
+  border-color: var(--color-primary, #dc2626);
+  box-shadow: inset 0 0 0 1px var(--color-primary, #dc2626);
+}
+
+.resumen-chip--monto,
+.resumen-chip--recupero,
+.resumen-chip--perdida {
+  cursor: default;
+}
+
+.resumen-chip-valor {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.resumen-chip-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.resumen-chip--tramite .resumen-chip-valor { color: #d97706; }
+.resumen-chip--cerrados .resumen-chip-valor { color: #059669; }
+.resumen-chip--monto .resumen-chip-valor { color: #dc2626; }
+.resumen-chip--recupero .resumen-chip-valor { color: #059669; }
+.resumen-chip--perdida .resumen-chip-valor { color: #dc2626; }
+
+@media (max-width: 640px) {
+  .resumen-chip {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .resumen-chip--accion {
+    margin-left: 0;
+  }
+}
+
+/* Tarjeta del mes en curso: variación contra los mismos días del mes anterior */
+.mes-variacion {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Más siniestros es peor: sube en rojo, baja en verde */
+.mes-variacion--sube { color: #dc2626; }
+.mes-variacion--baja { color: #059669; }
+
+/* Culpabilidad por mes (se abre desde la fila resumen) */
+.resumen-chip--accion {
+  align-items: center;
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+/* Las 6 tarjetas de cada fila en una sola línea en pantallas de escritorio (con auto-fit la de
+   "último robo" quedaba sola en una segunda fila) */
+@media (min-width: 1100px) {
+  .siniestros-stats--v2 .siniestros-stats-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* Indicadores unificados (v2): dos filas, Cantidades y Montos, mismo formato */
+.siniestros-stats-fila-titulo {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+
+.siniestros-stats--v2 .siniestros-stats-grid + .siniestros-stats-fila-titulo {
+  margin-top: 12px;
+}
+
+.stat-card--filtro {
+  width: 100%;
+  border: 1px solid transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.stat-card--filtro:hover:not(:disabled) {
+  border-color: var(--border-primary);
+}
+
+.stat-card--filtro:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.stat-card--filtro.activo {
+  border-color: var(--border-primary);
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.06));
+}
+
+.stat-card--filtro.activo .stat-label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Color solo cuando significa algo: recuperado en verde, pérdida en rojo */
+.stat-card--positivo .stat-value { color: #059669; }
+.stat-card--negativo .stat-value { color: #dc2626; }
+
+/* Íconos neutros en todas las tarjetas */
+.siniestros-stats--v2 .stat-card .stat-icon {
+  color: var(--text-tertiary);
+}
+
+.btn-secondary.btn-secondary--activo {
+  border-color: var(--color-primary, #dc2626);
+  color: var(--color-primary, #dc2626);
+}
+
+
+/* Cobro a conductor: estado según facturación + confirmación manual del pago */
+.ss-cobro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ss-cobro-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.ss-cobro-estado {
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 11px;
+  font-weight: 600;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.ss-cobro-estado--aplicado { background: #dbeafe; color: #1d4ed8; }
+.ss-cobro-estado--en_proceso { background: #fef3c7; color: #b45309; }
+.ss-cobro-estado--pagado { background: #dcfce7; color: #15803d; }
+.ss-cobro-estado--rechazado,
+.ss-cobro-estado--sin_incidencia { background: #e5e7eb; color: #4b5563; }
+
+.ss-cobro-confirmado {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: #059669;
+}
+
+.ss-cobro-sin-confirmar {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.ss-cobro-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid #059669;
+  border-radius: var(--radius-sm);
+  background: #059669;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ss-cobro-btn--sec {
+  border-color: var(--border-primary);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.ss-cobro-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ss-cobro-baja {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ss-cobro-baja svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Columna "Cobro conductor": confirmado de enviado + estado del primer cobro sin confirmar */
+.cobro-celda {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cobro-celda-montos {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.cobro-celda-montos strong {
+  color: #059669;
+}
+
+.cobro-celda-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.cobro-celda-baja {
+  color: #d97706;
+}
+
+/* Número + % juntos (En trámite, Cerrados, Culpabilidad, Gravedad) */
+.stat-pct {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+
+/* Informe de gestión: vista previa a la izquierda, lo que se agrega a mano a la derecha */
+.modal-content.ss-modal.ig-modal {
+  max-width: 1280px;
+  width: 96vw;
+  height: 92vh;
+  max-height: 92vh;
+}
+
+.ig-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.ig-cuerpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 18px;
+}
+
+@media (max-width: 900px) {
+  .ig-cuerpo {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(300px, 1fr) auto;
+    overflow-y: auto;
+  }
+}
+
+.ig-vista {
+  position: relative;
+  min-height: 0;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.ig-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.ig-cargando {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+}
+
+.ig-actualizando {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full, 999px);
+  background: rgba(17, 24, 39, 0.8);
+  color: #fff;
+  font-size: 12px;
+}
+
+.ig-error {
+  margin: 16px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.ig-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ig-panel-ayuda {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.ig-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ig-campo > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ig-campo textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.ig-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.ig-grupo-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+
+.ig-campo--caso > span {
+  font-weight: 500;
+}
+
+.ig-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.ig-acciones .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Todas las tarjetas del mismo alto, con lugar para el botón "i" */
+.siniestros-stats--v2 .stat-card {
+  position: relative;
+  min-height: 72px;
+}
+
+.siniestros-stats--v2 .stat-card:has(.info-detalle) {
+  padding-right: 26px;
+}
+
+/* Botón "i" con el detalle del indicador */
+.info-detalle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.info-detalle-btn {
+  display: flex;
+  padding: 2px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.info-detalle-btn:hover,
+.info-detalle-btn[aria-expanded='true'] {
+  color: var(--color-primary, #dc2626);
+}
+
+.info-detalle-pop {
+  position: fixed;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 300px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.info-detalle-titulo {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.info-detalle-fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.info-detalle-fila strong {
+  color: var(--text-primary);
+}
+
+/* "Sin gestiones" también abre el seguimiento para cargar la primera nota */
+.ultima-gestion-agregar {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary, #dc2626);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ultima-gestion--vacia:hover .ultima-gestion-agregar,
+.ultima-gestion--vacia:focus-visible .ultima-gestion-agregar {
+  opacity: 1;
+}
+
+/* Recupero neto: lo que entró por seguro y por conductor, a la vista (pedido de Karen).
+   Una sola línea para no estirar la fila; el detalle completo sigue en la "i". */
+.stat-desglose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.stat-desglose > span {
+  white-space: nowrap;
+}
+
+.stat-desglose strong {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Ver y editar siniestro: alto y ancho fijos para que no cambie de tamaño al pasar de pestaña.
+   El contenido largo hace scroll dentro del cuerpo. */
+.modal-content.siniestros-modal-edicion {
+  height: min(760px, 90vh);
+}
+.modal-content.sd-modal.siniestros-modal-edicion {
+  max-width: 800px;
+}
+
+/* Títulos de fila: mismo estilo y separación para Siniestros, Distribución y Montos */
+.siniestros-stats--v2 .siniestros-stats-grid + .siniestros-stats-fila-titulo {
+  margin-top: 14px;
+}
+
+/* Distribución: dos tarjetas (Culpabilidad, Gravedad) de media fila cada una */
+.siniestros-stats--v2 .dist-card {
+  grid-column: span 3;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 1099px) {
+  .siniestros-stats--v2 .dist-card {
+    grid-column: 1 / -1;
+  }
+}
+
+.dist-titulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dist-barra {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border-primary);
+}
+
+.dist-barra > span {
+  height: 100%;
+}
+
+.dist-barra > span + span {
+  border-left: 2px solid var(--bg-secondary, #fff);
+}
+
+.dist-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dist-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.dist-item i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.dist-item strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dist-pct {
+  color: var(--text-tertiary);
+}
+
+.dist-vacio {
+  color: var(--text-tertiary);
+}
+
+/* Montos: 8 tarjetas en 2 filas de 4 */
+@media (min-width: 1100px) {
+  .siniestros-stats--v2 .siniestros-stats-grid.siniestros-stats-grid--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Cuenta del indicador en la "i": el total separado con una línea */
+.info-detalle-total {
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+
+/* ===== Nuevo siniestro (v2): más compacto y prolijo ===== */
+/* Pasos: más chicos y todos a la misma altura ("(Opc.)" al lado del nombre, no abajo) */
+#root .siniestro-wizard--v2 .wizard-progress {
+  align-items: flex-start;
+  padding: 0 12px 14px;
+  margin-bottom: 14px;
+}
+#root .siniestro-wizard--v2 .wizard-step {
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 10px;
+}
+#root .siniestro-wizard--v2 .wizard-step-number {
+  width: 30px;
+  height: 30px;
+  font-size: 12px !important;
+}
+#root .siniestro-wizard--v2 .wizard-step-optional {
+  margin-top: -2px;
+  font-size: 9px !important;
+}
+#root .siniestro-wizard--v2 .wizard-step-line {
+  margin: 18px 4px 0;
+}
+
+/* Responsable: nombre arriba y la explicación abajo, en minúscula */
+#root .siniestro-wizard--v2 .form-group > .radio-group-cards > .radio-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+#root .siniestro-wizard--v2 .radio-card .radio-card-label {
+  margin: 0;
+  font-size: 12px !important;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+#root .siniestro-wizard--v2 .radio-card .radio-card-desc {
+  font-size: 11px !important;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Hay lesionados: renglón normal, sin mayúsculas */
+#root .siniestro-wizard--v2 .form-group > .checkbox-lesionados {
+  padding: 8px 12px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+#root .siniestro-wizard--v2 .checkbox-lesionados span {
+  font-size: 12px !important;
+  color: var(--text-primary);
+}
+
+/* Editar siniestro: Responsable y "Hay lesionados" como renglones normales
+   (radio/casilla al lado del texto, sin mayúsculas) */
+#root .siniestros-modal-edicion .radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  min-height: 34px;
+  align-items: center;
+}
+#root .siniestros-modal-edicion :is(.radio-option, .checkbox-option) {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  cursor: pointer;
+}
+#root .siniestros-modal-edicion :is(.radio-option, .checkbox-option) span {
+  font-size: 12px !important;
+  color: var(--text-primary);
+  text-transform: none;
+  letter-spacing: normal;
+}
+#root .siniestros-modal-edicion .checkbox-option { min-height: 34px; }
+
+/* Hora: mismo alto, borde y fondo que el resto de los campos */
+#root :is(.siniestros-modal-edicion, .siniestro-wizard--v2) .time-input-display {
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-primary, #fff);
+}
+#root :is(.siniestros-modal-edicion, .siniestro-wizard--v2) .time-input-display .time-value {
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 12px;
+}

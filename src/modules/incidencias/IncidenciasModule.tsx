@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../utils/conductorUtils'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
@@ -421,7 +422,7 @@ export function IncidenciasModule() {
         (supabase.from('tipos_penalidad' as any) as any).select('id, codigo, nombre, descripcion, orden').eq('is_active', true).order('orden'),
         (supabase.from('tipos_cobro_descuento' as any) as any).select('id, codigo, nombre, descripcion, categoria, es_a_favor, orden').eq('is_active', true).order('orden'),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, gnc, updated_at').is('deleted_at', null)).order('patente'),
-        aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, estado_id')).order('apellidos'),
+        aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, estado_id').not(...FILTRO_SIN_INTERNOS)).order('apellidos'),
         aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         // Obtener campos adicionales de la tabla incidencias (tipo, monto, telepase_id)

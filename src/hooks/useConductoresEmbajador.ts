@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SearchableSelectOption } from '../components/ui/SearchableSelect'
 import { supabase } from '../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../utils/conductorUtils'
 import { traerTodasLasPaginas } from '../utils/paginacionSupabase'
 
 export interface ConductorEmbajador {
@@ -32,7 +33,7 @@ function cargarConductores(): Promise<ConductorEmbajador[]> {
     cache = (async () => {
       const { data, error } = await traerTodasLasPaginas<FilaConductor>((desde, hasta, contar) =>
         (supabase.from('conductores') as any)
-          .select('id, nombres, apellidos, numero_dni, conductores_estados(codigo)', contar ? { count: 'exact' } : undefined)
+          .select('id, nombres, apellidos, numero_dni, conductores_estados(codigo)', contar ? { count: 'exact' } : undefined).not(...FILTRO_SIN_INTERNOS)
           .order('apellidos', { ascending: true })
           .order('id', { ascending: true })
           .range(desde, hasta)

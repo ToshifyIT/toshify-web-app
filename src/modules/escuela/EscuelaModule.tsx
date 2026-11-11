@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { FILTRO_SIN_INTERNOS } from '../../utils/conductorUtils';
 import { 
   Users, 
   TrendingUp, 
@@ -70,7 +71,7 @@ export function EscuelaModule() {
           conductores_estados (
             descripcion
           )
-        `)
+        `).not(...FILTRO_SIN_INTERNOS)
         .not('fecha_escuela', 'is', null))
         .order('fecha_escuela', { ascending: false });
 
@@ -183,7 +184,7 @@ export function EscuelaModule() {
 
       setConductores(processedData);
 
-    } catch (_err) {
+    } catch {
       // silently ignored
     } finally {
       setLoading(false);

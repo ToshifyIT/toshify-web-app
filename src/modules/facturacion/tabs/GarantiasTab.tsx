@@ -32,7 +32,7 @@ import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { recalcGarantiasForSede } from '../../../services/garantiasService'
 import { descargarExcel } from '../../../utils/excelCorporativo'
-import { formatNombreCompleto } from '../../../utils/conductorUtils'
+import { formatNombreCompleto, FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
 import { X as XIcon } from 'lucide-react'
 import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
@@ -739,7 +739,7 @@ export function GarantiasTab() {
     // Cargar todos los conductores
     const { data: conductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos'))
+      .select('id, nombres, apellidos').not(...FILTRO_SIN_INTERNOS))
       .order('apellidos')
 
     // Set para O(1) lookup — evita .some() O(m) por cada uno de los n conductores

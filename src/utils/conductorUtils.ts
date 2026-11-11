@@ -116,3 +116,11 @@ export function esConductorInterno(c: { apellidos?: string | null } | null | und
     .replace(/\s+/g, ' ').trim().toUpperCase();
   return ap === APELLIDO_CONDUCTOR_INTERNO;
 }
+
+/**
+ * Para queries de Supabase: deja afuera a los conductores internos (apellido
+ * "INTERNO") del lado de la base. Uso: `.select(...).not(...FILTRO_SIN_INTERNOS)`.
+ * Ningún conductor tiene apellido vacío, así que no se pierde ningún otro.
+ * NO usar en Multas y Telepase (ahí sí tienen que aparecer).
+ */
+export const FILTRO_SIN_INTERNOS = ['apellidos', 'ilike', APELLIDO_CONDUCTOR_INTERNO] as const;

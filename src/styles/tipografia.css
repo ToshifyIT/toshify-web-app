@@ -167,9 +167,9 @@
   min-height: 0 !important;
 }
 
-/* Botones de la barra de la tabla: todos del mismo alto (32 px) y letra 12 */
+/* Botones de la barra de la tabla: todos del mismo alto (--alto-control) y letra 12 */
 #root :is(.btn-primary, .btn-secondary, .fact-btn, .date-range-btn) {
-  height: 32px !important;
+  height: var(--alto-control) !important;
   box-sizing: border-box;
   display: inline-flex !important;
   align-items: center;
@@ -180,14 +180,14 @@
   border-radius: var(--radius-md) !important;
 }
 #root .date-range-btn svg.lucide { width: 14px !important; height: 14px !important; }
-#root .modal-content .modal-footer :is(.btn-primary, .btn-secondary) { height: 34px !important; padding: 0 16px !important; }
+#root .modal-content .modal-footer :is(.btn-primary, .btn-secondary) { height: var(--alto-control-ventana) !important; padding: 0 16px !important; }
 
 /* El buscador se define una sola vez en DataTable.css */
 
 /* Filtros que van al lado del buscador (selects, fechas, casillas): mismo alto
    y letra que los botones de la barra */
 #root .dt-header-action :is(select, input[type="date"], input[type="month"]) {
-  height: 32px !important;
+  height: var(--alto-control) !important;
   box-sizing: border-box;
   padding: 0 10px !important;
   font-size: 12px !important;
@@ -203,7 +203,7 @@
   gap: 6px;
 }
 #root .dt-header-action .audit-filter-clear {
-  height: 32px;
+  height: var(--alto-control);
   padding: 0 12px;
   font-size: 12px;
   border-radius: var(--radius-md);
@@ -230,7 +230,7 @@
 
 /* Semana de Cabify (selector, flechas y rango) al alto de la barra */
 #root :is(.cabify-semana-flecha, .week-calendar-btn, .cabify-semana-hoy, .cabify-help-icon) {
-  height: 32px !important;
+  height: var(--alto-control) !important;
   font-size: 12px !important;
   box-sizing: border-box;
 }
@@ -281,20 +281,20 @@
 
 /* Selectores de período, flechas y botones: 32 px y letra 12 */
 #root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(.ddir-select, .dkv2-periodo-select) {
-  height: 32px !important;
+  height: var(--alto-control) !important;
   box-sizing: border-box;
   font-size: 12px !important;
   border-radius: var(--radius-md) !important;
 }
 #root .dkv2-module .dkv2-icon-btn {
-  width: 32px !important;
-  height: 32px !important;
+  width: var(--alto-control) !important;
+  height: var(--alto-control) !important;
   min-height: 0 !important;
   box-sizing: border-box;
 }
 #root .dkv2-module .dkv2-icon-btn svg { width: 16px; height: 16px; }
 #root .dkv2-module .dkv2-btn {
-  height: 32px !important;
+  height: var(--alto-control) !important;
   min-height: 0 !important;
   box-sizing: border-box;
   font-size: 12px !important;
@@ -357,18 +357,18 @@
   white-space: nowrap;
 }
 #root :is(.cr-filtros, .tc-filtros) :is(input, select) {
-  height: 32px !important;
+  height: var(--alto-control) !important;
   min-height: 0 !important;
   box-sizing: border-box;
   padding: 0 10px !important;
   font-size: 12px !important;
   width: auto !important;
 }
-#root :is(.cr-filtros, .tc-filtros) :is(.btn-primary, .btn-secondary) { height: 32px !important; }
+#root :is(.cr-filtros, .tc-filtros) :is(.btn-primary, .btn-secondary) { height: var(--alto-control) !important; }
 
 /* Campos de formulario sueltos en pantalla (no en ventanas): mismo alto que el resto */
 #root .main-content :is(input.form-input:not([type="checkbox"]):not([type="radio"]), select.form-input, input.select-input, .ss-trigger):not(.modal-content *):not(td *) {
-  height: 32px !important;
+  height: var(--alto-control) !important;
   min-height: 0 !important;
   box-sizing: border-box;
   font-size: 12px !important;

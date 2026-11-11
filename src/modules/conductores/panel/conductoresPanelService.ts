@@ -15,6 +15,7 @@
 // El resto de las multas atribuidas se consideran pendientes con su importe original.
 
 import { supabase } from '../../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { calcularKmSemanaConductores } from '../../portal/kmRecorridos'
@@ -204,7 +205,7 @@ export async function cargarPanelConductores(
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia, conductores_estados(codigo)')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
         .range(from, to)
       if (sedeId) q = q.eq('sede_id', sedeId)
       return q

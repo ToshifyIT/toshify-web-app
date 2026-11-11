@@ -18,6 +18,11 @@
   --radius-lg: 12px;    /* tarjetas, paneles, ventanas */
   --radius-full: 999px; /* píldoras e interruptores */
 
+  /* Alto de botones, buscador y filtros de pantalla (todos iguales para que la
+     barra quede pareja). Cambiar acá cambia toda la app. */
+  --alto-control: 28px;
+  --alto-control-ventana: 30px; /* Guardar / Cancelar al pie de las ventanas */
+
   /* Capas (de abajo hacia arriba). Los valores bajos (1–60) que quedan en los
      módulos son locales a cada componente y no compiten con estos. */
   --z-sidebar: 900;

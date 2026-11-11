@@ -5,6 +5,7 @@
 // cuentan) y en paralelo. Los rangos de fechas son los del período elegido
 // y el anterior.
 import { supabase } from '../../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { lunesDeSemana, sumarDias } from './kpisV2Types'
 import { formatPlata } from '../../../utils/format'
 import { normalizarTexto } from '../../../utils/sedeMatch'
@@ -142,7 +143,7 @@ export interface GuiasConductores {
 export async function cargarGuiasConductores(filtroSede: FiltroSede): Promise<GuiasConductores> {
   const filas = await leerTodo<{ id: string; nombres: string | null; apellidos: string | null; guia: string | null }>(
     (a, b) => filtroSede((supabase.from('conductores') as any)
-      .select('id, nombres, apellidos, guia'))
+      .select('id, nombres, apellidos, guia').not(...FILTRO_SIN_INTERNOS))
       .range(a, b),
   )
   const conductores = filas.map(c => ({

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../utils/conductorUtils'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
@@ -1081,7 +1082,7 @@ export function LeadsModule() {
       const [cond, est] = await Promise.all([
         traerTodasLasPaginas<ConductorPrevio>((desde, hasta, contar) =>
           (supabase.from('conductores') as any)
-            .select('id, nombres, apellidos, numero_dni, telefono_contacto, estado_id, fecha_terminacion, motivo_baja', contar ? { count: 'exact' } : undefined)
+            .select('id, nombres, apellidos, numero_dni, telefono_contacto, estado_id, fecha_terminacion, motivo_baja', contar ? { count: 'exact' } : undefined).not(...FILTRO_SIN_INTERNOS)
             .order('id', { ascending: true })
             .range(desde, hasta)),
         supabase.from('conductores_estados').select('id, codigo'),
@@ -3014,9 +3015,9 @@ export function LeadsModule() {
           <div
             title={enZonaRestringida ? `Zona Restringida: ${zonaRestringida}` : tieneCoordenadas ? 'Zona Aprobada' : undefined}
             style={{
-              background: enZonaRestringida ? 'var(--badge-red-bg)' : undefined,
-              borderLeft: enZonaRestringida ? '3px solid var(--color-primary)' : undefined,
-              padding: '6px 8px',
+              // Zona restringida: solo la raya roja (sin fondo), para no agrandar la fila
+              borderLeft: `3px solid ${enZonaRestringida ? 'var(--color-primary)' : 'transparent'}`,
+              padding: '2px 8px',
               borderRadius: 'var(--radius-sm)',
             }}
           >
@@ -3071,19 +3072,7 @@ export function LeadsModule() {
                     </button>
                   )
                 })()}
-              </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
-                {phone && !normalizarCelularAR(phone) && (
-                  <span
-                    title="El teléfono no tiene formato de celular (+54 9 área número). Corregirlo desde Editar."
-                    style={{ marginLeft: '6px', color: 'var(--badge-red-text)', fontWeight: 600 }}
-                  >
-                    Tel. inválido
-                  </span>
-                )}
-              </span>
-              {/* Zona, programado y pareja en una misma línea (bajan si no entran) */}
+              {/* Zona, programado y pareja al lado del nombre: la fila queda en dos líneas */}
               <div className="lead-etiquetas">
               {enZonaRestringida && (
                 <span
@@ -3197,6 +3186,18 @@ export function LeadsModule() {
                 )
               })()}
               </div>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
+                {phone && !normalizarCelularAR(phone) && (
+                  <span
+                    title="El teléfono no tiene formato de celular (+54 9 área número). Corregirlo desde Editar."
+                    style={{ marginLeft: '6px', color: 'var(--badge-red-text)', fontWeight: 600 }}
+                  >
+                    Tel. inválido
+                  </span>
+                )}
+              </span>
             </div>
           </div>
         )

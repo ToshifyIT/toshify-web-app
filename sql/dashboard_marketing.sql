@@ -258,7 +258,9 @@ cond_base AS (
     regexp_replace(COALESCE(c.numero_dni, ''), '\D', '', 'g') AS dni,
     COALESCE(dashboard_directivo_zona(c.zona, c.direccion_lat::double precision, c.direccion_lng::double precision, c.direccion), 'Sin dato') AS zona_ficha
   FROM conductores c
-  WHERE p_sede_id IS NULL OR c.sede_id = p_sede_id
+  WHERE (p_sede_id IS NULL OR c.sede_id = p_sede_id)
+    -- Conductores internos (apellido INTERNO): no son conductores reales (2026-11-06)
+    AND COALESCE(c.apellidos, '') NOT ILIKE 'interno'
 ),
 turnos AS (
   SELECT

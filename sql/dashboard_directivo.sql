@@ -177,7 +177,9 @@ cond_base AS (
     dashboard_directivo_zona(c.zona, c.direccion_lat::double precision, c.direccion_lng::double precision, c.direccion) AS zona_legajo
   FROM conductores c
   LEFT JOIN conductores_estados ce ON ce.id = c.estado_id
-  WHERE p_sede_id IS NULL OR c.sede_id = p_sede_id
+  WHERE (p_sede_id IS NULL OR c.sede_id = p_sede_id)
+    -- Conductores internos (apellido INTERNO): no son conductores reales (2026-11-06)
+    AND COALESCE(c.apellidos, '') NOT ILIKE 'interno'
 ),
 
 turnos_validos AS (

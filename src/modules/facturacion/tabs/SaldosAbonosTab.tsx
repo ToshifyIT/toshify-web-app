@@ -33,7 +33,7 @@ import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getISOW
 import { LoadingOverlay, Spinner } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
 import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
-import { formatNombreCompleto } from '../../../utils/conductorUtils'
+import { formatNombreCompleto, FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 interface ConductorBasico {
@@ -385,7 +385,7 @@ export function SaldosAbonosTab() {
     // Cargar conductores disponibles al momento de abrir el modal
     const { data: todosLosConductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos'))
+      .select('id, nombres, apellidos').not(...FILTRO_SIN_INTERNOS))
       .order('apellidos')
 
     const conductoresParaModal = ((todosLosConductores || []) as ConductorBasico[])

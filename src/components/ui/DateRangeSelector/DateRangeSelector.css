@@ -54,6 +54,22 @@
   max-width: calc(100vw - 20px);
 }
 
+/* Abre hacia arriba cuando abajo no entra (lo decide DateRangeSelector) */
+@media (min-width: 481px) {
+  .date-range-dropdown--arriba {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+}
+
+/* Alineado al borde derecho del botón cuando por la izquierda se sale de la pantalla */
+@media (min-width: 481px) {
+  .date-range-dropdown--derecha {
+    left: auto;
+    right: 0;
+  }
+}
+
 /* Mobile: dropdown full-width centrado */
 @media (max-width: 480px) {
   .date-range-dropdown {
@@ -326,5 +342,29 @@
 
   .date-range-day:hover:not(.selected):not(.day-selected) {
     background: var(--bg-tertiary, #374151);
+  }
+}
+
+/* Pantallas anchas: atajos en una columna a la derecha del calendario, así el panel
+   es ~200px más bajo y entra entero aunque la pantalla sea baja. */
+@media (min-width: 700px) {
+  .date-range-dropdown {
+    display: flex;
+    align-items: stretch;
+  }
+  .date-range-calendario {
+    width: 276px;
+    flex-shrink: 0;
+  }
+  .date-range-shortcuts {
+    width: 180px;
+    white-space: nowrap;
+    margin: 0 0 0 12px;
+    padding: 0 0 0 12px;
+    border-top: none;
+    border-left: 1px solid var(--border-primary);
+  }
+  .date-range-shortcut {
+    padding: 8px 10px;
   }
 }

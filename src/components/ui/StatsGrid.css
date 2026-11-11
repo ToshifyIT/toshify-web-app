@@ -21,7 +21,9 @@
   display: flex;
   flex-wrap: nowrap;
 }
-#root .stats-grid-uniforme.stats-grid-midiendo > * { flex: 0 0 auto; }
+/* Sin transición al medir: con "transition: all" (p. ej. Incidencias) el ancho que se
+   lee es el de antes del cambio (estirado), y las tarjetas quedaban una debajo de otra. */
+#root .stats-grid-uniforme.stats-grid-midiendo > * { flex: 0 0 auto; transition: none !important; }
 #root .stats-grid-uniforme.stats-grid-midiendo [class*="stat-label"] { white-space: nowrap; }
 @media (max-width: 640px) {
   #root .stats-grid-uniforme.stats-grid-columnas { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -1,6 +1,6 @@
 /* =====================================================
    BOTONES: TAMAÑO UNIFICADO EN TODA LA PLATAFORMA
-   Mismo tamaño que en Facturación: 32 px de alto, texto
+   Mismo tamaño que en Facturación: --alto-control (tokens.css) de alto, texto
    de 12 px e íconos de 14 px. Solo cambia el tamaño:
    colores, textos y funciones de cada botón quedan igual.
 
@@ -29,8 +29,8 @@
     .prod-btn-primary, .prod-btn-secondary, .prod-btn-success,
     .btn-logout
   ):not(.btn-icon) {
-    min-height: 32px;
-    padding: 6px 12px;
+    min-height: var(--alto-control);
+    padding: 4px 12px;
     gap: 6px;
     border-radius: var(--radius-sm);
     font-size: 12px;
