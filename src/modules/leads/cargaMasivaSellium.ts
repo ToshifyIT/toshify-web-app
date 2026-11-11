@@ -51,6 +51,7 @@
  */
 import { inferirSedeDeLead, normalizarTexto, type SedeRef } from '../../utils/sedeMatch'
 import { homologarGuia } from './guias'
+import { estadoLicencia } from './licenciaLead'
 
 /** Valor de fuente_de_lead para los leads creados Y actualizados por esta carga. */
 export const FUENTE_SELLIUM = 'SELLIUM'
@@ -645,7 +646,9 @@ function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unkno
   if (f.estado.estado) p.estado_de_lead = f.estado.estado
   if (f.causal) p.observaciones = lineaCausal(f.causal)
   if (f.casillas.acepta_oferta) p.acepta_oferta = true
-  if (f.casillas.d1) p.d1 = 'Si'
+  // Casilla "Licencia D1": tiene licencia y su categoría es D1 (ver licenciaLead.ts).
+  // Sin la casilla no se deduce nada: puede tener B1 o no tener licencia.
+  if (f.casillas.d1) Object.assign(p, { d1: 'Si', licencia: 'Si', categoria_licencia: 'D1' })
   if (f.casillas.monotributo) p.monotributo = 'Si'
   if (f.casillas.experiencia_previa) p.experiencia_previa = 'Si'
   const sede = inferirSedeDeLead(f.ubicacion, sedes)
@@ -686,7 +689,12 @@ function payloadActualizacion(
   completar('email', f.email)
 
   if (f.casillas.acepta_oferta) completar('acepta_oferta', true)
-  if (f.casillas.d1) completar('d1', 'Si')
+  if (f.casillas.d1) {
+    completar('d1', 'Si')
+    completar('licencia', 'Si')
+    // Solo si el lead no dice que no tiene licencia: no se pisa un dato cargado a mano.
+    if (estadoLicencia(l.licencia as string | null) !== 'no') completar('categoria_licencia', 'D1')
+  }
   if (f.casillas.monotributo) completar('monotributo', 'Si')
   if (f.casillas.experiencia_previa) completar('experiencia_previa', 'Si')
 

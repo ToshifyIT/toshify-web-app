@@ -4,6 +4,8 @@ import { User, CreditCard, FileCheck, Phone, Shield, Check, ChevronLeft, Chevron
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import { ReferidoEmbajadorFields } from './ReferidoEmbajadorFields'
 import { GUIAS_ACTIVOS } from '../../leads/guias'
+import { CATEGORIAS_LICENCIA_LEAD } from '../../leads/licenciaLead'
+import { erroresLicenciaConductor } from '../licenciaConductor'
 
 interface ConductorFormData {
   nombres: string
@@ -17,6 +19,13 @@ interface ConductorFormData {
   licencia_vencimiento: string
   licencia_estado_id: string
   licencia_tipo_id: string
+  /** ¿Tiene licencia? ('Si' / 'No') y categoría única B1 / D1 / Otros (ver licenciaConductor.ts) */
+  tiene_licencia: string
+  categoria_licencia: string
+  categoria_licencia_otra: string
+  fecha_categoria_licencia: string
+  fecha_licencia_b1: string
+  fecha_licencia_d1: string
   telefono_contacto: string
   telefono_secundario?: string
   /** Mail personal / respaldo (conductores.correo_personal). Opcional. */
@@ -82,7 +91,6 @@ export function ConductorWizard({
   setFormData,
   estadosCiviles,
   nacionalidades,
-  categoriasLicencia,
   estadosConductor,
   sedes,
   onCancel,
@@ -91,6 +99,21 @@ export function ConductorWizard({
 }: ConductorWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Fechas de obtención de la licencia (ver licenciaConductor.ts): B1, D1 o la general de Otros
+  const campoFechaLicencia = (campo: 'fecha_licencia_b1' | 'fecha_licencia_d1' | 'fecha_categoria_licencia', label: string) => (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <input
+        type="date"
+        className={`form-input ${errors[campo] ? 'input-error' : ''}`}
+        value={formData[campo]}
+        onChange={(e) => setFormData({ ...formData, [campo]: e.target.value })}
+        disabled={saving}
+      />
+      {errors[campo] && <span className="error-message">{errors[campo]}</span>}
+    </div>
+  )
 
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {}
@@ -108,9 +131,7 @@ export function ConductorWizard({
     }
 
     if (step === 3) {
-      if (!formData.numero_licencia.trim()) newErrors.numero_licencia = 'Requerido'
-      if (formData.licencia_categorias_ids.length === 0) newErrors.licencia_categorias_ids = 'Seleccione al menos una'
-      if (!formData.licencia_vencimiento) newErrors.licencia_vencimiento = 'Requerido'
+      Object.assign(newErrors, erroresLicenciaConductor(formData))
     }
 
     if (step === 4) {
@@ -305,52 +326,97 @@ export function ConductorWizard({
               <FileCheck size={20} />
               <h3>Licencia de Conducir</h3>
             </div>
-            <p className="step-description">Datos de la licencia. Número, categorías y vencimiento son obligatorios.</p>
+            <p className="step-description">Si tiene licencia: número, vencimiento, categoría y fecha de obtención son obligatorios.</p>
 
-            <div className="form-row-3">
+            <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Nro. Licencia *</label>
-                <input
-                  type="text"
-                  className={`form-input ${errors.numero_licencia ? 'input-error' : ''}`}
-                  value={formData.numero_licencia}
-                  onChange={(e) => setFormData({ ...formData, numero_licencia: e.target.value })}
-                  disabled={saving}
-                />
-                {errors.numero_licencia && <span className="error-message">{errors.numero_licencia}</span>}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Categorías *</label>
+                <label className="form-label">¿Tiene licencia? *</label>
                 <select
-                  className={`form-input ${errors.licencia_categorias_ids ? 'input-error' : ''}`}
-                  multiple
-                  value={formData.licencia_categorias_ids}
-                  onChange={(e) => {
-                    const selected = Array.from(e.target.selectedOptions, (option) => option.value)
-                    setFormData({ ...formData, licencia_categorias_ids: selected })
-                  }}
+                  className={`form-input ${errors.tiene_licencia ? 'input-error' : ''}`}
+                  value={formData.tiene_licencia}
+                  onChange={(e) => setFormData({ ...formData, tiene_licencia: e.target.value })}
                   disabled={saving}
-                  style={{ minHeight: '100px' }}
                 >
-                  {categoriasLicencia.map((cat: any) => (
-                    <option key={cat.id} value={cat.id}>{cat.descripcion}</option>
+                  <option value="">Seleccionar...</option>
+                  <option value="Si">Si</option>
+                  <option value="No">No</option>
+                </select>
+                {errors.tiene_licencia && <span className="error-message">{errors.tiene_licencia}</span>}
+              </div>
+              <div className="form-group" />
+            </div>
+
+            {formData.tiene_licencia === 'Si' && (
+              <>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Nro. Licencia *</label>
+                    <input
+                      type="text"
+                      className={`form-input ${errors.numero_licencia ? 'input-error' : ''}`}
+                      value={formData.numero_licencia}
+                      onChange={(e) => setFormData({ ...formData, numero_licencia: e.target.value })}
+                      disabled={saving}
+                    />
+                    {errors.numero_licencia && <span className="error-message">{errors.numero_licencia}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Vencimiento *</label>
+                    <input
+                      type="date"
+                      className={`form-input ${errors.licencia_vencimiento ? 'input-error' : ''}`}
+                      value={formData.licencia_vencimiento}
+                      onChange={(e) => setFormData({ ...formData, licencia_vencimiento: e.target.value })}
+                      disabled={saving}
+                    />
+                    {errors.licencia_vencimiento && <span className="error-message">{errors.licencia_vencimiento}</span>}
+                  </div>
+                </div>
+                <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Categoría *</label>
+                <select
+                  className={`form-input ${errors.categoria_licencia ? 'input-error' : ''}`}
+                  value={formData.categoria_licencia}
+                  onChange={(e) => setFormData({ ...formData, categoria_licencia: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  {CATEGORIAS_LICENCIA_LEAD.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
-                {errors.licencia_categorias_ids && <span className="error-message">{errors.licencia_categorias_ids}</span>}
-                <small className="input-hint">Ctrl+Click para múltiples</small>
+                {errors.categoria_licencia && <span className="error-message">{errors.categoria_licencia}</span>}
               </div>
+              {formData.categoria_licencia === 'B1' && campoFechaLicencia('fecha_licencia_b1', 'Fecha de obtención B1 *')}
+              {formData.categoria_licencia === 'D1' && campoFechaLicencia('fecha_licencia_d1', 'Fecha de obtención D1 *')}
+              {formData.categoria_licencia === 'Otros' && campoFechaLicencia('fecha_categoria_licencia', 'Fecha de obtención de la categoría *')}
+              {!formData.categoria_licencia && <div className="form-group" />}
+                </div>
+                {formData.categoria_licencia === 'D1' && (
+                  <div className="form-row">
+                    {campoFechaLicencia('fecha_licencia_b1', 'Fecha de obtención B1 (opcional)')}
+                    <div className="form-group" />
+                  </div>
+                )}
+                {formData.categoria_licencia === 'Otros' && (
+                  <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Vencimiento *</label>
+                <label className="form-label">Detalle de la licencia *</label>
                 <input
-                  type="date"
-                  className={`form-input ${errors.licencia_vencimiento ? 'input-error' : ''}`}
-                  value={formData.licencia_vencimiento}
-                  onChange={(e) => setFormData({ ...formData, licencia_vencimiento: e.target.value })}
+                  type="text"
+                  className={`form-input ${errors.categoria_licencia_otra ? 'input-error' : ''}`}
+                  value={formData.categoria_licencia_otra}
+                  onChange={(e) => setFormData({ ...formData, categoria_licencia_otra: e.target.value })}
                   disabled={saving}
+                  placeholder="Ej: D3, B2"
                 />
-                {errors.licencia_vencimiento && <span className="error-message">{errors.licencia_vencimiento}</span>}
+                {errors.categoria_licencia_otra && <span className="error-message">{errors.categoria_licencia_otra}</span>}
               </div>
-            </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )
 

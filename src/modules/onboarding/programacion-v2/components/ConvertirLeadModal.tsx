@@ -23,6 +23,8 @@ import {
   type OpcionCatalogo,
 } from '../../../leads/conversionLeadAConductor'
 import { estadoMonotributo } from '../../../leads/monotributo'
+import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, licenciaSiNo, normalizarLicenciaAlGuardar } from '../../../leads/licenciaLead'
+import { AlertasLicencia } from '../../../leads/components/AlertasLicencia'
 import type { Lead } from '../../../../types/leads.types'
 import {
   validarCuit,
@@ -231,17 +233,6 @@ export function ConvertirLeadModal({
   // Guardar SI admite campos incompletos: lo unico que bloquea es un dato mal escrito.
   const puedeGuardar = !!lead && !hayErroresFormato && !guardando
 
-  const toggleCategoria = (descripcion: string) => {
-    if (!lead) return
-    const actuales = lead.categorias_licencia || []
-    set(
-      'categorias_licencia',
-      actuales.includes(descripcion)
-        ? actuales.filter((c) => c !== descripcion)
-        : [...actuales, descripcion]
-    )
-  }
-
   /**
    * Persiste lo editado en `leads`. Se usa en los dos botones:
    *
@@ -269,9 +260,14 @@ export function ConvertirLeadModal({
       phone: texto(l.phone),
       email: texto(l.email),
       direccion: texto(l.direccion),
+      licencia: texto(l.licencia),
       numero_licencia: texto(l.numero_licencia),
-      categorias_licencia: l.categorias_licencia?.length ? l.categorias_licencia : null,
       vencimiento_licencia: l.vencimiento_licencia || null,
+      categoria_licencia: l.categoria_licencia || null,
+      categoria_licencia_otra: texto(l.categoria_licencia_otra),
+      fecha_categoria_licencia: l.fecha_categoria_licencia || null,
+      fecha_licencia_b1: l.fecha_licencia_b1 || null,
+      fecha_licencia_d1: l.fecha_licencia_d1 || null,
       estado_licencia: texto(l.estado_licencia),
       tipo_licencia: texto(l.tipo_licencia),
       experiencia_previa: texto(l.experiencia_previa),
@@ -283,6 +279,7 @@ export function ConvertirLeadModal({
     // siquiera entraria, y en una de texto dejaria basura. Se conserva todo lo
     // demas, que es lo que importa para no perder el trabajo cargado.
     for (const campo of omitir) delete campos[campo]
+    normalizarLicenciaAlGuardar(campos)
 
     const { error: errUpdate } = await (supabase.from('leads') as any)
       .update(campos)
@@ -296,8 +293,10 @@ export function ConvertirLeadModal({
     if (!a || !lead) return false
     const campos: Array<keyof Lead> = [
       'nombre_completo', 'dni', 'cuit', 'monotributo', 'motivo_sin_monotributo', 'fecha_de_nacimiento', 'nacionalidad',
-      'estado_civil', 'sede_id', 'phone', 'email', 'direccion', 'numero_licencia',
-      'vencimiento_licencia', 'estado_licencia', 'tipo_licencia',
+      'estado_civil', 'sede_id', 'phone', 'email', 'direccion', 'licencia', 'numero_licencia',
+      'vencimiento_licencia', 'categoria_licencia', 'categoria_licencia_otra', 'fecha_categoria_licencia',
+      'fecha_licencia_b1', 'fecha_licencia_d1',
+      'estado_licencia', 'tipo_licencia',
       'experiencia_previa', 'cochera', 'url_folder',
     ]
     for (const c of campos) {
@@ -305,9 +304,7 @@ export function ConvertirLeadModal({
       const vb = (lead[c] ?? '') as string
       if (String(va).trim() !== String(vb).trim()) return true
     }
-    const ca = (a.categorias_licencia || []).slice().sort().join('|')
-    const cb = (lead.categorias_licencia || []).slice().sort().join('|')
-    return ca !== cb
+    return false
   }, [lead])
 
   /**
@@ -617,6 +614,41 @@ export function ConvertirLeadModal({
                 <Campo label="Dirección" obligatorio error={errores.direccion}>
                   <input style={inputStyle} value={lead.direccion || ''} onChange={(e) => set('direccion', e.target.value)} />
                 </Campo>
+                <Campo label="¿Tiene licencia?" obligatorio>
+                  <select style={inputStyle} value={licenciaSiNo(lead.licencia)} onChange={(e) => set('licencia', e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    <option value="Si">Si</option>
+                    <option value="No">No</option>
+                  </select>
+                </Campo>
+                <Campo label="Categoría de licencia" obligatorio>
+                  <select style={inputStyle} value={lead.categoria_licencia || ''} onChange={(e) => set('categoria_licencia', e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    {CATEGORIAS_LICENCIA_LEAD.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </Campo>
+                {lead.categoria_licencia === 'Otros' && (
+                  <Campo label="Detalle de la licencia" obligatorio>
+                    <input style={inputStyle} placeholder="Ej: D3, B2" value={lead.categoria_licencia_otra || ''} onChange={(e) => set('categoria_licencia_otra', e.target.value)} />
+                  </Campo>
+                )}
+                {lead.categoria_licencia === 'D1' && (
+                  <Campo label="Fecha de obtención D1" obligatorio>
+                    <input type="date" style={inputStyle} value={(lead.fecha_licencia_d1 || '').substring(0, 10)} onChange={(e) => set('fecha_licencia_d1', e.target.value)} />
+                  </Campo>
+                )}
+                {(lead.categoria_licencia === 'B1' || lead.categoria_licencia === 'D1') && (
+                  <Campo label={lead.categoria_licencia === 'B1' ? 'Fecha de obtención B1' : 'Fecha de obtención B1 (opcional)'} obligatorio={lead.categoria_licencia === 'B1'}>
+                    <input type="date" style={inputStyle} value={(lead.fecha_licencia_b1 || '').substring(0, 10)} onChange={(e) => set('fecha_licencia_b1', e.target.value)} />
+                  </Campo>
+                )}
+                {lead.categoria_licencia === 'Otros' && (
+                  <Campo label="Fecha de obtención de la categoría" obligatorio>
+                    <input type="date" style={inputStyle} value={(lead.fecha_categoria_licencia || '').substring(0, 10)} onChange={(e) => set('fecha_categoria_licencia', e.target.value)} />
+                  </Campo>
+                )}
                 <Campo label="Nro. de licencia" obligatorio error={errores.numero_licencia}>
                   <input style={inputStyle} value={lead.numero_licencia || ''} onChange={(e) => set('numero_licencia', e.target.value)} />
                 </Campo>
@@ -664,32 +696,12 @@ export function ConvertirLeadModal({
                   </span>
                 </Campo>
 
-                <Campo label="Categorías de licencia" obligatorio>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {catalogos.categoriasLicencia.map((c) => {
-                      const activa = (lead.categorias_licencia || []).includes(c.descripcion)
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => toggleCategoria(c.descripcion)}
-                          style={{
-                            padding: '5px 11px',
-                            borderRadius: 'var(--radius-sm)',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            border: activa ? '1px solid #ff0033' : '1px solid var(--border-primary)',
-                            background: activa ? 'rgba(255, 0, 51, 0.1)' : 'var(--modal-bg)',
-                            color: activa ? '#ff0033' : 'var(--text-secondary)',
-                          }}
-                        >
-                          {c.descripcion}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </Campo>
+                <AlertasLicencia mensajes={alertasLicencia(clasesDeLicencia(lead.categorias_licencia || [], lead.categoria_licencia, lead.categoria_licencia_otra))} />
+                {(lead.categorias_licencia?.length ?? 0) > 0 && (
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Categorías cargadas antes (histórico): <strong>{lead.categorias_licencia?.join(', ')}</strong>
+                  </span>
+                )}
               </div>
             </>
           ) : null}

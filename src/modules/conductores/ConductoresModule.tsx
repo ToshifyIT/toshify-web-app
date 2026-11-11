@@ -50,6 +50,9 @@ import { formatPlata } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { TabsBar, type TabsBarItem } from "../../components/ui/TabsBar";
 import { formatFecha } from '../../utils/format'
+import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, licenciaSiNo } from '../leads/licenciaLead'
+import { AlertasLicencia } from '../leads/components/AlertasLicencia'
+import { agregarCategoriaAlHistorico, columnasLicenciaConductor, erroresLicenciaConductor } from './licenciaConductor'
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
 
@@ -456,10 +459,16 @@ export function ConductoresModule() {
     monotributo: false,
     motivo_sin_monotributo: "",
     numero_licencia: "",
-    licencia_categorias_ids: [] as string[], // Array de categorías de licencia
+    licencia_categorias_ids: [] as string[], // HISTÓRICO (conductores_licencias_categorias): ya no se edita
     licencia_vencimiento: "",
     licencia_estado_id: "",
     licencia_tipo_id: "",
+    tiene_licencia: "",
+    categoria_licencia: "",
+    categoria_licencia_otra: "",
+    fecha_categoria_licencia: "",
+    fecha_licencia_b1: "",
+    fecha_licencia_d1: "",
     telefono_contacto: "",
     telefono_secundario: undefined as string | undefined,
     correo_personal: undefined as string | undefined,
@@ -1245,7 +1254,7 @@ export function ConductoresModule() {
     if (
       !formData.nombres ||
       !formData.apellidos ||
-      !formData.licencia_vencimiento ||
+      Object.keys(erroresLicenciaConductor(formData)).length > 0 ||
       !formData.sede_id
     ) {
       Alerta.fire({
@@ -1304,8 +1313,8 @@ export function ConductoresModule() {
             numero_cuit: formData.numero_cuit || null,
             cbu: formData.cbu || null,
             monotributo: formData.monotributo,
-            numero_licencia: formData.numero_licencia || null,
-            licencia_vencimiento: formData.licencia_vencimiento,
+            // Licencia: ¿tiene?, nro, vencimiento, categoría y fecha (ver licenciaConductor.ts)
+            ...columnasLicenciaConductor(formData),
             licencia_estado_id: formData.licencia_estado_id || null,
             licencia_tipo_id: formData.licencia_tipo_id || null,
             telefono_contacto: formData.telefono_contacto || null,
@@ -1352,18 +1361,9 @@ export function ConductoresModule() {
 
       const createdConductor = newConductor?.[0];
 
-      // Guardar categorías de licencia en la tabla de relación
-      if (createdConductor && formData.licencia_categorias_ids.length > 0) {
-        const categoriasRelacion = formData.licencia_categorias_ids.map((categoriaId) => ({
-          conductor_id: createdConductor.id,
-          licencia_categoria_id: categoriaId,
-        }));
-
-        const { error: categoriasError } = await (supabase as any)
-          .from("conductores_licencias_categorias")
-          .insert(categoriasRelacion);
-
-        if (categoriasError) throw categoriasError;
+      // Categoría actual también en conductores_licencias_categorias (la leen Guías, Asignaciones, filtros)
+      if (createdConductor) {
+        await agregarCategoriaAlHistorico(createdConductor.id, formData.categoria_licencia, formData.categoria_licencia_otra, categoriasLicencia);
       }
 
       // Crear carpeta en Google Drive para el conductor y guardar URL
@@ -1441,11 +1441,7 @@ export function ConductoresModule() {
     if (!formData.nacionalidad_id) newErrors.nacionalidad_id = 'Requerido (usado en contratos)';
     if (!formData.estado_civil_id) newErrors.estado_civil_id = 'Requerido (usado en contratos)';
     if (!formData.sede_id) newErrors.sede_id = 'Requerido';
-    if (!formData.numero_licencia?.trim()) newErrors.numero_licencia = 'Requerido';
-    if (!formData.licencia_categorias_ids || formData.licencia_categorias_ids.length === 0) {
-      newErrors.licencia_categorias_ids = 'Seleccione al menos una categoría';
-    }
-    if (!formData.licencia_vencimiento) newErrors.licencia_vencimiento = 'Requerido';
+    Object.assign(newErrors, erroresLicenciaConductor(formData));
     if (!formData.telefono_contacto?.trim()) newErrors.telefono_contacto = 'Requerido';
     if (!formData.email?.trim()) newErrors.email = 'Requerido (el de la app de Cabify; usado en contratos)';
     if (!formData.direccion?.trim()) newErrors.direccion = 'Requerido (usado en contratos)';
@@ -1467,9 +1463,14 @@ export function ConductoresModule() {
         nacionalidad_id: 'Nacionalidad',
         estado_civil_id: 'Estado civil',
         sede_id: 'Sede',
+        tiene_licencia: '¿Tiene licencia?',
         numero_licencia: 'Número de licencia',
-        licencia_categorias_ids: 'Categorías de licencia',
         licencia_vencimiento: 'Vencimiento de licencia',
+        categoria_licencia: 'Categoría de licencia',
+        categoria_licencia_otra: 'Detalle de la licencia (Otros)',
+        fecha_categoria_licencia: 'Fecha de obtención de la categoría',
+        fecha_licencia_b1: 'Fecha de obtención B1',
+        fecha_licencia_d1: 'Fecha de obtención D1',
         telefono_contacto: 'Teléfono',
         email: 'Email',
         direccion: 'Dirección',
@@ -1902,8 +1903,8 @@ export function ConductoresModule() {
         monotributo: formData.monotributo,
         // Con monotributo el motivo no aplica (ver leads/monotributo.ts)
         motivo_sin_monotributo: formData.monotributo ? null : formData.motivo_sin_monotributo?.trim() || null,
-        numero_licencia: formData.numero_licencia || null,
-        licencia_vencimiento: formData.licencia_vencimiento,
+        // Licencia: ¿tiene?, nro, vencimiento, categoría y fecha (ver licenciaConductor.ts)
+        ...columnasLicenciaConductor(formData),
         licencia_estado_id: formData.licencia_estado_id || null,
         licencia_tipo_id: formData.licencia_tipo_id || null,
         telefono_contacto: formData.telefono_contacto || null,
@@ -2012,24 +2013,9 @@ export function ConductoresModule() {
       }
     }
 
-    // Actualizar categorías de licencia
-    await (supabase as any)
-      .from("conductores_licencias_categorias")
-      .delete()
-      .eq("conductor_id", selectedConductor!.id);
-
-    if (formData.licencia_categorias_ids.length > 0) {
-      const categoriasRelacion = formData.licencia_categorias_ids.map((categoriaId) => ({
-        conductor_id: selectedConductor!.id,
-        licencia_categoria_id: categoriaId,
-      }));
-
-      const { error: categoriasError } = await (supabase as any)
-        .from("conductores_licencias_categorias")
-        .insert(categoriasRelacion);
-
-      if (categoriasError) throw categoriasError;
-    }
+    // Categoría actual también en conductores_licencias_categorias. No se borra lo que
+    // había: queda como histórico (ver licenciaConductor.ts)
+    await agregarCategoriaAlHistorico(selectedConductor!.id, formData.categoria_licencia, formData.categoria_licencia_otra, categoriasLicencia);
   };
 
   // Handler para el botón "Sí" (finalizar asignaciones) y "Dar de Baja" (solo TURNO con compañero)
@@ -2567,9 +2553,16 @@ export function ConductoresModule() {
       motivo_sin_monotributo: fc.motivo_sin_monotributo || "",
       numero_licencia: fc.numero_licencia || "",
       licencia_categorias_ids: categoriasIds,
-      licencia_vencimiento: fc.licencia_vencimiento,
+      licencia_vencimiento: fc.licencia_vencimiento || "",
       licencia_estado_id: fc.licencia_estado_id || "",
       licencia_tipo_id: fc.licencia_tipo_id || "",
+      // Sin dato cargado: si tiene número de licencia, tiene licencia
+      tiene_licencia: licenciaSiNo(fc.tiene_licencia) || (fc.numero_licencia ? "Si" : ""),
+      categoria_licencia: fc.categoria_licencia || "",
+      categoria_licencia_otra: fc.categoria_licencia_otra || "",
+      fecha_categoria_licencia: fc.fecha_categoria_licencia || "",
+      fecha_licencia_b1: fc.fecha_licencia_b1 || "",
+      fecha_licencia_d1: fc.fecha_licencia_d1 || "",
       telefono_contacto: fc.telefono_contacto || "",
       telefono_secundario: "telefono_secundario" in fc ? ((fc as any).telefono_secundario || "") : undefined,
       correo_personal: "correo_personal" in fc ? ((fc as any).correo_personal || "") : undefined,
@@ -2821,6 +2814,12 @@ export function ConductoresModule() {
       licencia_vencimiento: "",
       licencia_estado_id: "",
       licencia_tipo_id: "",
+      tiene_licencia: "",
+      categoria_licencia: "",
+      categoria_licencia_otra: "",
+      fecha_categoria_licencia: "",
+      fecha_licencia_b1: "",
+      fecha_licencia_d1: "",
       telefono_contacto: "",
       telefono_secundario: undefined,
       correo_personal: undefined,
@@ -3068,6 +3067,12 @@ export function ConductoresModule() {
             fecha_nacimiento,
             cbu,
             numero_licencia,
+            tiene_licencia,
+            categoria_licencia,
+            categoria_licencia_otra,
+            fecha_categoria_licencia,
+            fecha_licencia_b1,
+            fecha_licencia_d1,
             email,
             direccion,
             contacto_emergencia,
@@ -3117,8 +3122,13 @@ export function ConductoresModule() {
           "Zona": vehiculo?.zona_asignacion || c.zona || "",
           "Sede": d.sedes?.nombre || "",
           "CBU": d.cbu || "",
+          "¿Tiene Licencia?": d.tiene_licencia || "",
           "Nro. Licencia": d.numero_licencia || "",
-          "Categorías": categorias,
+          "Categoría": d.categoria_licencia === "Otros" ? `Otros: ${d.categoria_licencia_otra || ""}` : d.categoria_licencia || "",
+          "Obtención Categoría": formatFechaExport(d.fecha_categoria_licencia),
+          "Obtención B1": formatFechaExport(d.fecha_licencia_b1),
+          "Obtención D1": formatFechaExport(d.fecha_licencia_d1),
+          "Categorías (histórico)": categorias,
           "Vencimiento Licencia": formatFechaExport(c.licencia_vencimiento),
           "Estado Licencia": d.licencias_estados?.descripcion || "",
           "Tipo Licencia": d.licencias_tipos?.descripcion || "",
@@ -4255,7 +4265,9 @@ const PESTANAS_EDICION: TabsBarItem<PestanaEdicion>[] = [
 /** En qué pestaña está cada campo validado (los demás caen en Personal). */
 const PESTANA_DE_CAMPO: Record<string, PestanaEdicion> = {
   numero_licencia: 'licencia', licencia_categorias_ids: 'licencia', licencia_vencimiento: 'licencia',
-  licencia_estado_id: 'licencia', licencia_tipo_id: 'licencia',
+  licencia_estado_id: 'licencia', licencia_tipo_id: 'licencia', tiene_licencia: 'licencia',
+  categoria_licencia: 'licencia', categoria_licencia_otra: 'licencia', fecha_categoria_licencia: 'licencia',
+  fecha_licencia_b1: 'licencia', fecha_licencia_d1: 'licencia',
   telefono_contacto: 'contacto', telefono_secundario: 'contacto', email: 'contacto', correo_personal: 'contacto',
   direccion: 'contacto', zona: 'contacto', guia: 'contacto', contacto_emergencia: 'contacto', telefono_emergencia: 'contacto',
   experiencia_previa: 'operativo', estado_id: 'operativo', fecha_terminacion: 'operativo', motivo_baja: 'operativo',
@@ -4286,6 +4298,24 @@ function ModalEditar({
   onVerImpactoDetalle,
 }: any) {
   const [pestana, setPestana] = useState<PestanaEdicion>('personal')
+
+  // Fechas de obtención de la licencia (ver licenciaConductor.ts): B1, D1 o la general de Otros
+  const campoFechaLicencia = (campo: "fecha_licencia_b1" | "fecha_licencia_d1" | "fecha_categoria_licencia", label: string) => (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <input
+        type="date"
+        className={`form-input ${editErrors[campo] ? 'input-error' : ''}`}
+        value={formData[campo] || ""}
+        onChange={(e) => {
+          setFormData({ ...formData, [campo]: e.target.value });
+          if (editErrors[campo]) setEditErrors((prev: Record<string, string>) => { const { [campo]: _r, ...rest } = prev; void _r; return rest });
+        }}
+        disabled={saving}
+      />
+      {editErrors[campo] && <span className="error-message">{editErrors[campo]}</span>}
+    </div>
+  );
   // Errores de validación por pestaña (para marcarlas y abrir la que tenga errores)
   const erroresPorPestana = useMemo(() => {
     const out: Partial<Record<PestanaEdicion, number>> = {}
@@ -4605,62 +4635,128 @@ function ModalEditar({
         </>)}
         {pestana === 'licencia' && (<>
         <div className="section-title">Licencia de Conducir</div>
+        <AlertasLicencia
+          mensajes={alertasLicencia(clasesDeLicencia(
+            (formData.licencia_categorias_ids || []).map((id: string) => categoriasLicencia.find((c: any) => c.id === id)?.codigo),
+            formData.categoria_licencia,
+            formData.categoria_licencia_otra,
+          ))}
+        />
 
-        <div className="form-row-3">
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">¿Tiene licencia? *</label>
+            <select
+              className={`form-input ${editErrors.tiene_licencia ? 'input-error' : ''}`}
+              value={formData.tiene_licencia || ""}
+              onChange={(e) => {
+                setFormData({ ...formData, tiene_licencia: e.target.value });
+                if (editErrors.tiene_licencia) setEditErrors((prev: Record<string, string>) => { const { tiene_licencia: _r, ...rest } = prev; void _r; return rest });
+              }}
+              disabled={saving}
+            >
+              <option value="">Seleccionar...</option>
+              <option value="Si">Si</option>
+              <option value="No">No</option>
+            </select>
+            {editErrors.tiene_licencia && <span className="error-message">{editErrors.tiene_licencia}</span>}
+          </div>
+          <div className="form-group" />
+        </div>
+
+        {formData.tiene_licencia === "Si" && (<>
+        <div className="form-row">
           <div className="form-group">
             <label className="form-label">Nro. Licencia *</label>
             <input
               type="text"
-              className="form-input"
-              value={formData.numero_licencia}
-              onChange={(e) =>
-                setFormData({ ...formData, numero_licencia: e.target.value })
-              }
-              disabled={saving}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Categorías *</label>
-            <select
-              className="form-input"
-              multiple
-              value={formData.licencia_categorias_ids}
+              className={`form-input ${editErrors.numero_licencia ? 'input-error' : ''}`}
+              value={formData.numero_licencia || ""}
               onChange={(e) => {
-                const selected = Array.from(
-                  e.target.selectedOptions,
-                  (option) => option.value
-                );
-                setFormData({ ...formData, licencia_categorias_ids: selected });
+                setFormData({ ...formData, numero_licencia: e.target.value });
+                if (editErrors.numero_licencia) setEditErrors((prev: Record<string, string>) => { const { numero_licencia: _r, ...rest } = prev; void _r; return rest });
               }}
               disabled={saving}
-              style={{ minHeight: "100px" }}
-            >
-              {categoriasLicencia.map((cat: any) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.descripcion}
-                </option>
-              ))}
-            </select>
-            <small style={{ fontSize: "12px", color: "#6B7280", marginTop: "4px", display: "block" }}>
-              Mantén presionado Ctrl (o Cmd en Mac) para seleccionar múltiples categorías
-            </small>
+            />
+            {editErrors.numero_licencia && <span className="error-message">{editErrors.numero_licencia}</span>}
           </div>
           <div className="form-group">
             <label className="form-label">Vencimiento *</label>
             <input
               type="date"
-              className="form-input"
-              value={formData.licencia_vencimiento}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  licencia_vencimiento: e.target.value,
-                })
-              }
+              className={`form-input ${editErrors.licencia_vencimiento ? 'input-error' : ''}`}
+              value={formData.licencia_vencimiento || ""}
+              onChange={(e) => {
+                setFormData({ ...formData, licencia_vencimiento: e.target.value });
+                if (editErrors.licencia_vencimiento) setEditErrors((prev: Record<string, string>) => { const { licencia_vencimiento: _r, ...rest } = prev; void _r; return rest });
+              }}
               disabled={saving}
             />
+            {editErrors.licencia_vencimiento && <span className="error-message">{editErrors.licencia_vencimiento}</span>}
           </div>
         </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Categoría *</label>
+            <select
+              className={`form-input ${editErrors.categoria_licencia ? 'input-error' : ''}`}
+              value={formData.categoria_licencia || ""}
+              onChange={(e) => {
+                setFormData({ ...formData, categoria_licencia: e.target.value });
+                if (editErrors.categoria_licencia) setEditErrors((prev: Record<string, string>) => { const { categoria_licencia: _r, ...rest } = prev; void _r; return rest });
+              }}
+              disabled={saving}
+            >
+              <option value="">Seleccionar...</option>
+              {CATEGORIAS_LICENCIA_LEAD.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            {editErrors.categoria_licencia && <span className="error-message">{editErrors.categoria_licencia}</span>}
+          </div>
+          {formData.categoria_licencia === "B1" && campoFechaLicencia("fecha_licencia_b1", "Fecha de obtención B1 *")}
+          {formData.categoria_licencia === "D1" && campoFechaLicencia("fecha_licencia_d1", "Fecha de obtención D1 *")}
+          {formData.categoria_licencia === "Otros" && campoFechaLicencia("fecha_categoria_licencia", "Fecha de obtención de la categoría *")}
+          {!formData.categoria_licencia && <div className="form-group" />}
+        </div>
+        {formData.categoria_licencia === "D1" && (
+          <div className="form-row">
+            {campoFechaLicencia("fecha_licencia_b1", "Fecha de obtención B1 (opcional)")}
+            <div className="form-group" />
+          </div>
+        )}
+        {formData.categoria_licencia === "Otros" && (
+          <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Detalle de la licencia *</label>
+            <input
+              type="text"
+              className={`form-input ${editErrors.categoria_licencia_otra ? 'input-error' : ''}`}
+              value={formData.categoria_licencia_otra || ""}
+              onChange={(e) => {
+                setFormData({ ...formData, categoria_licencia_otra: e.target.value });
+                if (editErrors.categoria_licencia_otra) setEditErrors((prev: Record<string, string>) => { const { categoria_licencia_otra: _r, ...rest } = prev; void _r; return rest });
+              }}
+              disabled={saving}
+              placeholder="Ej: D3, B2"
+            />
+            {editErrors.categoria_licencia_otra && <span className="error-message">{editErrors.categoria_licencia_otra}</span>}
+          </div>
+          </div>
+        )}
+        </>)}
+
+        {formData.licencia_categorias_ids?.length > 0 && (
+          <div style={{ marginBottom: "12px", padding: "6px 10px", background: "rgba(251, 191, 36, 0.1)", border: "1px solid rgba(251, 191, 36, 0.3)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--text-secondary)" }}>
+            Categorías cargadas antes (histórico):{" "}
+            <strong style={{ color: "var(--text-primary)" }}>
+              {formData.licencia_categorias_ids
+                .map((id: string) => categoriasLicencia.find((c: any) => c.id === id)?.codigo || "")
+                .filter(Boolean)
+                .join(", ")}
+            </strong>
+          </div>
+        )}
 
         <div className="form-row">
           <div className="form-group">
@@ -5638,15 +5734,54 @@ function ModalDetalles({
 
         {pestana === 'licencia' && (<>
         <div className="section-title">Licencia de Conducir</div>
+        <AlertasLicencia
+          mensajes={alertasLicencia(clasesDeLicencia(
+            ((selectedConductor as any).licencias_categorias || []).map((c: any) => c?.codigo),
+            (selectedConductor as any).categoria_licencia,
+            (selectedConductor as any).categoria_licencia_otra,
+          ))}
+        />
         <div className="details-grid">
+          <div>
+            <label className="detail-label">¿TIENE LICENCIA?</label>
+            <div className="detail-value">
+              {licenciaSiNo((selectedConductor as any).tiene_licencia) || "N/A"}
+            </div>
+          </div>
           <div>
             <label className="detail-label">NRO. LICENCIA</label>
             <div className="detail-value">
               {selectedConductor.numero_licencia || "N/A"}
             </div>
           </div>
+          <div>
+            <label className="detail-label">CATEGORÍA</label>
+            <div className="detail-value">
+              {(selectedConductor as any).categoria_licencia === "Otros"
+                ? `Otros: ${(selectedConductor as any).categoria_licencia_otra || "-"}`
+                : (selectedConductor as any).categoria_licencia || "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">OBTENCIÓN DE LA CATEGORÍA</label>
+            <div className="detail-value">
+              {(selectedConductor as any).fecha_categoria_licencia ? formatFecha((selectedConductor as any).fecha_categoria_licencia) : "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">OBTENCIÓN B1</label>
+            <div className="detail-value">
+              {(selectedConductor as any).fecha_licencia_b1 ? formatFecha((selectedConductor as any).fecha_licencia_b1) : "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">OBTENCIÓN D1</label>
+            <div className="detail-value">
+              {(selectedConductor as any).fecha_licencia_d1 ? formatFecha((selectedConductor as any).fecha_licencia_d1) : "N/A"}
+            </div>
+          </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="detail-label">CATEGORÍAS</label>
+            <label className="detail-label">CATEGORÍAS (HISTÓRICO)</label>
             <div className="detail-value" style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
               {Array.isArray((selectedConductor as any).licencias_categorias) &&
               (selectedConductor as any).licencias_categorias.length > 0

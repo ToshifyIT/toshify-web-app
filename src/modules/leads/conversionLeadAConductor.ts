@@ -20,6 +20,7 @@ import type { UbicacionDireccion } from '../../utils/ubicacionGoogle'
 import type { Lead } from '../../types/leads.types'
 import { guiaParaConductor } from './guias'
 import { estadoMonotributo, faltantesMonotributo } from './monotributo'
+import { codigosCategoriaParaConductor, estadoLicencia, faltantesLicencia, licenciaSiNo } from './licenciaLead'
 
 /**
  * Tope para la geocodificacion. Es una llamada a Google que puede quedarse sin
@@ -156,9 +157,9 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
     else if (lead.referido === true && !lead.embajador_id) camposFaltantes.push('Embajador (quién lo refirió)')
     if (!lead.email?.trim()) camposFaltantes.push('Email app móvil (Cabify)')
     if (!lead.direccion?.trim()) camposFaltantes.push('Dirección')
-    if (!lead.numero_licencia?.trim()) camposFaltantes.push('Nro. Licencia')
-    if (!lead.categorias_licencia || lead.categorias_licencia.length === 0) camposFaltantes.push('Categorías de licencia')
-    if (!lead.vencimiento_licencia) camposFaltantes.push('Vencimiento de licencia')
+    // Licencia (ver ./licenciaLead.ts): para ser conductor tiene que tenerla
+    if (estadoLicencia(lead.licencia) === 'no') camposFaltantes.push('Licencia (el lead indica que no tiene)')
+    else camposFaltantes.push(...faltantesLicencia(lead))
     if (!lead.experiencia_previa?.trim()) camposFaltantes.push('Experiencia previa')
     if (!lead.cochera?.trim()) camposFaltantes.push('Cochera')
     if (exigirLinkDrive && !lead.url_folder?.trim()) camposFaltantes.push('Link de Documentación (Drive)')
@@ -215,13 +216,30 @@ export async function buscarConductorExistente(lead: Lead): Promise<Record<strin
  * sin marcar como convertido (se conserva el comportamiento original).
  */
 /** Columnas nuevas opcionales: si su SQL todavía no se corrió, se guarda sin ellas. */
-const COLUMNAS_OPCIONALES = ['guia', 'correo_personal'] as const
+const COLUMNAS_OPCIONALES = [
+  'guia', 'correo_personal',
+  // sql/licencia_categoria_conductores.sql
+  'tiene_licencia', 'categoria_licencia', 'categoria_licencia_otra', 'fecha_categoria_licencia',
+  'fecha_licencia_b1', 'fecha_licencia_d1',
+] as const
 
 /** Columna opcional que falta en la base (según el error), o null. */
 function columnaFaltante(err: { message?: string; code?: string } | null, datos: Record<string, unknown>): string | null {
   const m = String(err?.message || '')
   if (!(err?.code === 'PGRST204' || err?.code === '42703' || /column/i.test(m))) return null
   return COLUMNAS_OPCIONALES.find(c => c in datos && new RegExp(`\\b${c}\\b`).test(m)) ?? null
+}
+
+/** Columnas de licencia nueva del conductor a partir del lead (vacías se filtran después). */
+function camposLicenciaParaConductor(lead: Lead): Record<string, string | null> {
+  return {
+    tiene_licencia: licenciaSiNo(lead.licencia) || null,
+    categoria_licencia: lead.categoria_licencia || null,
+    categoria_licencia_otra: lead.categoria_licencia === 'Otros' ? lead.categoria_licencia_otra?.trim() || null : null,
+    fecha_categoria_licencia: lead.fecha_categoria_licencia || null,
+    fecha_licencia_b1: lead.fecha_licencia_b1 || null,
+    fecha_licencia_d1: lead.fecha_licencia_d1 || null,
+  }
 }
 
 export async function convertirLeadAConductor(
@@ -330,6 +348,8 @@ export async function convertirLeadAConductor(
       preferencia_turno: turnoMapped,
       licencia_vencimiento: lead.vencimiento_licencia || null,
       numero_licencia: lead.numero_licencia || '',
+      // Licencia nueva (ver ./licenciaLead.ts y conductores/licenciaConductor.ts)
+      ...camposLicenciaParaConductor(lead),
       licencia_estado_id: licenciaEstadoId,
       licencia_tipo_id: licenciaTipoId,
       nacionalidad_id: nacionalidadId,
@@ -389,6 +409,10 @@ export async function convertirLeadAConductor(
           updateData[key] = leadValue
         }
       }
+
+      // Licencia: la del lead es la que se verificó ahora (puede haber pasado de B1 a D1),
+      // así que si el lead tiene categoría pisa la del conductor.
+      if (lead.categoria_licencia) Object.assign(updateData, camposLicenciaParaConductor(lead))
 
       // País/ciudad describen el punto del LEAD: solo se copian si en esta fusión
       // también se copian sus coordenadas. Si el conductor ya tenía su propio
@@ -501,8 +525,14 @@ export async function convertirLeadAConductor(
       }
     }
 
-    // Insertar categorías de licencia (sin duplicar)
-    if (conductorId && lead.categorias_licencia?.length && categoriasLicencia.length > 0) {
+    // Insertar categorías de licencia (sin duplicar). La categoría actual del lead (B1 / D1 /
+    // Otros); los leads anteriores a 2026-11 que no la tienen usan las del histórico.
+    const descripcionesCategorias = lead.categoria_licencia
+      ? codigosCategoriaParaConductor(lead.categoria_licencia, lead.categoria_licencia_otra, categoriasLicencia.map(c => c.codigo))
+        .map(codigo => categoriasLicencia.find(c => c.codigo === codigo)?.descripcion)
+        .filter((d): d is string => !!d)
+      : lead.categorias_licencia || []
+    if (conductorId && descripcionesCategorias.length && categoriasLicencia.length > 0) {
       // Obtener categorias que ya tiene el conductor
       const { data: categoriasExistentes } = await (supabase as any)
         .from('conductores_licencias_categorias')
@@ -511,7 +541,7 @@ export async function convertirLeadAConductor(
       const idsExistentes = new Set((categoriasExistentes || []).map((c: { licencia_categoria_id: string }) => c.licencia_categoria_id))
 
       const categoriasRelacion: Array<{ conductor_id: string; licencia_categoria_id: string }> = []
-      for (const desc of lead.categorias_licencia) {
+      for (const desc of descripcionesCategorias) {
         const cat = categoriasLicencia.find(c => c.descripcion === desc)
         if (cat && !idsExistentes.has(cat.id)) {
           categoriasRelacion.push({ conductor_id: conductorId, licencia_categoria_id: cat.id })
