@@ -9,6 +9,7 @@ import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { Alerta } from '../../../components/ui/alertas'
+import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import { showError, showSuccess } from '../../../utils/toast'
 import { formatNumero } from '../../../utils/format'
 import { formatFecha } from '../../../utils/format'
@@ -24,6 +25,7 @@ export interface CabifyPreviewRowDetalle {
   prorrateoNocturnoMonto: number
   subtotalAlquiler: number
   subtotalGarantia: number
+  montoToshipass?: number // P027: reemplaza a la garantía (tarifa nueva), nunca vienen los dos
   cuotaGarantia: string
   montoPeajes: number
   montoExcesos: number
@@ -33,6 +35,21 @@ export interface CabifyPreviewRowDetalle {
   subtotalDescuentos: number
   saldoAnterior: number
   totalAPagar: number
+}
+
+// Explicación de las columnas (ícono (i) del encabezado)
+const INFO_IMPORTE_CONTRATO = 'Alquiler de la semana completa (7 días). Si la semana está en curso, se proyecta a los días que faltan. Se muestra redondeado a peso. No incluye garantía, Toshipass ni otros cargos.'
+const INFO_EXCEDENTES = 'Todo lo que no es alquiler: Garantía o Toshipass (nunca los dos) + Peajes + Excesos de KM + Penalidades − Tickets a favor + Saldo anterior (deuda suma, saldo a favor resta).'
+
+/** Ícono (i) con la explicación de una columna (al pasar el mouse). */
+function InfoColumna({ text }: { text: string }) {
+  return (
+    <AdaptiveTooltip content={text} width={260} variant="dark">
+      <span className="fact-stat-info" aria-label={text}>
+        <Info size={12} strokeWidth={2} />
+      </span>
+    </AdaptiveTooltip>
+  )
 }
 
 // Tipo para cada fila del preview Cabify
@@ -568,12 +585,13 @@ export function CabifyPreviewTable({
             <strong>Importe Contrato</strong> = Alquiler proyectado a semana completa (7 días). Si la semana está en curso, se escala proporcionalmente el valor actual.
           </div>
           <div style="background: rgba(124,58,237,0.08); border-left: 3px solid #7C3AED; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px;">
-            <strong>Excedentes</strong> = Garantía + Peajes + Excesos KM + Penalidades − Tickets a favor + Saldo anterior.
+            <strong>Excedentes</strong> = Garantía o Toshipass + Peajes + Excesos KM + Penalidades − Tickets a favor + Saldo anterior.
           </div>
           <p style="margin-bottom: 8px; font-size: 12px; color: #666;">Detalle de componentes:</p>
           <ul style="font-size: 12px; color: #555; padding-left: 18px; margin: 0;">
             <li><strong>Alquiler</strong>: precio diario × 7 días (proyectado a semana completa)</li>
             <li><strong>Garantía</strong>: cuota semanal fija ($50.000)</li>
+            <li><strong>Toshipass</strong>: tarifa nueva, se cobra en lugar de la garantía (nunca los dos)</li>
             <li><strong>Peajes</strong>: telepeajes de la semana anterior</li>
             <li><strong>Excesos KM</strong>: km excedidos sobre el límite</li>
             <li><strong>Penalidades</strong>: multas internas por incumplimiento</li>
@@ -624,11 +642,15 @@ export function CabifyPreviewTable({
     const garantia = garantiaRes.data as any
     // Tickets de facturacion_detalle (P004) como fallback
     const ticketsDetalle = facDetalles.filter(d => d.concepto_codigo === 'P004' && d.es_descuento)
-    const penalidadesDetalle = facDetalles.filter(d => !d.es_descuento && d.concepto_codigo !== 'P003' && d.concepto_codigo !== 'P005' && d.concepto_codigo !== 'P006' && !d.concepto_codigo?.startsWith('P00') && !d.concepto_codigo?.startsWith('P01'))
+    const penalidadesDetalle = facDetalles.filter(d => !d.es_descuento && d.concepto_codigo !== 'P003' && d.concepto_codigo !== 'P005' && d.concepto_codigo !== 'P027' && d.concepto_codigo !== 'P006' && !d.concepto_codigo?.startsWith('P00') && !d.concepto_codigo?.startsWith('P01'))
 
     // Helpers
     const fmt = (n: number) => formatCurrency(n);
     const total = row.importeContrato + row.excedentes;
+    // Garantía o Toshipass (nunca los dos): se muestra el que corresponde al conductor
+    const toshipass = d.montoToshipass || 0
+    const etiquetaGarantia = toshipass > 0 ? 'Toshipass' : 'Garantía'
+    const montoGarantia = toshipass > 0 ? toshipass : d.subtotalGarantia
     const iBtn = (id: string) => `<span onclick="var b=document.getElementById('cbf-info-box');var t=document.getElementById('${id}');if(t){b.innerHTML=t.innerHTML;b.style.display=b.style.display==='none'?'block':'none';}else{b.style.display='none';}" style="cursor:pointer;color:#7C3AED;font-size:10px;border:1px solid #7C3AED;border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:2px;">i</span>`
 
     // Generar HTML de detalles ocultos — usar datos de BD con fallback a facturacion_detalle
@@ -677,12 +699,12 @@ export function CabifyPreviewTable({
           </div>
 
           <!-- Detalles ocultos para los (i) -->
-          <div style="display:none"><div id="det-garantia">${garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo acumulado de semanas anteriores</div><div id="det-contrato">Precio diario × 7 días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Tickets ${fmt(d.ticketsFavor)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
+          <div style="display:none"><div id="det-garantia">${toshipass > 0 ? 'Toshipass semanal (tarifa nueva, en lugar de la garantía)' : garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + ${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo acumulado de semanas anteriores</div><div id="det-contrato">Precio diario × 7 días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Tickets ${fmt(d.ticketsFavor)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
 
           <div id="cbf-info-box" style="display:none;background:#1e1e2e;color:#fff;padding:8px 12px;border-radius:6px;font-size:11px;line-height:1.4;margin-bottom:8px;"></div>
           <table style="width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
             <tbody>
-              <tr><td style="padding: 4px 0;">Garantía <span style="color: #888; font-size: 11px;">(${d.cuotaGarantia})</span> ${iBtn('det-garantia')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalGarantia)}</td></tr>
+              <tr><td style="padding: 4px 0;">${etiquetaGarantia}${toshipass > 0 || !d.cuotaGarantia ? '' : ` <span style="color: #888; font-size: 11px;">(${d.cuotaGarantia})</span>`} ${iBtn('det-garantia')}</td><td style="text-align: right; font-family: monospace;">${fmt(montoGarantia)}</td></tr>
               <tr><td style="padding: 4px 0;">Peajes ${iBtn('det-peajes')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPeajes)}</td></tr>
               <tr><td style="padding: 4px 0;">Excesos KM ${iBtn('det-excesos')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoExcesos)}</td></tr>
               <tr><td style="padding: 4px 0;">Penalidades ${iBtn('det-penalidades')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPenalidades)}</td></tr>
@@ -925,8 +947,8 @@ export function CabifyPreviewTable({
               <th>Email</th>
               <th>Patente</th>
               <th>DNI</th>
-              <th className="col-money">Importe Contrato</th>
-              <th className="col-money">EXCEDENTES</th>
+              <th className="col-money">Importe Contrato{'\u00A0'}<InfoColumna text={INFO_IMPORTE_CONTRATO} /></th>
+              <th className="col-money">EXCEDENTES{'\u00A0'}<InfoColumna text={INFO_EXCEDENTES} /></th>
               <th>#DO</th>
               <th className="cabify-col-th">Horas Conexión<span className="cabify-tag">Cabify</span></th>
               <th className="col-money cabify-col-th">Importe Generado<span className="cabify-tag">Cabify</span></th>

@@ -10389,7 +10389,8 @@ export function ReporteFacturacionTab() {
         const tieneTelepasePreview = f.tiene_telepase === true
         const peajesReales = tieneTelepasePreview ? 0 : (f.monto_peajes || 0)
         const saldoPendiente = f.saldo_anterior || 0
-        const subtotalCargosRecalc = actualAlquiler + (f.subtotal_garantia || 0) + peajesReales + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
+        // Toshipass (tarifa nueva) reemplaza a la garantía: nunca vienen los dos, va en excedentes igual
+        const subtotalCargosRecalc = actualAlquiler + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0) + peajesReales + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
         const excedentes = subtotalCargosRecalc - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
@@ -10419,6 +10420,7 @@ export function ReporteFacturacionTab() {
             prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
             subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
+            montoToshipass: f.monto_toshipass || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
             montoPeajes: peajesReales,
             montoExcesos: f.monto_excesos || 0,
@@ -10581,7 +10583,8 @@ export function ReporteFacturacionTab() {
         const tieneTelepaseCerrado = f.tiene_telepase === true
         const peajesRealesCerrado = tieneTelepaseCerrado ? 0 : (f.monto_peajes || 0)
         const saldoPendiente = f.saldo_anterior || 0
-        const subtotalCargosRecalcCerrado = actualAlquiler + (f.subtotal_garantia || 0) + peajesRealesCerrado + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
+        // Toshipass (tarifa nueva) reemplaza a la garantía: nunca vienen los dos, va en excedentes igual
+        const subtotalCargosRecalcCerrado = actualAlquiler + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0) + peajesRealesCerrado + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
         const excedentes = subtotalCargosRecalcCerrado - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
@@ -10611,6 +10614,7 @@ export function ReporteFacturacionTab() {
             prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
             subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
+            montoToshipass: f.monto_toshipass || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
             montoPeajes: peajesRealesCerrado,
             montoExcesos: f.monto_excesos || 0,

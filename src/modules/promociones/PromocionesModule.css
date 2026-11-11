@@ -1,0 +1,244 @@
+/* =====================================================
+   PROMOCIONES (Parámetros)
+   ===================================================== */
+
+.promo-stats {
+  margin-bottom: 16px;
+}
+
+.promo-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.promo-nombre {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 520px;
+}
+
+.promo-nombre-titulo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.promo-nombre-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: normal;
+}
+
+.promo-sin-conectar {
+  padding: 1px 8px;
+  border-radius: var(--radius-lg);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+.promo-fecha {
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* Estado */
+.promo-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-lg);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.promo-badge-vigente {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+}
+
+.promo-badge-programada {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+}
+
+.promo-badge-finalizada {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+.promo-badge-desactivada {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+}
+
+/* Interruptor activar / desactivar */
+.promo-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.promo-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.promo-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: #cbd5e1;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+
+.promo-switch-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.promo-switch input:checked + .promo-switch-slider {
+  background: #16a34a;
+}
+
+.promo-switch input:checked + .promo-switch-slider::before {
+  transform: translateX(18px);
+}
+
+.promo-switch input:focus-visible + .promo-switch-slider {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.promo-switch-disabled,
+.promo-switch input:disabled + .promo-switch-slider {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Acciones */
+.promo-acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.promo-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+
+.promo-action-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Modales */
+.promo-modal-nombre {
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.promo-ayuda {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 6px 0;
+}
+
+.promo-detalle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  font-size: 13px;
+}
+
+.promo-detalle-grid > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.promo-detalle-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.promo-seccion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 20px 0 6px;
+}
+
+.promo-reglas {
+  margin: 6px 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.promo-aviso {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  font-size: 12px;
+}
+
+.promo-historial {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.promo-historial li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
+.promo-historial-fecha {
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+.promo-historial-usuario {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
