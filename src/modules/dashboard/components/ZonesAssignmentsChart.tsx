@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts'
 import { startOfWeek, endOfWeek, isWithinInterval, parseISO, getISOWeek, setISOWeek } from 'date-fns'
 import { supabase } from '../../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { useSede } from '../../../contexts/SedeContext'
 import { getCache, setCache } from '../../../hooks/useSessionCache'
 import { PeriodPicker } from './PeriodPicker'
@@ -80,7 +81,7 @@ export function ZonesAssignmentsChart() {
         // 1+2 in PARALLEL: zonas base + asignaciones filtered by date range
         let zonesQuery = supabase
           .from('conductores')
-          .select('zona')
+          .select('zona').not(...FILTRO_SIN_INTERNOS)
           .not('zona', 'is', null)
 
         let assignQuery = supabase
@@ -180,7 +181,7 @@ export function ZonesAssignmentsChart() {
         setData(finalData)
         setCache(CACHE_NS, paramsKey, finalData)
 
-      } catch (_error) {
+      } catch {
         // silently ignored
       } finally {
         setLoading(false)

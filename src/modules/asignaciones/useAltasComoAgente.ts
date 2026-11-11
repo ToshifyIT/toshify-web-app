@@ -10,6 +10,7 @@
 // cualquiera que entra o sale de un auto del que el agente es responsable.
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../utils/conductorUtils'
 import { useSede } from '../../contexts/SedeContext'
 import { hoyART, sumarDiasISO } from '../../utils/fechaArgentina'
 import { etiquetaGuia, leerTodo } from '../reportes/kpis-v2/indicadoresModulosService'
@@ -66,7 +67,7 @@ export function useAltasComoAgente(activo: boolean): {
         const [conductores, altas, bajas] = await Promise.all([
           leerTodo<{ id: string; nombres: string | null; apellidos: string | null; guia: string | null }>(
             (a, b) => filtroSede((supabase.from('conductores') as any)
-              .select('id, nombres, apellidos, guia')
+              .select('id, nombres, apellidos, guia').not(...FILTRO_SIN_INTERNOS)
               .order('id'))
               .range(a, b),
           ),

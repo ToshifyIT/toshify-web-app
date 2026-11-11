@@ -40,7 +40,7 @@ import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { cargarGoogleMaps, ubicacionDesdeCoordenadas } from "../../utils/ubicacionGoogle";
 import { registrarHistorialConductor, registrarHistorialVehiculo, registrarHistorialBaja } from "../../services/historialService";
 import { insertControlSaldo } from "../../services/controlSaldosService";
-import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle } from "../../utils/conductorUtils";
+import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle, FILTRO_SIN_INTERNOS } from "../../utils/conductorUtils";
 import { normalizeDni } from "../../utils/normalizeDocuments";
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
@@ -977,7 +977,7 @@ export function ConductoresModule() {
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
             )
-          `))
+          `).not(...FILTRO_SIN_INTERNOS))
           .order("created_at", { ascending: false }),
         (() => {
           const q = supabase
@@ -1158,7 +1158,7 @@ export function ConductoresModule() {
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
             )
-          `))
+          `).not(...FILTRO_SIN_INTERNOS))
           .order("created_at", { ascending: false }),
         (() => {
           const q = supabase

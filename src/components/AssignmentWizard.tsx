@@ -10,7 +10,7 @@ import { Alerta } from './ui/alertas'
 import { showError, showSuccess } from '../utils/toast'
 import type { Vehicle } from '../types/vehiculo.types'
 import type { Conductor } from '../types/conductor.types'
-import { formatPreferencia, getPreferenciaBadge } from '../utils/conductorUtils'
+import { formatPreferencia, getPreferenciaBadge, FILTRO_SIN_INTERNOS } from '../utils/conductorUtils'
 
 import { hoyART } from '../utils/fechaArgentina'
 import { formatFecha } from '../utils/format'
@@ -224,7 +224,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               codigo,
               descripcion
             )
-          `)
+          `).not(...FILTRO_SIN_INTERNOS)
         if (sedeActualId) conductoresQuery = conductoresQuery.eq('sede_id', sedeActualId)
         const { data, error } = await conductoresQuery.order('apellidos')
 

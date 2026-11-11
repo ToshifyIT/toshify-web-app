@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../utils/conductorUtils'
 import { useSede } from '../contexts/SedeContext'
 import { getCache, setCache } from './useSessionCache'
 import { fetchCobroMultasStats } from '../services/cobroMultasStatsService'
@@ -167,7 +168,7 @@ export function useDashboardStats() {
           aplicarFiltroSede(
             supabase
               .from('conductores')
-              .select('id, estado_id, fecha_terminacion, updated_at, conductores_estados(codigo)')
+              .select('id, estado_id, fecha_terminacion, updated_at, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
           ),
           supabase.rpc('sum_kilometraje_total', {
             p_sede_id: sedeActualId || null

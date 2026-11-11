@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, User } from 'lucide-react';
 import { Alerta } from '../../../components/ui/alertas'
 import { supabase } from '../../../lib/supabase';
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils';
 import { useSede } from '../../../contexts/SedeContext';
 import type {
   VisitaCategoria,
@@ -213,7 +214,7 @@ export function VisitasFormModal({
       // Conductores
       let queryCond = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni')
+        .select('id, nombres, apellidos, numero_dni').not(...FILTRO_SIN_INTERNOS)
         .order('apellidos');
       queryCond = aplicarFiltroSede(queryCond, 'sede_id');
       const { data: conductores } = await queryCond;

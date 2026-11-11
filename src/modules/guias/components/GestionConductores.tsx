@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../../lib/supabase";
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils';
 import { format } from "date-fns";
 import { Alerta } from '../../../components/ui/alertas'
 import { useSede } from '../../../contexts/SedeContext';
@@ -151,7 +152,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
         if (guiasData) {
           guiasData.forEach((g: any) => guidesMap[g.id] = g.full_name);
         }
-      } catch (_e) {
+      } catch {
         // silently ignored
       }
 
@@ -172,7 +173,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
               vehiculos ( patente, marca, modelo )
             )
           )
-        `)
+        `).not(...FILTRO_SIN_INTERNOS)
         .not('id_guia', 'is', null))
         .order('apellidos');
 
@@ -198,7 +199,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
       });
 
       setAllDrivers(formattedDrivers);
-    } catch (_err) {
+    } catch {
       // silently ignored
     }
   };
@@ -446,7 +447,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
 
       setHistoryData(buildHistoryRows(rawHistory, driver, cabifyDataMap, weekAssignments));
 
-    } catch (_err) {
+    } catch {
       Alerta.fire({
         title: 'Error',
         text: 'No se pudo cargar el historial del conductor',

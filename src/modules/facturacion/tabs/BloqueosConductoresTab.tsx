@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { useSede } from '../../../contexts/SedeContext'
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
@@ -106,7 +107,7 @@ export function BloqueosConductoresTab() {
         .select(`
           id, nombres, apellidos, dni, cuit, telefono, email, estado,
           bloqueado, motivo_bloqueo, fecha_bloqueo
-        `))
+        `).not(...FILTRO_SIN_INTERNOS))
         .in('estado', ['ACTIVO', 'activo'])
 
       if (error) throw error

@@ -1,6 +1,7 @@
 // src/modules/siniestros/SiniestrosModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { FILTRO_SIN_INTERNOS } from '../../utils/conductorUtils'
 import { actualizarEstadoVehiculo } from '../../services/vehiculoEstadoService'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -181,7 +182,7 @@ export function SiniestrosModule() {
       // son hechos históricos y pueden requerir referenciar a un conductor ya dado de baja
       const estadosMap = new Map<string, string>()
       for (const e of (estadosCondRes.data || [])) estadosMap.set(e.id, e.codigo)
-      const conductoresRes = await aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, estado_id')).order('apellidos')
+      const conductoresRes = await aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, estado_id').not(...FILTRO_SIN_INTERNOS)).order('apellidos')
 
       const categoriasData = categoriasRes.data as SiniestroCategoria[] | null
       const estadosData = estadosRes.data as SiniestroEstado[] | null

@@ -1284,13 +1284,15 @@ button.lead-pareja-badge:hover { filter: brightness(0.95); text-decoration: unde
 .lead-detail .lead-detail-dato { padding: 6px 10px; }
 .lead-detail .tabs-bar { margin-bottom: 0; }
 
-/* Etiquetas del candidato (zona, programado, pareja) en una sola línea */
+/* Etiquetas del candidato (zona, programado, pareja): al lado del nombre, sin
+   achicarse; si falta lugar se corta el nombre con "…" */
 .lead-etiquetas {
   display: flex;
   flex-wrap: nowrap;
+  flex-shrink: 0;
   white-space: nowrap;
   align-items: center;
   gap: 4px;
-  margin-top: 2px;
 }
+.lead-etiquetas:empty { display: none; }
 .lead-etiquetas > * { margin-top: 0 !important; }

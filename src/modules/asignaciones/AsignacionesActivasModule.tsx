@@ -942,7 +942,17 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
               <div>
                 <PatenteBadge patente={vehiculo.patente} size="sm" />
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {/* Ancho máximo: un modelo largo no estira toda la columna (se ve completo al pasar el mouse) */}
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                  maxWidth: 200,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={`${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.anio})`}
+              >
                 {vehiculo.marca} {vehiculo.modelo} ({vehiculo.anio})
               </div>
             </div>
@@ -1005,6 +1015,9 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
         {
           id: 'dias_vacante',
           header: 'Vacante desde',
+          // Esta columna se queda con el espacio sobrante: así Vehículo y Asignados
+          // miden lo que su contenido y no quedan anchas y vacías.
+          meta: { expand: true },
           accessorFn: (row) => {
             const v = diasVacante(row)
             if (!v) return null

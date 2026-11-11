@@ -27,7 +27,10 @@ export const LIMITE_CHURN = 0.05
 export const SEMANAS_HISTORIA = 8
 export const MESES_HISTORIA = 6
 export const SEMANAS_RETENCION = 8
-export const SIN_GESTOR = 'Sin gestor'
+/** Horizontes de la curva de retención (selector del gráfico), en días */
+export const HORIZONTES_RETENCION = [30, 60, 90] as const
+export type HorizonteRetencion = typeof HORIZONTES_RETENCION[number]
+export const SIN_GESTOR = 'Sin capitán'
 export const TOTAL = 'Total empresa'
 
 const ESTADOS_OPERATIVOS = new Set(['DISPONIBLE', 'PKG_ON_BASE', 'EN_USO'])
@@ -86,8 +89,16 @@ export interface PeriodoHistoria {
 export interface CurvaRetencion {
   gestor: string
   cohorte: number
-  /** % que sigue en cada semana 0..SEMANAS_RETENCION (null = todavía no pasó) */
+  /** % que sigue en cada día de `dias` (null = todavía no pasó) */
   puntos: (number | null)[]
+}
+
+/** Curva de retención a un horizonte: la cohorte es el último mes que ya lo cumplió entero. */
+export interface RetencionHorizonte {
+  mes: string
+  /** Días de cada punto: 0, 7, 14... y el horizonte al final */
+  dias: number[]
+  curvas: CurvaRetencion[]
 }
 
 export interface ControlGestores {
@@ -96,7 +107,7 @@ export interface ControlGestores {
   /** limite: el 5 % semanal llevado a la duración del período (en un mes, ~20 %) */
   churn: { porGestor: ChurnGestor[]; total: ChurnGestor; promedio: number | null; limite: number }
   historia: PeriodoHistoria[]
-  retencion: { mes: string; curvas: CurvaRetencion[] }
+  retencion: Record<HorizonteRetencion, RetencionHorizonte>
   gestores: string[]
   precios: { diurno: number; nocturno: number; aCargo: number; conPrecio: boolean }
   hoy: string
@@ -187,8 +198,10 @@ export async function cargarControlGestores(
   }
 
   // Ventana: la historia y la cohorte de retención
-  const mesCohorte = mesCohorteDe(enCurso ? hoy : finPeriodo)
-  const desdeDia = mesCohorte < periodosHistoria[0] ? mesCohorte : periodosHistoria[0]
+  const corteRetencion = enCurso ? hoy : finPeriodo
+  // La cohorte más vieja es la del horizonte más largo
+  const mesCohorteMin = mesCohorteDe(corteRetencion, Math.max(...HORIZONTES_RETENCION))
+  const desdeDia = mesCohorteMin < periodosHistoria[0] ? mesCohorteMin : periodosHistoria[0]
   const desdeISO = new Date(inicioDiaMs(desdeDia) - 7 * DIA_MS).toISOString()
 
   const [vehiculosRaw, cambiosRaw, historialGuia, asignacionesRaw, conceptos, bajasRaw, altasRaw] = await Promise.all([
@@ -453,31 +466,40 @@ export async function cargarControlGestores(
   const diasPeriodo = Math.round((inicioDiaMs(finPeriodo) - inicioDiaMs(inicioPeriodo)) / DIA_MS) + 1
   const limite = granularidad === 'semana' ? LIMITE_CHURN : 1 - (1 - LIMITE_CHURN) ** (diasPeriodo / 7)
 
-  // ── Retención de la cohorte ──
-  const finMesCohorte = sumarDias(`${sumarDias(mesCohorte, 32).slice(0, 7)}-01`, -1)
-  const cohorte = altas.filter((x) => x.dia >= mesCohorte && x.dia <= finMesCohorte)
-  const porGestorCohorte = new Map<string, { id: string; dia: string }[]>()
-  for (const x of cohorte) {
-    const g = gestorDeConductor(x.id, inicioDiaMs(x.dia) + DIA_MS - 1)
-    porGestorCohorte.set(g, [...(porGestorCohorte.get(g) ?? []), x])
-  }
-  const curva = (gestor: string, lista: { id: string; dia: string }[]): CurvaRetencion => {
-    const puntos: (number | null)[] = []
-    for (let k = 0; k <= SEMANAS_RETENCION; k++) {
-      // Toda la cohorte tiene que haber cumplido k semanas (si no, el porcentaje
-      // mezcla grupos distintos y salta)
-      const cumplieron = lista.filter((x) => sumarDias(x.dia, 7 * k) <= hoy)
-      if (cumplieron.length === 0 || cumplieron.length < lista.length) { puntos.push(null); continue }
-      const siguen = cumplieron.filter((x) => {
-        const baja = primeraBaja.get(x.id)
-        return !baja || baja < x.dia || baja > sumarDias(x.dia, 7 * k)
-      }).length
-      puntos.push(siguen / cumplieron.length)
+  // ── Retención: una curva por horizonte (30, 60, 90 días) ──
+  const retencionDe = (horizonte: HorizonteRetencion): RetencionHorizonte => {
+    const mes = mesCohorteDe(corteRetencion, horizonte)
+    const finMes = sumarDias(`${sumarDias(mes, 32).slice(0, 7)}-01`, -1)
+    const cohorte = altas.filter((x) => x.dia >= mes && x.dia <= finMes)
+    const dias: number[] = []
+    for (let d = 0; d < horizonte; d += 7) dias.push(d)
+    dias.push(horizonte)
+    const porGestor = new Map<string, { id: string; dia: string }[]>()
+    for (const x of cohorte) {
+      const g = gestorDeConductor(x.id, inicioDiaMs(x.dia) + DIA_MS - 1)
+      porGestor.set(g, [...(porGestor.get(g) ?? []), x])
     }
-    return { gestor, cohorte: lista.length, puntos }
+    const curva = (gestor: string, lista: { id: string; dia: string }[]): CurvaRetencion => {
+      const puntos = dias.map((d) => {
+        // Toda la cohorte tiene que haber cumplido esos días (si no, el porcentaje
+        // mezcla grupos distintos y salta)
+        const cumplieron = lista.filter((x) => sumarDias(x.dia, d) <= hoy)
+        if (cumplieron.length === 0 || cumplieron.length < lista.length) return null
+        const siguen = cumplieron.filter((x) => {
+          const baja = primeraBaja.get(x.id)
+          return !baja || baja < x.dia || baja > sumarDias(x.dia, d)
+        }).length
+        return siguen / cumplieron.length
+      })
+      return { gestor, cohorte: lista.length, puntos }
+    }
+    const curvas = [...porGestor.entries()].map(([g, l]) => curva(g, l))
+    curvas.push(curva(TOTAL, cohorte))
+    return { mes, dias, curvas }
   }
-  const curvas = [...porGestorCohorte.entries()].map(([g, l]) => curva(g, l))
-  curvas.push(curva(TOTAL, cohorte))
+  const retencion = Object.fromEntries(
+    HORIZONTES_RETENCION.map((h) => [h, retencionDe(h)]),
+  ) as Record<HorizonteRetencion, RetencionHorizonte>
 
   // ── Gestores (orden estable para colores) ──
   const nombres = new Set<string>()
@@ -497,7 +519,7 @@ export async function cargarControlGestores(
     foto,
     churn: { porGestor: churnPorGestor, total: churnSemana.total, promedio, limite },
     historia,
-    retencion: { mes: mesCohorte, curvas },
+    retencion,
     gestores,
     precios,
     hoy,
@@ -506,15 +528,15 @@ export async function cargarControlGestores(
 
 /**
  * Mes de la cohorte de retención: el último mes cuyos conductores ya cumplieron todos
- * SEMANAS_RETENCION semanas al `corte` (el que arrancó el último día del mes también).
+ * `dias` días al `corte` (el que arrancó el último día del mes también).
  * Así la curva está completa y no mezcla grupos.
  */
-export function mesCohorteDe(corte: string): string {
+export function mesCohorteDe(corte: string, dias: number = 7 * SEMANAS_RETENCION): string {
   let [y, m] = corte.slice(0, 7).split('-').map(Number)
   for (let i = 0; i < 24; i++) {
     const ini = new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10)
     const fin = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
-    if (sumarDias(fin, 7 * SEMANAS_RETENCION) <= corte) return ini
+    if (sumarDias(fin, dias) <= corte) return ini
     m -= 1
     if (m === 0) { m = 12; y -= 1 }
   }

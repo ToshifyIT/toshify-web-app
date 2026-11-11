@@ -256,6 +256,7 @@ const AsignacionesPage = lazy(() => import('./asignaciones/AsignacionesPage').th
 const UsuariosPage = lazy(() => import('./usuarios/UsuariosPage').then(m => ({ default: m.UsuariosPage })))
 const VehiculosPage = lazy(() => import('./vehiculos/VehiculosPage').then(m => ({ default: m.VehiculosPage })))
 const SiniestrosPage = lazy(() => import('./siniestros/SiniestrosPage').then(m => ({ default: m.SiniestrosPage })))
+const SiniestrosPageV2 = lazy(() => import('./siniestros/SiniestrosPageV2').then(m => ({ default: m.SiniestrosPageV2 })))
 const VisitasPage = lazy(() => import('./visitas/VisitasPage').then(m => ({ default: m.VisitasPage })))
 const VencimientosPage = lazy(() => import('./vencimientos/VencimientosPage').then(m => ({ default: m.VencimientosPage })))
 const AlertasMantenimientoPage = lazy(() => import('./vehiculos/AlertasMantenimientoPage'))
@@ -1330,7 +1331,9 @@ export function HomePage() {
           right: 0;
           bottom: 0;
           background: var(--bg-overlay);
-          z-index: 999;
+          /* Justo debajo del menú: en el celular el menú usa --z-sidebar
+             (index.css) y si el fondo queda arriba, cada toque lo cierra. */
+          z-index: calc(var(--z-sidebar) - 1);
         }
 
         .sidebar-overlay.show {
@@ -2093,6 +2096,11 @@ export function HomePage() {
               <Route path="/siniestros" element={
                 <ProtectedRoute menuName="siniestros" action="view">
                   <LazyPage><SiniestrosPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/siniestros-v2" element={
+                <ProtectedRoute menuName="siniestros" action="view">
+                  <LazyPage><SiniestrosPageV2 /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/visitas" element={<Navigate to="/gestion-de-visitas" replace />} />
