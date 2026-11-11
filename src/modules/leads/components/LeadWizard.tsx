@@ -12,6 +12,8 @@ import { LABELS_CUENTA_APP } from '../cuentasApps'
 import { useAuth } from '../../../contexts/AuthContext'
 import { ESTADO_DESCARTADO, pedirMotivoDescarte } from '../motivoDescarte'
 import { estadoMonotributo, faltantesMonotributo } from '../monotributo'
+import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, estadoLicencia, faltantesLicencia } from '../licenciaLead'
+import { AlertasLicencia } from './AlertasLicencia'
 
 /** Cabecera de cada nota de la bitácora: "[02/11/2026 16:40 · Maria Flores]" */
 const RE_CABECERA = /^\[(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}[^\]]*)\]\s*/
@@ -86,7 +88,7 @@ function calcularEdad(fechaNac: string): number | undefined {
   return edad >= 0 ? edad : undefined
 }
 
-export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosCiviles = [], nacionalidades = [], guias = [], estados = [] }: LeadWizardProps) {
+export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, estadosCiviles = [], nacionalidades = [], guias = [], estados = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
   const embajadores = useConductoresEmbajador()
@@ -130,27 +132,6 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.zona])
-
-  // whatsapp_number ya no se usa: el teléfono principal ES el WhatsApp (sql/leads_whatsapp_a_phone.sql)
-  useEffect(() => {
-    // Auto-mapear licencia texto a categorías si hay licencia pero no categorías
-    if (formData.licencia && (!formData.categorias_licencia || formData.categorias_licencia.length === 0) && categoriasLicencia.length > 0) {
-      const partes = formData.licencia.split(/[.,\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean)
-      const matched: string[] = []
-      for (const parte of partes) {
-        const cat = categoriasLicencia.find(c => {
-          const descUpper = c.descripcion.toUpperCase()
-          return descUpper.includes(parte) || c.codigo?.toUpperCase() === parte
-        })
-        if (cat) matched.push(cat.descripcion)
-      }
-      if (matched.length > 0) {
-        setFormData(prev => ({ ...prev, categorias_licencia: matched }))
-      }
-    }
-    // Solo al montar
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   function updateField(field: keyof LeadFormData, value: any) {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -205,6 +186,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
       zona: c.zona || '',
       latitud: typeof c.direccion_lat === 'number' ? c.direccion_lat : undefined,
       longitud: typeof c.direccion_lng === 'number' ? c.direccion_lng : undefined,
+      licencia: c.numero_licencia ? 'Si' : '',
       numero_licencia: c.numero_licencia || '',
       vencimiento_licencia: c.licencia_vencimiento ? String(c.licencia_vencimiento).slice(0, 10) : '',
       cbu: c.cbu || '',
@@ -241,6 +223,26 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
   const errorTelefono = errors.phone || (telefonosTocados.has('phone') ? validarCelularAR(formData.phone) : null)
   const errorSecundario = errors.telefono_secundario || (telefonosTocados.has('telefono_secundario') && formData.telefono_secundario ? validarCelularAR(formData.telefono_secundario) : null)
 
+  // Fechas de obtención de la licencia (ver licenciaLead.ts): B1, D1 o la general de Otros
+  function campoFechaLicencia(
+    campo: 'fecha_licencia_b1' | 'fecha_licencia_d1' | 'fecha_categoria_licencia',
+    label: string,
+    obligatorio: boolean,
+  ) {
+    return (
+      <div className="lead-wizard-field">
+        <label>{label} {obligatorio && <span className="required">*</span>}</label>
+        <input
+          type="date"
+          className={errors[campo] ? 'field-error' : ''}
+          value={formData[campo] || ''}
+          onChange={e => updateField(campo, e.target.value)}
+        />
+        {errors[campo] && <span className="error-text">{errors[campo]}</span>}
+      </div>
+    )
+  }
+
   function handleNext() {
     if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1)
@@ -254,6 +256,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
   // Estado de cada paso según sus campos obligatorios:
   //  verde = completo · amarillo = ya pasaste por ahí pero falta algo · gris = sin visitar
   const sinMonotributo = estadoMonotributo(formData.monotributo) === 'no'
+  const tieneLicencia = estadoLicencia(formData.licencia) === 'si'
   const lleno = (v: unknown) => Array.isArray(v) ? v.length > 0 : typeof v === 'boolean' ? true : !!String(v ?? '').trim()
   const faltantesPorPaso: Record<number, string[]> = {
     1: [
@@ -263,8 +266,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     ].filter(Boolean) as string[],
     2: [!lleno(formData.phone) && 'Teléfono', !lleno(formData.email) && 'Email Cabify', !lleno(formData.direccion) && 'Dirección'].filter(Boolean) as string[],
     3: [
-      !lleno(formData.numero_licencia) && 'Nro. licencia', !lleno(formData.vencimiento_licencia) && 'Vencimiento licencia',
-      !lleno(formData.categorias_licencia) && 'Categorías', !lleno(formData.experiencia_previa) && 'Experiencia previa',
+      ...faltantesLicencia(formData), !lleno(formData.experiencia_previa) && 'Experiencia previa',
       !lleno(formData.url_folder) && 'Link de documentación',
     ].filter(Boolean) as string[],
     4: [!lleno(formData.cochera) && 'Cochera'].filter(Boolean) as string[],
@@ -643,72 +645,98 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
         {/* Step 3: Documentación */}
         {currentStep === 3 && (
           <>
+            <AlertasLicencia mensajes={alertasLicencia(clasesDeLicencia(formData.categorias_licencia || [], formData.categoria_licencia, formData.categoria_licencia_otra))} />
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Nro. Licencia <span className="required">*</span></label>
-                <input
-                  type="text"
-                  className={errors.numero_licencia ? 'field-error' : ''}
-                  value={formData.numero_licencia || ''}
-                  onChange={e => updateField('numero_licencia', e.target.value)}
-                  placeholder="Número de licencia"
-                />
-                {errors.numero_licencia && <span className="error-text">{errors.numero_licencia}</span>}
-              </div>
-              <div className="lead-wizard-field">
-                <label>Vencimiento Licencia <span className="required">*</span></label>
-                <input
-                  type="date"
-                  className={errors.vencimiento_licencia ? 'field-error' : ''}
-                  value={formData.vencimiento_licencia || ''}
-                  onChange={e => updateField('vencimiento_licencia', e.target.value)}
-                />
-                {errors.vencimiento_licencia && <span className="error-text">{errors.vencimiento_licencia}</span>}
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field" style={{ flex: 1 }}>
-                <label>Categorías <span className="required">*</span></label>
+                <label>¿Tiene licencia? <span className="required">*</span></label>
                 <select
-                  multiple
-                  className={errors.categorias_licencia ? 'field-error' : ''}
-                  value={formData.categorias_licencia || []}
-                  onChange={e => {
-                    const selected = Array.from(e.target.selectedOptions, opt => opt.value)
-                    setFormData(prev => {
-                      // Extraer códigos cortos de las descripciones (ej: "Licencia categoría A1.4" -> "A1.4")
-                      const codigos = selected.map(desc => {
-                        const match = desc.match(/categoría\s+(.+)/i)
-                        return match ? match[1].trim() : desc
-                      })
-                      const licenciaText = codigos.join('.')
-                      // d1 se mantiene auto-sincronizado con las categorías seleccionadas.
-                      // licencia: si hay al menos 1 categoría seleccionada → 'Si' (tener categoría
-                      // implica tener licencia). Si se vacían las categorías, mantener valor previo.
-                      return {
-                        ...prev,
-                        categorias_licencia: selected,
-                        licencia: selected.length > 0 ? 'Si' : prev.licencia,
-                        d1: licenciaText.includes('D1') ? 'Si' : 'No',
-                      }
-                    })
-                  }}
-                  style={{ minHeight: '80px' }}
+                  className={errors.licencia ? 'field-error' : ''}
+                  value={formData.licencia || ''}
+                  onChange={e => updateField('licencia', e.target.value)}
                 >
-                  {categoriasLicencia.map(cat => (
-                    <option key={cat.id} value={cat.descripcion}>{cat.descripcion}</option>
-                  ))}
+                  <option value="">Seleccionar</option>
+                  <option value="Si">Si</option>
+                  <option value="No">No</option>
                 </select>
-                <small style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>Ctrl+Click para múltiples</small>
-                {errors.categorias_licencia && <span className="error-text">{errors.categorias_licencia}</span>}
-                {formData.licencia && (!formData.categorias_licencia || formData.categorias_licencia.length === 0) && (
-                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Valor anterior: <strong style={{ color: 'var(--text-primary)' }}>{formData.licencia}</strong>
-                    <span style={{ display: 'block', fontSize: '11px', marginTop: '2px' }}>Selecciona las categorías correspondientes del listado</span>
+                {errors.licencia && <span className="error-text">{errors.licencia}</span>}
+              </div>
+              <div className="lead-wizard-field" />
+            </div>
+            {tieneLicencia && (
+              <>
+                <div className="lead-wizard-form-group">
+                  <div className="lead-wizard-field">
+                    <label>Nro. Licencia <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      className={errors.numero_licencia ? 'field-error' : ''}
+                      value={formData.numero_licencia || ''}
+                      onChange={e => updateField('numero_licencia', e.target.value)}
+                      placeholder="Número de licencia"
+                    />
+                    {errors.numero_licencia && <span className="error-text">{errors.numero_licencia}</span>}
+                  </div>
+                  <div className="lead-wizard-field">
+                    <label>Vencimiento Licencia <span className="required">*</span></label>
+                    <input
+                      type="date"
+                      className={errors.vencimiento_licencia ? 'field-error' : ''}
+                      value={formData.vencimiento_licencia || ''}
+                      onChange={e => updateField('vencimiento_licencia', e.target.value)}
+                    />
+                    {errors.vencimiento_licencia && <span className="error-text">{errors.vencimiento_licencia}</span>}
+                  </div>
+                </div>
+                <div className="lead-wizard-form-group">
+                  <div className="lead-wizard-field">
+                    <label>Categoría <span className="required">*</span></label>
+                    <select
+                      className={errors.categoria_licencia ? 'field-error' : ''}
+                      value={formData.categoria_licencia || ''}
+                      onChange={e => updateField('categoria_licencia', e.target.value)}
+                    >
+                      <option value="">Seleccionar</option>
+                      {CATEGORIAS_LICENCIA_LEAD.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    {errors.categoria_licencia && <span className="error-text">{errors.categoria_licencia}</span>}
+                  </div>
+                  {formData.categoria_licencia === 'B1' && campoFechaLicencia('fecha_licencia_b1', 'Fecha de obtención B1', true)}
+                  {formData.categoria_licencia === 'D1' && campoFechaLicencia('fecha_licencia_d1', 'Fecha de obtención D1', true)}
+                  {formData.categoria_licencia === 'Otros' && campoFechaLicencia('fecha_categoria_licencia', 'Fecha de obtención de la categoría', true)}
+                  {!formData.categoria_licencia && <div className="lead-wizard-field" />}
+                </div>
+                {formData.categoria_licencia === 'D1' && (
+                  <div className="lead-wizard-form-group">
+                    {campoFechaLicencia('fecha_licencia_b1', 'Fecha de obtención B1 (opcional)', false)}
+                    <div className="lead-wizard-field" />
                   </div>
                 )}
+                {formData.categoria_licencia === 'Otros' && (
+                  <div className="lead-wizard-form-group full-width">
+                    <div className="lead-wizard-field">
+                      <label>Detalle de la licencia <span className="required">*</span></label>
+                      <input
+                        type="text"
+                        className={errors.categoria_licencia_otra ? 'field-error' : ''}
+                        value={formData.categoria_licencia_otra || ''}
+                        onChange={e => updateField('categoria_licencia_otra', e.target.value)}
+                        placeholder="Ej: D3, B2"
+                      />
+                      {errors.categoria_licencia_otra && <span className="error-text">{errors.categoria_licencia_otra}</span>}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {(formData.categorias_licencia?.length ?? 0) > 0 && (
+              <div className="lead-wizard-form-group full-width">
+                <div style={{ padding: '6px 10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Categorías cargadas antes (histórico): <strong style={{ color: 'var(--text-primary)' }}>{formData.categorias_licencia?.join(', ')}</strong>
+                </div>
               </div>
-            </div>
+            )}
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
                 <label>RNR</label>

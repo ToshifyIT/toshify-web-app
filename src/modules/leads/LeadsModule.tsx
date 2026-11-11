@@ -51,6 +51,7 @@ import {
   sinTurnosTomados, textoProgramacion,
 } from './parejasLeads'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
+import { categoriaDesdeTexto, d1DesdeCategoria, estadoLicencia, licenciaSiNo, normalizarLicenciaAlGuardar } from './licenciaLead'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { formatNumero } from '../../utils/format'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
@@ -507,10 +508,15 @@ function leadToFormData(lead: Lead): LeadFormData {
     longitud: lead.longitud ?? undefined,
     estado_direccion: lead.estado_direccion || '',
     clasificacion_domicilio: lead.clasificacion_domicilio || '',
-    licencia: lead.licencia || '',
+    licencia: licenciaSiNo(lead.licencia),
     vencimiento_licencia: lead.vencimiento_licencia || '',
     numero_licencia: lead.numero_licencia || '',
     categorias_licencia: lead.categorias_licencia || [],
+    categoria_licencia: lead.categoria_licencia || '',
+    categoria_licencia_otra: lead.categoria_licencia_otra || '',
+    fecha_categoria_licencia: lead.fecha_categoria_licencia || '',
+    fecha_licencia_b1: lead.fecha_licencia_b1 || '',
+    fecha_licencia_d1: lead.fecha_licencia_d1 || '',
     estado_licencia: lead.estado_licencia || '',
     tipo_licencia: lead.tipo_licencia || '',
     rnr: lead.rnr || '',
@@ -1915,6 +1921,7 @@ export function LeadsModule() {
 
   async function handleSaveCreate() {
     const fields = formDataToDbFields(formData)
+    normalizarLicenciaAlGuardar(fields)
     if (!prepararTelefonos(fields, null)) return
     if (!validarReferido(fields)) return
     setSaving(true)
@@ -1942,6 +1949,7 @@ export function LeadsModule() {
   async function handleSaveEdit() {
     if (!selectedLead) return
     const fields = formDataToDbFields(formData)
+    normalizarLicenciaAlGuardar(fields)
     if (!prepararTelefonos(fields, selectedLead)) return
     if (!validarReferido(fields)) return
     setSaving(true)
@@ -2227,7 +2235,11 @@ export function LeadsModule() {
 
           // --- Documentacion (detalle) ---
           'Nro. Licencia': l.numero_licencia || '',
-          'Categorías Licencia': l.categorias_licencia?.length ? l.categorias_licencia.join(', ') : '',
+          'Categoría Licencia': l.categoria_licencia === 'Otros' ? `Otros: ${l.categoria_licencia_otra || ''}` : l.categoria_licencia || '',
+          'Fecha Obtención Categoría': formatDateOnly(l.fecha_categoria_licencia),
+          'Fecha Obtención B1': formatDateOnly(l.fecha_licencia_b1),
+          'Fecha Obtención D1': formatDateOnly(l.fecha_licencia_d1),
+          'Categorías Licencia (histórico)': l.categorias_licencia?.length ? l.categorias_licencia.join(', ') : '',
           'Estado Licencia': l.estado_licencia || '',
           'Tipo Licencia': l.tipo_licencia || '',
           'RNR': l.rnr || '',
@@ -2582,6 +2594,20 @@ export function LeadsModule() {
             const realCol = isDamaro ? resolveHeader(excelCol) : excelCol
             if (!realCol || !(realCol in row)) continue
             dbRow[dbCol] = normalizeExcelValue(dbCol, row[realCol])
+          }
+
+          // Formato original: la categoría sale del texto de "LICENCIA - CLASES" (o de la
+          // columna D1). El texto se pierde al normalizar `licencia` a Si/No, por eso se lee
+          // de la fila (ver licenciaLead.ts).
+          if (!isDamaro) {
+            const desdeTexto = categoriaDesdeTexto(row['LICENCIA - CLASES'] == null ? null : String(row['LICENCIA - CLASES']))
+              ?? (dbRow.d1 && estadoLicencia(String(dbRow.d1)) === 'si' ? { categoria: 'D1' as const, otra: null } : null)
+            if (desdeTexto && dbRow.licencia !== 'No') {
+              dbRow.licencia = 'Si'
+              dbRow.categoria_licencia = desdeTexto.categoria
+              dbRow.categoria_licencia_otra = desdeTexto.otra
+              dbRow.d1 = d1DesdeCategoria(desdeTexto.categoria, desdeTexto.otra)
+            }
           }
 
           // Formato Damaro: concatenar FEEDBACK DAMARO en observaciones y setear fuente

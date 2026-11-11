@@ -2,6 +2,9 @@
 // Interface alineada con el esquema real de la tabla `leads` en Supabase
 // (todas las columnas en snake_case tras la normalización).
 
+/** Categoría de licencia del lead (selección única desde 2026-11). */
+export type CategoriaLicenciaLead = 'B1' | 'D1' | 'Otros'
+
 export interface Lead {
   id: string
 
@@ -173,7 +176,13 @@ export interface Lead {
 
   // Licencia detallada
   numero_licencia?: string | null
+  /** HISTÓRICO: selección múltiple anterior a 2026-11. La actual es categoria_licencia. */
   categorias_licencia?: string[] | null
+  categoria_licencia?: CategoriaLicenciaLead | null
+  categoria_licencia_otra?: string | null
+  fecha_categoria_licencia?: string | null
+  fecha_licencia_b1?: string | null
+  fecha_licencia_d1?: string | null
   estado_licencia?: string | null
   tipo_licencia?: string | null
 
@@ -220,6 +229,11 @@ export interface LeadFormData {
   vencimiento_licencia?: string
   numero_licencia?: string
   categorias_licencia?: string[]
+  categoria_licencia?: CategoriaLicenciaLead | ''
+  categoria_licencia_otra?: string
+  fecha_categoria_licencia?: string
+  fecha_licencia_b1?: string
+  fecha_licencia_d1?: string
   estado_licencia?: string
   tipo_licencia?: string
   rnr?: string

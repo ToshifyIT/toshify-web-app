@@ -8,6 +8,8 @@ import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
 import { clasificarMotivoDesinteres } from '../leadMotivos'
 import { estadoMonotributo } from '../monotributo'
+import { alertasLicencia, clasesDeLicencia } from '../licenciaLead'
+import { AlertasLicencia } from './AlertasLicencia'
 import '../LeadsModule.css'
 
 const detailMapStyle = {
@@ -394,10 +396,20 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
 
         {pestana === 'documentos' && (
           <>
+            <AlertasLicencia mensajes={alertasLicencia(clasesDeLicencia(lead.categorias_licencia || [], lead.categoria_licencia, lead.categoria_licencia_otra))} />
             <Tarjeta titulo="Licencia">
-              <Item label="Licencia" valor={lead.licencia} />
+              <Item label="¿Tiene licencia?" valor={lead.licencia} />
               <Item label="Nro. licencia" valor={lead.numero_licencia} />
-              <Item label="Categorías" valor={lead.categorias_licencia?.length ? lead.categorias_licencia.join(', ') : null} />
+              <Item
+                label="Categoría"
+                valor={lead.categoria_licencia === 'Otros' ? `Otros: ${lead.categoria_licencia_otra || '-'}` : lead.categoria_licencia}
+              />
+              <Item label="Obtención de la categoría" valor={formatDateOnly(lead.fecha_categoria_licencia)} />
+              <Item label="Obtención B1" valor={formatDateOnly(lead.fecha_licencia_b1)} />
+              <Item label="Obtención D1" valor={formatDateOnly(lead.fecha_licencia_d1)} />
+              {lead.categorias_licencia?.length ? (
+                <Item label="Categorías (histórico)" valor={lead.categorias_licencia.join(', ')} />
+              ) : null}
               <Item label="Estado" valor={lead.estado_licencia} />
               <Item label="Tipo" valor={lead.tipo_licencia} />
               <Item label="Vencimiento" valor={formatDateOnly(lead.vencimiento_licencia)} />
