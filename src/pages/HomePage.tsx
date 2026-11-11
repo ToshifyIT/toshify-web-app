@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase, UserCheck
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase, UserCheck, Tag
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -77,6 +77,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'escuela-conductores': GraduationCap,
   'rango-seguimiento-guias': Target,
   'parametros-sistema': Settings,
+  'promociones': Tag,
   'gestion-vehiculos': Car,
   'registro-vencimientos': FileWarning,
   'alertas-mantenimiento': Wrench,
@@ -303,6 +304,7 @@ const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPag
 const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').then(m => ({ default: m.ParametrosUssPage })))
 const ParametrosAsignacionesPage = lazy(() => import('./parametros/ParametrosAsignacionesPage').then(m => ({ default: m.ParametrosAsignacionesPage })))
 const GruposFlotaPage = lazy(() => import('./parametros/GruposFlotaPage').then(m => ({ default: m.GruposFlotaPage })))
+const PromocionesPage = lazy(() => import('./parametros/PromocionesPage').then(m => ({ default: m.PromocionesPage })))
 const IntegracionesTokensPage = lazy(() => import('./administracion/IntegracionesTokensPage').then(m => ({ default: m.IntegracionesTokensPage })))
 const PromptChatbotPage = lazy(() => import('./administracion/PromptChatbotPage').then(m => ({ default: m.PromptChatbotPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
@@ -2357,6 +2359,11 @@ export function HomePage() {
               <Route path="/parametros/grupos-flota" element={
                 <ProtectedRoute submenuName="parametros-sistema" action="view">
                   <LazyPage><GruposFlotaPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/parametros/promociones" element={
+                <ProtectedRoute submenuName="promociones" action="view">
+                  <LazyPage><PromocionesPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
