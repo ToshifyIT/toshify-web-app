@@ -18,6 +18,8 @@ import { formatPlata, formatFecha, formatFechaHora } from '../../../utils/format
 import { Alerta } from '../../../components/ui/alertas'
 import { cargarCobrosConductor, confirmarPagoCobro, textoEstadoCobro } from './cobrosConductor'
 import type { InfoCobro } from './cobrosConductor'
+import { MontoPesos } from './MontoPesos'
+import { mostrarPesos } from './pesos'
 interface SiniestroSeguimientoProps {
   siniestro: SiniestroCompleto
   onReload: () => void
@@ -135,7 +137,7 @@ export function SiniestroSeguimientoV2({ siniestro, onReload, readonly = false }
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   const [savingIncidencia, setSavingIncidencia] = useState(false)
-  // Total pagado del siniestro; se actualiza al registrar un "Pago recibido"
+  // Cobrado del seguro (total_pagado); se actualiza al registrar un "Pago del seguro"
   const [totalPagado, setTotalPagado] = useState<number>(siniestro.total_pagado || 0)
 
   useEffect(() => {
@@ -405,17 +407,17 @@ export function SiniestroSeguimientoV2({ siniestro, onReload, readonly = false }
 
       if (segError) throw segError
 
-      // Un "Pago recibido" con monto se suma al Total pagado del siniestro
+      // Un "Pago del seguro" con monto se suma a Cobrado del seguro (total_pagado)
       if (formData.tipo_evento === 'pago' && formData.monto && formData.monto > 0) {
         const nuevoTotal = await sumarAMonto('total_pagado', formData.monto)
         if (nuevoTotal === null) {
           showWarning(
             'Seguimiento registrado',
-            'No se pudo actualizar el Total pagado del siniestro: cargalo a mano en Editar',
+            'No se pudo actualizar Cobrado del seguro: corregilo en Gestión y montos (Corregir)',
           )
         } else {
           setTotalPagado(nuevoTotal)
-          showSuccess('Pago registrado', `Total pagado del siniestro: ${formatPlata(nuevoTotal)}`)
+          showSuccess('Pago del seguro registrado', `Cobrado del seguro: ${mostrarPesos(nuevoTotal)}`)
         }
       } else {
         showSuccess('Seguimiento registrado')
@@ -627,31 +629,40 @@ export function SiniestroSeguimientoV2({ siniestro, onReload, readonly = false }
           </div>
 
           <div className={`ss-grid${llevaMonto ? '' : ' ss-grid-1'}`}>
-            <label className="ss-field">
+            {/* Tres opciones a la vista (sin lista desplegable) */}
+            <div className="ss-field">
               <span className="ss-label">Tipo de evento</span>
-              <select
-                className="ss-input"
-                value={formData.tipo_evento}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  tipo_evento: e.target.value as any,
-                  cobrar_conductor: e.target.value === 'cobro_conductor'
-                }))}
-              >
-                <option value="nota">Nota / Observación</option>
-                <option value="pago">Pago recibido</option>
-                <option value="cobro_conductor">Cobro a conductor (genera incidencia)</option>
-              </select>
-            </label>
+              <div className="segmentado ss-tipo-evento" role="radiogroup" aria-label="Tipo de evento">
+                {([
+                  ['nota', 'Nota'],
+                  ['pago', 'Pago del seguro'],
+                  ['cobro_conductor', 'Cobro a conductor'],
+                ] as const).map(([valor, texto]) => (
+                  <button
+                    key={valor}
+                    type="button"
+                    role="radio"
+                    aria-checked={formData.tipo_evento === valor}
+                    className={`segmentado-btn${formData.tipo_evento === valor ? ' is-active' : ''}`}
+                    title={valor === 'cobro_conductor' ? 'Genera una incidencia de cobro al conductor' : undefined}
+                    onClick={() => setFormData(prev => ({
+                      ...prev,
+                      tipo_evento: valor as any,
+                      cobrar_conductor: valor === 'cobro_conductor',
+                    }))}
+                  >
+                    {texto}
+                  </button>
+                ))}
+              </div>
+            </div>
             {llevaMonto && (
               <label className="ss-field">
                 <span className="ss-label">Monto {esCobro && <span className="ss-req">*</span>}</span>
-                <input
+                <MontoPesos
                   className="ss-input"
-                  type="number"
-                  value={formData.monto || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, monto: Number(e.target.value) || undefined }))}
-                  placeholder="0"
+                  valor={formData.monto}
+                  onChange={(v) => setFormData(prev => ({ ...prev, monto: v }))}
                 />
               </label>
             )}
@@ -660,8 +671,8 @@ export function SiniestroSeguimientoV2({ siniestro, onReload, readonly = false }
           {formData.tipo_evento === 'pago' && (
             <div className="ss-ayuda">
               {formData.monto && formData.monto > 0
-                ? <>Se suma al Total pagado del siniestro: {formatPlata(totalPagado)} → <strong>{formatPlata(totalPagado + formData.monto)}</strong></>
-                : <>El monto se suma al Total pagado del siniestro (hoy {formatPlata(totalPagado)}).</>}
+                ? <>Se suma a Cobrado del seguro: {mostrarPesos(totalPagado)} → <strong>{mostrarPesos(totalPagado + formData.monto)}</strong></>
+                : <>El monto se suma a Cobrado del seguro (hoy {mostrarPesos(totalPagado)}).</>}
             </div>
           )}
 

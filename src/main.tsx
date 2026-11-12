@@ -14,6 +14,10 @@ import './styles/tipografia.css'
 import './styles/modo-oscuro.css'
 import { ThemeProvider } from './contexts/ThemeContext'
 import App from './App.tsx'
+import { iniciarSelectorApp } from './components/ui/SelectorApp/selectorApp'
+
+// Lista de opciones con el diseño de la app para todos los <select>
+iniciarSelectorApp()
 
 // Fix oficial de Vite para ChunkLoadError post-deploy:
 // Cuando un chunk lazy ya no existe en el servidor (nuevo deploy con nuevos hashes),

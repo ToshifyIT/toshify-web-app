@@ -831,3 +831,31 @@ button.resumen-chip:disabled {
   font-weight: 400;
   font-size: 12px;
 }
+
+/* "Corregir" al lado de Cobrado del seguro (campo que se suma solo) */
+#root .siniestros-modal-edicion .form-group label .monto-corregir {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary, #ff0033);
+  font-size: 10px !important;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+#root .siniestros-modal-edicion .form-group label .monto-corregir:hover { text-decoration: underline; }
+
+/* Seguimiento: tipo de evento como control segmentado, a lo ancho y al alto del
+   campo Monto de al lado (34 px) */
+.ss .ss-tipo-evento {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+.ss .ss-tipo-evento .segmentado-btn {
+  flex: 1 1 0;
+  height: 28px;
+  font-size: 12px !important;
+}

@@ -48,7 +48,8 @@ import type { ConductorSinCompanero, LeadCercaHtml, ParejaLead, ProgramacionesAc
 import { cargarLeadsCercaPorCalle, cargarParejasCalle, procesarLeadsNuevos } from './rutasLeadsService'
 import type { ParejasCalle } from './rutasLeadsService'
 import {
-  activarPaginacionOpciones, cargarConductoresSinCompanero, cargarProgramacionesActivas, detallePareja, htmlOpcionesPareja, mejorPareja,
+  activarPaginacionOpciones, cargarConductoresSinCompanero, cargarProgramacionesActivas, detallePareja, escaparHtml, htmlOpcionesPareja,
+  mejorPareja,
   sinTurnosTomados, textoProgramacion,
 } from './parejasLeads'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
@@ -3157,9 +3158,10 @@ export function LeadsModule() {
                         }
                       }
                       Alerta.fire({
-                        title: `Parejas posibles · ${(row.original.nombre_completo || '').toUpperCase()}`,
+                        // Título más chico (14 px): la tabla va con la letra de la app (ver parejasLeads.ts)
+                        title: `<span style="font-size:14px;">Parejas posibles · ${escaparHtml((row.original.nombre_completo || '').toUpperCase())}</span>`,
                         html: htmlOpcionesPareja(pareja, row.original.id, leadsCerca),
-                        width: 860,
+                        width: 800,
                         confirmButtonText: 'Cerrar',
                         didOpen: (popup) => {
                           activarPaginacionOpciones(popup)

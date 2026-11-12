@@ -12,6 +12,8 @@ import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTabl
 import { Alerta } from '../../components/ui/alertas'
 import { cargarCobrosConductor, textoEstadoCobro } from './components/cobrosConductor'
 import { InfoDetalle } from './components/InfoDetalle'
+import { MontoPesos } from './components/MontoPesos'
+import { mostrarPesos } from './components/pesos'
 import { InformeGestionModal } from './components/InformeGestionModal'
 import type { InfoCobro } from './components/cobrosConductor'
 import { showError, showSuccess } from '../../utils/toast'
@@ -111,7 +113,7 @@ interface UltimaGestion {
 
 const TIPO_GESTION_LABEL: Record<string, string> = {
   nota: 'Nota',
-  pago: 'Pago recibido',
+  pago: 'Pago del seguro',
   cobro_conductor: 'Cobro a conductor',
   estado_cambio: 'Cambio de estado',
   documento: 'Documento',
@@ -2112,21 +2114,17 @@ function SiniestroForm({
   const campoMonto = (label: string, campo: CampoMontoKey, ayuda?: string) => (
     <div className="form-group">
       <label title={ayuda}>{label}</label>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={formData[campo] ?? ''}
-        onChange={(e) => {
-          const val = e.target.value.replace(/[^0-9]/g, '')
-          setFormData(prev => ({ ...prev, [campo]: val === '' ? undefined : Number(val) }))
-        }}
-        placeholder="0"
+      <MontoPesos
+        valor={formData[campo]}
+        onChange={(v) => setFormData(prev => ({ ...prev, [campo]: v }))}
         title={ayuda}
         disabled={isFieldDisabled('other')}
       />
     </div>
   )
   const resultado = calcularResultadoSiniestro(formData)
+  // "Cobrado del seguro" se suma solo; "Corregir" lo habilita para arreglar un error de carga
+  const [corrigiendoCobrado, setCorrigiendoCobrado] = useState(false)
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -2555,22 +2553,48 @@ function SiniestroForm({
           {campoMonto('Presupuesto real', 'presupuesto_real', 'Presupuesto del taller')}
           {campoMonto('Reclamado al seguro', 'presupuesto_enviado_seguro', 'Lo que se le pidió al seguro')}
         </div>
+        {/* Oferta del seguro ya no se carga (no la usa ningún indicador); si un siniestro
+            la tiene, se sigue viendo en el detalle. */}
         <div className="form-row">
-          {hayMontosNuevos && campoMonto('Oferta del seguro', 'oferta_seguro', 'Lo que ofreció el seguro antes del acuerdo')}
           {campoMonto('Aprobado / acordado', 'presupuesto_aprobado_seguro', 'Monto final acordado con el seguro')}
-        </div>
-        <div className="form-row">
-          {campoMonto('Cobrado del seguro', 'total_pagado', 'Se suma solo al registrar un "Pago recibido" en el seguimiento')}
           {campoMonto('Pagado al taller', 'total_reparacion_pagada', 'Lo que se pagó por la reparación')}
         </div>
         <div className="form-row">
+          {/* Cobrado del seguro: se suma solo con cada "Pago del seguro" del Seguimiento.
+              De solo lectura para no cargarlo dos veces. */}
+          <div className="form-group">
+            <label title="Suma de los Pago del seguro del Seguimiento">
+              Cobrado del seguro
+              {!corrigiendoCobrado && !isFieldDisabled('other') && (
+                <button type="button" className="monto-corregir" onClick={() => setCorrigiendoCobrado(true)}>
+                  Corregir
+                </button>
+              )}
+            </label>
+            {corrigiendoCobrado ? (
+              <MontoPesos
+                valor={formData.total_pagado}
+                onChange={(v) => setFormData(prev => ({ ...prev, total_pagado: v }))}
+                disabled={isFieldDisabled('other')}
+              />
+            ) : (
+              <input type="text" value={mostrarPesos(formData.total_pagado || 0)} disabled readOnly />
+            )}
+            <span className="ss-ayuda">
+              {corrigiendoCobrado
+                ? 'Solo para corregir un error: los pagos nuevos se cargan con "Pago del seguro" en el Seguimiento.'
+                : 'Se carga con "Pago del seguro" en el Seguimiento.'}
+            </span>
+          </div>
           {hayMontosNuevos && (
             <div className="form-group">
               <label title="Suma de los pagos confirmados en los Cobros a conductor del historial de gestión">Cobrado al conductor</label>
-              <input type="text" value={formatPlata(formData.cobrado_conductor || 0)} disabled readOnly />
-              <span className="ss-ayuda">Se carga con "Confirmar pago" en cada Cobro a conductor del historial.</span>
+              <input type="text" value={mostrarPesos(formData.cobrado_conductor || 0)} disabled readOnly />
+              <span className="ss-ayuda">Se carga con "Confirmar pago" en cada Cobro a conductor del Seguimiento.</span>
             </div>
           )}
+        </div>
+        <div className="form-row">
           <div className="form-group">
             <label>Fecha pago estimada</label>
             <input
@@ -2605,7 +2629,7 @@ function SiniestroForm({
                 title={explicarResultado(resultado.costoDe, formData.porcentaje_abogada)}
               >
                 {resultado.valor >= 0 ? 'Recupero ' : 'Pérdida '}
-                {formatPlata(Math.abs(resultado.valor))}
+                {mostrarPesos(Math.abs(resultado.valor))}
               </div>
             ) : (
               <div className="siniestro-resultado">Sin montos cargados</div>
@@ -2872,7 +2896,7 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
                       className={resultadoDetalle.valor >= 0 ? 'sd-positivo' : 'sd-negativo'}
                       title={explicarResultado(resultadoDetalle.costoDe, siniestro.porcentaje_abogada)}
                     >
-                      {resultadoDetalle.valor >= 0 ? 'Recupero ' : 'Pérdida '}{formatPlata(Math.abs(resultadoDetalle.valor))}
+                      {resultadoDetalle.valor >= 0 ? 'Recupero ' : 'Pérdida '}{mostrarPesos(Math.abs(resultadoDetalle.valor))}
                     </span>
                   </Dato>
                 )}

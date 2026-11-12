@@ -98,7 +98,11 @@ function formatDetalles(detalles: Record<string, unknown>): string[] {
   return lines;
 }
 
-export function HistorialModal({ tipo, entityId, entityLabel, onClose }: HistorialModalProps) {
+/**
+ * Línea de tiempo de los movimientos (historial_vehiculos / historial_conductores).
+ * La usa HistorialModal y la pestaña "Movimientos" del detalle del vehículo.
+ */
+export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conductor'; entityId: string }) {
   const [entries, setEntries] = useState<HistorialEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -128,6 +132,127 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
     }
   }
 
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF' }}>Cargando historial...</div>
+  }
+  return (
+    <>
+      {entries.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF' }}>
+          <FileText size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>No hay registros de historial</p>
+        </div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          {/* Timeline line */}
+          <div style={{
+            position: 'absolute', left: 15, top: 8, bottom: 8,
+            width: 2, background: '#E5E7EB',
+          }} />
+
+          {entries.map((entry, i) => {
+            const color = EVENTO_COLORS[entry.tipo_evento] || '#6B7280';
+            const detallesLines = formatDetalles(entry.detalles || {});
+
+            return (
+              <div key={entry.id} style={{
+                position: 'relative', paddingLeft: 40, paddingBottom: i < entries.length - 1 ? 20 : 0,
+              }}>
+                {/* Dot */}
+                <div style={{
+                  position: 'absolute', left: 8, top: 4,
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: color, border: '3px solid #fff',
+                  boxShadow: `0 0 0 2px ${color}33`,
+                }} />
+
+                {/* Card */}
+                <div style={{
+                  background: '#F9FAFB', borderRadius: 'var(--radius-md)',
+                  padding: '10px 14px', border: '1px solid #E5E7EB',
+                }}>
+                  {/* Tipo + fecha */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{
+                      fontSize: 12, fontWeight: 600, color,
+                      background: `${color}15`, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
+                    }}>
+                      {EVENTO_LABELS[entry.tipo_evento] || entry.tipo_evento}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <Clock size={11} />
+                      {formatFecha(entry.created_at)}
+                    </span>
+                  </div>
+
+                  {/* Estado anterior → nuevo */}
+                  {(entry.estado_anterior || entry.estado_nuevo) && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      fontSize: 13, color: '#374151', marginBottom: 4,
+                    }}>
+                      {entry.estado_anterior && (
+                        <span style={{
+                          padding: '1px 6px', borderRadius: 'var(--radius-xs)',
+                          background: '#FEE2E2', color: '#991B1B', fontSize: 12,
+                        }}>
+                          {entry.estado_anterior}
+                        </span>
+                      )}
+                      {entry.estado_anterior && entry.estado_nuevo && (
+                        <ArrowRight size={14} style={{ color: '#9CA3AF' }} />
+                      )}
+                      {entry.estado_nuevo && (
+                        <span style={{
+                          padding: '1px 6px', borderRadius: 'var(--radius-xs)',
+                          background: '#D1FAE5', color: '#065F46', fontSize: 12,
+                        }}>
+                          {entry.estado_nuevo}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Detalles */}
+                  {detallesLines.length > 0 && (
+                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                      {detallesLines.map((line, j) => (
+                        <div key={j}>{line}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Usuario + módulo */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    fontSize: 11, color: '#9CA3AF', marginTop: 6,
+                    borderTop: '1px solid #E5E7EB', paddingTop: 6,
+                  }}>
+                    {entry.usuario_nombre && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <User size={11} />
+                        {entry.usuario_nombre}
+                      </span>
+                    )}
+                    {entry.modulo && (
+                      <span style={{
+                        background: '#F3F4F6', padding: '1px 6px', borderRadius: 'var(--radius-xs)',
+                      }}>
+                        {MODULO_LABELS[entry.modulo] || entry.modulo}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+export function HistorialModal({ tipo, entityId, entityLabel, onClose }: HistorialModalProps) {
   return (
     <div
       style={{
@@ -166,121 +291,7 @@ export function HistorialModal({ tipo, entityId, entityLabel, onClose }: Histori
 
         {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF' }}>
-              Cargando historial...
-            </div>
-          ) : entries.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF' }}>
-              <FileText size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
-              <p style={{ margin: 0, fontSize: 14 }}>No hay registros de historial</p>
-            </div>
-          ) : (
-            <div style={{ position: 'relative' }}>
-              {/* Timeline line */}
-              <div style={{
-                position: 'absolute', left: 15, top: 8, bottom: 8,
-                width: 2, background: '#E5E7EB',
-              }} />
-
-              {entries.map((entry, i) => {
-                const color = EVENTO_COLORS[entry.tipo_evento] || '#6B7280';
-                const detallesLines = formatDetalles(entry.detalles || {});
-
-                return (
-                  <div key={entry.id} style={{
-                    position: 'relative', paddingLeft: 40, paddingBottom: i < entries.length - 1 ? 20 : 0,
-                  }}>
-                    {/* Dot */}
-                    <div style={{
-                      position: 'absolute', left: 8, top: 4,
-                      width: 16, height: 16, borderRadius: '50%',
-                      background: color, border: '3px solid #fff',
-                      boxShadow: `0 0 0 2px ${color}33`,
-                    }} />
-
-                    {/* Card */}
-                    <div style={{
-                      background: '#F9FAFB', borderRadius: 'var(--radius-md)',
-                      padding: '10px 14px', border: '1px solid #E5E7EB',
-                    }}>
-                      {/* Tipo + fecha */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{
-                          fontSize: 12, fontWeight: 600, color,
-                          background: `${color}15`, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
-                        }}>
-                          {EVENTO_LABELS[entry.tipo_evento] || entry.tipo_evento}
-                        </span>
-                        <span style={{ fontSize: 11, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <Clock size={11} />
-                          {formatFecha(entry.created_at)}
-                        </span>
-                      </div>
-
-                      {/* Estado anterior → nuevo */}
-                      {(entry.estado_anterior || entry.estado_nuevo) && (
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          fontSize: 13, color: '#374151', marginBottom: 4,
-                        }}>
-                          {entry.estado_anterior && (
-                            <span style={{
-                              padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                              background: '#FEE2E2', color: '#991B1B', fontSize: 12,
-                            }}>
-                              {entry.estado_anterior}
-                            </span>
-                          )}
-                          {entry.estado_anterior && entry.estado_nuevo && (
-                            <ArrowRight size={14} style={{ color: '#9CA3AF' }} />
-                          )}
-                          {entry.estado_nuevo && (
-                            <span style={{
-                              padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                              background: '#D1FAE5', color: '#065F46', fontSize: 12,
-                            }}>
-                              {entry.estado_nuevo}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Detalles */}
-                      {detallesLines.length > 0 && (
-                        <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
-                          {detallesLines.map((line, j) => (
-                            <div key={j}>{line}</div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Usuario + módulo */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        fontSize: 11, color: '#9CA3AF', marginTop: 6,
-                        borderTop: '1px solid #E5E7EB', paddingTop: 6,
-                      }}>
-                        {entry.usuario_nombre && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <User size={11} />
-                            {entry.usuario_nombre}
-                          </span>
-                        )}
-                        {entry.modulo && (
-                          <span style={{
-                            background: '#F3F4F6', padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                          }}>
-                            {MODULO_LABELS[entry.modulo] || entry.modulo}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <HistorialLista tipo={tipo} entityId={entityId} />
         </div>
       </div>
     </div>

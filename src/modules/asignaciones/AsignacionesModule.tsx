@@ -33,6 +33,7 @@ import {
 } from './confirmacionAsignacion'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
+import { TIPO_ASIGNACION_LABELS as ETIQUETAS_TIPO_ASIGNACION } from '../../types/onboarding.types'
 import './AsignacionesModule.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
@@ -125,6 +126,18 @@ async function mostrarAvisosConfirmacion(textoOk: string, avisos: string[]): Pro
  * Argentina. El input no maneja zonas horarias, asi que lo que se le pasa tiene
  * que estar YA convertido a ART; si no, el operador veria la hora UTC.
  */
+/** "asignacion_companero" -> "Asignación de compañero" (y los motivos viejos de programación). */
+function etiquetaMotivoProgramacion(motivo: string): string {
+  const viejos: Record<string, string> = {
+    entrega_cargo: 'Entrega a cargo',
+    devolucion: 'Devolución',
+  }
+  const etiqueta = (ETIQUETAS_TIPO_ASIGNACION as Record<string, string>)[motivo] ?? viejos[motivo]
+  if (etiqueta) return etiqueta
+  const texto = motivo.replace(/_/g, ' ')
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
+}
+
 function inputDateTimeART(valor: string | null | undefined): string {
   const p = partesART(valor)
   return p ? `${p.anio}-${p.mes}-${p.dia}T${p.hora}:${p.minuto}` : ''
@@ -4369,29 +4382,35 @@ export function AsignacionesModule() {
               </>
             ) : (
               <>
+                {/* Detalle pensado para quien hace la entrega (2026-11-12): primero qué auto,
+                    cuándo y en qué estado; después cada conductor con sus datos ordenados. */}
                 <h2 className="asig-modal-title">{viewAsignacion?.motivoDetalle?.cambioVehiculo ? 'Detalles de Cambio de Vehículo' : 'Detalles de Asignación'}</h2>
                 <div className="asig-detail-grid">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <label className="asig-detail-label">Número de Asignación</label>
-                      <p className="asig-detail-value code">{viewAsignacion.codigo}</p>
+                  {/* Encabezado: auto, estado y modalidad */}
+                  <div className="asig-det-cabecera">
+                    <div className="asig-det-auto">
+                      {viewAsignacion?.motivoDetalle?.cambioVehiculo && viewAsignacion?.motivoDetalle?.vehiculoCambioPatente ? null : (
+                        <>
+                          <PatenteBadge patente={viewAsignacion.vehiculos?.patente} />
+                          <span className="asig-det-modelo">{viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}</span>
+                        </>
+                      )}
+                      <span className="asig-det-codigo">
+                        {viewAsignacion.codigo}
+                        {viewAsignacion.motivo && (
+                          <> · {etiquetaMotivoProgramacion(viewAsignacion.motivo)}{viewAsignacion.motivoDetalle?.programadoPor ? ` · por ${viewAsignacion.motivoDetalle.programadoPor}` : ''}</>
+                        )}
+                      </span>
                     </div>
-                    {viewAsignacion.motivo && (
-                      <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)' }}>
-                        <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Programación</div>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{viewAsignacion.motivo === 'entrega_auto' ? 'Entrega de auto' : viewAsignacion.motivo === 'cambio_auto' ? 'Cambio de auto' : viewAsignacion.motivo === 'cambio_turno' ? 'Cambio de turno' : viewAsignacion.motivo === 'entrega_cargo' ? 'Entrega a cargo' : viewAsignacion.motivo === 'devolucion' ? 'Devolución' : viewAsignacion.motivo}</div>
-                        {viewAsignacion.motivoDetalle?.programadoPor && (
-                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>por {viewAsignacion.motivoDetalle.programadoPor}</div>
-                        )}
-                        {viewAsignacion.motivoDetalle?.observaciones && (
-                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', fontStyle: 'italic', maxWidth: '250px' }}>{viewAsignacion.motivoDetalle.observaciones}</div>
-                        )}
-                      </div>
-                    )}
+                    <div className="asig-det-badges">
+                      <span className={getStatusBadgeClass(viewAsignacion.estado)}>{viewAsignacion.estado}</span>
+                      <span className={getHorarioBadgeClass(viewAsignacion.horario)}>
+                        {viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Vehículo: si es cambio de vehículo mostrar ambos, sino el normal */}
-                  {viewAsignacion?.motivoDetalle?.cambioVehiculo && viewAsignacion?.motivoDetalle?.vehiculoCambioPatente ? (
+                  {viewAsignacion?.motivoDetalle?.cambioVehiculo && viewAsignacion?.motivoDetalle?.vehiculoCambioPatente && (
                     <div>
                       <label className="asig-detail-label">Cambio de Vehículo</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
@@ -4408,18 +4427,39 @@ export function AsignacionesModule() {
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <div>
-                      <label className="asig-detail-label">Vehículo</label>
-                      <p className="asig-detail-value">
-                        <PatenteBadge patente={viewAsignacion.vehiculos?.patente} size="sm" /> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
-                      </p>
+                  )}
+
+                  {/* Fechas: la de entrega destacada */}
+                  <div className="asig-det-fechas">
+                    <div className="asig-det-fecha asig-det-fecha--principal">
+                      <span className="asig-det-lbl">Entrega</span>
+                      <span className="asig-det-val">{viewAsignacion.fecha_programada ? formatFechaHora(viewAsignacion.fecha_programada) : 'No definida'}</span>
+                    </div>
+                    <div className="asig-det-fecha">
+                      <span className="asig-det-lbl">Activación</span>
+                      <span className="asig-det-val">{viewAsignacion.fecha_inicio ? formatFechaHora(viewAsignacion.fecha_inicio) : 'No activada'}</span>
+                    </div>
+                    <div className="asig-det-fecha">
+                      <span className="asig-det-lbl">Fin</span>
+                      <span className="asig-det-val">{viewAsignacion.fecha_fin ? formatFechaHora(viewAsignacion.fecha_fin) : 'Sin definir'}</span>
+                    </div>
+                    <div className="asig-det-fecha">
+                      <span className="asig-det-lbl">Creada</span>
+                      <span className="asig-det-val">{formatFecha(viewAsignacion.created_at)}</span>
+                    </div>
+                  </div>
+
+                  {/* Observaciones de la programación: a la vista, para no pasarlas por alto */}
+                  {viewAsignacion.motivoDetalle?.observaciones && (
+                    <div className="asig-det-aviso">
+                      <span className="asig-det-lbl">Observaciones de la programación</span>
+                      {viewAsignacion.motivoDetalle.observaciones}
                     </div>
                   )}
 
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <label className="asig-detail-label">Conductores Asignados</label>
+                    <div className="asig-det-seccion">
+                      <span className="asig-det-seccion-titulo">Conductores</span>
                       {(() => {
                         const hayAnteriores = tieneConductoresAnteriores(viewAsignacion)
                         return (
@@ -4436,7 +4476,7 @@ export function AsignacionesModule() {
                       })()}
                     </div>
                     {viewAsignacion.asignaciones_conductores?.length ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {(() => {
                           const conductoresFiltrados = viewAsignacion.asignaciones_conductores.filter((c) =>
                             c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'completado'
@@ -4470,100 +4510,87 @@ export function AsignacionesModule() {
                             && (viewAsignacion.estado === 'programado' || viewAsignacion.estado === 'activa')
                           const showDrive = ac.documento !== 'NA' && ac.documento !== 'N/A'
                             && (!!driveUrl || !noGeneraDocumento(viewAsignacion))
+                          const cd = ac.conductores as any
+                          const ct = contactosDetalle.get(ac.conductor_id)
+                          const { tarifa: tarifaAc, texto: tarifaTexto, titulo: tarifaTitulo } = getTarifaConductor(ac)
+                          const fueraDelCambio = tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id)
                           return (
-                          <div key={ac.id} className="asig-conductor-card" style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
-                            {/* Datos del conductor */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p className="asig-conductor-card-name">
-                                {ac.conductores?.nombres || '-'} {ac.conductores?.apellidos || ''}
-                                {(ac.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
-                                  <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: 'var(--radius-lg)', verticalAlign: 'middle' }}>De baja</span>
-                                )}
-                              </p>
-                              <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
-                              {(() => {
-                                const ct = contactosDetalle.get(ac.conductor_id)
-                                if (!ct || !(ct.tel || ct.tel2 || ct.email || ct.email2)) return null
-                                return (
-                                  <div className="asig-contacto">
-                                    {ct.tel && <span><span className="asig-contacto-lbl">Teléfono (WhatsApp)</span><a href={`https://wa.me/${ct.tel.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{ct.tel}</a></span>}
-                                    {ct.tel2 && <span><span className="asig-contacto-lbl">Tel. secundario</span>{ct.tel2}</span>}
-                                    {ct.email && <span><span className="asig-contacto-lbl">Email (Cabify)</span>{ct.email}</span>}
-                                    {ct.email2 && <span><span className="asig-contacto-lbl">Mail personal</span>{ct.email2}</span>}
-                                  </div>
-                                )
-                              })()}
-                              {tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id) && (
-                                <p className="asig-conductor-card-info" style={{ color: 'var(--text-tertiary)' }} title="Este conductor no fue parte del cambio de vehículo">
-                                  Asignación: <strong style={{ color: 'var(--text-secondary)' }}>{tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id)}</strong>
-                                  <span style={{ fontStyle: 'italic' }}> · no participó del cambio de vehículo</span>
-                                </p>
-                              )}
+                          <div key={ac.id} className="asig-det-conductor">
+                            {/* Turno, nombre y si confirmó */}
+                            <div className="asig-det-conductor-cab">
                               {ac.horario !== 'todo_dia' && (
-                                <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
+                                <span className={`asig-det-turno asig-det-turno--${ac.horario}`}>{ac.horario === 'diurno' ? 'Diurno' : ac.horario === 'nocturno' ? 'Nocturno' : ac.horario}</span>
                               )}
-                              <div style={{ display: 'flex', gap: '16px', marginTop: '2px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                <span>Cochera: <strong style={{ color: (ac.conductores as any)?.cochera_propia ? '#16a34a' : '#9ca3af' }}>{(ac.conductores as any)?.cochera_propia ? 'Si' : 'No'}</strong></span>
-                                {(ac.conductores as any)?.contacto_emergencia && (
-                                  <span>Emergencia: <strong style={{ color: 'var(--text-secondary)' }}>{(ac.conductores as any).contacto_emergencia}{(ac.conductores as any).parentesco_emergencia ? ` (${(ac.conductores as any).parentesco_emergencia})` : ''}{(ac.conductores as any).telefono_emergencia ? ` · ${(ac.conductores as any).telefono_emergencia}` : ''}</strong></span>
+                              <span className="asig-det-nombre">
+                                {cd?.nombres || '-'} {cd?.apellidos || ''}
+                                {cd?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
+                                  <span className="asig-det-baja">De baja</span>
                                 )}
-                              </div>
-                              {ac.documento && (
-                                <p className="asig-conductor-card-info">
-                                  Documento: <strong style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
-                                    {ac.documento === 'CARTA_OFERTA' ? 'Carta Oferta' : ac.documento === 'ANEXO' ? 'Anexo' : ac.documento}
-                                  </strong>
-                                </p>
-                              )}
-                              {(() => {
-                                const { tarifa: tarifaAc, texto: tarifaTexto, titulo: tarifaTitulo } = getTarifaConductor(ac)
-                                return (
-                                  <p className="asig-conductor-card-info" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span>Tarifa:</span>
-                                    <span
-                                      title={tarifaTitulo}
-                                      style={{
-                                        padding: '1px 9px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600,
-                                        background: tarifaAc === 'nueva' ? '#DCFCE7' : '#EEF2F7',
-                                        color: tarifaAc === 'nueva' ? '#15803D' : '#475569'
-                                      }}
-                                    >
-                                      {tarifaTexto}
-                                    </span>
-                                    {/* Botones "Cambiar" e historial de tarifa ocultos a pedido:
-                                        la tarifa se muestra solo como informacion. Para reactivarlos,
-                                        volver a renderizar handleCambiarTarifaConductor / verHistorialTarifa. */}
-                                  </p>
-                                )
-                              })()}
-                              <p className="asig-conductor-status">
+                              </span>
+                              <span className="asig-det-estado">
                                 {ac.confirmado ? (
                                   <>
                                     <span className="asig-conductor-confirmed">
-                                      <CheckCircle size={14} /> Confirmado
-                                      {ac.fecha_confirmacion && (
-                                        <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px', opacity: 0.85 }}>
-                                          ({formatFechaHora(ac.fecha_confirmacion)})
-                                        </span>
-                                      )}
+                                      <CheckCircle size={13} /> Confirmado
+                                      {ac.fecha_confirmacion && <span className="asig-det-tenue"> ({formatFechaHora(ac.fecha_confirmacion)})</span>}
                                     </span>
                                     {canEdit && viewAsignacion.estado === 'programado' && (
-                                      <button
-                                        className="asig-btn-unconfirm"
-                                        onClick={() => handleUnconfirmFromViewModal(ac.id)}
-                                      >
+                                      <button className="asig-btn-unconfirm" onClick={() => handleUnconfirmFromViewModal(ac.id)}>
                                         Desconfirmar
                                       </button>
                                     )}
                                   </>
                                 ) : (
-                                  <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
+                                  <span className="asig-det-pendiente">Pendiente</span>
                                 )}
-                              </p>
+                              </span>
                             </div>
-                            {/* Documentos en Drive */}
+                            {fueraDelCambio && (
+                              <p className="asig-det-nota" title="Este conductor no fue parte del cambio de vehículo">
+                                Asignación: <strong>{fueraDelCambio}</strong> · no participó del cambio de vehículo
+                              </p>
+                            )}
+
+                            {/* Datos en dos columnas */}
+                            <dl className="asig-det-datos">
+                              <div><dt>Licencia</dt><dd>{cd?.numero_licencia || '-'}</dd></div>
+                              <div>
+                                <dt>WhatsApp</dt>
+                                <dd>{ct?.tel ? <a href={`https://wa.me/${ct.tel.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{ct.tel}</a> : '-'}</dd>
+                              </div>
+                              {ct?.tel2 && <div><dt>Tel. secundario</dt><dd>{ct.tel2}</dd></div>}
+                              <div><dt>Email (Cabify)</dt><dd className="asig-det-largo" title={ct?.email || undefined}>{ct?.email || '-'}</dd></div>
+                              {ct?.email2 && <div><dt>Mail personal</dt><dd className="asig-det-largo" title={ct.email2}>{ct.email2}</dd></div>}
+                              <div>
+                                <dt>Emergencia</dt>
+                                <dd>
+                                  {cd?.contacto_emergencia
+                                    ? <>{cd.contacto_emergencia}{cd.parentesco_emergencia ? ` (${cd.parentesco_emergencia})` : ''}{cd.telefono_emergencia ? ` · ${cd.telefono_emergencia}` : ''}</>
+                                    : '-'}
+                                </dd>
+                              </div>
+                              <div><dt>Cochera propia</dt><dd className={cd?.cochera_propia ? 'asig-det-si' : 'asig-det-tenue'}>{cd?.cochera_propia ? 'Sí' : 'No'}</dd></div>
+                              <div>
+                                <dt>Tarifa</dt>
+                                <dd>
+                                  {/* Botones "Cambiar" e historial de tarifa ocultos a pedido: la tarifa
+                                      se muestra solo como información (handleCambiarTarifaConductor / verHistorialTarifa). */}
+                                  <span title={tarifaTitulo} className={`asig-det-tarifa${tarifaAc === 'nueva' ? ' asig-det-tarifa--nueva' : ''}`}>{tarifaTexto}</span>
+                                </dd>
+                              </div>
+                              {ac.documento && (
+                                <div>
+                                  <dt>Documento</dt>
+                                  <dd style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : undefined }}>
+                                    {ac.documento === 'CARTA_OFERTA' ? 'Carta Oferta' : ac.documento === 'ANEXO' ? 'Anexo' : ac.documento}
+                                  </dd>
+                                </div>
+                              )}
+                            </dl>
+
+                            {/* Documento en Drive (carta oferta) o aviso si falta */}
                             {showDrive && (
-                              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '130px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
+                              <div className={`asig-det-drive${sinDocumento || !driveUrl ? ' asig-det-drive--falta' : ''}`}>
                                 {sinDocumento ? (
                                   <>
                                     <FolderOpen size={22} style={{ color: '#DC2626', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
@@ -4645,21 +4672,6 @@ export function AsignacionesModule() {
                     )}
                   </div>
 
-                  <div className="asig-detail-row">
-                    <div>
-                      <label className="asig-detail-label">Horario</label>
-                      <span className={getHorarioBadgeClass(viewAsignacion.horario)}>
-                        {viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="asig-detail-label">Estado</label>
-                      <span className={getStatusBadgeClass(viewAsignacion.estado)}>
-                        {viewAsignacion.estado}
-                      </span>
-                    </div>
-                  </div>
-
                   {viewAsignacion.estado === 'cancelada' && (() => {
                     // El motivo puede venir de dos flujos:
                     //  (1) Botón "Cancelar" del menú → guarda "[CANCELADA] Motivo: <texto>"
@@ -4688,33 +4700,6 @@ export function AsignacionesModule() {
                       </div>
                     )
                   })()}
-
-                  <div className="asig-detail-row four">
-                    <div>
-                      <label className="asig-detail-label">Fecha Creación</label>
-                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {formatFecha(viewAsignacion.created_at)}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="asig-detail-label">Fecha Entrega</label>
-                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_programada ? formatFechaHora(viewAsignacion.fecha_programada) : 'No definida'}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="asig-detail-label">Fecha Activación</label>
-                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_inicio ? formatFechaHora(viewAsignacion.fecha_inicio) : 'No activada'}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="asig-detail-label">Fecha Fin</label>
-                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_fin ? formatFechaHora(viewAsignacion.fecha_fin) : 'Sin definir'}
-                      </p>
-                    </div>
-                  </div>
 
                   {viewAsignacion.estado !== 'cancelada' && (() => {
                     // Para estados no-cancelados, mostrar notas tal cual.
