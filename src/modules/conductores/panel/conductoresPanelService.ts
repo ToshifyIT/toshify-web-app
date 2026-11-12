@@ -53,6 +53,8 @@ export interface ConductorPanelRow {
   guia: string | null               // guía del lead de origen o quien lo convirtió (conductores.guia)
   estadoCodigo: string | null
   activo: boolean
+  categoriaLicencia: string | null       // B1 / D1 / Otros (conductores.categoria_licencia)
+  categoriaLicenciaOtra: string | null   // detalle cuando es Otros (ej. "D2")
   tieneAsignacion: boolean
   vehiculoAsignado: string | null   // patente del auto asignado ahora mismo
   grupoFlotaAsignado: string | null // grupo de flota (razon social) de ese auto
@@ -156,6 +158,8 @@ interface RawConductor {
   numero_dni: string | null
   numero_cuit: string | null
   numero_licencia: string | null
+  categoria_licencia?: string | null
+  categoria_licencia_otra?: string | null
   conductores_estados: { codigo: string | null } | null
 }
 
@@ -207,7 +211,7 @@ export async function cargarPanelConductores(
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia, categoria_licencia, categoria_licencia_otra, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
         .range(from, to)
       if (sedeId) q = q.eq('sede_id', sedeId)
       return q
@@ -522,6 +526,8 @@ export async function cargarPanelConductores(
       guia: guiaPorConductor.get(c.id) || null,
       estadoCodigo,
       activo: estadoCodigo === 'activo',
+      categoriaLicencia: c.categoria_licencia || null,
+      categoriaLicenciaOtra: c.categoria_licencia_otra || null,
       tieneAsignacion: !!vehiculoAsignado,
       vehiculoAsignado,
       grupoFlotaAsignado: grupoFlotaPorConductor.get(c.id) || null,

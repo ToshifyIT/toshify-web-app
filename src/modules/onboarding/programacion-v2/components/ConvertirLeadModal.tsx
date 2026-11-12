@@ -639,8 +639,8 @@ export function ConvertirLeadModal({
                     <input type="date" style={inputStyle} value={(lead.fecha_licencia_d1 || '').substring(0, 10)} onChange={(e) => set('fecha_licencia_d1', e.target.value)} />
                   </Campo>
                 )}
-                {(lead.categoria_licencia === 'B1' || lead.categoria_licencia === 'D1') && (
-                  <Campo label={lead.categoria_licencia === 'B1' ? 'Fecha de obtención B1' : 'Fecha de obtención B1 (opcional)'} obligatorio={lead.categoria_licencia === 'B1'}>
+                {lead.categoria_licencia === 'B1' && (
+                  <Campo label="Fecha de obtención B1" obligatorio>
                     <input type="date" style={inputStyle} value={(lead.fecha_licencia_b1 || '').substring(0, 10)} onChange={(e) => set('fecha_licencia_b1', e.target.value)} />
                   </Campo>
                 )}

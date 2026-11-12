@@ -18,7 +18,7 @@ import { insightsDirectivoRouter } from './server-insights-directivo.js'
 import { twoChatRouter } from './server-2chat.js'
 import { cabifyRouter, obtenerTokenCabifyParaCompany, requireUsuario } from './server-cabify.js'
 // Integración Cresium -> Alegra: movimientos bancarios y carga en Alegra (claves solo en el servidor)
-import { cresiumRouter } from './server-cresium.js'
+import { cresiumRouter, iniciarSyncAutomaticoCresium } from './server-cresium.js'
 // Integraciones > Alegra: Excel de ARCA (comprobantes recibidos) -> Alegra (token solo en el servidor)
 import { alegraRouter } from './server-alegra.js'
 // Administración > Integraciones & Tokens: credenciales y monitor de edge functions
@@ -61,6 +61,9 @@ app.use('/api/cabify', cabifyRouter)
 
 // Rutas /api/cresium (Integraciones > Cresium, archivo aparte)
 app.use('/api/cresium', cresiumRouter)
+// Movimientos de Cresium (44 Dreams y Grupo CG) cada 30 minutos, las 24 h. Solo la tabla
+// cresium_movimientos: no toca Alegra. CRESIUM_SYNC_AUTO=0 la apaga.
+iniciarSyncAutomaticoCresium()
 
 // Google Drive service
 function getDriveService(writeAccess = false) {

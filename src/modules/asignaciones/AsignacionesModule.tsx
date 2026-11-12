@@ -35,6 +35,7 @@ import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
 interface Asignacion {
@@ -80,6 +81,8 @@ interface Asignacion {
       nombres: string
       apellidos: string
       numero_licencia: string
+      categoria_licencia?: string | null
+      categoria_licencia_otra?: string | null
     }
   }>
 }
@@ -986,7 +989,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo, gnc),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
-              conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, categoria_licencia, categoria_licencia_otra, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
           .order('fecha_programada', { ascending: false, nullsFirst: false })
@@ -1148,7 +1151,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo, gnc),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
-              conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, categoria_licencia, categoria_licencia_otra, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
           .order('created_at', { ascending: false })
@@ -4559,6 +4562,15 @@ export function AsignacionesModule() {
                                 ) : (
                                   <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
                                 )}
+                              </p>
+                              {/* Categoría de licencia actual del conductor (B1 / D1 / Otros) */}
+                              <p className="asig-conductor-card-info" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span>Tipo de licencia:</span>
+                                <LicenciaBadge
+                                  categoria={ac.conductores?.categoria_licencia}
+                                  otra={ac.conductores?.categoria_licencia_otra}
+                                  sinDato="Sin cargar"
+                                />
                               </p>
                             </div>
                             {/* Documentos en Drive */}

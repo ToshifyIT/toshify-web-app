@@ -5,7 +5,8 @@
  * Movimientos de la cuenta Cresium de cada empresa, mes por mes, y su carga en
  * Alegra. Los movimientos están guardados en la base (cresium_movimientos): la
  * pantalla lee de ahí y "Traer nuevos" solo pide a Cresium lo posterior al último
- * movimiento guardado ("Re-sincronizar mes" vuelve a traer el mes elegido). Cada movimiento muestra cómo
+ * movimiento guardado ("Re-sincronizar mes" vuelve a traer el mes elegido). El servidor trae lo
+ * nuevo solo cada 30 minutos y la pantalla relee la base con la misma frecuencia. Cada movimiento muestra cómo
  * se cargaría en Alegra (contacto por CUIT + cuenta contable o factura) y se
  * puede cambiar antes de cargar. Lo cargado queda marcado con el link al pago.
  *
@@ -47,6 +48,9 @@ import './CresiumModule.css'
 import { formatMoneda } from '../../../utils/format'
 
 type FiltroEstado = 'todos' | EstadoAlegra
+
+/** Cada cuánto la pantalla relee los movimientos de la base */
+const RELEER_MOVIMIENTOS_MS = 30 * 60 * 1000
 
 const ETIQUETA_ESTADO: Record<EstadoAlegra, string> = {
   pendiente: 'Pendiente',
@@ -186,6 +190,18 @@ export function CresiumModule({ empresa }: CresiumModuleProps) {
   useEffect(() => {
     setElecciones({})
     setFiltro('todos')
+  }, [empresa, mes])
+
+  // Cada 30 minutos relee los movimientos de la base (el servidor los trae de Cresium cada
+  // 30 minutos). Solo la tabla: no consulta Alegra ni toca la selección o lo elegido.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.hidden) return
+      obtenerMovimientosCresium(empresa, mes)
+        .then(setDatos)
+        .catch((err) => console.error('[cresium] No se pudo releer los movimientos:', err))
+    }, RELEER_MOVIMIENTOS_MS)
+    return () => window.clearInterval(id)
   }, [empresa, mes])
 
   const filas = useMemo<MovimientoCresium[]>(() => (datos?.filas ?? []).map((f) => {

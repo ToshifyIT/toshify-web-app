@@ -300,7 +300,7 @@ const INTEGRATIONS: IntegrationSystem[] = [
     ],
     cronJobs: [],
     notes: [
-      'Con CRESIUM_SYNC_AUTO=1 trae lo nuevo sola cada hora, de 9 a 18 h',
+      'Trae los movimientos nuevos solo cada 30 minutos, las 24 h (no toca Alegra). CRESIUM_SYNC_AUTO=0 lo apaga',
       'Guarda los ids de Alegra para no cargar nada dos veces',
     ],
     tokenInfo: {
