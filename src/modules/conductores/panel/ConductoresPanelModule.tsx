@@ -184,7 +184,7 @@ export function ConductoresPanelModule() {
     setError('')
     cargarPanelConductores(sedeActualId, {
       cabify: { startDate: semanaCabify.startDate, endDate: semanaCabify.endDate },
-      appsSemanaCerrada: cabifyService.getWeekRange(1),
+      appsPago: { inicio: semanaCabify.startDate.slice(0, 10) },
     })
       .then(data => { if (activo) setRows(data) })
       .catch(e => { if (activo) setError(e?.message || 'Error al cargar el panel') })
@@ -231,7 +231,7 @@ export function ConductoresPanelModule() {
       'DNI': c.dni || '',
       'CUIT': c.ruc || '',
       'Guía': c.guia || '',
-      'App (semana cerrada)': c.apps?.join(' + ') || '',
+      'App (pagó)': c.apps?.join(' + ') || '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
       'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
       'Grupo de Flota': grupoFlotaLabel(c.grupoFlotaAsignado),
@@ -359,10 +359,10 @@ export function ConductoresPanelModule() {
       },
     },
     {
-      // App con la que trabajó la última semana cerrada (Cabify; DiDi más adelante)
+      // App con la que pagó (Cabify, DiDi o ambas): misma regla que Facturación
       id: 'apps',
       accessorFn: (r) => (r.apps && r.apps.length ? r.apps.join(' + ') : 'Sin app'),
-      header: () => <span title="Apps con las que trabajó la última semana cerrada">App</span>,
+      header: () => <span title="Apps con las que pagó, igual que en Facturación: carga de Pagos Cabify / Pagos DiDi de la última semana cerrada + pagos manuales de esta semana que nombran la app">App</span>,
       cell: ({ row }) => {
         const apps = row.original.apps
         if (apps === undefined) return <span className="cpanel-num cpanel-nulo">…</span>

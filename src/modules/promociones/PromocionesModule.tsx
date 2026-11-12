@@ -1,10 +1,11 @@
 // src/modules/promociones/PromocionesModule.tsx
 // Parámetros > Promociones. Lista las promociones del catálogo del código
-// (catalogoPromociones.ts): se activan / desactivan y se programan (desde / hasta).
-// No se crean ni se borran desde acá.
+// (catalogoPromociones.ts): se activan / desactivan y se edita el código, la descripción y el
+// período (desde / hasta). No se crean ni se borran desde acá. Cada cambio queda en el
+// historial (quién y cuándo), que se ve en el detalle.
 
 import { useState, useEffect, useMemo } from 'react'
-import { Tag, CheckCircle, Clock, XCircle, Eye, CalendarRange, X, History } from 'lucide-react'
+import { Tag, CheckCircle, Clock, XCircle, Eye, Edit2, X, History } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -13,7 +14,7 @@ import { showError, showSuccess, showWarning } from '../../utils/toast'
 import { formatFechaHoraART } from '../../utils/fechaArgentina'
 import { definicionPromocion } from './catalogoPromociones'
 import {
-  actualizarPromocion, cargarHistorialPromocion, cargarPromociones, estadoPromocion,
+  actualizarPromocion, cargarHistorialPromocion, cargarPromociones, estadoPromocion, FORMATO_CODIGO_PROMOCION,
 } from './promocionesService'
 import type { EstadoPromocion, PromocionHistorial, PromocionRegistro } from './promocionesService'
 import { DataTable } from '../../components/ui/DataTable'
@@ -28,11 +29,30 @@ const ETIQUETA_ESTADO: Record<EstadoPromocion, string> = {
   desactivada: 'Desactivada',
 }
 
+const ETIQUETA_CAMBIO: Record<string, string> = {
+  alta: 'Alta',
+  codigo: 'Código',
+  activada: 'Activada',
+  desactivada: 'Desactivada',
+  fechas: 'Período',
+  descripcion: 'Descripción',
+}
+
+function etiquetaCambio(cambio: string | null): string {
+  if (!cambio) return 'Cambio'
+  return cambio.split(',').map(c => ETIQUETA_CAMBIO[c.trim()] || c.trim()).join(' · ')
+}
+
 /** "YYYY-MM-DD" → "DD/MM/YYYY" (sin pasar por Date: es una fecha, no un instante). */
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '-'
   const [y, m, d] = fecha.slice(0, 10).split('-')
   return `${d}/${m}/${y}`
+}
+
+/** Descripción guardada; si todavía no tiene, la del catálogo del código. */
+function descripcionDe(p: PromocionRegistro): string {
+  return p.descripcion || definicionPromocion(p.clave)?.descripcionInicial || ''
 }
 
 export function PromocionesModule() {
@@ -46,8 +66,8 @@ export function PromocionesModule() {
   const [filtro, setFiltro] = useState<EstadoPromocion | null>(null)
   const [cambiandoId, setCambiandoId] = useState<string | null>(null)
 
-  const [programando, setProgramando] = useState<PromocionRegistro | null>(null)
-  const [fechas, setFechas] = useState({ inicio: '', fin: '' })
+  const [editando, setEditando] = useState<PromocionRegistro | null>(null)
+  const [form, setForm] = useState({ codigo: '', descripcion: '', inicio: '', fin: '' })
   const [guardando, setGuardando] = useState(false)
 
   const [detalle, setDetalle] = useState<PromocionRegistro | null>(null)
@@ -101,11 +121,11 @@ export function PromocionesModule() {
 
   async function cambiarActiva(p: PromocionRegistro) {
     if (!puedeEditar) return
-    const def = definicionPromocion(p.codigo)
+    const def = definicionPromocion(p.clave)
     const activar = !p.activa
 
     if (activar && (!p.fecha_inicio || !p.fecha_fin)) {
-      showWarning('Primero programá la promoción', 'Cargá desde y hasta cuándo aplica antes de activarla.')
+      showWarning('Primero cargá el período', 'Editá la promoción y cargá desde y hasta cuándo aplica antes de activarla.')
       return
     }
 
@@ -116,7 +136,7 @@ export function PromocionesModule() {
       : 'Deja de aplicar desde ahora, aunque esté dentro del período programado.'
 
     const ok = await confirmar({
-      titulo: `${activar ? 'Activar' : 'Desactivar'} "${p.nombre}"`,
+      titulo: `${activar ? 'Activar' : 'Desactivar'} ${p.codigo} · ${p.nombre}`,
       texto,
       peligro: !activar,
     })
@@ -134,29 +154,61 @@ export function PromocionesModule() {
     }
   }
 
-  function abrirProgramar(p: PromocionRegistro) {
-    setProgramando(p)
-    setFechas({ inicio: p.fecha_inicio || '', fin: p.fecha_fin || '' })
+  function abrirEditar(p: PromocionRegistro) {
+    setEditando(p)
+    setForm({
+      codigo: p.codigo,
+      descripcion: descripcionDe(p),
+      inicio: p.fecha_inicio || '',
+      fin: p.fecha_fin || '',
+    })
   }
 
-  async function guardarFechas() {
-    if (!programando) return
-    if (!fechas.inicio || !fechas.fin) {
+  async function guardarEdicion() {
+    if (!editando) return
+    const codigo = form.codigo.trim().toUpperCase()
+    if (!FORMATO_CODIGO_PROMOCION.test(codigo)) {
+      showWarning('Código inválido', 'Usá mayúsculas, números o guion, de 2 a 20 caracteres (ej. PRM01).')
+      return
+    }
+    if (promociones.some(p => p.id !== editando.id && p.codigo === codigo)) {
+      showWarning('Código repetido', `Ya hay otra promoción con el código ${codigo}.`)
+      return
+    }
+    const descripcion = form.descripcion.trim()
+    if (!descripcion) {
+      showWarning('Falta la descripción', 'La promoción tiene que tener una descripción.')
+      return
+    }
+    if (!form.inicio || !form.fin) {
       showWarning('Faltan fechas', 'Cargá desde y hasta cuándo aplica la promoción.')
       return
     }
-    if (fechas.fin < fechas.inicio) {
+    if (form.fin < form.inicio) {
       showWarning('Fechas inválidas', 'La fecha "hasta" no puede ser anterior a "desde".')
       return
     }
+
+    // Solo lo que cambió (así el historial registra exactamente eso)
+    const cambios: Parameters<typeof actualizarPromocion>[1] = {}
+    if (codigo !== editando.codigo) cambios.codigo = codigo
+    if (descripcion !== (editando.descripcion ?? '')) cambios.descripcion = descripcion
+    if (form.inicio !== editando.fecha_inicio) cambios.fecha_inicio = form.inicio
+    if (form.fin !== editando.fecha_fin) cambios.fecha_fin = form.fin
+    if (Object.keys(cambios).length === 0) {
+      setEditando(null)
+      return
+    }
+
     setGuardando(true)
     try {
-      reemplazar(await actualizarPromocion(programando.id, { fecha_inicio: fechas.inicio, fecha_fin: fechas.fin }, usuario))
-      showSuccess('Período guardado')
-      setProgramando(null)
+      reemplazar(await actualizarPromocion(editando.id, cambios, usuario))
+      showSuccess('Promoción actualizada')
+      setEditando(null)
     } catch (err: any) {
-      console.error('Error guardando fechas de promoción:', err)
-      showError('No se pudo guardar el período', err.message)
+      console.error('Error editando promoción:', err)
+      const repetido = err?.code === '23505'
+      showError('No se pudo guardar la promoción', repetido ? `El código ${codigo} ya está en uso.` : err.message)
     } finally {
       setGuardando(false)
     }
@@ -167,7 +219,7 @@ export function PromocionesModule() {
     setHistorial([])
     setCargandoHistorial(true)
     try {
-      setHistorial(await cargarHistorialPromocion(p.codigo))
+      setHistorial(await cargarHistorialPromocion(p.id))
     } catch (err) {
       console.error('Error cargando historial de promoción:', err)
     } finally {
@@ -177,10 +229,16 @@ export function PromocionesModule() {
 
   const columns = useMemo<ColumnDef<PromocionRegistro & { estado: EstadoPromocion }>[]>(() => [
     {
+      accessorKey: 'codigo',
+      header: 'Código',
+      cell: ({ getValue }) => <span className="promo-codigo">{getValue() as string}</span>,
+      enableSorting: true,
+    },
+    {
       accessorKey: 'nombre',
       header: 'Promoción',
       cell: ({ row }) => {
-        const def = definicionPromocion(row.original.codigo)
+        const def = definicionPromocion(row.original.clave)
         return (
           <div className="promo-nombre">
             <span className="promo-nombre-titulo">
@@ -191,7 +249,7 @@ export function PromocionesModule() {
                 </span>
               )}
             </span>
-            {def && <span className="promo-nombre-desc">{def.descripcion}</span>}
+            <span className="promo-nombre-desc">{descripcionDe(row.original)}</span>
           </div>
         )
       },
@@ -247,8 +305,8 @@ export function PromocionesModule() {
             <Eye size={15} />
           </button>
           {puedeEditar && (
-            <button className="promo-action-btn" onClick={() => abrirProgramar(row.original)} title="Programar fechas">
-              <CalendarRange size={15} />
+            <button className="promo-action-btn" onClick={() => abrirEditar(row.original)} title="Editar código, descripción y período">
+              <Edit2 size={15} />
             </button>
           )}
         </div>
@@ -258,7 +316,7 @@ export function PromocionesModule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [puedeEditar, cambiandoId])
 
-  const defDetalle = detalle ? definicionPromocion(detalle.codigo) : undefined
+  const defDetalle = detalle ? definicionPromocion(detalle.clave) : undefined
   const estadoDetalle = detalle ? estadoPromocion(detalle) : null
 
   return (
@@ -314,29 +372,49 @@ export function PromocionesModule() {
         loading={loading}
         error={error}
         pageSize={50}
-        searchPlaceholder="Buscar promoción..."
+        searchPlaceholder="Buscar por código o promoción..."
         emptyTitle="No hay promociones"
         emptyDescription="Las promociones se agregan desde el código (catalogoPromociones.ts)"
       />
 
-      {/* Programar desde / hasta */}
-      {programando && (
-        <div className="modal-overlay" onClick={() => !guardando && setProgramando(null)}>
-          <div className="modal-content" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+      {/* Editar descripción y período */}
+      {editando && (
+        <div className="modal-overlay" onClick={() => !guardando && setEditando(null)}>
+          <div className="modal-content" style={{ maxWidth: '560px' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Programar promoción</h2>
-              <button className="modal-close" onClick={() => !guardando && setProgramando(null)}><X size={18} /></button>
+              <h2>Editar promoción</h2>
+              <button className="modal-close" onClick={() => !guardando && setEditando(null)}><X size={18} /></button>
             </div>
             <div className="modal-body">
-              <p className="promo-modal-nombre">{programando.nombre}</p>
+              <p className="promo-modal-nombre">{editando.nombre}</p>
+              <div className="form-group">
+                <label>Código <span className="required">*</span></label>
+                <input
+                  type="text"
+                  className="form-input promo-codigo-input"
+                  value={form.codigo}
+                  maxLength={20}
+                  placeholder="PRM01"
+                  onChange={e => setForm(f => ({ ...f, codigo: e.target.value.toUpperCase().replace(/\s/g, '') }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>Descripción <span className="required">*</span></label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  value={form.descripcion}
+                  onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
+                />
+              </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Desde <span className="required">*</span></label>
                   <input
                     type="date"
                     className="form-input"
-                    value={fechas.inicio}
-                    onChange={e => setFechas(f => ({ ...f, inicio: e.target.value }))}
+                    value={form.inicio}
+                    onChange={e => setForm(f => ({ ...f, inicio: e.target.value }))}
                   />
                 </div>
                 <div className="form-group">
@@ -344,21 +422,22 @@ export function PromocionesModule() {
                   <input
                     type="date"
                     className="form-input"
-                    value={fechas.fin}
-                    min={fechas.inicio || undefined}
-                    onChange={e => setFechas(f => ({ ...f, fin: e.target.value }))}
+                    value={form.fin}
+                    min={form.inicio || undefined}
+                    onChange={e => setForm(f => ({ ...f, fin: e.target.value }))}
                   />
                 </div>
               </div>
               <p className="promo-ayuda">
                 Las dos fechas se incluyen. La promoción aplica solo si además está activada.
+                Se puede editar esté activa o desactivada; el cambio queda en el historial.
               </p>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setProgramando(null)} disabled={guardando}>
+              <button className="btn-secondary" onClick={() => setEditando(null)} disabled={guardando}>
                 Cancelar
               </button>
-              <button className="btn-primary" onClick={guardarFechas} disabled={guardando}>
+              <button className="btn-primary" onClick={guardarEdicion} disabled={guardando}>
                 {guardando ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
@@ -388,7 +467,7 @@ export function PromocionesModule() {
                 </div>
                 <div>
                   <span className="promo-detalle-label">Código</span>
-                  <span className="promo-fecha">{detalle.codigo}</span>
+                  <span className="promo-codigo">{detalle.codigo}</span>
                 </div>
                 <div>
                   <span className="promo-detalle-label">Último cambio</span>
@@ -399,10 +478,12 @@ export function PromocionesModule() {
                 </div>
               </div>
 
+              <h3 className="promo-seccion">Descripción</h3>
+              <p className="promo-ayuda">{descripcionDe(detalle)}</p>
+
               {defDetalle && (
                 <>
-                  <h3 className="promo-seccion">Qué hace</h3>
-                  <p className="promo-ayuda">{defDetalle.descripcion}</p>
+                  <h3 className="promo-seccion">Reglas</h3>
                   <ul className="promo-reglas">
                     {defDetalle.reglas.map(r => <li key={r}>{r}</li>)}
                   </ul>
@@ -424,11 +505,17 @@ export function PromocionesModule() {
                 <ul className="promo-historial">
                   {historial.map(h => (
                     <li key={h.id}>
-                      <span className="promo-historial-fecha">{formatFechaHoraART(h.registrado_at)}</span>
+                      <div className="promo-historial-cabecera">
+                        <span className="promo-historial-fecha">{formatFechaHoraART(h.registrado_at)}</span>
+                        <span className="promo-historial-cambio">{etiquetaCambio(h.cambio)}</span>
+                        <span className="promo-historial-usuario">{h.usuario_nombre || 'Sistema'}</span>
+                      </div>
                       <span>
-                        {h.activa ? 'Activa' : 'Desactivada'} · {formatFecha(h.fecha_inicio)} al {formatFecha(h.fecha_fin)}
+                        {h.promocion_codigo} · {h.activa ? 'Activa' : 'Desactivada'} · {formatFecha(h.fecha_inicio)} al {formatFecha(h.fecha_fin)}
                       </span>
-                      <span className="promo-historial-usuario">{h.usuario_nombre || 'Sistema'}</span>
+                      {h.cambio?.includes('descripcion') && h.descripcion && (
+                        <span className="promo-historial-desc">"{h.descripcion}"</span>
+                      )}
                     </li>
                   ))}
                 </ul>
