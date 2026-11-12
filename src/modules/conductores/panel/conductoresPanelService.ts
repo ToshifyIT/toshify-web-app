@@ -17,6 +17,7 @@
 import { supabase } from '../../../lib/supabase'
 import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
+import { cargarAppsPagoSemana, etiquetasApps } from '../../../services/appsPagoService'
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { calcularKmSemanaConductores } from '../../portal/kmRecorridos'
 
@@ -183,9 +184,10 @@ export interface PanelOpciones {
   // consulta y las filas quedan con `cabify: undefined` (los modulos de mapa, que
   // tambien usan este servicio, no pagan esa consulta).
   cabify?: { startDate: string; endDate: string }
-  // Semana CERRADA para la etiqueta de app (Cabify): quién trabajó con Cabify esa
-  // semana. Se mira la semana cerrada, no la en curso (el lunes la en curso está vacía).
-  appsSemanaCerrada?: { startDate: string; endDate: string }
+  // Etiqueta de app (Cabify / DiDi): con qué app pagó, misma regla que Facturación
+  // (appsPagoService). `inicio` = lunes de la semana en curso ("YYYY-MM-DD"): cuenta
+  // la carga de Pagos Cabify / DiDi de la última semana cerrada + pagos manuales de esta.
+  appsPago?: { inicio: string }
 }
 
 /**
@@ -200,7 +202,7 @@ export async function cargarPanelConductores(
   // Las 5 consultas son independientes entre si: se lanzan EN PARALELO para no
   // sumar la latencia de cada una (antes iban en serie). Los datos traidos y el
   // procesamiento posterior son identicos; solo cambia el "cuando" se piden.
-  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias, cabifyDrivers, guias, cabifyCerrada] = await Promise.all([
+  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias, cabifyDrivers, guias, appsPago] = await Promise.all([
     // 1. Conductores (con estado y dni).
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
@@ -299,12 +301,10 @@ export async function cargarPanelConductores(
       if (sedeId) q = q.eq('sede_id', sedeId)
       return q
     }).catch(() => [] as { id: string; guia: string | null }[]),
-    // 11. Cabify de la semana cerrada (solo para la etiqueta de app).
-    opciones?.appsSemanaCerrada
-      ? cabifyHistoricalService
-          .getDriversData(opciones.appsSemanaCerrada.startDate, opciones.appsSemanaCerrada.endDate, { sedeId })
-          .then(r => r.drivers)
-          .catch(() => null)
+    // 11. Apps con las que pagó (solo para la etiqueta de app). Tolerante: si falla,
+    // la columna queda en "…" y el panel carga igual.
+    opciones?.appsPago
+      ? cargarAppsPagoSemana(opciones.appsPago.inicio).catch(() => null)
       : Promise.resolve(null),
   ])
   const guiaPorConductor = new Map(guias.map(g => [g.id, g.guia]))
@@ -352,13 +352,6 @@ export async function cargarPanelConductores(
     porDni.get(normalizeDni(d.nationalIdNumber)) ||
     porLicencia.get(normalizeLicencia(d.driverLicense)) ||
     porNombre.get(normalizeNombre(`${d.name || ''} ${d.surname || ''}`))
-  // Etiqueta de app: trabajó con Cabify la semana cerrada (completó viajes o cobró)
-  const conCabifyCerrada = new Set<string>()
-  for (const d of cabifyCerrada || []) {
-    if (!((Number(d.viajesFinalizados) || 0) > 0 || (Number(d.gananciaTotal) || 0) > 0)) continue
-    const cid = conductorDeCabify(d)
-    if (cid) conCabifyCerrada.add(cid)
-  }
   if (cabifyDrivers) {
     for (const d of cabifyDrivers) {
       const cid = conductorDeCabify(d)
@@ -551,7 +544,7 @@ export async function cargarPanelConductores(
       saldoMenosGarantia: saldoPendiente - garantiaPagada,
       // undefined si no se pidio Cabify; null si se pidio y no hubo cruce.
       cabify: cabifyDrivers ? (cabifyPorConductor.get(c.id) ?? null) : undefined,
-      apps: cabifyCerrada ? (conCabifyCerrada.has(c.id) ? ['Cabify'] : []) : undefined,
+      apps: appsPago ? etiquetasApps(appsPago.get(c.id)) : undefined,
       kmGeo: opciones?.cabify ? (kmGeoPorConductor.get(c.id) ?? null) : undefined,
     }
   })

@@ -44,6 +44,19 @@
   color: #b45309;
 }
 
+.promo-codigo {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.promo-codigo-input {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  max-width: 200px;
+}
+
 .promo-fecha {
   font-size: 12px;
   font-family: var(--font-mono);
@@ -227,8 +240,8 @@
 
 .promo-historial li {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  flex-direction: column;
+  gap: 2px;
   padding: 6px 0;
   border-bottom: 1px solid var(--border-primary, rgba(0, 0, 0, 0.08));
 }
@@ -241,4 +254,21 @@
 .promo-historial-usuario {
   margin-left: auto;
   color: var(--text-secondary);
+}
+
+.promo-historial-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.promo-historial-cambio {
+  font-weight: 600;
+}
+
+.promo-historial-desc {
+  color: var(--text-secondary);
+  font-style: italic;
+  white-space: pre-wrap;
 }

@@ -12,6 +12,11 @@ import { acumularCuentaCabify, elegirCuentaCabify, type CuentasCabifyPorConducto
 import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
 import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE } from '../utils/descuentoReferido'
+import {
+  cargarPromocionesSemana, descuentoPromoAlquiler, descuentoPromoToshipass, leerCalculoPromocion,
+  lineasPromocionConductor, REFERENCIA_PROMOCION, textoLineaPromocion,
+} from '../utils/promocionesFacturacion'
+import type { DiaPromocion, LineaPromocion, PagoDiarioB1 } from '../utils/promocionesFacturacion'
 import { cruzarPagosDidi, leerExcelDidi, palabrasNombreDidi, type CandidatoDidi, type MetodoCruceDidi, type NoCruzadoDidi } from '../utils/pagosDidi'
 import { etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import { esFacturaA } from '../utils/tipoFactura'
@@ -97,7 +102,8 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 
 import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
-import { semanaISO, semanasDelAnio, sumarSemanasISO } from '../../../utils/semanaISO'
+import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
+import { cargarAppsPagoSemana, type AppsPago } from '../../../services/appsPagoService'
 import { formatNumero } from '../../../utils/format'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
@@ -231,6 +237,9 @@ interface FacturacionConductor {
   monto_devolucion_garantia?: number  // P028 - Devolución de garantía por cambio de tarifa (descuento)
   monto_descuento_referido?: number  // P004 - Descuento 5% primera semana del referido
   dias_descuento_referido?: number
+  promo_lineas?: LineaPromocion[]  // Descuentos por promoción (Vista Previa), código PRM...
+  promo_b1?: PagoDiarioB1 | null   // Promoción licencia B1: días con pago diario (no resta)
+  _codigosPromocion?: string[]     // Códigos de promoción de la semana (chips de la grilla)
   monto_tickets_favor?: number  // Tickets a favor
   // Detalle de peajes para validar con Cabify
   peajes_detalle?: Array<{ fecha: string; monto: number }>
@@ -298,6 +307,8 @@ interface FacturacionDetalle {
   referencia_id: string | null
   referencia_tipo: string | null
   fecha_referencia?: string | null
+  /** Texto libre; en las líneas de promoción, el desglose del cálculo (JSON). */
+  descripcion?: string | null
 }
 
 // Tipo para excesos de km asociados a cada conductor
@@ -741,6 +752,14 @@ export function ReporteFacturacionTab() {
   // Memoized filtered detalle items to avoid recalculation on each render
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
   const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
+  // Promociones de la factura: códigos (chips) y líneas informativas en $0 (pago diario B1)
+  const detallePromociones = useMemo(() => {
+    const lineas = detalleItems.filter(d => d.referencia_tipo === REFERENCIA_PROMOCION)
+    return {
+      codigos: [...new Set(lineas.map(d => d.concepto_codigo).filter(Boolean))],
+      informativas: lineas.filter(d => !d.total),
+    }
+  }, [detalleItems])
 
   // Conceptos faltantes: peajes y saldo que no están como items pero deben mostrarse
   // Si tiene telepase, peajes = 0, no se cobra, no se muestra, no existe
@@ -931,64 +950,21 @@ export function ReporteFacturacionTab() {
   }, [facturaciones, semanaActual])
 
   // Apps con las que pagó cada conductor (etiquetas "Cabify" / "DiDi" bajo el nombre).
-  // Solo visual. En la semana N cuentan:
-  //   - Las cargas de los botones Pagos Cabify / Pagos DiDi al cerrar la semana N-1
-  //     ("Pago Cabify S44/2026" se ve en la S45), con monto > 0.
-  //   - Los pagos manuales registrados dentro de la semana N cuya referencia nombra la
-  //     app ("Pago en efectivo | Ingreso por DiDi").
-  const [appsPorConductor, setAppsPorConductor] = useState<Map<string, { cabify: boolean; didi: boolean }>>(new Map())
+  // Solo visual. La regla está en appsPagoService (la misma del Panel de conductores).
+  const [appsPorConductor, setAppsPorConductor] = useState<Map<string, AppsPago>>(new Map())
   useEffect(() => {
     let cancelado = false
     if (facturaciones.length === 0 || modoVistaPrevia) {
       setAppsPorConductor(new Map())
       return
     }
-    const inicio = new Date(`${format(semanaActual.inicio, 'yyyy-MM-dd')}T00:00:00-03:00`)
-    const fin = new Date(`${format(semanaActual.fin, 'yyyy-MM-dd')}T23:59:59.999-03:00`)
-    const ids = [...new Set(facturaciones.map(f => f.conductor_id))]
-    const { semana, anio } = semanaISO(format(semanaActual.inicio, 'yyyy-MM-dd'))
-    const previa = sumarSemanasISO(semana, anio, -1)
-    const refsCierrePrevio = [`Pago Cabify S${previa.semana}/${previa.anio}`, `Pago DiDi S${previa.semana}/${previa.anio}`]
-    void (async () => {
-      try {
-        const resultado = new Map<string, { cabify: boolean; didi: boolean }>()
-        const marcar = (conductorId: string | undefined, referencia: string | null) => {
-          if (!conductorId) return
-          const ref = (referencia || '').toLowerCase()
-          const cabify = ref.includes('cabify')
-          const didi = ref.includes('didi')
-          if (!cabify && !didi) return
-          const previo = resultado.get(conductorId) || { cabify: false, didi: false }
-          resultado.set(conductorId, { cabify: previo.cabify || cabify, didi: previo.didi || didi })
-        }
-        for (let k = 0; k < ids.length; k += 200) {
-          const { data, error } = await (supabase.from('pagos_conductores') as any)
-            .select('conductor_id, referencia')
-            .in('conductor_id', ids.slice(k, k + 200))
-            .eq('tipo_cobro', 'facturacion_semanal')
-            .in('referencia', refsCierrePrevio)
-            .gt('monto', 0)
-          if (error) throw error
-          for (const p of data || []) marcar(p.conductor_id, p.referencia)
-        }
-        for (let k = 0; k < ids.length; k += 200) {
-          const { data, error } = await (supabase.from('control_saldos') as any)
-            .select('conductor_id, referencia')
-            .in('conductor_id', ids.slice(k, k + 200))
-            .in('tipo_movimiento', ['pago_manual', 'pago_efectivo'])
-            .gt('monto_movimiento', 0)
-            .gte('created_at', inicio.toISOString())
-            .lte('created_at', fin.toISOString())
-            .or('referencia.ilike.*cabify*,referencia.ilike.*didi*')
-          if (error) throw error
-          for (const m of data || []) marcar(m.conductor_id, m.referencia)
-        }
-        if (!cancelado) setAppsPorConductor(resultado)
-      } catch (error) {
+    const ids = facturaciones.map(f => f.conductor_id)
+    cargarAppsPagoSemana(format(semanaActual.inicio, 'yyyy-MM-dd'), ids)
+      .then(resultado => { if (!cancelado) setAppsPorConductor(resultado) })
+      .catch(error => {
         console.error('Error cargando pagos por app:', error)
         if (!cancelado) setAppsPorConductor(new Map())
-      }
-    })()
+      })
     return () => { cancelado = true }
   }, [facturaciones, semanaActual, modoVistaPrevia])
 
@@ -2116,7 +2092,7 @@ export function ReporteFacturacionTab() {
           .eq('tipo_cobro', 'facturacion_semanal')
           .in('referencia_id', facIds),
         (supabase.from('facturacion_detalle') as any)
-          .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento')
+          .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento, referencia_tipo')
           .in('facturacion_id', facIds),
         (supabase.from('excesos_kilometraje') as any)
           .select('id, conductor_id, km_exceso, monto_total, aplicado')
@@ -2151,6 +2127,16 @@ export function ReporteFacturacionTab() {
         const actuales = codigosAlquilerMap.get(d.facturacion_id) || []
         if (!actuales.includes(d.concepto_codigo)) actuales.push(d.concepto_codigo)
         codigosAlquilerMap.set(d.facturacion_id, actuales)
+      })
+
+      // Códigos de promoción de la factura (líneas con referencia_tipo = 'promocion'): el
+      // código queda como estaba al calcular, aunque después se edite en Parámetros.
+      const codigosPromocionMap = new Map<string, string[]>()
+      ;(detallesData || []).forEach((d: any) => {
+        if (d.referencia_tipo !== REFERENCIA_PROMOCION || !d.concepto_codigo) return
+        const actuales = codigosPromocionMap.get(d.facturacion_id) || []
+        if (!actuales.includes(d.concepto_codigo)) actuales.push(d.concepto_codigo)
+        codigosPromocionMap.set(d.facturacion_id, actuales)
       })
 
       // Agrupar detalles raw por facturacion_id (para popup de stats)
@@ -2216,6 +2202,7 @@ export function ReporteFacturacionTab() {
           monto_toshipass: detalle?.monto_toshipass || 0,
           _detalles: detallesRawMap.get(f.id) || [],
           _codigosAlquiler: codigosAlquilerMap.get(f.id) || [],
+          _codigosPromocion: codigosPromocionMap.get(f.id) || [],
         }
       })
 
@@ -2539,6 +2526,8 @@ export function ReporteFacturacionTab() {
       const devolucionesGarantiaVP = await cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       // Referidos: días de esta semana dentro de su primera semana (descuento 5%)
       const diasDescuentoReferidoVP = await cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin })
+      // Promociones activas (Parámetros > Promociones): días con 10% y días con B1
+      const promocionesVP = await cargarPromocionesSemana(conductorIds, { inicio: fechaInicio, fin: fechaFin })
       const { data: asignacionesConductores } = await (supabase
         .from('asignaciones_conductores') as any)
         .select(`
@@ -2972,6 +2961,8 @@ export function ReporteFacturacionTab() {
       const primeraFechaPorConductor = new Map<string, Date>()
       // Referido: 5% del alquiler de cada día de su primera semana (utils/descuentoReferido.ts)
       const descuentoReferidoVP = new Map<string, { monto: number; dias: number }>()
+      // Promoción del 10%: 10% del alquiler de cada día con promoción (utils/promocionesFacturacion.ts)
+      const descuentoPromoAlquilerVP = new Map<string, ReturnType<typeof descuentoPromoAlquiler>>()
 
       for (const [conductorId, asignaciones] of asignacionesPorConductorVP.entries()) {
         const prorrateo = prorrateoMap.get(conductorId)
@@ -2981,6 +2972,8 @@ export function ReporteFacturacionTab() {
         const montosContados = new Set<string>()
         const diasReferido = diasDescuentoReferidoVP.get(conductorId)
         const preciosDiaReferido = new Map<string, number>()
+        const diasPromo10 = promocionesVP.diasDescuento10.get(conductorId)
+        const preciosDiaPromo = new Map<string, { precio: number; codigo: string }>()
 
         for (const asig of asignaciones) {
           const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
@@ -3002,6 +2995,7 @@ export function ReporteFacturacionTab() {
               const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
               ;(prorrateo as any)[montoKey] += precioDiario
               if (diasReferido?.has(dateKey)) preciosDiaReferido.set(dateKey, precioDiario)
+              if (diasPromo10?.has(dateKey)) preciosDiaPromo.set(dateKey, { precio: precioDiario, codigo })
             }
             currentDate.setDate(currentDate.getDate() + 1)
           }
@@ -3026,6 +3020,18 @@ export function ReporteFacturacionTab() {
             diasRef++
           }
           if (diasRef > 0) descuentoReferidoVP.set(conductorId, { monto: Math.round(montoRef * 100) / 100, dias: diasRef })
+        }
+        // Promoción del 10%, misma base que el referido (lo cobrado cada día)
+        if (preciosDiaPromo.size > 0) {
+          const fechaEntregaPromoVP = alertaVP ? alertaVP.fecha.split('/').reverse().join('-') : null
+          const diasPromoVP: DiaPromocion[] = []
+          for (const [fecha, { precio, codigo }] of preciosDiaPromo) {
+            const descontadoDia = descontadoPorDiaVP.get(`${conductorId}|${fecha}`)
+              ?? (fechaEntregaPromoVP === fecha ? descuentoVP : 0)
+            diasPromoVP.push({ fecha, codigo, precio, fraccion: Math.max(0, 1 - descontadoDia) })
+          }
+          const promoAlquiler = descuentoPromoAlquiler(diasPromoVP)
+          if (promoAlquiler.dias > 0) descuentoPromoAlquilerVP.set(conductorId, promoAlquiler)
         }
         const descCierreVP = descuentosCierreVP.get(conductorId)
         const descuentoCierreVP = (descCierreVP?.TURNO_DIURNO || 0) + (descCierreVP?.CARGO || 0)
@@ -3502,7 +3508,13 @@ export function ReporteFacturacionTab() {
         const montoDevolucionGarantia = devolucionesGarantiaVP.get(conductorId) || 0
         // Referido: 5% de su primera semana (P004)
         const descuentoReferido = descuentoReferidoVP.get(conductorId)
-        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento + montoDevolucionGarantia + (descuentoReferido?.monto || 0)
+        // Promociones (código visible de Parámetros > Promociones)
+        const promoDescuentosVP = lineasPromocionConductor(
+          promocionesVP, conductorId, descuentoPromoAlquilerVP.get(conductorId),
+          descuentoPromoToshipass(montoToshipass, promocionesVP.diasDescuento10.get(conductorId), diasContadosVP.get(conductorId)),
+        )
+        const montoDescuentoPromoVP = promoDescuentosVP.lineas.reduce((sum, l) => sum + l.monto, 0)
+        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento + montoDevolucionGarantia + (descuentoReferido?.monto || 0) + montoDescuentoPromoVP
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
         // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
@@ -3574,6 +3586,9 @@ export function ReporteFacturacionTab() {
             monto_devolucion_garantia: montoDevolucionGarantia,  // P028 (descuento)
             monto_descuento_referido: descuentoReferido?.monto || 0,  // P004 (descuento)
             dias_descuento_referido: descuentoReferido?.dias || 0,
+            promo_lineas: promoDescuentosVP.lineas,  // descuentos por promoción (código PRM...)
+            promo_b1: promoDescuentosVP.b1,
+            _codigosPromocion: promoDescuentosVP.codigos,
             monto_tickets_favor: ticketsMap.get(conductorId) || 0,  // Tickets a favor
            // Prorrateo desglosado por modalidad
            prorrateo_cargo_dias: prorrateo.CARGO,
@@ -4645,10 +4660,12 @@ export function ReporteFacturacionTab() {
       // 4. Conceptos (precios actuales) y flags de vehículo por patente (snapshot al recalcular)
       // Son independientes entre sí: se piden juntas.
       const patentesRecalc = [...new Set(conductoresProcesados.map(c => c.vehiculo_patente).filter(Boolean))] as string[]
-      const [reglaToshipass, devolucionesGarantia, diasDescuentoReferido, { data: conceptos }, { data: vehiculosFlagsRecalc }] = await Promise.all([
+      // Promociones activas (Parámetros > Promociones): días con 10% y días con B1
+      const [reglaToshipass, devolucionesGarantia, diasDescuentoReferido, promocionesRecalc, { data: conceptos }, { data: vehiculosFlagsRecalc }] = await Promise.all([
         cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
         cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
         cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+        cargarPromocionesSemana(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
         supabase.from('conceptos_nomina').select('*').eq('activo', true),
         patentesRecalc.length > 0
           ? supabase.from('vehiculos').select('patente, gnc, telepase').in('patente', patentesRecalc)
@@ -5104,7 +5121,24 @@ export function ReporteFacturacionTab() {
           diasDescuentoReferidoConductor++
         }
         montoDescuentoReferido = Math.round(montoDescuentoReferido * 100) / 100
-        const subtotalDescuentos = totalTickets + totalPenP004 + montoDevolucionGarantia + montoDescuentoReferido
+        // Promoción del 10% (utils/promocionesFacturacion.ts): misma base que el referido
+        const diasPromoRecalc: DiaPromocion[] = []
+        const diasPromo10Recalc = promocionesRecalc.diasDescuento10.get(conductor.conductor_id)
+        for (const fecha of diasPromo10Recalc || []) {
+          const tarifaDia = tarifaDiaRecalc.get(conductor.conductor_id)?.get(fecha)
+          if (!tarifaDia) continue
+          const descontadoDia = descontadoPorDiaR.get(`${conductor.conductor_id}|${fecha}`)
+            ?? (fechaDescEntregaRecalc.get(conductor.conductor_id) === fecha ? (descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0) : 0)
+          const codigoDia = getCodigoAlquiler(tarifaDia.modalidad, tarifaDia.gnc, tarifaDia.tarifa)
+          diasPromoRecalc.push({ fecha, codigo: codigoDia, precio: preciosActuales[codigoDia] || 0, fraccion: Math.max(0, 1 - descontadoDia) })
+        }
+        const promoRecalc = lineasPromocionConductor(
+          promocionesRecalc, conductor.conductor_id,
+          descuentoPromoAlquiler(diasPromoRecalc),
+          descuentoPromoToshipass(montoToshipass, diasPromo10Recalc, diasContadosRecalc.get(conductor.conductor_id)),
+        )
+        const montoDescuentoPromo = promoRecalc.lineas.reduce((sum, l) => sum + l.monto, 0)
+        const subtotalDescuentos = totalTickets + totalPenP004 + montoDevolucionGarantia + montoDescuentoReferido + montoDescuentoPromo
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagarRaw = subtotalNeto + saldoAnterior
         const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
@@ -5190,6 +5224,26 @@ export function ReporteFacturacionTab() {
             concepto_descripcion: descripcionDescuentoReferido(diasDescuentoReferidoConductor),
             cantidad: 1, precio_unitario: montoDescuentoReferido,
             subtotal: montoDescuentoReferido, total: montoDescuentoReferido, es_descuento: true
+          })
+        }
+
+        // Promociones: descuento con el código visible de la promoción (PRM...). El código
+        // queda guardado tal cual en la factura aunque después se edite en Parámetros.
+        for (const linea of promoRecalc.lineas) {
+          todosDetalles.push({
+            concepto_codigo: linea.codigo, concepto_descripcion: linea.descripcion,
+            cantidad: 1, precio_unitario: linea.monto, subtotal: linea.monto, total: linea.monto, es_descuento: true,
+            referencia_id: linea.promocionId, referencia_tipo: REFERENCIA_PROMOCION,
+            descripcion: JSON.stringify(linea.calculo)
+          })
+        }
+        // Promoción licencia B1: línea informativa en $0 (pago diario como saldo a favor)
+        if (promoRecalc.b1) {
+          todosDetalles.push({
+            concepto_codigo: promoRecalc.b1.codigo, concepto_descripcion: promoRecalc.b1.descripcion,
+            cantidad: promoRecalc.b1.dias, precio_unitario: 0, subtotal: 0, total: 0, es_descuento: false,
+            referencia_id: promoRecalc.b1.promocionId, referencia_tipo: REFERENCIA_PROMOCION,
+            descripcion: JSON.stringify(promoRecalc.b1.calculo)
           })
         }
 
@@ -6113,6 +6167,41 @@ export function ReporteFacturacionTab() {
         })
       }
 
+      // Promociones (Parámetros > Promociones): descuento con el código visible (PRM...)
+      ;(facturacion.promo_lineas || []).forEach((linea, idx) => {
+        detallesSimulados.push({
+          id: `det-promo-${facturacion.conductor_id}-${idx}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: linea.codigo,
+          concepto_descripcion: linea.descripcion,
+          cantidad: 1,
+          precio_unitario: linea.monto,
+          subtotal: linea.monto,
+          total: linea.monto,
+          es_descuento: true,
+          referencia_id: linea.promocionId,
+          referencia_tipo: REFERENCIA_PROMOCION,
+          descripcion: JSON.stringify(linea.calculo)
+        })
+      })
+      // Promoción licencia B1: informativa en $0 (pago diario como saldo a favor)
+      if (facturacion.promo_b1) {
+        detallesSimulados.push({
+          id: `det-promo-b1-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: facturacion.promo_b1.codigo,
+          concepto_descripcion: facturacion.promo_b1.descripcion,
+          cantidad: facturacion.promo_b1.dias,
+          precio_unitario: 0,
+          subtotal: 0,
+          total: 0,
+          es_descuento: false,
+          referencia_id: facturacion.promo_b1.promocionId,
+          referencia_tipo: REFERENCIA_PROMOCION,
+          descripcion: JSON.stringify(facturacion.promo_b1.calculo)
+        })
+      }
+
       // P028 - Devolución de garantía por cambio de tarifa (descuento)
       if ((facturacion.monto_devolucion_garantia || 0) > 0) {
         detallesSimulados.push({
@@ -6326,15 +6415,21 @@ export function ReporteFacturacionTab() {
 
       // === DESCUENTOS ===
 
-      // P004 - Tickets a Favor
-      if (facturacion.subtotal_descuentos > 0) {
+      // P004 - Tickets a Favor: lo que queda del subtotal de descuentos después de los
+      // descuentos que ya tienen su propia línea (referido, promociones, devolución, tickets
+      // de penalidades). Antes se usaba el subtotal entero y esos montos salían dos veces.
+      const descuentosYaListados = detallesSimulados
+        .filter(d => d.es_descuento)
+        .reduce((sum, d) => sum + (d.total || 0), 0)
+      const montoTicketsRestante = Math.round((facturacion.subtotal_descuentos - descuentosYaListados) * 100) / 100
+      if (montoTicketsRestante > 0.01) {
         detallesSimulados.push({
           id: `det-tickets-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P004',
           concepto_descripcion: 'Tickets a Favor',
-          cantidad: 1, precio_unitario: facturacion.subtotal_descuentos,
-          subtotal: facturacion.subtotal_descuentos, total: facturacion.subtotal_descuentos,
+          cantidad: 1, precio_unitario: montoTicketsRestante,
+          subtotal: montoTicketsRestante, total: montoTicketsRestante,
           es_descuento: true, referencia_id: null, referencia_tipo: null
         })
       }
@@ -6705,7 +6800,122 @@ export function ReporteFacturacionTab() {
   // ==========================================
   // VER DETALLE GENÉRICO DE ÍTEM DE FACTURACIÓN
   // ==========================================
+  /**
+   * Cómo se calculó una línea de promoción (desglose guardado en `descripcion` al calcular):
+   * datos de la promoción, base día por día, porcentaje, monto y su efecto en el total.
+   */
+  function htmlCalculoPromocion(item: FacturacionDetalle): string {
+    const esc = (t: string) => t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+    const fecha = (f: string | null | undefined) => (f ? f.slice(0, 10).split('-').reverse().join('/') : '-')
+    const pct = (n: number) => `${Math.round(n * 1000) / 10}%`
+    const grid = (filas: Array<[string, string]>) => `
+      <div style="display:grid; grid-template-columns:150px 1fr; gap:2px 12px; font-size:13px; line-height:1.8">
+        ${filas.map(([k, v]) => `<strong>${k}</strong><span>${v}</span>`).join('')}
+      </div>`
+    const titulo = (t: string) =>
+      `<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 6px">${t}</div>`
+    const th = (t: string, der = false) =>
+      `<th style="padding:5px 8px;font-size:10px;color:#6b7280;text-align:${der ? 'right' : 'left'};border-bottom:1px solid #e5e7eb">${t}</th>`
+    const td = (t: string, der = false, extra = '') =>
+      `<td style="padding:5px 8px;font-size:12px;border-bottom:1px solid #f3f4f6;text-align:${der ? 'right' : 'left'};${der ? 'font-family:monospace;' : ''}${extra}">${t}</td>`
+
+    const calculo = leerCalculoPromocion(item.descripcion)
+    const cabecera = grid([
+      ['Código:', `<span style="font-weight:700;color:#b91c1c">${esc(item.concepto_codigo)}</span>`],
+      ['Concepto:', esc(item.concepto_descripcion)],
+    ])
+    if (!calculo) {
+      return `${cabecera}
+        <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px">
+          Este descuento se calculó antes de que se guardara el desglose. Recalculá la semana para ver de dónde sale el monto.
+        </div>`
+    }
+
+    const ingreso = calculo.ingreso
+      ? `${fecha(calculo.ingreso.fecha)} (${calculo.ingreso.esReingreso ? 'reingreso' : 'primer día trabajado'})`
+      : '-'
+    let html = `${cabecera}
+      ${titulo('Promoción')}
+      ${grid([
+        ['Promoción:', esc(calculo.promocion.nombre)],
+        ['Vigencia:', `${fecha(calculo.promocion.desde)} al ${fecha(calculo.promocion.hasta)}`],
+        ['Ingreso del conductor:', ingreso],
+        ['Por qué entra:', 'Ingresó o reingresó dentro de la vigencia'],
+      ])}`
+
+    if (calculo.tipo === 'alquiler') {
+      const dias = calculo.dias || []
+      const base = dias.reduce((sum, d) => sum + d.precio * d.fraccion, 0)
+      const filas = dias.map(d => {
+        const tarifa = periodoPorCodigo.get(d.codigo)
+        const concepto = `${d.codigo} ${MODALIDAD_POR_CODIGO_ALQUILER[d.codigo] || ''}${tarifa ? ` (${tarifa})` : ''}`
+        return `<tr>${td(fecha(d.fecha))}${td(esc(concepto))}${td(formatCurrency(d.precio), true)}${td(d.fraccion === 1 ? 'Completo' : pct(d.fraccion), true)}${td(formatCurrency(d.precio * d.fraccion), true)}${td(`-${formatCurrency(d.descuento)}`, true, 'color:#059669;font-weight:600;')}</tr>`
+      }).join('')
+      html += `
+        ${titulo(`Cálculo día por día (${dias.length} ${dias.length === 1 ? 'día' : 'días'})`)}
+        <div style="max-height:220px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr>${th('Fecha')}${th('Concepto')}${th('Precio día', true)}${th('Cobrado', true)}${th('Base', true)}${th(pct(calculo.porcentaje), true)}</tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+        ${grid([
+          ['Base (IVA incluido):', formatCurrency(base)],
+          ['Porcentaje:', pct(calculo.porcentaje)],
+          ['Cálculo:', `${formatCurrency(base)} × ${pct(calculo.porcentaje)} = <strong style="color:#059669">-${formatCurrency(calculo.monto)}</strong>`],
+        ])}
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">Precio día = valor del concepto de alquiler con IVA. Si ese día se cobró medio turno, el ${pct(calculo.porcentaje)} es sobre esa mitad.</div>`
+    } else if (calculo.tipo === 'toshipass') {
+      const proporcion = calculo.diasCobrados ? (calculo.diasPromo || 0) / calculo.diasCobrados : 0
+      html += `
+        ${titulo('Cálculo')}
+        ${grid([
+          ['ToshiPass semanal:', formatCurrency(calculo.base || 0)],
+          ['Días cobrados:', `${calculo.diasCobrados || 0}`],
+          ['Días con promoción:', `${calculo.diasPromo || 0} de ${calculo.diasCobrados || 0} (${pct(proporcion)})`],
+          ['Porcentaje:', pct(calculo.porcentaje)],
+          ['Cálculo:', `${formatCurrency(calculo.base || 0)} × ${pct(calculo.porcentaje)} × ${pct(proporcion)} = <strong style="color:#059669">-${formatCurrency(calculo.monto)}</strong>`],
+        ])}
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">El ToshiPass es un monto semanal fijo: el ${pct(calculo.porcentaje)} se aplica en proporción a los días de la semana que caen en la promoción.</div>`
+    } else {
+      const diasB1 = calculo.diasB1 || []
+      html += `
+        ${titulo('Pago diario B1 (no cambia el total)')}
+        ${grid([
+          ['Días con B1:', `${diasB1.length}: ${diasB1.map(fecha).join(', ')}`],
+          ['Pago por día:', formatCurrency(calculo.pagoDiario || 0)],
+          ['Total pagos diarios:', `${diasB1.length} × ${formatCurrency(calculo.pagoDiario || 0)} = <strong>${formatCurrency(calculo.monto)}</strong>`],
+        ])}
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">Los pagos diarios son saldo a favor de esta semana: se restan de lo que retiene la app.</div>`
+    }
+
+    // Efecto en el total de la factura
+    if (detalleFacturacion && calculo.tipo !== 'b1') {
+      const f = detalleFacturacion
+      html += `
+        ${titulo('Cómo impacta en el total')}
+        ${grid([
+          ['Subtotal cargos:', formatCurrency(f.subtotal_cargos)],
+          ['Descuentos:', `-${formatCurrency(f.subtotal_descuentos)} <span style="color:#6b7280">(incluye este -${formatCurrency(item.total)})</span>`],
+          ['Saldo anterior:', `${f.saldo_anterior >= 0 ? '+' : '-'}${formatCurrency(Math.abs(f.saldo_anterior))}`],
+          ['Total a pagar:', `<strong style="color:#ff0033">${formatCurrency(f.total_a_pagar)}</strong>`],
+        ])}`
+    }
+    return html
+  }
+
   async function verDetalleItem(item: FacturacionDetalle) {
+    if (item.referencia_tipo === REFERENCIA_PROMOCION) {
+      await Alerta.fire({
+        title: 'Detalle de la Promoción',
+        html: `<div style="text-align:left">${htmlCalculoPromocion(item)}</div>`,
+        width: 640,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#ff0033',
+        customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
+      })
+      return
+    }
     const codigo = item.concepto_codigo
     const desc = descripcionSinNumeroCuota(descripcionConPeriodo(item.concepto_descripcion, codigo, periodoPorCodigo), codigo)
     const qty = item.cantidad
@@ -8222,7 +8432,11 @@ export function ReporteFacturacionTab() {
         pdf.setFont('helvetica', 'normal')
 
         descuentos.forEach(desc => {
-          pdf.text(desc.concepto_descripcion, margin, y)
+          // Promociones: con su código adelante (PRM01 - ...)
+          const textoDesc = desc.referencia_tipo === REFERENCIA_PROMOCION
+            ? textoLineaPromocion(desc.concepto_codigo, desc.concepto_descripcion)
+            : desc.concepto_descripcion
+          pdf.text(textoDesc, margin, y)
           pdf.text(`-${formatCurrency(desc.total)}`, pageWidth - margin, y, { align: 'right' })
           y += 5
         })
@@ -8234,6 +8448,20 @@ export function ReporteFacturacionTab() {
         pdf.text('SUBTOTAL DESCUENTOS', margin, y)
         pdf.text(`-${formatCurrency(subtotalDescReal)}`, pageWidth - margin, y, { align: 'right' })
         y += 10
+      }
+
+      // Promociones informativas (no cambian el total): pago diario B1
+      const promosInformativas = detalleItems.filter(d => d.referencia_tipo === REFERENCIA_PROMOCION && !d.total)
+      if (promosInformativas.length > 0) {
+        pdf.setFontSize(9)
+        pdf.setTextColor(negro)
+        pdf.setFont('helvetica', 'normal')
+        promosInformativas.forEach(item => {
+          const lineasTexto = pdf.splitTextToSize(textoLineaPromocion(item.concepto_codigo, item.concepto_descripcion), pageWidth - margin * 2)
+          pdf.text(lineasTexto, margin, y)
+          y += 5 * lineasTexto.length
+        })
+        y += 3
       }
 
       // TOTAL
@@ -8319,7 +8547,7 @@ export function ReporteFacturacionTab() {
         [''],
         ['DETALLE POR CONDUCTOR'],
         [''],
-        ['Conductor', 'DNI', 'CUIT', 'Vehículo', 'Tipo', 'Turnos', 'Alquiler', 'Garantía', 'Cargos', 'Descuentos', 'Saldo Ant.', 'Pagos Sem.', 'Mora', 'Total']
+        ['Conductor', 'DNI', 'CUIT', 'Vehículo', 'Tipo', 'Turnos', 'Alquiler', 'Garantía', 'Cargos', 'Descuentos', 'Promociones', 'Saldo Ant.', 'Pagos Sem.', 'Mora', 'Total']
       ]
 
       dataToExport.forEach(f => {
@@ -8334,6 +8562,7 @@ export function ReporteFacturacionTab() {
           f.subtotal_garantia,
           f.subtotal_cargos,
           f.subtotal_descuentos,
+          (f._codigosPromocion || []).join(', ') || '-',
           saldosSeparados.get(f.conductor_id)?.saldoCierre ?? f.saldo_anterior,
           -(saldosSeparados.get(f.conductor_id)?.totalPagos ?? 0),
           f.monto_mora,
@@ -8348,6 +8577,7 @@ export function ReporteFacturacionTab() {
         dataToExport.reduce((sum, f) => sum + f.subtotal_garantia, 0),
         dataToExport.reduce((sum, f) => sum + f.subtotal_cargos, 0),
         dataToExport.reduce((sum, f) => sum + f.subtotal_descuentos, 0),
+        '',
         dataToExport.reduce((sum, f) => sum + (saldosSeparados.get(f.conductor_id)?.saldoCierre ?? f.saldo_anterior), 0),
         dataToExport.reduce((sum, f) => sum - (saldosSeparados.get(f.conductor_id)?.totalPagos ?? 0), 0),
         dataToExport.reduce((sum, f) => sum + f.monto_mora, 0),
@@ -8358,7 +8588,7 @@ export function ReporteFacturacionTab() {
       wsResumen['!cols'] = [
         { wch: 30 }, { wch: 12 }, { wch: 15 }, { wch: 10 },
         { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
-        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 }
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 }
       ]
       XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
 
@@ -8746,6 +8976,21 @@ export function ReporteFacturacionTab() {
         if (detallesConductor.length > 0) {
           for (const det of detallesConductor) {
             if (det.total <= 0) continue
+
+            // Promociones: en SiFactura van como descuento (P004, el producto que conoce el
+            // sistema de facturación) con el código de la promoción en la descripción.
+            if (det.referencia_tipo === REFERENCIA_PROMOCION) {
+              filasPreview.push(crearFilaPreview(
+                numeroFactura++,
+                fact,
+                det.total,
+                'P004',
+                textoLineaPromocion(det.concepto_codigo, det.concepto_descripcion || ''),
+                fact.id,
+                det.id
+              ))
+              continue
+            }
 
             let descripcionAdicional = ''
             if (det.concepto_codigo === 'P001') {
@@ -9345,6 +9590,17 @@ export function ReporteFacturacionTab() {
             ticket.monto,
             'P004',
             descripcionTicket
+          ))
+        }
+
+        // Promociones (descuento P004 con el código de la promoción en la descripción)
+        for (const linea of fact.promo_lineas || []) {
+          filasPreview.push(crearFilaPreview(
+            numeroFactura++,
+            fact,
+            linea.monto,
+            'P004',
+            textoLineaPromocion(linea.codigo, linea.descripcion)
           ))
         }
 
@@ -11608,6 +11864,17 @@ export function ReporteFacturacionTab() {
             {appsPorConductor.get(row.original.conductor_id)?.didi && (
               <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(249, 115, 22, 0.14)', color: '#c2410c' }}>DiDi</span>
             )}
+            {/* Promociones aplicadas en la semana (Parámetros > Promociones). Salen de las
+                líneas de su factura, así que coinciden con el detalle. */}
+            {(row.original._codigosPromocion || []).map(codigo => (
+              <span
+                key={`promo-${codigo}`}
+                title="Promoción aplicada esta semana (ver detalle)"
+                style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 700, background: 'rgba(220, 38, 38, 0.12)', color: '#b91c1c' }}
+              >
+                {codigo}
+              </span>
+            ))}
           </div>
         </div>
       ),
@@ -14089,49 +14356,95 @@ export function ReporteFacturacionTab() {
                     </div>
                   </div>
 
-                  {/* Info bar: Vehículo, Tipo, Turnos */}
-                  <div style={{
-                    display: 'flex', gap: '16px', marginBottom: '16px',
-                    padding: '8px 12px', borderRadius: 'var(--radius-sm)',
-                    background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Vehículo</span>
-                      <PatenteBadge patente={detalleFacturacion.vehiculo_patente} size="sm" />
-                    </div>
-                    <div style={{ width: '1px', background: 'var(--border-primary)' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Tipo</span>
-                      <span style={{
-                        fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
-                        background: detalleFacturacion.tipo_alquiler === 'CARGO' ? 'rgba(59,130,246,0.1)' : 'rgba(107,114,128,0.1)',
-                        color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : '#6b7280',
-                      }}>
-                        {detalleFacturacion.tipo_alquiler}
-                      </span>
-                    </div>
-                    <div style={{ width: '1px', background: 'var(--border-primary)' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Turnos</span>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {detalleFacturacion.turnos_cobrados}<span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>/{detalleFacturacion.turnos_base}</span>
-                      </span>
-                    </div>
-                    {detalleFacturacion.grupo_flota && (
-                      <>
-                        <div style={{ width: '1px', background: 'var(--border-primary)' }} />
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Flota</span>
-                          <span style={{
-                            fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
-                            background: '#dbeafe', color: '#1e40af',
+                  {/* Info bar: Vehículo, Tipo, Turnos, Flota, Promo. Celdas del mismo ancho,
+                      etiqueta arriba y valor abajo, sin cortar los valores en varias líneas. */}
+                  {(() => {
+                    const chip = (bg: string, fg: string): React.CSSProperties => ({
+                      fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
+                      background: bg, color: fg, whiteSpace: 'nowrap',
+                    })
+                    const celdas: Array<{ etiqueta: string; valor: React.ReactNode }> = [
+                      { etiqueta: 'Vehículo', valor: <PatenteBadge patente={detalleFacturacion.vehiculo_patente} size="sm" /> },
+                      {
+                        etiqueta: 'Tipo',
+                        valor: (
+                          <span style={detalleFacturacion.tipo_alquiler === 'CARGO'
+                            ? chip('rgba(59,130,246,0.1)', '#2563eb')
+                            : chip('rgba(107,114,128,0.1)', '#6b7280')}>
+                            {detalleFacturacion.tipo_alquiler}
+                          </span>
+                        ),
+                      },
+                      {
+                        etiqueta: 'Turnos',
+                        valor: (
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {detalleFacturacion.turnos_cobrados}
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>/{detalleFacturacion.turnos_base}</span>
+                          </span>
+                        ),
+                      },
+                    ]
+                    if (detalleFacturacion.grupo_flota) {
+                      celdas.push({
+                        etiqueta: 'Flota',
+                        valor: (
+                          <span title={detalleFacturacion.grupo_flota} style={{
+                            ...chip('#dbeafe', '#1e40af'), maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
                           }}>
                             {detalleFacturacion.grupo_flota}
                           </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                        ),
+                      })
+                    }
+                    if (detallePromociones.codigos.length > 0) {
+                      celdas.push({
+                        etiqueta: 'Promo',
+                        valor: (
+                          <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {detallePromociones.codigos.map(codigo => (
+                              <span key={codigo} style={chip('rgba(220, 38, 38, 0.12)', '#b91c1c')}>{codigo}</span>
+                            ))}
+                          </span>
+                        ),
+                      })
+                    }
+                    return (
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: `repeat(${celdas.length}, minmax(0, 1fr))`,
+                        marginBottom: '16px', borderRadius: 'var(--radius-sm)',
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                      }}>
+                        {celdas.map((celda, idx) => (
+                          <div key={celda.etiqueta} style={{
+                            display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center',
+                            gap: '4px', padding: '8px 12px', minWidth: 0,
+                            borderLeft: idx > 0 ? '1px solid var(--border-primary)' : 'none',
+                          }}>
+                            <span style={{
+                              fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)',
+                              textTransform: 'uppercase', letterSpacing: '0.4px',
+                            }}>
+                              {celda.etiqueta}
+                            </span>
+                            {celda.valor}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Promociones informativas (no cambian el total): pago diario B1 */}
+                  {detallePromociones.informativas.map(item => (
+                    <div key={item.id} style={{
+                      marginBottom: '12px', padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+                      background: 'rgba(37, 99, 235, 0.06)', border: '1px solid rgba(37, 99, 235, 0.18)',
+                      fontSize: '12px', color: 'var(--text-primary)',
+                    }}>
+                      <span style={{ fontWeight: 700, color: '#1d4ed8' }}>{item.concepto_codigo}</span>
+                      {' · '}{item.concepto_descripcion}
+                    </div>
+                  ))}
 
                   {/* Sección: Cargos */}
                   <div style={{ marginBottom: '12px' }}>
