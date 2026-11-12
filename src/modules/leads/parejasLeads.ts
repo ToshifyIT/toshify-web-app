@@ -181,7 +181,7 @@ export function detallePareja(p: ParejaLead): string {
   const partes = [
     `${p.conductor.nombre} (${turno(p.conductor.turnoOcupado)}) necesita compañero ${turno(p.conductor.turnoLibre)}`,
     p.conductor.patente ? `Auto ${p.conductor.patente}` : '',
-    p.conductor.responsable ? `Responsable: ${p.conductor.responsable}` : '',
+    p.conductor.responsable ? `Capitán: ${p.conductor.responsable}` : '',
     p.fuente === 'calle'
       ? `${p.minutos} min en auto (${p.km.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km por calle)`
       : `~${p.minutos} min (${p.km.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km en línea recta)`,
@@ -341,7 +341,7 @@ export function htmlOpcionesPareja(p: ParejaLead | null, leadId: string, leadsCe
 
   return `<div style="font-size:13px;text-align:left;">
     <p style="margin:0 0 2px;opacity:.7;font-size:12px;text-align:center;">${explicacion}</p>
-    ${tablaPaginada('conductores', 'Conductores sin compañero con el turno que le sirve', [th('Conductor'), th('Turno → falta'), th('Auto'), th('Responsable'), th('Tiempo', 'right'), th('')], filasConductores)}
+    ${tablaPaginada('conductores', 'Conductores sin compañero con el turno que le sirve', [th('Conductor'), th('Turno → falta'), th('Auto'), th('Capitán'), th('Tiempo', 'right'), th('')], filasConductores)}
     ${tablaPaginada('leads', `Otros leads a ${UMBRAL_MINUTOS_MAX} min o menos por calle`, [th('Lead'), th('Turno'), th('Estado'), th('Tiempo', 'right')], filasLeads)}
   </div>`
 }

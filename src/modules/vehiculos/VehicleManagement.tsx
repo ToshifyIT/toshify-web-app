@@ -1973,7 +1973,7 @@ export function VehicleManagement() {
   const handleCambiarResponsable = async (vehiculo: VehiculoWithRelations) => {
     const actual = ((vehiculo as any).guia_responsable as string | null) || ''
     const r = await Alerta.fire({
-      title: `Responsable de ${vehiculo.patente}`,
+      title: `Capitán de ${vehiculo.patente}`,
       text: 'Guía que se encarga de llenar los turnos de este vehículo.',
       input: 'select',
       inputOptions: Object.fromEntries(GUIAS_ACTIVOS.map(g => [g, g])),
@@ -1990,10 +1990,10 @@ export function VehicleManagement() {
         .eq('id', vehiculo.id)
       if (error) throw error
       setVehiculos(prev => prev.map(v => (v.id === vehiculo.id ? { ...v, guia_responsable: r.value } as any : v)))
-      showSuccess('Responsable actualizado', `${vehiculo.patente}: ${r.value}`)
+      showSuccess('Capitán actualizado', `${vehiculo.patente}: ${r.value}`)
     } catch (err) {
-      console.error('Error al cambiar responsable:', err)
-      showError('Error', 'No se pudo cambiar el responsable')
+      console.error('Error al cambiar capitán:', err)
+      showError('Error', 'No se pudo cambiar el capitán')
     }
   }
 
@@ -2349,15 +2349,15 @@ export function VehicleManagement() {
         // Guía de ventas responsable de llenar los turnos del auto (solo PKG ON / EN USO).
         // Es organización de la flota: no tiene que ver con el guía de cada conductor.
         id: 'guia_responsable',
-        header: 'Responsable',
-        accessorFn: (row) => (row as any).guia_responsable || 'Sin responsable',
+        header: 'Capitán',
+        accessorFn: (row) => (row as any).guia_responsable || 'Sin capitán',
         cell: ({ row }) => {
           const guia = (row.original as any).guia_responsable as string | null
           return guia
             ? <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{guia}</span>
             : <span style={{ color: 'var(--text-tertiary)' }}>-</span>
         },
-        meta: { mobileLabel: 'Responsable' },
+        meta: { mobileLabel: 'Capitán' },
         enableSorting: true,
       },
       {
@@ -2409,7 +2409,7 @@ export function VehicleManagement() {
                 },
                 {
                   icon: <UserCheck size={15} />,
-                  label: 'Cambiar responsable',
+                  label: 'Cambiar capitán',
                   onClick: () => handleCambiarResponsable(row.original),
                   hidden: !['PKG_ON_BASE', 'EN_USO'].includes(row.original.vehiculos_estados?.codigo || ''),
                   disabled: !canUpdate,
