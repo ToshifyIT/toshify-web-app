@@ -116,3 +116,31 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Motivos de churn */
+.cg-tema-punto {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.cg-principal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.cg-principal b { color: var(--text-primary); font-weight: 600; }
+.cg-ultimas { max-height: 320px; overflow-y: auto; }
+/* En esta tabla todas las columnas son texto: a la izquierda y el motivo puede cortar renglón */
+.cg-tabla--texto td,
+.cg-tabla--texto th { text-align: left !important; }
+.cg-tabla--texto td:last-child { white-space: normal; min-width: 180px; }
+.cg-motivo-texto { vertical-align: middle; }

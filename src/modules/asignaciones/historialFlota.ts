@@ -77,6 +77,8 @@ export interface Llenado {
   patente: string
   guiaResponsable: string | null
   conductor: string
+  /** Guía del conductor que llenó el turno (quién lo cargó), como está en conductores.guia */
+  guiaConductor: string | null
   turno: Turno
 }
 
@@ -293,6 +295,7 @@ export function calcularLlenados(h: HistorialFlota): Llenado[] {
       patente: m.patente,
       guiaResponsable: m.guiaResponsable,
       conductor: m.conductor,
+      guiaConductor: m.guiaConductor,
       turno: m.turno,
     })
   }

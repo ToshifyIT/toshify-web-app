@@ -295,12 +295,12 @@ export interface PorLlenarAgente {
 }
 
 export interface VehiculosPorLlenar {
-  /** Por agente responsable; 'Sin responsable' para los que no tienen */
+  /** Por agente responsable; 'Sin capitán' para los que no tienen */
   porAgente: Map<string, PorLlenarAgente>
   total: PorLlenarAgente
 }
 
-const SIN_RESPONSABLE = 'Sin responsable'
+const SIN_RESPONSABLE = 'Sin capitán'
 const INACTIVOS = ['cancelado', 'completado', 'finalizado']
 
 export async function cargarVehiculosPorLlenar(filtroSede: FiltroSede): Promise<VehiculosPorLlenar> {

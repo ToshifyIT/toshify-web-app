@@ -914,20 +914,20 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
           // Guía responsable de llenar los turnos del auto (organización de la flota).
           // Independiente del guía de cada conductor (círculo junto al nombre).
           id: 'responsable',
-          header: 'Responsable',
-          accessorFn: (row) => row.vehiculos?.guia_responsable || 'Sin responsable',
+          header: 'Capitán',
+          accessorFn: (row) => row.vehiculos?.guia_responsable || 'Sin capitán',
           cell: ({ row }) => {
             const guia = row.original.vehiculos?.guia_responsable
             return guia
               ? (
                 <span
                   className={`dt-badge asig-responsable asig-responsable--${COLOR_GUIA[primerNombre(guia)] ?? 'otro'}`}
-                  title={`Responsable de llenar los turnos: ${guia}`}
+                  title={`Capitán (llena los turnos de este auto): ${guia}`}
                 >
                   {guia.trim().split(/\s+/)[0]}
                 </span>
               )
-              : <span style={{ color: 'var(--text-tertiary)' }}>Sin responsable</span>
+              : <span style={{ color: 'var(--text-tertiary)' }}>Sin capitán</span>
           },
           enableSorting: true,
         },
@@ -1525,7 +1525,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
         loading={loading}
         globalFilter={busquedaTabla}
         onGlobalFilterChange={setBusquedaTabla}
-        // Agentes: Responsable, Vehículo y Asignados quedan fijos al scrollear a la derecha
+        // Agentes: Capitán, Vehículo y Asignados quedan fijos al scrollear a la derecha
         // (Acciones ya va fija a la derecha por ser la columna 'acciones')
         stickyLeftColumns={esAgentes ? 3 : undefined}
         searchPlaceholder="Buscar por vehiculo, conductor, numero de asignacion..."
@@ -1537,10 +1537,10 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
               agenteElegidoAMano.current = true
               setAgente(e.target.value)
             }}
-            aria-label="Filtrar por agente"
-            title="Agente responsable de los vehículos"
+            aria-label="Filtrar por capitán"
+            title="Capitán de los vehículos"
           >
-            <option value="">Todos los agentes</option>
+            <option value="">Todos los capitanes</option>
             {GUIAS_ACTIVOS.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         ) : undefined}
