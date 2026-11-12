@@ -5,6 +5,8 @@
 // Textos (pedido de Operaciones, 2026-11-06): a quien tiene el auto se lo llama siempre
 // «capitán», y cada subtítulo dice qué muestra el gráfico y para qué sirve; las
 // fórmulas van en las notas al pie.
+// Ocupación y turnos: por el capitán del auto. Churn, altas, bajas y retención: por el
+// capitán que onboardeó al conductor (conductores.guia), pedido 2026-11-12.
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -538,7 +540,7 @@ function Churn({ datos, colorDe }: { datos: ControlGestores; colorDe: Map<string
         {tx.churn} = bajas {tx.del} (las mismas del Dashboard KPI) ÷ conductores activos {tx.inicio}{g0 === 'mes' ? ' más los que entraron en el mes' : ''}. Límite {fmtPct(LIMITE_CHURN)}
         {g0 === 'mes' ? ' (el 5 % semanal llevado a los días del mes)' : ''}.
         {' '}Retención a N días = de los que arrancaron en un mes, porcentaje sin baja N días después. Se usa el último mes cuyos conductores ya cumplieron todos esos días ({horizonte} días: {nombreMes(retencion.mes)}).
-        {' '}A cada conductor se lo cuenta en el capitán del auto que manejaba.
+        {' '}A cada conductor se lo cuenta en el capitán que lo onboardeó (no en el del auto que manejaba).
         {' '}En la evolución, cada punto es la foto al cierre; {tx.enCurso} cuenta hasta hoy. Línea gruesa: total empresa.
       </p>
     </>

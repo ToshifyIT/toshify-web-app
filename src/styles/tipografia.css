@@ -282,6 +282,7 @@
 /* Selectores de período, flechas y botones: 32 px y letra 12 */
 #root :is(.ddir-module, .dkv2-module, .dkpis-module) :is(.ddir-select, .dkv2-periodo-select) {
   height: var(--alto-control) !important;
+  min-height: 0 !important;
   box-sizing: border-box;
   font-size: 12px !important;
   border-radius: var(--radius-md) !important;

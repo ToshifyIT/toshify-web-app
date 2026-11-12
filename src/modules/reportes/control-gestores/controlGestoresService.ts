@@ -21,6 +21,7 @@
 //    kpi_altas_conductores), cuántos siguen sin baja N semanas después.
 import { supabase } from '../../../lib/supabase'
 import { lunesDe, sumarDias } from '../kpis-v2/kpisV2Types'
+import { homologarGuia } from '../../leads/guias'
 
 export const META_OCUPACION = 0.9
 export const LIMITE_CHURN = 0.05
@@ -204,7 +205,7 @@ export async function cargarControlGestores(
   const desdeDia = mesCohorteMin < periodosHistoria[0] ? mesCohorteMin : periodosHistoria[0]
   const desdeISO = new Date(inicioDiaMs(desdeDia) - 7 * DIA_MS).toISOString()
 
-  const [vehiculosRaw, cambiosRaw, historialGuia, asignacionesRaw, conceptos, bajasRaw, altasRaw] = await Promise.all([
+  const [vehiculosRaw, cambiosRaw, historialGuia, asignacionesRaw, conceptos, bajasRaw, altasRaw, conductoresRaw] = await Promise.all([
     leerTodo((a, b) => filtroSede(supabase
       .from('vehiculos')
       .select('id, created_at, guia_responsable, vehiculos_estados (codigo)')
@@ -248,6 +249,13 @@ export async function cargarControlGestores(
       console.error('[ControlGestores] Sin altas (falta sql/kpi_altas_conductores.sql):', err)
       return [] as any[]
     }),
+    // Agente que onboardeó a cada conductor (conductores.guia): altas, bajas, churn y
+    // retención van por él, no por el capitán del auto que manejaba.
+    leerTodo((a, b) => filtroSede(supabase
+      .from('conductores')
+      .select('id, guia'))
+      .order('id')
+      .range(a, b)),
   ])
 
   // ── Precios por día (semanal / 7, sin IVA) ──
@@ -329,10 +337,8 @@ export async function cargarControlGestores(
     }
   }
   const estadiasPorAuto = new Map<string, Estadia[]>()
-  const estadiasPorConductor = new Map<string, Estadia[]>()
   for (const e of estadias) {
     estadiasPorAuto.set(e.vehiculoId, [...(estadiasPorAuto.get(e.vehiculoId) ?? []), e])
-    estadiasPorConductor.set(e.conductorId, [...(estadiasPorConductor.get(e.conductorId) ?? []), e])
   }
   const asignacionesPorAuto = new Map<string, AsignacionAuto[]>()
   for (const a of asignacionesAuto) {
@@ -380,17 +386,11 @@ export async function cargarControlGestores(
     return { momento: new Date(t).toISOString(), porGestor, total }
   }
 
-  /** Gestor del auto en el que estaba el conductor en `t` (o en su último auto antes de `t`). */
-  const gestorDeConductor = (conductorId: string, t: number): string => {
-    const lista = estadiasPorConductor.get(conductorId) ?? []
-    const actual = lista.find((e) => e.ini <= t && t <= e.fin)
-    if (actual) return gestorEn(actual.vehiculoId, t)
-    const previas = lista.filter((e) => e.ini <= t).sort((a, b) => b.fin - a.fin)
-    if (previas[0]) return gestorEn(previas[0].vehiculoId, Math.min(t, previas[0].fin))
-    const posteriores = lista.filter((e) => e.ini > t).sort((a, b) => a.ini - b.ini)
-    if (posteriores[0]) return gestorEn(posteriores[0].vehiculoId, posteriores[0].ini)
-    return SIN_GESTOR
-  }
+  /** Agente que onboardeó al conductor (conductores.guia, homologado). */
+  const guiaPorConductor = new Map<string, string>(
+    conductoresRaw.map((c) => [c.id as string, homologarGuia(c.guia) ?? SIN_GESTOR]),
+  )
+  const gestorDeConductor = (conductorId: string): string => guiaPorConductor.get(conductorId) ?? SIN_GESTOR
 
   // Bajas y altas con su día
   const bajas = bajasRaw
@@ -419,18 +419,18 @@ export async function cargarControlGestores(
     const activosLunes = new Map<string, string>()
     for (const e of estadias) {
       if (e.ini <= tLunes && tLunes < e.fin && !activosLunes.has(e.conductorId)) {
-        activosLunes.set(e.conductorId, gestorEn(e.vehiculoId, tLunes))
+        activosLunes.set(e.conductorId, gestorDeConductor(e.conductorId))
       }
     }
     for (const g of activosLunes.values()) { fila(g).activos++; total.activos++ }
     for (const b of bajas) {
       if (b.dia < lunes || b.dia > dom) continue
-      fila(gestorDeConductor(b.id, inicioDiaMs(b.dia) + DIA_MS - 1)).bajas++
+      fila(gestorDeConductor(b.id)).bajas++
       total.bajas++
     }
     for (const x of altas) {
       if (x.dia < lunes || x.dia > dom) continue
-      fila(gestorDeConductor(x.id, inicioDiaMs(x.dia) + DIA_MS - 1)).altas++
+      fila(gestorDeConductor(x.id)).altas++
       total.altas++
     }
     // Semana: bajas / activos el lunes (definición de Operaciones). Mes: bajas /
@@ -476,7 +476,7 @@ export async function cargarControlGestores(
     dias.push(horizonte)
     const porGestor = new Map<string, { id: string; dia: string }[]>()
     for (const x of cohorte) {
-      const g = gestorDeConductor(x.id, inicioDiaMs(x.dia) + DIA_MS - 1)
+      const g = gestorDeConductor(x.id)
       porGestor.set(g, [...(porGestor.get(g) ?? []), x])
     }
     const curva = (gestor: string, lista: { id: string; dia: string }[]): CurvaRetencion => {

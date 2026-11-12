@@ -28,7 +28,7 @@ import { DetalleBajasModal } from './DetalleBajasModal'
 import { DetalleHabilitadosModal } from './DetalleHabilitadosModal'
 import {
   armarFiltroGuia, cargarAltasBajasGuia, cargarConductores, cargarGuiasConductores, cargarMultas, cargarTurnosGenerados,
-  cargarLlenados, cargarVehiculos, cargarVehiculosPorLlenar,
+  cargarLlenados, cargarVehiculos, cargarVehiculosPorLlenar, etiquetaGuia,
 } from './indicadoresModulosService'
 import {
   INICIO_DATOS, difPuntos, difRelativa, difUnidades, fechaCorta, fmtInt, fmtMonedaCorta, fmtPct, resumenMotivos, sumarDias,
@@ -255,7 +255,7 @@ function SelectorGuia({ guia, opciones, onChange }: { guia: string; opciones: st
       onChange={e => onChange(e.target.value)}
       disabled={!opciones}
       aria-label="Filtrar por agente"
-      title="Agente (guía) que onboardeó a los conductores y responsable de llenar los autos"
+      title="Agente que onboardeó a los conductores"
     >
       <option value="">Todos los agentes</option>
       {(opciones ?? []).map(g => <option key={g} value={g}>{g}</option>)}
@@ -284,9 +284,10 @@ function porLlenarPorAgente(v: VehiculosPorLlenar): string {
 
 const nfDias = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
-/** Promedio de días para llenar los turnos de un período (y de un agente, si viene). */
+/** Promedio de días para llenar los turnos de un período. Con agente: solo los turnos que
+ *  llenaron conductores que onboardeó ese agente (no el capitán del auto). */
 function promedioLlenado(llenados: Llenado[], p: { inicio: string; fin: string }, agente?: string): { dias: number; n: number } | null {
-  const lista = llenados.filter(l => l.dia >= p.inicio && l.dia <= p.fin && (!agente || l.guiaResponsable === agente))
+  const lista = llenados.filter(l => l.dia >= p.inicio && l.dia <= p.fin && (!agente || etiquetaGuia(l.guiaConductor) === agente))
   if (lista.length === 0) return null
   return { dias: lista.reduce((s, l) => s + l.dias, 0) / lista.length, n: lista.length }
 }
@@ -425,7 +426,8 @@ function Conductores({ periodo, anterior, general, carga, multas, turnos, guia, 
       detalle: pl && plAgente
         ? [
             `${fmtInt(plAgente.turnosD + plAgente.turnosN)} turnos libres (${fmtInt(plAgente.turnosD)} D · ${fmtInt(plAgente.turnosN)} N)`,
-            guia ? 'hoy' : porLlenarPorAgente(pl),
+            // Sin conductor no hay agente que lo onboardeó: va por el capitán del auto (referencial)
+            guia ? 'hoy, en los autos donde es capitán' : porLlenarPorAgente(pl),
           ].filter(Boolean).join(' · ')
         : undefined,
     },
