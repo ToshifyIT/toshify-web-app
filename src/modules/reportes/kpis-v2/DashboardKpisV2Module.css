@@ -287,6 +287,7 @@
 }
 
 .dkv2-desglose dt {
+  min-width: 0;
   color: var(--text-tertiary);
 }
 
@@ -294,6 +295,9 @@
   margin: 0;
   color: var(--text-primary);
   font-weight: 600;
+  /* El monto no se parte ("$" arriba y "0" abajo) */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .dkv2-kpi-detalle strong {
@@ -309,7 +313,9 @@
 .dkv2-dif {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  /* Si no entra en la tarjeta, "vs semana anterior" baja entero al renglón de abajo
+     (antes se salía del recuadro) */
+  white-space: normal;
 }
 
 .dkv2-dif--bueno {
@@ -327,6 +333,7 @@
 .dkv2-dif-sufijo {
   font-weight: 400;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 .dkv2-dif-sufijo:empty {

@@ -3921,6 +3921,83 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           border-color: rgba(245, 158, 11, 0.4);
           color: #FCD34D;
         }
+
+        /* ===== Escala de letra única para todo el modal (2026-11-12) =====
+           Antes los tamaños crecían con el ancho de pantalla (clamp con vw) y en monitores
+           anchos quedaban grandes y distintos entre pasos. Ahora: títulos 15-16, texto 12,
+           secundario 11, etiquetas 10; campos de 32 px como en el resto de la app.
+           !important porque varios tamaños están escritos en línea (style=...). */
+        .wizard-container .wizard-header { padding: 14px 24px; }
+        .wizard-container .wizard-title { font-size: 16px; }
+        .wizard-container .wizard-subtitle { font-size: 12px; }
+        .wizard-container .wizard-stepper { padding: 12px 24px; }
+        .wizard-container .step-circle { width: 30px; height: 30px; font-size: 12px; }
+        .wizard-container .step-label { font-size: 10px; }
+        .wizard-container .step-resumen { font-size: 10px; }
+        .wizard-container .wizard-content { padding: 16px 24px; }
+        .wizard-container .step-description { margin-bottom: 14px; }
+        .wizard-container .step-description h3 { font-size: 15px; margin-bottom: 2px; }
+        .wizard-container .step-description p { font-size: 12px; }
+        .wizard-container .wizard-footer { padding: 12px 24px; }
+        .wizard-container .wizard-footer .btn {
+          height: var(--alto-control-ventana, 30px);
+          padding: 0 16px;
+          border-radius: var(--radius-md);
+          font-size: 12px;
+        }
+
+        /* Campos: mismo alto, borde y letra en todos los pasos */
+        .wizard-container .wizard-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select) {
+          height: 32px !important;
+          min-height: 0 !important;
+          box-sizing: border-box !important;
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          padding-left: 10px !important;
+          border-width: 1px !important;
+          border-radius: var(--radius-md) !important;
+          font-size: 12px !important;
+        }
+        .wizard-container .wizard-content textarea { font-size: 12px !important; padding: 8px 10px !important; border-width: 1px !important; }
+        .wizard-container .wizard-content label { font-size: 11px; }
+
+        /* Paso Tipo */
+        .wizard-container .modality-card { padding: 22px 18px; }
+        .wizard-container .modality-title { font-size: 15px; }
+        .wizard-container .modality-description { font-size: 12px; }
+
+        /* Paso Vehículo */
+        .wizard-container .vehicle-grid { gap: 8px; }
+        /* Dos columnas (datos | círculo): con "auto 1fr auto" el círculo caía en el medio */
+        .wizard-container .vehicle-card { grid-template-columns: 1fr auto; padding: 10px 14px; gap: 12px; border-width: 1px; border-radius: var(--radius-lg); }
+        .wizard-container .vehicle-card:hover { transform: none; }
+        .wizard-container .vehicle-patente { font-size: 13px; }
+        .wizard-container .vehicle-details { font-size: 11px; }
+        .wizard-container .vehicle-card span { font-size: 10px !important; padding: 2px 8px !important; }
+        .wizard-container .radio-circle { width: 18px; height: 18px; border-width: 2px; }
+        .wizard-container .radio-circle.selected::after { width: 8px; height: 8px; }
+
+        /* Paso Conductores / Leads */
+        .wizard-container .conductores-column { padding: 12px; }
+        .wizard-container .conductores-column h4 { font-size: 13px; }
+        .wizard-container .conductor-item { padding: 8px 10px; }
+        .wizard-container .conductor-avatar { width: 30px; height: 30px; font-size: 11px; }
+        .wizard-container .conductor-name { font-size: 12px; }
+        .wizard-container .conductor-license { font-size: 11px; }
+        .wizard-container .assigned-conductor-card { padding: 10px; }
+        .wizard-container .conductor-asignacion-activa { font-size: 10px; }
+        .wizard-container .turno-badge { font-size: 11px; padding: 3px 10px; }
+        .wizard-container .badge-lead { font-size: 10px; }
+        .wizard-container .drop-zone { min-height: 64px; }
+        .wizard-container .drop-zone-empty,
+        .wizard-container .empty-state { font-size: 12px; }
+
+        /* Paso Detalles */
+        .wizard-container .conductor-form-card { padding: 14px; }
+        .wizard-container .conductor-form-card h4 { font-size: 13px; }
+        .wizard-container .conductor-form-card label,
+        .wizard-container .step4-form label { font-size: 11px; }
+        .wizard-container .conductor-aviso-no-cambio { font-size: 12px; }
       `}</style>
 
       <div className="wizard-overlay" onClick={onClose}>

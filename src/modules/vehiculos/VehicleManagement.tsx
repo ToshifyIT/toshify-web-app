@@ -1,10 +1,10 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Trash2, UserCheck, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2, Fuel, CalendarClock, ShieldCheck, ClipboardList } from 'lucide-react'
+import { AlertTriangle, Eye, Trash2, UserCheck, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Download, Tag, X, Lock, Archive, Edit2, Fuel, CalendarClock, ShieldCheck, ClipboardList, ListChecks } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 
-import { HistorialModal } from '../../components/ui/HistorialModal'
+import { HistorialLista } from '../../components/ui/HistorialModal'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -136,12 +136,15 @@ const PESTANAS_VEHICULO: TabsBarItem<PestanaVehiculo>[] = [
   { id: 'adicional', label: 'Adicional', icon: ClipboardList },
 ]
 
-type PestanaDetalleVehiculo = PestanaVehiculo | 'estados'
+type PestanaDetalleVehiculo = PestanaVehiculo | 'estados' | 'movimientos'
 
 /** Detalle del vehículo: las de Editar + el historial de estados. */
 const PESTANAS_DETALLE_VEHICULO: TabsBarItem<PestanaDetalleVehiculo>[] = [
   ...PESTANAS_VEHICULO,
   { id: 'estados', label: 'Estados', icon: History },
+  // Antes era "Historial" en el menú ⋮ (solo admin): asignaciones, devoluciones,
+  // siniestros y cambios de estado con quién lo hizo.
+  { id: 'movimientos', label: 'Movimientos', icon: ListChecks },
 ]
 
 export function VehicleManagement() {
@@ -166,7 +169,6 @@ export function VehicleManagement() {
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
   const [lastAuditLog, setLastAuditLog] = useState<{ usuario_nombre: string | null; campos_modificados: string[] | null } | null>(null)
 
-  const [historialVehiculo, setHistorialVehiculo] = useState<{ id: string; patente: string } | null>(null)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [titularesOptions, setTitularesOptions] = useState<{ id: string; tipo: 'persona' | 'empresa'; nombre: string }[]>([])
 
@@ -2422,13 +2424,6 @@ export function VehicleManagement() {
                   variant: folderUrl ? 'success' : 'default'
                 },
                 {
-                  icon: <History size={15} />,
-                  label: 'Historial',
-                  onClick: () => setHistorialVehiculo({ id: row.original.id, patente: row.original.patente }),
-                  hidden: !isAdmin(),
-                  variant: 'info'
-                },
-                {
                   icon: <Trash2 size={15} />,
                   label: 'Eliminar',
                   onClick: () => openDeleteModal(row.original),
@@ -3414,7 +3409,8 @@ export function VehicleManagement() {
             <TabsBar
               className="tabs-bar--modal"
               ariaLabel="Detalle del vehículo"
-              tabs={PESTANAS_DETALLE_VEHICULO}
+              // Movimientos: solo admin, como era la opción "Historial" del menú
+              tabs={PESTANAS_DETALLE_VEHICULO.filter(t => t.id !== 'movimientos' || isAdmin())}
               active={pestanaDetalle}
               onChange={setPestanaDetalle}
             />
@@ -3716,6 +3712,10 @@ export function VehicleManagement() {
             {pestanaDetalle === 'estados' && (
               <HistorialEstadosVehiculo vehiculoId={selectedVehiculo.id} />
             )}
+
+            {pestanaDetalle === 'movimientos' && (
+              <HistorialLista tipo="vehiculo" entityId={selectedVehiculo.id} />
+            )}
             </div>
             {(() => {
               const folderUrl = (selectedVehiculo as any).drive_folder_url || (selectedVehiculo as any).url_documentacion
@@ -3814,16 +3814,6 @@ export function VehicleManagement() {
       )}
 
 
-
-      {/* Modal Historial */}
-      {historialVehiculo && (
-        <HistorialModal
-          tipo="vehiculo"
-          entityId={historialVehiculo.id}
-          entityLabel={historialVehiculo.patente}
-          onClose={() => setHistorialVehiculo(null)}
-        />
-      )}
 
       {/* Modal Finalización de Asignación */}
       {showFinalizarModal && finalizarData && (
