@@ -37,7 +37,7 @@ import {
 type Pestana = 'conductores' | 'ventas' | 'vehiculos'
 
 const PESTANAS: { id: Pestana; label: string }[] = [
-  { id: 'conductores', label: 'Agentes' },
+  { id: 'conductores', label: 'Capitanes' },
   { id: 'ventas', label: 'Ventas' },
   { id: 'vehiculos', label: 'Vehículos' },
 ]
@@ -254,10 +254,10 @@ function SelectorGuia({ guia, opciones, onChange }: { guia: string; opciones: st
       value={guia}
       onChange={e => onChange(e.target.value)}
       disabled={!opciones}
-      aria-label="Filtrar por agente"
-      title="Agente que onboardeó a los conductores"
+      aria-label="Filtrar por capitán"
+      title="Capitán que onboardeó a los conductores"
     >
-      <option value="">Todos los agentes</option>
+      <option value="">Todos los capitanes</option>
       {(opciones ?? []).map(g => <option key={g} value={g}>{g}</option>)}
     </select>
   )
@@ -355,7 +355,7 @@ function Conductores({ periodo, anterior, general, carga, multas, turnos, guia, 
       label: 'ALTAS',
       value: pendienteGuia ? sinValor : fmtInt(c.altas),
       dif: pendienteGuia ? null : difUnidades(c.altas, a?.altas ?? null),
-      detalle: errorGuia ? 'No se pudieron cargar las altas del guía' : 'Primer turno en el período',
+      detalle: errorGuia ? 'No se pudieron cargar las altas del capitán' : 'Primer turno en el período',
     },
     { label: 'BAJAS', value: pendienteGuia ? sinValor : fmtInt(c.bajas), dif: pendienteGuia ? null : alReves(difUnidades(c.bajas, a?.bajas ?? null)) },
     {
@@ -394,7 +394,7 @@ function Conductores({ periodo, anterior, general, carga, multas, turnos, guia, 
       value: t ? fmtInt(t.actual.porVehiculosNuevos) : sinDato,
       dif: t ? difUnidades(t.actual.porVehiculosNuevos, t.anterior.porVehiculosNuevos) : null,
       detalle: t && guia
-        ? 'Toda la flota: no depende del guía'
+        ? 'Toda la flota: no depende del capitán'
         : t
         ? [
             `${fmtInt(t.actual.vehiculosNuevos)} ${t.actual.vehiculosNuevos === 1 ? 'nuevo' : 'nuevos'}`,
@@ -544,7 +544,7 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
   const guias = useCarga<GuiasConductores | null>(
     `guias|${sede}|${guia ? 'con' : 'sin'}`,
     async () => (guia ? cargarGuiasConductores(filtroSede) : null),
-    'No se pudieron cargar los guías.',
+    'No se pudieron cargar los capitanes.',
   )
   useEffect(() => {
     setGuia('')
@@ -581,7 +581,7 @@ export function IndicadoresModulos({ periodo, anterior, hoy, motivosGeneral, com
   const altasBajas = useCarga<AltasBajasGuia | null>(
     `altasbajas|${sede}|${hoy}|${g}`,
     async () => (filtroGuia ? cargarAltasBajasGuia(filtroSede, sedeActualId ?? null, filtroGuia, INICIO_DATOS, hoy) : null),
-    'No se pudieron cargar las altas y bajas del guía.',
+    'No se pudieron cargar las altas y bajas del capitán.',
   )
   const selectorGuia = <SelectorGuia guia={guia} opciones={[...GUIAS_ACTIVOS]} onChange={setGuia} />
   // Turnos libres de toda la flota (como "Turnos Disponibles" de Estado de Flota): salen

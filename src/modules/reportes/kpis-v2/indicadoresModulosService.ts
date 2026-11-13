@@ -120,7 +120,7 @@ function aNumero(v: unknown): number {
 
 // ───────────── Filtro por guía (agente de ventas) ─────────────
 
-export const SIN_GUIA = 'Sin guía'
+export const SIN_GUIA = 'Sin capitán'
 
 /** Guía de un conductor tal como se muestra en el filtro (homologado). */
 export function etiquetaGuia(guia: string | null | undefined): string {

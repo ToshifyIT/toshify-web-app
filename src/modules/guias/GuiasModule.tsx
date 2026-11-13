@@ -2682,7 +2682,7 @@ export function GuiasModule() {
                 },
                 ...(isCurrent ? [{
                   icon: <ArrowLeftRight size={15} />,
-                  label: 'Reasignacion Guia',
+                  label: 'Reasignación Capitán',
                   onClick: () => {
                     setSelectedConductorForReassign(row.original as any);
                     setReasignacionModalOpen(true);
@@ -2735,7 +2735,7 @@ export function GuiasModule() {
       
 
       {loading ? (
-        <Spinner size="sm" message="Cargando guías..." />
+        <Spinner size="sm" message="Cargando capitanes..." />
       ) : (
         <>
           {/* Selected Guide Content */}
@@ -3238,7 +3238,7 @@ export function GuiasModule() {
                     emptyIcon={<Users size={64}
                   />}
                     emptyTitle="No hay conductores asignados"
-                    emptyDescription="Este guía no tiene conductores asignados o no cumplen con los filtros."
+                    emptyDescription="Este capitán no tiene conductores asignados o no cumplen con los filtros."
                   />
                 </div>
               </div>
@@ -3246,8 +3246,8 @@ export function GuiasModule() {
           ) : (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
               {guias.length === 0 
-                ? "No se encontraron usuarios con rol 'guia'."
-                : "Seleccione una guía del menú lateral para ver su gestión."}
+                ? "No se encontraron capitanes."
+                : "Seleccione un capitán del menú lateral para ver su gestión."}
             </div>
           )}
         </>

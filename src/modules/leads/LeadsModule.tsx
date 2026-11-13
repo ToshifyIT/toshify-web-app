@@ -2245,7 +2245,7 @@ export function LeadsModule() {
           'Motivo Desinterés': l.estado_de_lead === 'No le interesa' ? clasificarMotivoDesinteres(l.causal_de_cierre) : '',
           'Detalle Motivo Desinterés': l.motivo_desinteres || '',
           'Causal de Cierre': l.causal_de_cierre || '',
-          'Guia': l.entrevistador_asignado || '',
+          'Capitán': l.entrevistador_asignado || '',
           'Detalle Hireflix': l.resumen_hireflix || '',
 
           // --- Documentacion (detalle) ---
@@ -3392,7 +3392,7 @@ export function LeadsModule() {
     {
       id: 'entrevistador',
       accessorFn: (row) => row.entrevistador_asignado || '-',
-      header: 'Guia',
+      header: 'Capitán',
       cell: ({ row }) => (
         <GuiaDropdownCell
           leadId={row.original.id}

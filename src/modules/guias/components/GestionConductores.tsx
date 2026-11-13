@@ -555,7 +555,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
                     onClick={() => handleSelectDriver(s)}
                   >
                     <div className="gc-suggestion-name">{s.nombre}</div>
-                    <div className="gc-suggestion-info">DNI: {s.dni} | Guía: {s.guia_nombre}</div>
+                    <div className="gc-suggestion-info">DNI: {s.dni} | Capitán: {s.guia_nombre}</div>
                   </div>
                 ))}
               </div>

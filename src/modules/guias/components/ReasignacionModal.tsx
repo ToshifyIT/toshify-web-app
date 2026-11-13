@@ -63,12 +63,12 @@ export function ReasignacionModal({
 
   const handleConfirm = async () => {
     if (!selectedGuideId) {
-      Alerta.fire('Error', 'Debes seleccionar un guía', 'warning');
+      Alerta.fire('Error', 'Debes seleccionar un capitán', 'warning');
       return;
     }
 
     if (selectedGuideId === conductor.id_guia) {
-      Alerta.fire('Info', 'El guía seleccionado es el mismo que el actual', 'info');
+      Alerta.fire('Info', 'El capitán seleccionado es el mismo que el actual', 'info');
       return;
     }
 
@@ -76,7 +76,7 @@ export function ReasignacionModal({
     try {
       await onConfirm(selectedGuideId);
       onClose();
-    } catch (_error) {
+    } catch {
       // silently ignored
     } finally {
       setIsSubmitting(false);
@@ -151,14 +151,14 @@ export function ReasignacionModal({
           </div>
           
           <div className="form-group">
-            <label className="form-label">Guía Asignado</label>
+            <label className="form-label">Capitán Asignado</label>
             <div className="select-container" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
               <Search size={18} className="select-icon" />
               <input 
                 type="text" 
                 className="select-input" 
                 style={{ paddingLeft: '35px' }}
-                placeholder="Buscar o seleccionar guía..."
+                placeholder="Buscar o seleccionar capitán..."
                 value={isDropdownOpen ? searchTerm : selectedGuideName}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
@@ -203,7 +203,7 @@ export function ReasignacionModal({
                     ))
                   ) : (
                     <div className="dropdown-empty">
-                      No se encontraron guías
+                      No se encontraron capitanes
                     </div>
                   )}
                 </div>

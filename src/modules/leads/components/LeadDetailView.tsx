@@ -280,7 +280,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             const idGuia = guiaMap[entrevistador] || null
             const idHireflix = lead.id_hireflix?.trim() || null
             const faltantes: string[] = []
-            if (!idGuia) faltantes.push('No tiene guia asignado')
+            if (!idGuia) faltantes.push('No tiene capitán asignado')
             if (!idHireflix) faltantes.push('No tiene videocuestionario')
             const habilitado = !!idGuia && !!idHireflix
             const url = habilitado ? `https://admin.hireflix.com/es/jobs/${idGuia}/interview/${idHireflix}` : ''
@@ -327,7 +327,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
         <Dato label="Turno" valor={lead.turno || '-'} />
         <Dato label="Licencia" valor={lead.licencia || '-'} />
         <Dato label="Teléfono" valor={lead.phone || lead.whatsapp_number || '-'} />
-        <Dato label="Guía" valor={lead.entrevistador_asignado || '-'} />
+        <Dato label="Capitán" valor={lead.entrevistador_asignado || '-'} />
       </div>
 
       {/* Mismas partes que el formulario de carga (LeadWizard) */}
@@ -448,7 +448,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
                   </span>
                 </div>
               )}
-              <Item label="Guía" valor={lead.entrevistador_asignado} />
+              <Item label="Capitán" valor={lead.entrevistador_asignado} />
               <Item label="Fuente" valor={lead.fuente_de_lead} />
               <Item label="Fuente pauta" valor={lead.fuente_pauta} />
               <div className="lead-detail-item">

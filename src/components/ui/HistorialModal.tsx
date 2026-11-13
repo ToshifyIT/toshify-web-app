@@ -156,12 +156,12 @@ export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conduct
 
             return (
               <div key={entry.id} style={{
-                position: 'relative', paddingLeft: 40, paddingBottom: i < entries.length - 1 ? 20 : 0,
+                position: 'relative', paddingLeft: 36, paddingBottom: i < entries.length - 1 ? 10 : 0,
               }}>
                 {/* Dot */}
                 <div style={{
-                  position: 'absolute', left: 8, top: 4,
-                  width: 16, height: 16, borderRadius: '50%',
+                  position: 'absolute', left: 9, top: 6,
+                  width: 14, height: 14, borderRadius: '50%',
                   background: color, border: '3px solid #fff',
                   boxShadow: `0 0 0 2px ${color}33`,
                 }} />
@@ -169,13 +169,13 @@ export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conduct
                 {/* Card */}
                 <div style={{
                   background: '#F9FAFB', borderRadius: 'var(--radius-md)',
-                  padding: '10px 14px', border: '1px solid #E5E7EB',
+                  padding: '8px 12px', border: '1px solid #E5E7EB',
                 }}>
                   {/* Tipo + fecha */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
                     <span style={{
-                      fontSize: 12, fontWeight: 600, color,
-                      background: `${color}15`, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
+                      fontSize: 11, fontWeight: 600, color,
+                      background: `${color}15`, padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                     }}>
                       {EVENTO_LABELS[entry.tipo_evento] || entry.tipo_evento}
                     </span>
@@ -189,23 +189,23 @@ export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conduct
                   {(entry.estado_anterior || entry.estado_nuevo) && (
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 6,
-                      fontSize: 13, color: '#374151', marginBottom: 4,
+                      fontSize: 11, color: '#374151', marginBottom: 2,
                     }}>
                       {entry.estado_anterior && (
                         <span style={{
                           padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                          background: '#FEE2E2', color: '#991B1B', fontSize: 12,
+                          background: '#FEE2E2', color: '#991B1B', fontSize: 11,
                         }}>
                           {entry.estado_anterior}
                         </span>
                       )}
                       {entry.estado_anterior && entry.estado_nuevo && (
-                        <ArrowRight size={14} style={{ color: '#9CA3AF' }} />
+                        <ArrowRight size={12} style={{ color: '#9CA3AF' }} />
                       )}
                       {entry.estado_nuevo && (
                         <span style={{
                           padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                          background: '#D1FAE5', color: '#065F46', fontSize: 12,
+                          background: '#D1FAE5', color: '#065F46', fontSize: 11,
                         }}>
                           {entry.estado_nuevo}
                         </span>
@@ -215,7 +215,7 @@ export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conduct
 
                   {/* Detalles */}
                   {detallesLines.length > 0 && (
-                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2, lineHeight: 1.45 }}>
                       {detallesLines.map((line, j) => (
                         <div key={j}>{line}</div>
                       ))}
@@ -225,8 +225,8 @@ export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conduct
                   {/* Usuario + módulo */}
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 8,
-                    fontSize: 11, color: '#9CA3AF', marginTop: 6,
-                    borderTop: '1px solid #E5E7EB', paddingTop: 6,
+                    fontSize: 10, color: '#9CA3AF', marginTop: 6,
+                    borderTop: '1px solid #E5E7EB', paddingTop: 5,
                   }}>
                     {entry.usuario_nombre && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>

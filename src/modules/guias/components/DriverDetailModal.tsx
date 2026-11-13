@@ -47,9 +47,14 @@ interface DriverDetailModalProps {
   readOnly?: boolean;
 }
 
-export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImplementadas, currentProfile, readOnly = false }: DriverDetailModalProps) {
-  if (!driver) return null;
+// Sin conductor no se muestra nada. El chequeo va acá afuera para que los hooks
+// del contenido se llamen siempre en el mismo orden.
+export function DriverDetailModal(props: DriverDetailModalProps) {
+  if (!props.driver) return null;
+  return <DriverDetailModalContenido {...props} driver={props.driver} />;
+}
 
+function DriverDetailModalContenido({ driver, onClose, onDriverUpdate, accionesImplementadas, currentProfile, readOnly = false }: DriverDetailModalProps & { driver: NonNullable<DriverDetailModalProps['driver']> }) {
   const [showAnotaciones, setShowAnotaciones] = useState(false);
   const [anotaciones, setAnotaciones] = useState<Nota[]>(driver.anotaciones_extra || []);
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
@@ -196,7 +201,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
         if (condData) updates.id_guia = condData.id_guia;
       }
 
-      if (!updates.id_guia) throw new Error("No se pudo identificar el guía del conductor");
+      if (!updates.id_guia) throw new Error("No se pudo identificar el capitán del conductor");
 
       // GUARDAR FECHA ESCUELA EN TABLA CONDUCTORES
       const { error: conductorError } = await supabase
