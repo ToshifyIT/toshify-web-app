@@ -13,6 +13,7 @@ import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGaranti
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 
 import { hoyART } from '../../../utils/fechaArgentina'
+import { REFERENCIA_PROMOCION, textoLineaPagoB1, textoLineaPromocion } from '../../facturacion/utils/promocionesFacturacion'
 export interface MultaDetalle {
   id: string
   fecha: string | null
@@ -276,7 +277,7 @@ export async function cargarDetalleSemana(
   const [{ data: det }, vehRes, pagosRes, ivaPorCodigo, cortesRes] = await Promise.all([
     supabase
       .from('facturacion_detalle')
-      .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento, referencia_id, referencia_tipo')
+      .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento, referencia_id, referencia_tipo, descripcion')
       .eq('facturacion_id', facturaId)
       // Mismo orden que el portal: primero cargos y despues descuentos, y dentro
       // de cada grupo por codigo de concepto (P003, P007, P013...). Sin el segundo
@@ -316,11 +317,14 @@ export async function cargarDetalleSemana(
     const bruto = esDescuento ? Number(d.total || 0) : montoBruto(d)
     return {
       codigo: d.concepto_codigo,
-      // Misma etiqueta que ve el conductor en el portal (Mi Espacio).
-      nombre: getConceptoLabel({
-        concepto_codigo: d.concepto_codigo,
-        concepto_descripcion: d.concepto_descripcion,
-      }),
+      // Promociones: mismo texto que Facturación ("PRM01 - ..." y "B1 - Pago Transferencia Bancaria").
+      // El resto, la misma etiqueta que ve el conductor en el portal (Mi Espacio).
+      nombre: d.referencia_tipo === REFERENCIA_PROMOCION
+        ? (textoLineaPagoB1(d.descripcion) || textoLineaPromocion(d.concepto_codigo, d.concepto_descripcion || ''))
+        : getConceptoLabel({
+          concepto_codigo: d.concepto_codigo,
+          concepto_descripcion: d.concepto_descripcion,
+        }),
       cantidad: Number(d.cantidad) || 0,
       total: bruto,
       neto: esDescuento ? bruto : montoNeto(d, ivaPorCodigo),

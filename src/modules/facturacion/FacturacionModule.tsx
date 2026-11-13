@@ -12,7 +12,8 @@ import {
   // UserMinus, // Liquidacion - sin tabla en BD
   // AlertTriangle, // Multas movido a modulo Multas/Telepase
   CreditCard,
-  Ticket
+  Ticket,
+  IdCard
 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { Spinner } from '../../components/ui/LoadingOverlay'
@@ -31,10 +32,11 @@ const BloqueosConductoresTab = lazy(() => import('./tabs/BloqueosConductoresTab'
 // const LiquidacionConductoresTab = lazy(() => import('./tabs/LiquidacionConductoresTab').then(m => ({ default: m.LiquidacionConductoresTab }))) // Sin tabla en BD
 // const MultasTab = lazy(() => import('./tabs/MultasTab').then(m => ({ default: m.MultasTab }))) // Movido a modulo Multas/Telepase
 const CobrosFraccionadosTab = lazy(() => import('./tabs/CobrosFraccionadosTab').then(m => ({ default: m.CobrosFraccionadosTab })))
+const LicenciaB1Tab = lazy(() => import('./tabs/LicenciaB1Tab').then(m => ({ default: m.LicenciaB1Tab })))
 
 import './FacturacionModule.css'
 
-type TabType = 'reporte' | 'periodos' | 'garantias' | 'toshipass' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'conceptos' | 'cobros_fraccionados'
+type TabType = 'reporte' | 'periodos' | 'garantias' | 'toshipass' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'conceptos' | 'cobros_fraccionados' | 'licencia_b1'
 
 const TABS = [
   { id: 'reporte' as TabType, label: 'Reporte', icon: FileText },
@@ -48,10 +50,11 @@ const TABS = [
   // { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban }, // Oculto temporalmente
   // { id: 'liquidacion' as TabType, label: 'Liquidacion', icon: UserMinus }, // Sin tabla en BD
   { id: 'cobros_fraccionados' as TabType, label: 'Cobros Fraccionados', icon: CreditCard },
+  { id: 'licencia_b1' as TabType, label: 'Licencia B1', icon: IdCard }, // Pagos diarios de la promoción PRM02
   // { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings } // Movido a menú Parámetros
 ]
 
-const VALID_TABS: TabType[] = ['reporte', 'periodos', 'garantias', 'toshipass', 'saldos', 'tickets', 'excesos', 'bloqueos', 'conceptos', 'cobros_fraccionados']
+const VALID_TABS: TabType[] = ['reporte', 'periodos', 'garantias', 'toshipass', 'saldos', 'tickets', 'excesos', 'bloqueos', 'conceptos', 'cobros_fraccionados', 'licencia_b1']
 
 export function FacturacionModule() {
   // Tab activo sincronizado con la URL (?tab=garantias) — sobrevive al F5.
@@ -92,6 +95,7 @@ export function FacturacionModule() {
            {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
            {/* Liquidacion - sin tabla en BD */}
            {activeTab === 'cobros_fraccionados' && <CobrosFraccionadosTab />}
+           {activeTab === 'licencia_b1' && <LicenciaB1Tab />}
            {/* {activeTab === 'conceptos' && <ConceptosFacturacionTab />} */}{/* Movido a menú Parámetros */}
          </Suspense>
        </div>

@@ -55,6 +55,7 @@ import {
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 import { categoriaDesdeTexto, d1DesdeCategoria, estadoLicencia, licenciaSiNo, normalizarLicenciaAlGuardar } from './licenciaLead'
 import { StatsGrid } from '../../components/ui/StatsGrid'
+import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
 import { formatNumero } from '../../utils/format'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
@@ -445,12 +446,18 @@ function formatPhoneAR(raw: unknown): string | null {
  * pide recién al abrir un lead (detalle, edición, conversión) o al exportar.
  * Si una columna nueva se muestra o filtra en la tabla, hay que sumarla acá.
  */
+/** Grupo de la categoría de licencia para filtrar y ordenar la columna Categoría. */
+function grupoCategoriaLicencia(categoria?: string | null): string {
+  return categoria === 'B1' || categoria === 'D1' || categoria === 'Otros' ? categoria : 'Sin dato'
+}
+const OPCIONES_CATEGORIA_LIC = ['B1', 'D1', 'Otros', 'Sin dato']
+
 const COLUMNAS_LISTA = [
   'id', 'created_at', 'updated_at', 'sede', 'sede_id',
   'nombre_completo', 'nombre_completo_2', 'dni', 'cuit', 'edad', 'fecha_de_nacimiento', 'email', 'phone',
   'direccion', 'direccion_ciudad', 'direccion_pais', 'zona', 'latitud', 'longitud',
   'direccion_geocode_estado', 'direccion_geocode_fecha',
-  'licencia', 'turno', 'cuenta_cabify', 'cuenta_didi', 'cochera', 'experiencia_previa', 'experiencia_manejo',
+  'licencia', 'categoria_licencia', 'categoria_licencia_otra', 'turno', 'cuenta_cabify', 'cuenta_didi', 'cochera', 'experiencia_previa', 'experiencia_manejo',
   'disponibilidad', 'proceso', 'entrevista_ia', 'estado_de_lead', 'estado_manual_at', 'fase_de_preguntas',
   'causal_de_cierre', 'entrevistador_asignado', 'observaciones', 'referido', 'embajador_id', 'ayuda_entrevista',
   'url_folder', 'fuente_de_lead', 'companero', 'patente',
@@ -774,6 +781,8 @@ export function LeadsModule() {
   // Filtros de columna
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
   const [zonaFilter, setZonaFilter] = useState<string[]>([])
+  /** Filtro de la columna Categoría (B1 / D1 / Otros / Sin dato). */
+  const [categoriaLicFilter, setCategoriaLicFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([])
   const [fuenteFilter, setFuenteFilter] = useState<string[]>([])
@@ -1679,6 +1688,10 @@ export function LeadsModule() {
       const set = new Set(zonaFilter)
       result = result.filter(l => set.has(l.zona || ''))
     }
+    if (categoriaLicFilter.length > 0) {
+      const set = new Set(categoriaLicFilter)
+      result = result.filter(l => set.has(grupoCategoriaLicencia(l.categoria_licencia)))
+    }
     if (turnoFilter.length > 0) {
       const set = new Set(turnoFilter)
       result = result.filter(l => set.has(normalizarTurno(l.turno)))
@@ -1709,7 +1722,7 @@ export function LeadsModule() {
     }
 
     return result.sort((a, b) => getDateTime(b.created_at) - getDateTime(a.created_at))
-  }, [leads, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta])
+  }, [leads, nombreFilter, zonaFilter, categoriaLicFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta])
 
   /** leadsBase + tarjeta activa (lo que se exporta con "Exportar"). */
   const filteredLeads = useMemo(() => leadsBase.filter(filtroTarjeta), [leadsBase, filtroTarjeta])
@@ -1770,11 +1783,11 @@ export function LeadsModule() {
   // con filtros los números no son comparables de una semana a otra.
   const vistaPorDefecto = useMemo(() => {
     const def = rangoUltimoMesART()
-    return !nombreFilter.length && !zonaFilter.length && !turnoFilter.length && !disponibilidadFilter.length
+    return !nombreFilter.length && !zonaFilter.length && !categoriaLicFilter.length && !turnoFilter.length && !disponibilidadFilter.length
       && !fuenteFilter.length && !estadoFilter.length && activeStatCards.length === 0
       && creacionDesde === def.desde && creacionHasta === def.hasta
       && (leadsVisibles === null || leadsVisibles.length === filteredLeads.length)
-  }, [nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCards,
+  }, [nombreFilter, zonaFilter, categoriaLicFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCards,
     creacionDesde, creacionHasta, leadsVisibles, filteredLeads])
   const fotoAnteriorLeads = useFotoSemanaAnterior('leads', {
     contactadoSellium: stats.contactadoSellium,
@@ -3272,6 +3285,32 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
+      // Categoría de licencia del lead (B1 / D1 / Otros con su detalle)
+      id: 'categoria_licencia',
+      accessorFn: (row) => grupoCategoriaLicencia(row.categoria_licencia),
+      header: () => (
+        <ExcelColumnFilter
+          label="Categoría"
+          options={OPCIONES_CATEGORIA_LIC}
+          selectedValues={categoriaLicFilter}
+          onSelectionChange={setCategoriaLicFilter}
+          filterId="lead_categoria_licencia"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+          selectAll
+        />
+      ),
+      cell: ({ row }) => (
+        <LicenciaBadge
+          categoria={row.original.categoria_licencia}
+          otra={row.original.categoria_licencia_otra}
+          sinDato="-"
+        />
+      ),
+      size: 90,
+      enableSorting: true,
+    },
+    {
       id: 'turno',
       accessorFn: (row) => normalizarTurno(row.turno),
       header: () => (
@@ -3572,17 +3611,18 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, categoriaLicFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
-    zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 ||
+    zonaFilter.length > 0 || categoriaLicFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 ||
     creacionDesde !== null || creacionHasta !== null || activeStatCards.length > 0
 
   function clearAllFilters() {
     setNombreFilter([])
     setEstadoFilter([])
     setZonaFilter([])
+    setCategoriaLicFilter([])
     setTurnoFilter([])
     setDisponibilidadFilter([])
     setFuenteFilter([])
@@ -3605,6 +3645,7 @@ export function LeadsModule() {
     }
     addFilters(nombreFilter, 'Candidato', setNombreFilter)
     addFilters(zonaFilter, 'Zona', setZonaFilter)
+    addFilters(categoriaLicFilter, 'Categoría', setCategoriaLicFilter)
     addFilters(turnoFilter, 'Turno', setTurnoFilter)
     addFilters(disponibilidadFilter, 'Disponibilidad', setDisponibilidadFilter)
     addFilters(fuenteFilter, 'Fuente', setFuenteFilter)
@@ -3644,7 +3685,7 @@ export function LeadsModule() {
       }
     }
     return filters
-  }, [hasActiveFilters, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, activeStatCards])
+  }, [hasActiveFilters, nombreFilter, zonaFilter, categoriaLicFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, activeStatCards])
 
   // ---------- RENDER ----------
   return (

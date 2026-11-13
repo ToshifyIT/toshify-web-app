@@ -14,7 +14,7 @@ import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambio
 import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE } from '../utils/descuentoReferido'
 import {
   cargarPromocionesSemana, descuentoPromoAlquiler, descuentoPromoToshipass, leerCalculoPromocion,
-  lineasPromocionConductor, REFERENCIA_PROMOCION, textoLineaPromocion,
+  esPagoPromocionB1, lineasPromocionConductor, REFERENCIA_PROMOCION, textoLineaPagoB1, textoLineaPromocion,
 } from '../utils/promocionesFacturacion'
 import type { DiaPromocion, LineaPromocion, PagoDiarioB1 } from '../utils/promocionesFacturacion'
 import { cruzarPagosDidi, leerExcelDidi, palabrasNombreDidi, type CandidatoDidi, type MetodoCruceDidi, type NoCruzadoDidi } from '../utils/pagosDidi'
@@ -105,6 +105,7 @@ import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 import { cargarAppsPagoSemana, type AppsPago } from '../../../services/appsPagoService'
+import { quitarDiasPromocion } from '../../../utils/conceptoLabels'
 import { formatNumero } from '../../../utils/format'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
@@ -6850,7 +6851,7 @@ export function ReporteFacturacionTab() {
     const calculo = leerCalculoPromocion(item.descripcion)
     const cabecera = grid([
       ['Código:', `<span style="font-weight:700;color:#b91c1c">${esc(item.concepto_codigo)}</span>`],
-      ['Concepto:', esc(item.concepto_descripcion)],
+      ['Concepto:', esc(quitarDiasPromocion(item.concepto_descripcion))],
     ])
     if (!calculo) {
       return `${cabecera}
@@ -6907,18 +6908,33 @@ export function ReporteFacturacionTab() {
         <div style="font-size:11px;color:#6b7280;margin-top:4px">El ToshiPass es un monto semanal fijo: el ${pct(calculo.porcentaje)} se aplica en proporción a los días de la semana que caen en la promoción.</div>`
     } else {
       const diasB1 = calculo.diasB1 || []
+      const pagos = calculo.pagos || []
+      const aPagar = diasB1.length * (calculo.pagoDiario || 0)
+      // Cada pago como "Pago de esta semana · Pago en transferencia / Pago manual"
+      const filasPagos = pagos.map(p => {
+        const concepto = `Pago de esta semana · ${p.origen === 'manual' ? 'Pago manual' : 'Pago en transferencia'}`
+        return `<tr>${td(fecha(p.fecha))}${td(`<strong>${concepto}</strong>`)}${td(esc(p.pagador || '-'))}${td(esc(p.detalle))}${td(`-${formatCurrency(p.monto)}`, true, 'color:#059669;font-weight:600;')}</tr>`
+      }).join('')
       html += `
-        ${titulo('Pago diario B1 (no cambia el total)')}
+        ${titulo('Pago diario B1')}
         ${grid([
-          ['Días con B1:', `${diasB1.length}: ${diasB1.map(fecha).join(', ')}`],
-          ['Pago por día:', formatCurrency(calculo.pagoDiario || 0)],
-          ['Total pagos diarios:', `${diasB1.length} × ${formatCurrency(calculo.pagoDiario || 0)} = <strong>${formatCurrency(calculo.monto)}</strong>`],
+          ['Días con B1:', diasB1.length ? `${diasB1.length}: ${diasB1.map(fecha).join(', ')}` : '-'],
+          ['A pagar en la semana:', `${diasB1.length} × ${formatCurrency(calculo.pagoDiario || 0)} = ${formatCurrency(aPagar)}`],
+          ['Pagado en la semana:', `<strong style="color:#059669">${formatCurrency(calculo.monto)}</strong>`],
         ])}
-        <div style="font-size:11px;color:#6b7280;margin-top:4px">Los pagos diarios son saldo a favor de esta semana: se restan de lo que retiene la app.</div>`
+        ${pagos.length ? `
+          ${titulo(`Pagos de la semana (${pagos.length})`)}
+          <div style="max-height:200px;overflow-y:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead><tr>${th('Fecha')}${th('Concepto')}${th('Pagó')}${th('Origen')}${th('Monto', true)}</tr></thead>
+              <tbody>${filasPagos}</tbody>
+            </table>
+          </div>` : ''}
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">Lo pagado por día (Cresium o cargado a mano en Facturación &gt; Licencia B1) es saldo a favor de esta semana y resta del total. En Saldos se ve como informativo (no cambia el saldo).</div>`
     }
 
     // Efecto en el total de la factura
-    if (detalleFacturacion && calculo.tipo !== 'b1') {
+    if (detalleFacturacion && item.total > 0) {
       const f = detalleFacturacion
       html += `
         ${titulo('Cómo impacta en el total')}
@@ -6934,10 +6950,12 @@ export function ReporteFacturacionTab() {
 
   async function verDetalleItem(item: FacturacionDetalle) {
     if (item.referencia_tipo === REFERENCIA_PROMOCION) {
+      // Pago diario Licencia B1: tabla de pagos con más columnas
+      const esPagoB1 = esPagoPromocionB1(item.descripcion)
       await Alerta.fire({
-        title: 'Detalle de la Promoción',
+        title: esPagoB1 ? 'Pagos Licencia B1' : 'Detalle de la Promoción',
         html: `<div style="text-align:left">${htmlCalculoPromocion(item)}</div>`,
-        width: 640,
+        width: esPagoB1 ? 820 : 640,
         confirmButtonText: 'Cerrar',
         confirmButtonColor: '#ff0033',
         customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
@@ -8460,9 +8478,9 @@ export function ReporteFacturacionTab() {
         pdf.setFont('helvetica', 'normal')
 
         descuentos.forEach(desc => {
-          // Promociones: con su código adelante (PRM01 - ...)
+          // Promociones: con su código adelante (PRM01 - ...); pagos diarios B1 con su texto propio
           const textoDesc = desc.referencia_tipo === REFERENCIA_PROMOCION
-            ? textoLineaPromocion(desc.concepto_codigo, desc.concepto_descripcion)
+            ? (textoLineaPagoB1(desc.descripcion) || textoLineaPromocion(desc.concepto_codigo, desc.concepto_descripcion))
             : desc.concepto_descripcion
           pdf.text(textoDesc, margin, y)
           pdf.text(`-${formatCurrency(desc.total)}`, pageWidth - margin, y, { align: 'right' })
@@ -9007,7 +9025,9 @@ export function ReporteFacturacionTab() {
 
             // Promociones: en SiFactura van como descuento (P004, el producto que conoce el
             // sistema de facturación) con el código de la promoción en la descripción.
+            // El pago diario de la licencia B1 no va: es un pago del conductor, no un descuento.
             if (det.referencia_tipo === REFERENCIA_PROMOCION) {
+              if (esPagoPromocionB1(det.descripcion)) continue
               filasPreview.push(crearFilaPreview(
                 numeroFactura++,
                 fact,
@@ -9621,8 +9641,10 @@ export function ReporteFacturacionTab() {
           ))
         }
 
-        // Promociones (descuento P004 con el código de la promoción en la descripción)
+        // Promociones (descuento P004 con el código de la promoción en la descripción).
+        // El pago diario de la licencia B1 no va: es un pago del conductor, no un descuento.
         for (const linea of fact.promo_lineas || []) {
+          if (linea.calculo.tipo === 'b1') continue
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
             fact,
@@ -14615,7 +14637,11 @@ export function ReporteFacturacionTab() {
                         {detalleDescuentos.map(item => {
                           let desc = item.concepto_descripcion;
                           const codigo = item.concepto_codigo
-                          if (codigo && codigo !== 'PEND') {
+                          // Pagos diarios B1: "B1 - Pago Transferencia Bancaria" (sin el código)
+                          const textoB1 = textoLineaPagoB1(item.descripcion)
+                          if (textoB1) desc = textoB1
+                          else if (item.referencia_tipo === REFERENCIA_PROMOCION) desc = textoLineaPromocion(codigo, desc)
+                          else if (codigo && codigo !== 'PEND') {
                             desc = `${codigo} - ${desc}`
                           }
                           return (

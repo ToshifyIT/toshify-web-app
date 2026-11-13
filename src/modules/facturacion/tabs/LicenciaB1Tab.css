@@ -1,0 +1,474 @@
+/* =====================================================
+   FACTURACIÓN > LICENCIA B1 (pagos diarios PRM02)
+   ===================================================== */
+
+.lb1-aviso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  font-size: 12px;
+}
+
+.lb1-ayuda {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.lb1-tenue {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.lb1-fecha {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lb1-monto {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lb1-verde { color: #16a34a; }
+.lb1-der { text-align: right; }
+
+/* Semáforo: verde al día, amarillo debe 1 día, rojo debe 2 o más */
+.lb1-semaforo {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.lb1-semaforo-verde { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18); }
+.lb1-semaforo-amarillo { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
+.lb1-semaforo-rojo { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18); }
+
+/* Semáforo: solo una barra de color al inicio de la fila (sin pintar la celda) */
+.lb1 .dt-table td:has(> .lb1-celda-verde) {
+  box-shadow: inset 4px 0 0 #16a34a;
+}
+
+.lb1 .dt-table td:has(> .lb1-celda-amarillo) {
+  box-shadow: inset 4px 0 0 #f59e0b;
+}
+
+.lb1 .dt-table td:has(> .lb1-celda-rojo) {
+  box-shadow: inset 4px 0 0 #dc2626;
+}
+
+/* Modal del conductor */
+.lb1-modal {
+  position: relative;
+  max-width: 880px;
+  width: 100%;
+}
+
+/* "Actualizando datos..." encima del modal mientras se recarga después de una acción */
+.lb1-actualizando {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--bg-primary, #fff) 75%, transparent);
+  backdrop-filter: blur(1px);
+  cursor: progress;
+}
+
+.lb1-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.lb1-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.lb1-tabla th {
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  text-align: left;
+  border-bottom: 1px solid var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
+.lb1-tabla td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-primary, rgba(0, 0, 0, 0.05));
+  vertical-align: middle;
+}
+
+.lb1-detalle-pago {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  align-items: center;
+  gap: 8px 14px;
+  font-size: 13px;
+}
+
+.lb1-btn-icono,
+.lb1-btn-quitar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lb1-btn-quitar {
+  margin-right: auto;
+  color: #dc2626;
+}
+
+.lb1-origen {
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lb1-origen-auto { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
+.lb1-origen-cresium { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
+.lb1-origen-manual { background: rgba(100, 116, 139, 0.15); color: #475569; }
+
+.lb1-modos {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.lb1-modo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-primary, rgba(0, 0, 0, 0.12));
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lb1-modo-activo {
+  border-color: #ff0033;
+  color: #ff0033;
+  background: rgba(255, 0, 51, 0.06);
+  font-weight: 600;
+}
+
+.lb1-buscar {
+  display: flex;
+  gap: 8px;
+}
+
+.lb1-resultados {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-primary, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-sm);
+}
+
+.lb1-resultados tbody tr {
+  cursor: pointer;
+}
+
+.lb1-resultados tbody tr:hover {
+  background: var(--bg-secondary);
+}
+
+.lb1-fila-elegida {
+  background: rgba(255, 0, 51, 0.06);
+}
+
+.lb1-fila-bloqueada {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
+.lb1-girando {
+  animation: lb1-girar 0.9s linear infinite;
+}
+
+@keyframes lb1-girar {
+  to { transform: rotate(360deg); }
+}
+
+/* =====================================================
+   Formato Saldos / Control de Saldos (2026-11-13)
+   ===================================================== */
+
+/* Tarjetas que filtran la tabla */
+.lb1-stat {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.lb1-stat:hover {
+  border-color: var(--border-primary);
+}
+
+.lb1-stat-activa {
+  border-color: #ff0033;
+}
+
+/* Encabezado del modal (como Control de Saldos) */
+.lb1-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+/* Barra de filtros del modal */
+.lb1-barra {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lb1-barra-info {
+  flex: 1;
+  min-width: 180px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.lb1-barra-select {
+  padding: 5px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-xs);
+  background: var(--card-bg, #fff);
+  color: var(--text-secondary);
+}
+
+.lb1-barra-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-xs);
+  background: var(--card-bg, #fff);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.lb1-barra-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.lb1-barra-btn-primario {
+  border-color: #ff0033;
+  background: #ff0033;
+  color: #fff;
+}
+
+.lb1-barra-btn-primario:hover:not(:disabled) {
+  background: #e6002e;
+}
+
+/* Tabla del modal (como la de Control de Saldos) */
+.lb1-kardex {
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+.lb1-kardex table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+}
+
+.lb1-kardex thead tr {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+}
+
+.lb1-kardex th {
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: left;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.lb1-kardex td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-primary);
+  border-left: 0;
+  white-space: nowrap;
+}
+
+.lb1-kardex tbody tr {
+  border-left: 3px solid transparent;
+}
+
+/* Fondo de la fila según el estado del día */
+.lb1-kardex-fila-pagado,
+.lb1-kardex-fila-atrasado { background: rgba(240, 253, 244, 0.5); }
+.lb1-kardex-fila-parcial { background: rgba(254, 243, 199, 0.45); }
+.lb1-kardex-fila-no_pago { background: rgba(254, 242, 242, 0.5); }
+.lb1-kardex-fila-adelantado { background: rgba(239, 246, 255, 0.5); }
+
+/* Hoy, destacado como la fila "actual" de Control de Saldos */
+.lb1-kardex tbody tr.lb1-kardex-hoy {
+  background: #fef3c7;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.lb1-kardex-dia {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lb1-kardex-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: #f59e0b;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.lb1-kardex-monto {
+  font-family: var(--font-mono);
+}
+
+.lb1-kardex-tenue {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.lb1-kardex-corto {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb1-kardex-cubierto {
+  font-size: 10px;
+  color: #15803d;
+}
+
+.lb1-kardex-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+
+.lb1-kardex-estado {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.lb1-kardex-estado-pagado { background: #f0fdf4; color: #16a34a; }
+.lb1-kardex-estado-atrasado { background: #f0fdf4; color: #15803d; }
+.lb1-kardex-estado-parcial { background: #fef3c7; color: #b45309; }
+.lb1-kardex-estado-no_pago { background: #fef2f2; color: #dc2626; }
+.lb1-kardex-estado-adelantado { background: #eff6ff; color: #2563eb; }
+.lb1-kardex-estado-proximo { background: #f3f4f6; color: var(--text-secondary); }
+.lb1-kardex-estado-en_curso { background: #fef3c7; color: #92400e; }
+
+.lb1-kardex-icono {
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.lb1-kardex-icono:hover {
+  color: var(--text-primary);
+}
+
+.lb1-kardex-icono-quitar:hover {
+  color: #dc2626;
+}
+
+/* Pie de totales (como Control de Saldos) */
+.lb1-totales {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.lb1-totales > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 8px 12px;
+  border-right: 1px solid var(--border-primary);
+}
+
+.lb1-totales > div:last-child {
+  border-right: none;
+}
+
+.lb1-totales span {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.lb1-totales strong {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .lb1-totales {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

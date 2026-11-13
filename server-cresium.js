@@ -6,7 +6,7 @@
  *    cresium_movimientos (sql/cresium_integracion.sql). La pantalla lee SIEMPRE
  *    de la base; a Cresium solo se va para traer lo nuevo: desde el último
  *    movimiento guardado (con un margen para refrescar estados), con el botón
- *    "Traer nuevos" o solo cada 30 minutos (las 24 h) cuando corre en server.js.
+ *    "Traer nuevos" o solo cada 10 minutos (las 24 h) cuando corre en server.js.
  *  - Propone cómo cargar cada uno en Alegra, con el mismo criterio que ya se usa
  *    a mano: contacto por CUIT, cobros de Cabify a "Ventas", pagos que coinciden
  *    con una factura de proveedor abierta contra esa factura, el resto a la cuenta
@@ -23,7 +23,7 @@
  *  - CRESIUM_BASE_URL (opcional, default https://api.cresium.app)
  *  - CRESIUM_DESDE    (opcional, default 2026-05-01): desde qué día se importa la primera vez
  *  - CRESIUM_SYNC_AUTO (opcional) "0" apaga la actualización automática. Por defecto server.js
- *    trae lo nuevo de cada empresa cada 30 minutos, las 24 h (solo movimientos: no toca Alegra).
+ *    trae lo nuevo de cada empresa cada 10 minutos, las 24 h (solo movimientos: no toca Alegra).
  *    En desarrollo (npm run dev / vite) no corre.
  *  - VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (ya existen)
  *
@@ -1565,15 +1565,15 @@ cresiumRouter.post('/:empresa/conciliar', async (req, res) => {
 })
 
 /* -------------------------------------------------------------------------- */
-/* Actualización automática de movimientos (cada 30 minutos, las 24 h)        */
+/* Actualización automática de movimientos (cada 10 minutos, las 24 h)        */
 /* -------------------------------------------------------------------------- */
 // Solo trae los movimientos de Cresium a cresium_movimientos (lo mismo que "Traer nuevos").
 // No consulta ni carga nada en Alegra. La arranca server.js (producción); el dev server de
 // vite no, para no duplicar las consultas. CRESIUM_SYNC_AUTO=0 la apaga.
 
-const SYNC_AUTO_CADA_MIN = 30
+const SYNC_AUTO_CADA_MIN = 10
 
-/** Cada 30 minutos (en punto y y media, hora Argentina) trae lo nuevo de cada empresa con claves */
+/** Cada 10 minutos (:00, :10, :20..., hora Argentina) trae lo nuevo de cada empresa con claves */
 export function iniciarSyncAutomaticoCresium() {
   if (process.env.CRESIUM_SYNC_AUTO === '0') {
     console.log('[cresium] Actualización automática apagada (CRESIUM_SYNC_AUTO=0)')
