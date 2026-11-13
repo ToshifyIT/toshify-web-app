@@ -4,9 +4,9 @@
 // Grupo CG) del CUIT/CUIL del conductor; lo que paga un tercero se agrega a mano desde el
 // modal (carga manual o buscando el depósito en Cresium). Reglas en utils/pagosB1.ts.
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { getISOWeek } from 'date-fns'
-import { AlertTriangle, CheckCircle, Edit2, Eye, Plus, RefreshCw, Search, Trash2, Users, Wallet, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Edit2, Eye, Plus, Search, Trash2, Users, Wallet, X } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
@@ -25,6 +25,9 @@ import {
 } from '../utils/pagosB1'
 import type { DepositoBuscado, DiaB1, EstadoDiaB1, PagoB1, ResumenB1 } from '../utils/pagosB1'
 import { DataTable } from '../../../components/ui/DataTable'
+import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
+import { ExcelDateRangeFilter } from '../../../components/ui/DataTable/ExcelDateRangeFilter'
+import { ExcelNumberRangeFilter } from '../../../components/ui/DataTable/ExcelNumberRangeFilter'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { LicenciaBadge } from '../../../components/ui/LicenciaBadge'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
@@ -79,11 +82,66 @@ function semaforo(r: ResumenB1): Semaforo {
   return dias === 0 ? 'verde' : dias === 1 ? 'amarillo' : 'rojo'
 }
 
+/** Colores del semáforo: raya al inicio de la fila y nombre del conductor (como Leads). */
+const COLOR_SEMAFORO: Record<Semaforo, { raya: string; texto: string }> = {
+  verde: { raya: '#16a34a', texto: '#15803d' },
+  amarillo: { raya: '#f59e0b', texto: '#b45309' },
+  rojo: { raya: 'var(--color-primary)', texto: 'var(--badge-red-text)' },
+}
+
 const TITULO_SEMAFORO: Record<Semaforo, string> = {
   verde: 'Al día: no debe ningún día',
   amarillo: 'Debe 1 día',
   rojo: 'Debe 2 días o más',
 }
+
+/** Columna que se filtra por el valor que muestra la celda (lista). */
+type ColumnaValor = 'dias'
+
+const FILTROS_VALOR_VACIOS: Record<ColumnaValor, string[]> = { dias: [] }
+
+const ETIQUETA_COLUMNA: Record<ColumnaValor, string> = { dias: 'Días Pagados' }
+
+/** Valor de la columna tal como se ve (es la opción del filtro). */
+function valorColumna(f: FilaB1): string {
+  return `${f.resumen.diasPagados} de ${f.resumen.diasVencidos}`
+}
+
+/** Orden de las opciones de Días Pagados. */
+function ordenValor(f: FilaB1): number {
+  return f.resumen.diasPagados * 10000 + f.resumen.diasVencidos
+}
+
+/** Columnas de fecha con filtro de rango. */
+type ColumnaFecha = 'desde' | 'hasta'
+type RangoFecha = { inicio: string | null; fin: string | null }
+const RANGOS_FECHA_VACIOS: Record<ColumnaFecha, RangoFecha> = {
+  desde: { inicio: null, fin: null }, hasta: { inicio: null, fin: null },
+}
+const ETIQUETA_FECHA: Record<ColumnaFecha, string> = { desde: 'Desde', hasta: 'Hasta' }
+const fechaDeFila = (f: FilaB1, col: ColumnaFecha) => (col === 'desde' ? f.ingreso : f.pagaHasta)
+
+/** Columnas de monto con filtro de rango. */
+type ColumnaMonto = 'pagado' | 'debe'
+type RangoMonto = { min: number | null; max: number | null }
+const RANGOS_MONTO_VACIOS: Record<ColumnaMonto, RangoMonto> = {
+  pagado: { min: null, max: null }, debe: { min: null, max: null },
+}
+const ETIQUETA_MONTO: Record<ColumnaMonto, string> = { pagado: 'Pagado', debe: 'Debe' }
+const montoDeFila = (f: FilaB1, col: ColumnaMonto) => (col === 'pagado' ? f.resumen.totalPagado : f.resumen.deuda)
+
+/** Estado de la fila para el filtro de la columna Estado. */
+function estadoFila(r: ResumenB1): string {
+  if (r.diasVencidos === 0) return 'sin_dias'
+  return semaforo(r) === 'verde' ? 'al_dia' : semaforo(r) === 'amarillo' ? 'un_dia' : 'deuda'
+}
+
+const OPCIONES_ESTADO = [
+  { value: 'al_dia', label: 'Al día' },
+  { value: 'un_dia', label: 'Debe 1 día' },
+  { value: 'deuda', label: 'Debe 2+ días' },
+  { value: 'sin_dias', label: 'Sin días aún' },
+]
 
 /** Monto escrito como "15000", "15.000" o "15.000,50". */
 function leerMonto(texto: string): number {
@@ -108,6 +166,14 @@ export function LicenciaB1Tab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filtro, setFiltro] = useState<Filtro>('todos')
+  // Filtros de columna tipo Excel (como Saldos)
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  // Días pagados: lista de valores. Desde / Hasta: rango de fechas. Pagado / Debe: rango de montos.
+  const [filtrosValor, setFiltrosValor] = useState<Record<ColumnaValor, string[]>>(FILTROS_VALOR_VACIOS)
+  const [rangosFecha, setRangosFecha] = useState<Record<ColumnaFecha, RangoFecha>>(RANGOS_FECHA_VACIOS)
+  const [rangosMonto, setRangosMonto] = useState<Record<ColumnaMonto, RangoMonto>>(RANGOS_MONTO_VACIOS)
   const [detalleId, setDetalleId] = useState<string | null>(null)
   /** Semana elegida en el modal (lunes yyyy-MM-dd) o 'actual'. */
   const [semanaSel, setSemanaSel] = useState<string>('actual')
@@ -124,8 +190,6 @@ export function LicenciaB1Tab() {
   const [guardando, setGuardando] = useState(false)
   /** Recargando los datos después de una acción (se muestra en el modal del conductor). */
   const [actualizando, setActualizando] = useState(false)
-  /** Cuándo se leyeron los datos por última vez (se muestra junto al botón Actualizar). */
-  const [ultimaLectura, setUltimaLectura] = useState<string | null>(null)
 
   // Detalle / edición de un pago
   const [pagoVer, setPagoVer] = useState<PagoB1 | null>(null)
@@ -146,7 +210,6 @@ export function LicenciaB1Tab() {
       setFilas([])
       setError(err instanceof Error ? err.message : 'No se pudo cargar la pestaña')
     } finally {
-      setUltimaLectura(new Date().toISOString())
       setLoading(false)
     }
   }, [aplicarFiltroSede])
@@ -163,60 +226,205 @@ export function LicenciaB1Tab() {
     cobrado: filas.reduce((s, f) => s + f.resumen.totalPagado, 0),
   }), [filas])
 
-  const filtradas = useMemo(() => {
-    if (filtro === 'al_dia') return filas.filter(f => semaforo(f.resumen) === 'verde')
-    if (filtro === 'un_dia') return filas.filter(f => semaforo(f.resumen) === 'amarillo')
-    if (filtro === 'deuda') return filas.filter(f => semaforo(f.resumen) === 'rojo')
-    return filas
-  }, [filas, filtro])
+  const conductoresUnicos = useMemo(() =>
+    [...new Set(filas.map(f => formatNombreCompleto(f.nombre)).filter(Boolean))].sort()
+  , [filas])
+
+  // Opciones de cada filtro de valor (sin repetir, ordenadas por fecha / monto)
+  const opcionesValor = useMemo(() => {
+    const res = {} as Record<ColumnaValor, string[]>
+    for (const col of Object.keys(FILTROS_VALOR_VACIOS) as ColumnaValor[]) {
+      const vistos = new Map<string, number | string>()
+      for (const f of filas) {
+        const v = valorColumna(f)
+        if (!vistos.has(v)) vistos.set(v, ordenValor(f))
+      }
+      res[col] = [...vistos.entries()]
+        .sort((a, b) => (typeof a[1] === 'number' && typeof b[1] === 'number' ? a[1] - b[1] : String(a[1]).localeCompare(String(b[1]))))
+        .map(([v]) => v)
+    }
+    return res
+  }, [filas])
+
+  const filtradas = useMemo(() => filas.filter(f => {
+    const color = semaforo(f.resumen)
+    // Tarjetas de arriba
+    if (filtro === 'al_dia' && color !== 'verde') return false
+    if (filtro === 'un_dia' && color !== 'amarillo') return false
+    if (filtro === 'deuda' && color !== 'rojo') return false
+    // Filtros de columna
+    if (conductorFilter.length > 0 && !conductorFilter.includes(formatNombreCompleto(f.nombre))) return false
+    if (estadoFilter.length > 0 && !estadoFilter.includes(estadoFila(f.resumen))) return false
+    for (const col of Object.keys(filtrosValor) as ColumnaValor[]) {
+      if (filtrosValor[col].length > 0 && !filtrosValor[col].includes(valorColumna(f))) return false
+    }
+    for (const col of Object.keys(rangosFecha) as ColumnaFecha[]) {
+      const { inicio, fin } = rangosFecha[col]
+      const fecha = fechaDeFila(f, col)
+      if (inicio && fecha < inicio) return false
+      if (fin && fecha > fin) return false
+    }
+    for (const col of Object.keys(rangosMonto) as ColumnaMonto[]) {
+      const { min, max } = rangosMonto[col]
+      const monto = montoDeFila(f, col)
+      if (min !== null && monto < min) return false
+      if (max !== null && monto > max) return false
+    }
+    return true
+  }), [filas, filtro, conductorFilter, estadoFilter, filtrosValor, rangosFecha, rangosMonto])
+
+  /** Encabezado con filtro de rango de fechas (Desde / Hasta). */
+  const encabezadoFecha = (col: ColumnaFecha) => (
+    <ExcelDateRangeFilter
+      label={ETIQUETA_FECHA[col]}
+      startDate={rangosFecha[col].inicio}
+      endDate={rangosFecha[col].fin}
+      onRangeChange={(inicio, fin) => setRangosFecha(prev => ({ ...prev, [col]: { inicio, fin } }))}
+      filterId={`lb1_${col}`}
+      openFilterId={openColumnFilter}
+      onOpenChange={setOpenColumnFilter}
+      mostrarIndicador={false}
+    />
+  )
+
+  /** Encabezado con filtro de rango de montos (Pagado / Debe). */
+  const encabezadoMonto = (col: ColumnaMonto) => (
+    <ExcelNumberRangeFilter
+      label={ETIQUETA_MONTO[col]}
+      min={rangosMonto[col].min}
+      max={rangosMonto[col].max}
+      onRangeChange={(min, max) => setRangosMonto(prev => ({ ...prev, [col]: { min, max } }))}
+      filterId={`lb1_${col}`}
+      openFilterId={openColumnFilter}
+      onOpenChange={setOpenColumnFilter}
+      esMonto
+    />
+  )
+
+  // Filtros activos: la tabla los muestra debajo del buscador (como Leads y Conductores)
+  const filtrosActivos = [
+    ...conductorFilter.map(v => ({ id: `conductor-${v}`, label: `Conductor: ${v}`, onClear: () => setConductorFilter(prev => prev.filter(x => x !== v)) })),
+    ...estadoFilter.map(v => ({
+      id: `estado-${v}`,
+      label: `Estado: ${OPCIONES_ESTADO.find(o => o.value === v)?.label || v}`,
+      onClear: () => setEstadoFilter(prev => prev.filter(x => x !== v)),
+    })),
+    ...(Object.keys(filtrosValor) as ColumnaValor[]).flatMap(col => filtrosValor[col].map(v => ({
+      id: `${col}-${v}`,
+      label: `${ETIQUETA_COLUMNA[col]}: ${v}`,
+      onClear: () => setFiltrosValor(prev => ({ ...prev, [col]: prev[col].filter(x => x !== v) })),
+    }))),
+    ...(Object.keys(rangosFecha) as ColumnaFecha[]).filter(col => rangosFecha[col].inicio || rangosFecha[col].fin).map(col => {
+      const { inicio, fin } = rangosFecha[col]
+      const texto = inicio && fin ? `${formatFecha(inicio)} - ${formatFecha(fin)}` : inicio ? `desde ${formatFecha(inicio)}` : `hasta ${formatFecha(fin)}`
+      return { id: `fecha-${col}`, label: `${ETIQUETA_FECHA[col]}: ${texto}`, onClear: () => setRangosFecha(prev => ({ ...prev, [col]: { inicio: null, fin: null } })) }
+    }),
+    ...(Object.keys(rangosMonto) as ColumnaMonto[]).filter(col => rangosMonto[col].min !== null || rangosMonto[col].max !== null).map(col => {
+      const { min, max } = rangosMonto[col]
+      const texto = min !== null && max !== null ? `${formatCurrency(min)} - ${formatCurrency(max)}`
+        : min !== null ? `desde ${formatCurrency(min)}` : `hasta ${formatCurrency(max ?? 0)}`
+      return { id: `monto-${col}`, label: `${ETIQUETA_MONTO[col]}: ${texto}`, onClear: () => setRangosMonto(prev => ({ ...prev, [col]: { min: null, max: null } })) }
+    }),
+  ]
+
+  /** Encabezado con filtro tipo Excel para una columna de valor. */
+  const encabezadoValor = (col: ColumnaValor) => (
+    <ExcelColumnFilter
+      label={ETIQUETA_COLUMNA[col]}
+      options={opcionesValor[col]}
+      selectedValues={filtrosValor[col]}
+      onSelectionChange={vals => setFiltrosValor(prev => ({ ...prev, [col]: vals }))}
+      filterId={`lb1_${col}`}
+      openFilterId={openColumnFilter}
+      onOpenChange={setOpenColumnFilter}
+    />
+  )
 
   const detalle = filas.find(f => f.id === detalleId) || null
 
-  // Mismo formato que la tabla de Saldos (textos, badges y botones fact-*)
+  // Mismo formato que la tabla de Saldos: filtros tipo Excel, ⓘ de ayuda, letras y badges fact-*
+  // Encabezados con filtro: las columnas los leen de esta ref. Así las columnas no se
+  // vuelven a crear al cambiar un filtro y el desplegable no se vuelve a montar (antes, al
+  // escribir en "Hasta" del rango de montos, el foco saltaba a "Desde").
+  const encabezados = {
+    conductor: (
+      <ExcelColumnFilter
+        label="Conductor"
+        options={conductoresUnicos}
+        selectedValues={conductorFilter}
+        onSelectionChange={setConductorFilter}
+        filterId="lb1_conductor"
+        openFilterId={openColumnFilter}
+        onOpenChange={setOpenColumnFilter}
+      />
+    ),
+    estado: (
+      <ExcelColumnFilter
+        label="Estado"
+        options={OPCIONES_ESTADO}
+        selectedValues={estadoFilter}
+        onSelectionChange={setEstadoFilter}
+        filterId="lb1_estado"
+        openFilterId={openColumnFilter}
+        onOpenChange={setOpenColumnFilter}
+      />
+    ),
+    desde: encabezadoFecha('desde'),
+    hasta: encabezadoFecha('hasta'),
+    dias: encabezadoValor('dias'),
+    pagado: encabezadoMonto('pagado'),
+    debe: encabezadoMonto('debe'),
+  }
+  const encabezadosRef = useRef(encabezados)
+  encabezadosRef.current = encabezados
+
   const columns = useMemo<ColumnDef<FilaB1, unknown>[]>(() => [
     {
-      accessorKey: 'nombre',
-      header: 'Conductor',
-      // Barra de color del semáforo al inicio de la fila (CSS: td:has(> .lb1-celda-...))
-      cell: ({ row }) => (
-        <div className={`lb1-celda-${semaforo(row.original.resumen)}`} style={{ padding: '4px 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            <span
-              className={`lb1-semaforo lb1-semaforo-${semaforo(row.original.resumen)}`}
-              title={TITULO_SEMAFORO[semaforo(row.original.resumen)]}
-            />
-            {formatNombreCompleto(row.original.nombre)}
-            <LicenciaBadge categoria={row.original.categoria} otra={row.original.categoriaOtra} size="xs" />
+      id: 'conductor',
+      accessorFn: f => formatNombreCompleto(f.nombre),
+      meta: { info: 'Conductor y su CUIT o DNI. La raya de color es el semáforo: verde al día, ámbar debe 1 día, rojo debe 2 o más.' },
+      header: () => encabezadosRef.current.conductor,
+      cell: ({ row }) => {
+        const color = semaforo(row.original.resumen)
+        return (
+          // Raya del semáforo a la izquierda y nombre en ese color (formato de Leads)
+          <div title={TITULO_SEMAFORO[color]} style={{ padding: '4px 8px', borderLeft: `3px solid ${COLOR_SEMAFORO[color].raya}`, borderRadius: 'var(--radius-sm)' }}>
+            {/* Nombre en el color del semáforo, como el lead en Leads */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: COLOR_SEMAFORO[color].texto }}>
+              {formatNombreCompleto(row.original.nombre)}
+              <LicenciaBadge categoria={row.original.categoria} otra={row.original.categoriaOtra} size="xs" />
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{row.original.cuit || row.original.dni}</div>
           </div>
-          <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-            {row.original.cuit || row.original.dni || '-'}
-          </div>
-        </div>
-      ),
+        )
+      },
     },
     {
       accessorKey: 'ingreso',
-      header: 'Desde',
+      meta: { info: 'Primer día de turno (o del reingreso) dentro de la promoción. Desde ese día paga $15.000 por día.' },
+      header: () => encabezadosRef.current.desde,
       cell: ({ row }) => (
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{formatFecha(row.original.ingreso)}</div>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{formatFecha(row.original.ingreso)}</span>
           {row.original.esReingreso && <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Reingreso</div>}
         </div>
       ),
     },
     {
       accessorKey: 'pagaHasta',
-      header: 'Hasta',
+      meta: { info: 'Último día que paga por día: el día antes de obtener la D1 o el fin de la promoción.' },
+      header: () => encabezadosRef.current.hasta,
       cell: ({ row }) => (
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{formatFecha(row.original.pagaHasta)}</div>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{formatFecha(row.original.pagaHasta)}</span>
           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.original.fechaD1 ? 'Obtuvo la D1' : 'Fin de la promoción'}</div>
         </div>
       ),
     },
     {
       id: 'dias',
-      header: 'Días Pagados',
+      meta: { info: 'Días cerrados (hasta ayer) cubiertos con lo pagado, sobre los días que ya tenía que pagar. Hoy no cuenta hasta que termina.' },
+      header: () => encabezadosRef.current.dias,
       accessorFn: f => f.resumen.diasPagados,
       cell: ({ row }) => {
         const r = row.original.resumen
@@ -225,13 +433,15 @@ export function LicenciaB1Tab() {
     },
     {
       id: 'pagado',
-      header: 'Pagado',
+      meta: { info: 'Total pagado en la promoción: depósitos de Cresium y pagos cargados a mano.' },
+      header: () => encabezadosRef.current.pagado,
       accessorFn: f => f.resumen.totalPagado,
       cell: ({ row }) => <span className="fact-precio" style={{ fontWeight: 700 }}>{formatCurrency(row.original.resumen.totalPagado)}</span>,
     },
     {
       id: 'deuda',
-      header: 'Debe',
+      meta: { info: 'Lo que falta pagar de los días cerrados. Si pagó de más, se ve en verde lo adelantado.' },
+      header: () => encabezadosRef.current.debe,
       accessorFn: f => f.resumen.deuda,
       cell: ({ row }) => {
         const r = row.original.resumen
@@ -239,22 +449,23 @@ export function LicenciaB1Tab() {
         if (r.adelantado > 0) {
           return <span className="fact-precio" style={{ fontWeight: 700, color: '#16a34a' }} title="Pagó de más: cubre los días que vienen">+{formatCurrency(r.adelantado)}</span>
         }
-        return <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>-</span>
+        return <span className="fact-precio" style={{ fontWeight: 700 }}>{formatCurrency(0)}</span>
       },
     },
     {
       id: 'estado',
-      header: 'Estado',
-      accessorFn: f => diasAdeudados(f.resumen),
+      accessorFn: f => estadoFila(f.resumen),
+      meta: { info: 'Al día (verde), debe 1 día (ámbar) o debe 2 o más días (rojo). Solo cuentan los días cerrados.' },
+      header: () => encabezadosRef.current.estado,
       cell: ({ row }) => {
         const r = row.original.resumen
+        if (r.diasVencidos === 0) return <span className="fact-badge fact-badge-gray">Sin días aún</span>
         const color = semaforo(r)
         const dias = diasAdeudados(r)
         const clase = color === 'verde' ? 'fact-badge-green' : color === 'amarillo' ? 'fact-badge-yellow' : 'fact-badge-red'
         return (
-          <span className={`fact-badge ${clase}`} title={TITULO_SEMAFORO[color]} style={{ gap: '6px' }}>
-            <span className={`lb1-semaforo lb1-semaforo-${color}`} />
-            {r.diasVencidos === 0 ? 'Sin días aún' : dias === 0 ? 'Al día' : `Debe ${dias} ${dias === 1 ? 'día' : 'días'}`}
+          <span className={`fact-badge ${clase}`} title={TITULO_SEMAFORO[color]}>
+            {dias === 0 ? 'Al día' : `Debe ${dias} ${dias === 1 ? 'día' : 'días'}`}
           </span>
         )
       },
@@ -263,7 +474,7 @@ export function LicenciaB1Tab() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
-        <div className="fact-table-actions">
+        <div className="fact-table-actions" style={{ justifyContent: 'center' }}>
           <button
             className="fact-table-btn fact-table-btn-view"
             onClick={() => { setSemanaSel('actual'); setDiaVer(null); setDetalleId(row.original.id) }}
@@ -321,19 +532,6 @@ export function LicenciaB1Tab() {
       setActualizando(false)
     }
   }
-
-  /** Botón Actualizar: vuelve a leer los pagos (Cresium + registros) y los conductores. */
-  const botonActualizar = (
-    <button
-      className="fact-btn fact-btn-secondary"
-      onClick={() => (detalle ? actualizarTrasAccion() : cargar())}
-      disabled={loading || actualizando}
-      title={ultimaLectura ? `Datos leídos a las ${formatFechaHoraART(ultimaLectura).slice(-5)}` : 'Volver a leer los datos'}
-    >
-      <RefreshCw size={14} className={loading || actualizando ? 'lb1-girando' : undefined} />
-      {loading || actualizando ? 'Actualizando...' : 'Actualizar'}
-    </button>
-  )
 
   function abrirAgregar() {
     if (!detalle) return
@@ -530,10 +728,16 @@ export function LicenciaB1Tab() {
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         searchPlaceholder="Buscar conductor..."
+        externalFilters={filtrosActivos}
+        // Con filtros puestos, aunque no quede ninguna fila se ve la tabla (para poder cambiarlos)
+        mostrarTablaSinDatos={filtrosActivos.length > 0 || filtro !== 'todos'}
+        onClearAllFilters={() => {
+          setConductorFilter([]); setEstadoFilter([]); setFiltrosValor(FILTROS_VALOR_VACIOS)
+          setRangosFecha(RANGOS_FECHA_VACIOS); setRangosMonto(RANGOS_MONTO_VACIOS)
+        }}
         emptyIcon={<Wallet size={48} />}
         emptyTitle="Sin conductores en la promoción"
         emptyDescription="Aparecen los conductores con licencia B1 que ingresaron o reingresaron dentro del período de la promoción"
-        headerAction={<div className="fact-header fact-header-inline">{botonActualizar}</div>}
       />
 
       {/* Modal del conductor: mismo diseño que "Control de Saldos" */}
@@ -595,14 +799,6 @@ export function LicenciaB1Tab() {
                     ))}
                   </select>
                 )}
-                <button
-                  className="lb1-barra-btn"
-                  onClick={() => actualizarTrasAccion()}
-                  disabled={actualizando}
-                  title={ultimaLectura ? `Datos leídos a las ${formatFechaHoraART(ultimaLectura).slice(-5)}` : 'Volver a leer los datos'}
-                >
-                  <RefreshCw size={12} className={actualizando ? 'lb1-girando' : undefined} /> Actualizar
-                </button>
                 {puedeEditar && (
                   <button className="lb1-barra-btn lb1-barra-btn-primario" onClick={() => abrirAgregar()}>
                     <Plus size={12} /> Agregar registro
