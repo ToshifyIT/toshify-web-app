@@ -754,13 +754,12 @@ export function ReporteFacturacionTab() {
   // Memoized filtered detalle items to avoid recalculation on each render
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
   const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
-  // Promociones de la factura: códigos (chips) y líneas informativas en $0 (pago diario B1)
+  // Códigos de las promociones de la factura (chips). La línea en $0 del pago diario B1
+  // (sin pagos en la semana) no se muestra en el detalle ni en el PDF.
+  // El de los pagos diarios B1 (PRM02) tampoco se muestra como chip (solo visual).
   const detallePromociones = useMemo(() => {
-    const lineas = detalleItems.filter(d => d.referencia_tipo === REFERENCIA_PROMOCION)
-    return {
-      codigos: [...new Set(lineas.map(d => d.concepto_codigo).filter(Boolean))],
-      informativas: lineas.filter(d => !d.total),
-    }
+    const lineas = detalleItems.filter(d => d.referencia_tipo === REFERENCIA_PROMOCION && !esPagoPromocionB1(d.descripcion))
+    return { codigos: [...new Set(lineas.map(d => d.concepto_codigo).filter(Boolean))] }
   }, [detalleItems])
 
   // Conceptos faltantes: peajes y saldo que no están como items pero deben mostrarse
@@ -2121,7 +2120,7 @@ export function ReporteFacturacionTab() {
           .eq('tipo_cobro', 'facturacion_semanal')
           .in('referencia_id', facIds),
         (supabase.from('facturacion_detalle') as any)
-          .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento, referencia_tipo')
+          .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento, referencia_tipo, descripcion')
           .in('facturacion_id', facIds),
         (supabase.from('excesos_kilometraje') as any)
           .select('id, conductor_id, km_exceso, monto_total, aplicado')
@@ -2160,9 +2159,11 @@ export function ReporteFacturacionTab() {
 
       // Códigos de promoción de la factura (líneas con referencia_tipo = 'promocion'): el
       // código queda como estaba al calcular, aunque después se edite en Parámetros.
+      // El de los pagos diarios B1 (PRM02) no se muestra como chip (solo visual).
       const codigosPromocionMap = new Map<string, string[]>()
       ;(detallesData || []).forEach((d: any) => {
         if (d.referencia_tipo !== REFERENCIA_PROMOCION || !d.concepto_codigo) return
+        if (esPagoPromocionB1(d.descripcion)) return
         const actuales = codigosPromocionMap.get(d.facturacion_id) || []
         if (!actuales.includes(d.concepto_codigo)) actuales.push(d.concepto_codigo)
         codigosPromocionMap.set(d.facturacion_id, actuales)
@@ -3617,7 +3618,8 @@ export function ReporteFacturacionTab() {
             dias_descuento_referido: descuentoReferido?.dias || 0,
             promo_lineas: promoDescuentosVP.lineas,  // descuentos por promoción (código PRM...)
             promo_b1: promoDescuentosVP.b1,
-            _codigosPromocion: promoDescuentosVP.codigos,
+            // Chips: sin el código de los pagos diarios B1 (PRM02), solo visual
+            _codigosPromocion: [...new Set(promoDescuentosVP.lineas.filter(l => l.calculo.tipo !== 'b1').map(l => l.codigo))],
             monto_tickets_favor: ticketsMap.get(conductorId) || 0,  // Tickets a favor
            // Prorrateo desglosado por modalidad
            prorrateo_cargo_dias: prorrateo.CARGO,
@@ -8494,20 +8496,6 @@ export function ReporteFacturacionTab() {
         pdf.text('SUBTOTAL DESCUENTOS', margin, y)
         pdf.text(`-${formatCurrency(subtotalDescReal)}`, pageWidth - margin, y, { align: 'right' })
         y += 10
-      }
-
-      // Promociones informativas (no cambian el total): pago diario B1
-      const promosInformativas = detalleItems.filter(d => d.referencia_tipo === REFERENCIA_PROMOCION && !d.total)
-      if (promosInformativas.length > 0) {
-        pdf.setFontSize(9)
-        pdf.setTextColor(negro)
-        pdf.setFont('helvetica', 'normal')
-        promosInformativas.forEach(item => {
-          const lineasTexto = pdf.splitTextToSize(textoLineaPromocion(item.concepto_codigo, item.concepto_descripcion), pageWidth - margin * 2)
-          pdf.text(lineasTexto, margin, y)
-          y += 5 * lineasTexto.length
-        })
-        y += 3
       }
 
       // TOTAL
@@ -14488,18 +14476,6 @@ export function ReporteFacturacionTab() {
                       </div>
                     )
                   })()}
-
-                  {/* Promociones informativas (no cambian el total): pago diario B1 */}
-                  {detallePromociones.informativas.map(item => (
-                    <div key={item.id} style={{
-                      marginBottom: '12px', padding: '8px 12px', borderRadius: 'var(--radius-sm)',
-                      background: 'rgba(37, 99, 235, 0.06)', border: '1px solid rgba(37, 99, 235, 0.18)',
-                      fontSize: '12px', color: 'var(--text-primary)',
-                    }}>
-                      <span style={{ fontWeight: 700, color: '#1d4ed8' }}>{item.concepto_codigo}</span>
-                      {' · '}{item.concepto_descripcion}
-                    </div>
-                  ))}
 
                   {/* Sección: Cargos */}
                   <div style={{ marginBottom: '12px' }}>
