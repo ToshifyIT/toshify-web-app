@@ -61,7 +61,7 @@ app.use('/api/cabify', cabifyRouter)
 
 // Rutas /api/cresium (Integraciones > Cresium, archivo aparte)
 app.use('/api/cresium', cresiumRouter)
-// Movimientos de Cresium (44 Dreams y Grupo CG) cada 30 minutos, las 24 h. Solo la tabla
+// Movimientos de Cresium (44 Dreams y Grupo CG) cada 10 minutos, las 24 h. Solo la tabla
 // cresium_movimientos: no toca Alegra. CRESIUM_SYNC_AUTO=0 la apaga.
 iniciarSyncAutomaticoCresium()
 

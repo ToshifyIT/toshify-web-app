@@ -12,8 +12,10 @@
 //   · PROMO_CYBER_DESCUENTO_10: 10% del alquiler de cada día cobrado que cae en el período
 //     (desde su ingreso) y 10% del ToshiPass en proporción a esos días. Línea de descuento
 //     con el código visible de la promoción (PRM01...).
-//   · PROMO_CYBER_LICENCIA_B1: no descuenta nada. Marca los días que manejó con B1 (antes de
-//     su fecha de obtención D1) para mostrar el pago diario de $15.000 (saldo a favor).
+//   · PROMO_CYBER_LICENCIA_B1: paga $15.000 por día mientras maneja con B1 (antes de su
+//     fecha de obtención D1). Lo pagado en la semana (Cresium + registros a mano, ver
+//     pagosB1.ts) resta como saldo a favor con el código de la promoción (PRM02). Si no
+//     pagó nada, queda una línea informativa en $0 con los días.
 //
 // Este archivo solo decide QUÉ días entran; el monto lo calcula cada cálculo de Facturación
 // (Vista Previa y Recálculo) con el precio que ya usa para el día, igual que el referido.
@@ -21,10 +23,13 @@
 // Parámetros, las semanas ya calculadas conservan el que tenían.
 
 import { supabase } from '../../../lib/supabase'
+import { quitarDiasPromocion } from '../../../utils/conceptoLabels'
 import { PROMO_CYBER_DESCUENTO_10, PROMO_CYBER_LICENCIA_B1 } from '../../promociones/catalogoPromociones'
+import { cargarPagosB1, ETIQUETA_EMPRESA_CRESIUM, PROMO_B1_PAGO_DIARIO } from './pagosB1'
+import type { ConductorPagoB1, PagoB1 } from './pagosB1'
 
+export { PROMO_B1_PAGO_DIARIO }
 export const PROMO_DESCUENTO_PORCENTAJE = 0.10
-export const PROMO_B1_PAGO_DIARIO = 15000
 /** referencia_tipo de las líneas de facturacion_detalle que vienen de una promoción. */
 export const REFERENCIA_PROMOCION = 'promocion'
 
@@ -49,24 +54,52 @@ export interface PromocionesSemana {
   licenciaB1: PromocionFacturacion | null
   /** Días de la semana que manejó con B1 dentro de la promoción, por conductor. */
   diasB1: Map<string, Set<string>>
+  /** Pagos diarios B1 con fecha en la semana, por conductor (saldo a favor). */
+  pagosB1: Map<string, PagoB1[]>
 }
 
-export function descripcionDescuentoPromoAlquiler(nombre: string, dias: number): string {
-  return `${nombre} · 10% alquiler (${dias} ${dias === 1 ? 'día' : 'días'})`
+// Sin la cantidad de días en el texto (pedido 2026-11-13): el detalle de días está en el ⓘ.
+export function descripcionDescuentoPromoAlquiler(nombre: string): string {
+  return `${nombre} · 10% alquiler`
 }
 
-export function descripcionDescuentoPromoToshipass(nombre: string, dias: number): string {
-  return `${nombre} · 10% ToshiPass (${dias} ${dias === 1 ? 'día' : 'días'})`
+export function descripcionDescuentoPromoToshipass(nombre: string): string {
+  return `${nombre} · 10% ToshiPass`
 }
 
-export function descripcionPagoDiarioB1(nombre: string, dias: number): string {
+/** Texto de la línea de pagos diarios B1 en la factura (pedido 2026-11-13). */
+export const TEXTO_PAGO_B1 = 'B1 - Pago Transferencia Bancaria'
+
+/**
+ * Texto de la línea de pagos diarios B1 en la factura: siempre "B1 - Pago Transferencia
+ * Bancaria", sea el pago de Cresium o cargado a mano (el detalle de cada pago está en el ⓘ).
+ */
+export function textoPagoSemanalB1(): string {
+  return TEXTO_PAGO_B1
+}
+
+/**
+ * Texto para mostrar una línea de la factura de pagos diarios B1 (sin el código adelante).
+ * Se arma con el desglose guardado, así sirve también para semanas ya calculadas.
+ * null si la línea no es de pagos B1.
+ */
+export function textoLineaPagoB1(descripcion: string | null | undefined): string | null {
+  const calculo = leerCalculoPromocion(descripcion)
+  if (calculo?.tipo !== 'b1' || !(calculo.monto > 0)) return null
+  return textoPagoSemanalB1()
+}
+
+export function descripcionPagoDiarioB1(nombre: string, dias: number, pagado = 0): string {
+  const textoDias = `${dias} ${dias === 1 ? 'día' : 'días'} × $15.000`
+  if (pagado > 0) return textoPagoSemanalB1()
   const monto = (dias * PROMO_B1_PAGO_DIARIO).toLocaleString('es-AR')
-  return `${nombre} · Pago diario B1: ${dias} ${dias === 1 ? 'día' : 'días'} × $15.000 = $${monto} (saldo a favor)`
+  return `${nombre} · Pago diario B1: ${textoDias} = $${monto} (sin pagos en la semana)`
 }
 
 /** Texto de una línea de promoción con su código adelante (para PDF y Prev. Fact.). */
 export function textoLineaPromocion(codigo: string, descripcion: string): string {
-  return descripcion.startsWith(`${codigo} - `) ? descripcion : `${codigo} - ${descripcion}`
+  const texto = quitarDiasPromocion(descripcion)
+  return texto.startsWith(`${codigo} - `) ? texto : `${codigo} - ${texto}`
 }
 
 /**
@@ -108,7 +141,135 @@ function sumarDia(fecha: string): string {
 const LOTE_IDS = 200
 
 function vacio(): PromocionesSemana {
-  return { ingresos: new Map(), descuento10: null, diasDescuento10: new Map(), licenciaB1: null, diasB1: new Map() }
+  return {
+    ingresos: new Map(), descuento10: null, diasDescuento10: new Map(), licenciaB1: null, diasB1: new Map(), pagosB1: new Map(),
+  }
+}
+
+/** Ingreso (o reingreso), días trabajados y licencia de un conductor. */
+export interface DatosIngresoConductor {
+  ingreso: { fecha: string; esReingreso: boolean }
+  /** Días trabajados hasta la fecha pedida, ordenados. */
+  dias: string[]
+  dni: string | null
+  cuit: string | null
+  categoriaLicencia: string | null
+  fechaLicenciaB1: string | null
+  fechaLicenciaD1: string | null
+}
+
+/**
+ * Fecha de ingreso (o reingreso) y días trabajados de cada conductor hasta `hasta`
+ * (yyyy-MM-dd). Mismos filtros de asignaciones que la facturación y el referido.
+ */
+export async function cargarIngresosConductores(
+  conductorIds: string[],
+  hasta: string,
+): Promise<Map<string, DatosIngresoConductor>> {
+  const resultado = new Map<string, DatosIngresoConductor>()
+  const ids = [...new Set(conductorIds.filter(Boolean))]
+  if (ids.length === 0) return resultado
+
+  const asigs: any[] = []
+  const conductores: any[] = []
+  const reingresos: any[] = []
+  for (let i = 0; i < ids.length; i += LOTE_IDS) {
+    const lote = ids.slice(i, i + LOTE_IDS)
+    const [rAsigs, rCond, rHist] = await Promise.all([
+      (supabase.from('asignaciones_conductores') as any)
+        .select('conductor_id, fecha_inicio, fecha_fin, asignaciones!inner(estado, fecha_inicio, fecha_fin)')
+        .in('conductor_id', lote)
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
+      (supabase.from('conductores') as any)
+        .select('id, numero_dni, numero_cuit, fecha_reincorpoaracion, categoria_licencia, fecha_licencia_b1, fecha_licencia_d1')
+        .in('id', lote),
+      (supabase.from('historial_conductores') as any)
+        .select('conductor_id, created_at')
+        .in('conductor_id', lote)
+        .eq('estado_anterior', 'BAJA')
+        .eq('estado_nuevo', 'ACTIVO'),
+    ])
+    if (rAsigs.error) throw new Error(`No se pudieron leer las asignaciones para las promociones: ${rAsigs.error.message}`)
+    if (rCond.error) throw new Error(`No se pudieron leer los conductores para las promociones: ${rCond.error.message}`)
+    if (rHist.error) throw new Error(`No se pudieron leer los reingresos para las promociones: ${rHist.error.message}`)
+    asigs.push(...(rAsigs.data || []))
+    conductores.push(...(rCond.data || []))
+    reingresos.push(...(rHist.data || []))
+  }
+
+  // Último reingreso por conductor
+  const ultimoReingreso = new Map<string, string>()
+  const anotarReingreso = (conductorId: string, fecha: string | null) => {
+    if (!fecha) return
+    const actual = ultimoReingreso.get(conductorId)
+    if (!actual || fecha > actual) ultimoReingreso.set(conductorId, fecha)
+  }
+  for (const c of conductores) anotarReingreso(c.id, fechaArg(c.fecha_reincorpoaracion))
+  for (const h of reingresos) anotarReingreso(h.conductor_id, fechaArg(h.created_at))
+
+  // Días trabajados por conductor hasta la fecha pedida
+  const diasPorConductor = new Map<string, Set<string>>()
+  for (const ac of asigs) {
+    const padre = ac.asignaciones
+    if (!padre) continue
+    const estadoPadre = (padre.estado || '').toLowerCase()
+    if (['programado', 'programada'].includes(estadoPadre)) continue
+    if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !padre.fecha_fin) continue
+    const inicios = [fechaArg(ac.fecha_inicio), fechaArg(padre.fecha_inicio)].filter(Boolean) as string[]
+    if (inicios.length === 0) continue
+    const finales = [fechaArg(ac.fecha_fin), fechaArg(padre.fecha_fin)].filter(Boolean) as string[]
+    const inicio = inicios.sort()[inicios.length - 1]
+    const fin = finales.length > 0 ? finales.sort()[0] : hasta
+    const tope = fin < hasta ? fin : hasta
+    const dias = diasPorConductor.get(ac.conductor_id) || new Set<string>()
+    for (let d = inicio; d <= tope; d = sumarDia(d)) dias.add(d)
+    diasPorConductor.set(ac.conductor_id, dias)
+  }
+
+  const datosConductor = new Map(conductores.map(c => [c.id, c]))
+  for (const [conductorId, dias] of diasPorConductor) {
+    const ordenados = [...dias].sort()
+    const reingreso = ultimoReingreso.get(conductorId)
+    const ingreso = reingreso ? ordenados.find(d => d >= reingreso) : ordenados[0]
+    if (!ingreso) continue
+    const c = datosConductor.get(conductorId)
+    resultado.set(conductorId, {
+      ingreso: { fecha: ingreso, esReingreso: !!reingreso },
+      dias: ordenados,
+      dni: c?.numero_dni ?? null,
+      cuit: c?.numero_cuit ?? null,
+      categoriaLicencia: c?.categoria_licencia ?? null,
+      fechaLicenciaB1: c?.fecha_licencia_b1 ?? null,
+      fechaLicenciaD1: c?.fecha_licencia_d1 ?? null,
+    })
+  }
+  return resultado
+}
+
+/**
+ * Período en que el conductor paga por día con la promoción de licencia B1, o null si no
+ * entra: tiene que haber ingresado (o reingresado) dentro del período de la promoción y
+ * haber manejado con B1. Termina el día antes de obtener la D1 o al terminar la promoción.
+ */
+export function periodoPagoB1(
+  promo: { fecha_inicio: string; fecha_fin: string },
+  datos: DatosIngresoConductor,
+): { desde: string; hasta: string } | null {
+  const ingreso = datos.ingreso.fecha
+  if (ingreso < promo.fecha_inicio || ingreso > promo.fecha_fin) return null
+  const fechaD1 = datos.fechaLicenciaD1
+  // Manejó con B1: categoría actual B1, o tenía B1 y la D1 la obtuvo después
+  const tuvoB1 = datos.categoriaLicencia === 'B1' || (!!datos.fechaLicenciaB1 && !!fechaD1)
+  if (!tuvoB1) return null
+  const antesD1 = fechaD1 ? restarDia(fechaD1) : null
+  const hasta = antesD1 && antesD1 < promo.fecha_fin ? antesD1 : promo.fecha_fin
+  return hasta >= ingreso ? { desde: ingreso, hasta } : null
+}
+
+function restarDia(fecha: string): string {
+  const d = new Date(`${fecha}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
 }
 
 /**
@@ -147,92 +308,33 @@ export async function cargarPromocionesSemana(
   }
   if (!resultado.descuento10 && !resultado.licenciaB1) return resultado
 
-  // 2. Asignaciones (todas: hace falta el primer día trabajado), reingresos y licencia
-  const asigs: any[] = []
-  const conductores: any[] = []
-  const reingresos: any[] = []
-  for (let i = 0; i < ids.length; i += LOTE_IDS) {
-    const lote = ids.slice(i, i + LOTE_IDS)
-    const [rAsigs, rCond, rHist] = await Promise.all([
-      (supabase.from('asignaciones_conductores') as any)
-        .select('conductor_id, fecha_inicio, fecha_fin, asignaciones!inner(estado, fecha_inicio, fecha_fin)')
-        .in('conductor_id', lote)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
-      (supabase.from('conductores') as any)
-        .select('id, fecha_reincorpoaracion, categoria_licencia, fecha_licencia_b1, fecha_licencia_d1')
-        .in('id', lote),
-      (supabase.from('historial_conductores') as any)
-        .select('conductor_id, created_at')
-        .in('conductor_id', lote)
-        .eq('estado_anterior', 'BAJA')
-        .eq('estado_nuevo', 'ACTIVO'),
-    ])
-    if (rAsigs.error) throw new Error(`No se pudieron leer las asignaciones para las promociones: ${rAsigs.error.message}`)
-    if (rCond.error) throw new Error(`No se pudieron leer los conductores para las promociones: ${rCond.error.message}`)
-    if (rHist.error) throw new Error(`No se pudieron leer los reingresos para las promociones: ${rHist.error.message}`)
-    asigs.push(...(rAsigs.data || []))
-    conductores.push(...(rCond.data || []))
-    reingresos.push(...(rHist.data || []))
-  }
+  // 2. Ingreso (o reingreso), días trabajados y licencia de cada conductor
+  const datos = await cargarIngresosConductores(ids, semana.fin)
+  const conductoresB1: ConductorPagoB1[] = []
 
-  // Último reingreso por conductor
-  const ultimoReingreso = new Map<string, string>()
-  const anotarReingreso = (conductorId: string, fecha: string | null) => {
-    if (!fecha) return
-    const actual = ultimoReingreso.get(conductorId)
-    if (!actual || fecha > actual) ultimoReingreso.set(conductorId, fecha)
-  }
-  for (const c of conductores) anotarReingreso(c.id, fechaArg(c.fecha_reincorpoaracion))
-  for (const h of reingresos) anotarReingreso(h.conductor_id, fechaArg(h.created_at))
-
-  // Días trabajados por conductor (mismos filtros que la facturación y el referido),
-  // hasta el fin de la semana
-  const diasPorConductor = new Map<string, Set<string>>()
-  for (const ac of asigs) {
-    const padre = ac.asignaciones
-    if (!padre) continue
-    const estadoPadre = (padre.estado || '').toLowerCase()
-    if (['programado', 'programada'].includes(estadoPadre)) continue
-    if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !padre.fecha_fin) continue
-    const inicios = [fechaArg(ac.fecha_inicio), fechaArg(padre.fecha_inicio)].filter(Boolean) as string[]
-    if (inicios.length === 0) continue
-    const finales = [fechaArg(ac.fecha_fin), fechaArg(padre.fecha_fin)].filter(Boolean) as string[]
-    const inicio = inicios.sort()[inicios.length - 1]
-    const fin = finales.length > 0 ? finales.sort()[0] : semana.fin
-    const tope = fin < semana.fin ? fin : semana.fin
-    const dias = diasPorConductor.get(ac.conductor_id) || new Set<string>()
-    for (let d = inicio; d <= tope; d = sumarDia(d)) dias.add(d)
-    diasPorConductor.set(ac.conductor_id, dias)
-  }
-
-  const licenciaPorConductor = new Map(conductores.map(c => [c.id, c]))
-
-  for (const [conductorId, dias] of diasPorConductor) {
-    const ordenados = [...dias].sort()
-    const reingreso = ultimoReingreso.get(conductorId)
-    const ingreso = reingreso ? ordenados.find(d => d >= reingreso) : ordenados[0]
-    if (!ingreso) continue
-    resultado.ingresos.set(conductorId, { fecha: ingreso, esReingreso: !!reingreso })
-    const enSemana = ordenados.filter(d => d >= semana.inicio && d <= semana.fin && d >= ingreso)
+  for (const [conductorId, d] of datos) {
+    const ingreso = d.ingreso.fecha
+    resultado.ingresos.set(conductorId, d.ingreso)
+    const enSemana = d.dias.filter(dia => dia >= semana.inicio && dia <= semana.fin && dia >= ingreso)
 
     const promo10 = resultado.descuento10
     if (promo10 && ingreso >= promo10.fecha_inicio && ingreso <= promo10.fecha_fin) {
-      const elegibles = enSemana.filter(d => d >= promo10.fecha_inicio && d <= promo10.fecha_fin)
+      const elegibles = enSemana.filter(dia => dia >= promo10.fecha_inicio && dia <= promo10.fecha_fin)
       if (elegibles.length > 0) resultado.diasDescuento10.set(conductorId, new Set(elegibles))
     }
 
     const promoB1 = resultado.licenciaB1
-    if (promoB1 && ingreso >= promoB1.fecha_inicio && ingreso <= promoB1.fecha_fin) {
-      const lic = licenciaPorConductor.get(conductorId)
-      const fechaD1: string | null = lic?.fecha_licencia_d1 || null
-      // Manejó con B1: categoría actual B1, o tenía B1 y la D1 la obtuvo después
-      const tuvoB1 = lic?.categoria_licencia === 'B1' || (!!lic?.fecha_licencia_b1 && !!fechaD1)
-      if (tuvoB1) {
-        const elegibles = enSemana.filter(d =>
-          d >= promoB1.fecha_inicio && d <= promoB1.fecha_fin && (!fechaD1 || d < fechaD1))
-        if (elegibles.length > 0) resultado.diasB1.set(conductorId, new Set(elegibles))
-      }
+    const periodo = promoB1 ? periodoPagoB1(promoB1, d) : null
+    if (periodo) {
+      const elegibles = enSemana.filter(dia => dia >= periodo.desde && dia <= periodo.hasta)
+      if (elegibles.length > 0) resultado.diasB1.set(conductorId, new Set(elegibles))
+      conductoresB1.push({ id: conductorId, dni: d.dni, cuit: d.cuit, ...periodo })
     }
+  }
+
+  // 3. Pagos diarios B1 de la semana (Cresium + registros a mano): saldo a favor
+  if (conductoresB1.length > 0) {
+    resultado.pagosB1 = await cargarPagosB1(conductoresB1, { desde: semana.inicio, hasta: semana.fin })
   }
 
   return resultado
@@ -265,9 +367,10 @@ export interface CalculoPromocion {
   base?: number
   diasCobrados?: number
   diasPromo?: number
-  /** b1: días con B1 y pago diario. */
+  /** b1: días con B1, pago diario y lo pagado en la semana. */
   pagoDiario?: number
   diasB1?: string[]
+  pagos?: Array<{ fecha: string; monto: number; origen: string; pagador: string | null; detalle: string }>
   monto: number
 }
 
@@ -281,6 +384,18 @@ export function leerCalculoPromocion(texto: string | null | undefined): CalculoP
   }
 }
 
+/** De dónde salió un pago diario B1, para el detalle de la factura. */
+function detallePagoB1(p: PagoB1): string {
+  if (p.origen === 'manual') return 'Carga manual'
+  const empresa = p.empresa ? ETIQUETA_EMPRESA_CRESIUM[p.empresa] || p.empresa : ''
+  return `Cresium ${empresa}${p.origen === 'cresium' ? ' (asignado a mano)' : ''}`.trim()
+}
+
+/** true si la línea es el pago diario de la licencia B1: es un pago, no un descuento comercial. */
+export function esPagoPromocionB1(descripcion: string | null | undefined): boolean {
+  return leerCalculoPromocion(descripcion)?.tipo === 'b1'
+}
+
 /** Línea de descuento de una promoción en la factura del conductor. */
 export interface LineaPromocion {
   promocionId: string
@@ -290,7 +405,7 @@ export interface LineaPromocion {
   calculo: CalculoPromocion
 }
 
-/** Días con B1 (pago diario) de la promoción de licencia B1. No resta de la factura. */
+/** Días con B1 de la promoción de licencia B1 cuando no pagó nada en la semana ($0). */
 export interface PagoDiarioB1 {
   promocionId: string
   codigo: string
@@ -323,7 +438,7 @@ export function lineasPromocionConductor(
   if (p10 && alquiler && alquiler.monto > 0) {
     lineas.push({
       promocionId: p10.id, codigo: p10.codigo, monto: alquiler.monto,
-      descripcion: descripcionDescuentoPromoAlquiler(p10.nombre, alquiler.dias),
+      descripcion: descripcionDescuentoPromoAlquiler(p10.nombre),
       calculo: {
         v: 1, tipo: 'alquiler', promocion: datosPromo(p10), ingreso, porcentaje: PROMO_DESCUENTO_PORCENTAJE,
         dias: alquiler.detalle.map(d => ({ ...d, descuento: Math.round(d.precio * d.fraccion * PROMO_DESCUENTO_PORCENTAJE * 100) / 100 })),
@@ -334,25 +449,29 @@ export function lineasPromocionConductor(
   if (p10 && toshipass.monto > 0) {
     lineas.push({
       promocionId: p10.id, codigo: p10.codigo, monto: toshipass.monto,
-      descripcion: descripcionDescuentoPromoToshipass(p10.nombre, toshipass.dias),
+      descripcion: descripcionDescuentoPromoToshipass(p10.nombre),
       calculo: {
         v: 1, tipo: 'toshipass', promocion: datosPromo(p10), ingreso, porcentaje: PROMO_DESCUENTO_PORCENTAJE,
         base: toshipass.base, diasCobrados: toshipass.diasCobrados, diasPromo: toshipass.dias, monto: toshipass.monto,
       },
     })
   }
+  // Licencia B1: lo pagado en la semana resta como saldo a favor; sin pagos, informativa en $0
   let b1: PagoDiarioB1 | null = null
   const pB1 = promos.licenciaB1
-  const diasB1 = promos.diasB1.get(conductorId)
-  if (pB1 && diasB1 && diasB1.size > 0) {
-    b1 = {
-      promocionId: pB1.id, codigo: pB1.codigo, dias: diasB1.size,
-      descripcion: descripcionPagoDiarioB1(pB1.nombre, diasB1.size),
-      calculo: {
-        v: 1, tipo: 'b1', promocion: datosPromo(pB1), ingreso, porcentaje: 0,
-        pagoDiario: PROMO_B1_PAGO_DIARIO, diasB1: [...diasB1].sort(), monto: diasB1.size * PROMO_B1_PAGO_DIARIO,
-      },
+  const diasB1 = [...(promos.diasB1.get(conductorId) || [])].sort()
+  const pagosB1 = promos.pagosB1.get(conductorId) || []
+  if (pB1 && (diasB1.length > 0 || pagosB1.length > 0)) {
+    const pagado = Math.round(pagosB1.reduce((s, p) => s + p.monto, 0) * 100) / 100
+    const calculo: CalculoPromocion = {
+      v: 1, tipo: 'b1', promocion: datosPromo(pB1), ingreso, porcentaje: 0,
+      pagoDiario: PROMO_B1_PAGO_DIARIO, diasB1,
+      pagos: pagosB1.map(p => ({ fecha: p.fecha, monto: p.monto, origen: p.origen, pagador: p.pagador, detalle: detallePagoB1(p) })),
+      monto: pagado,
     }
+    const descripcion = descripcionPagoDiarioB1(pB1.nombre, diasB1.length, pagado)
+    if (pagado > 0) lineas.push({ promocionId: pB1.id, codigo: pB1.codigo, monto: pagado, descripcion, calculo })
+    else b1 = { promocionId: pB1.id, codigo: pB1.codigo, dias: diasB1.length, descripcion, calculo }
   }
   const codigos = [...new Set([...lineas.map(l => l.codigo), ...(b1 ? [b1.codigo] : [])])]
   return { lineas, b1, codigos }

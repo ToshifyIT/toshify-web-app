@@ -73,6 +73,9 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 import { hoyART } from '../../../utils/fechaArgentina'
 import { numeroSemana, semanaISO, sumarSemanasISO } from '../../../utils/semanaISO'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
+import { cargarConductoresLicenciaB1, tipoPagoSaldos } from '../utils/licenciaB1Service'
+import type { FilaB1 } from '../utils/licenciaB1Service'
+import { ETIQUETA_EMPRESA_CRESIUM } from '../utils/pagosB1'
 /** Calcula días calendario entre una fecha y hoy (sin considerar hora) */
 function diasCalendario(desde: string | Date): number {
   const d = new Date(desde)
@@ -81,6 +84,9 @@ function diasCalendario(desde: string | Date): number {
   hoy.setHours(0, 0, 0, 0)
   return Math.max(0, Math.floor((hoy.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)))
 }
+
+/** id de las filas de Saldos que solo existen por tener pagos de Licencia B1 (sin saldo todavía). */
+const PREFIJO_FILA_B1 = 'b1-'
 
 export function SaldosAbonosTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -91,6 +97,9 @@ export function SaldosAbonosTab() {
   // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
 
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
+  // Pagos de Facturación > Licencia B1 (PRM02) por conductor. Solo informativos: ya restan
+  // en la facturación de la semana; NO se guardan en el kardex ni cambian el saldo.
+  const [pagosB1, setPagosB1] = useState<Map<string, FilaB1>>(new Map())
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -348,7 +357,35 @@ export function SaldosAbonosTab() {
         ...s,
         conductor_estado: s.conductor?.estado?.codigo || null
       }))
-      setSaldos(saldosConEstado)
+      // Pagos Licencia B1 (informativos). Tolerante: si falla, Saldos carga igual.
+      // Quien tiene pagos B1 y todavía no tiene saldo aparece igual (fila solo de consulta).
+      const b1 = await cargarConductoresLicenciaB1(aplicarFiltroSede).catch(err => {
+        console.error('Error cargando pagos Licencia B1 para Saldos:', err)
+        return null
+      })
+      const conPagosB1 = new Map((b1?.filas || []).filter(f => f.pagos.length > 0).map(f => [f.id, f]))
+      setPagosB1(conPagosB1)
+      const conSaldo = new Set(saldosConEstado.map((s: SaldoConductor) => s.conductor_id))
+      const ahora = new Date().toISOString()
+      const soloB1: SaldoConductor[] = [...conPagosB1.values()]
+        .filter(f => !conSaldo.has(f.id))
+        .map(f => ({
+          id: `${PREFIJO_FILA_B1}${f.id}`,
+          conductor_id: f.id,
+          conductor_nombre: f.nombre,
+          conductor_dni: f.dni,
+          conductor_cuit: f.cuit,
+          saldo_actual: 0,
+          dias_mora: 0,
+          monto_mora_acumulada: 0,
+          fecha_referencia: null,
+          ultima_actualizacion: f.pagos.reduce((max, p) => (p.fecha > max ? p.fecha : max), f.pagos[0].fecha),
+          created_at: ahora,
+          updated_at: ahora,
+          conductor_estado: f.estado,
+        }))
+      setSaldos([...saldosConEstado, ...soloB1].sort((a, b) =>
+        (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')))
 
       // Procesar fraccionados
       const fraccionadosConNombre = ((fraccionadosRes.data || []) as unknown as CobroFraccionadoRow[]).map((f) => ({
@@ -1606,7 +1643,7 @@ export function SaldosAbonosTab() {
       return
     }
 
-    const data = saldos.map((s) => ({
+    const data = saldos.filter(s => !s.id.startsWith(PREFIJO_FILA_B1)).map((s) => ({
       'DNI': s.conductor_dni || '',
       'Conductor': s.conductor_nombre || '',
       'Estado': s.conductor_estado || '',
@@ -2107,6 +2144,17 @@ export function SaldosAbonosTab() {
         <div style={{ padding: '4px 8px' }}>
           <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatNombreCompleto(row.original.conductor_nombre)}</div>
           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{row.original.conductor_cuit || row.original.conductor_dni}</div>
+          {pagosB1.has(row.original.conductor_id) && (
+            <span
+              title="Pagos de Licencia B1 (PRM02): informativos, ya restan en la facturación de la semana"
+              style={{
+                display: 'inline-block', marginTop: '3px', padding: '1px 5px', borderRadius: 'var(--radius-xs)',
+                fontSize: '9px', fontWeight: 600, background: 'rgba(245, 158, 11, 0.16)', color: '#b45309',
+              }}
+            >
+              Pagos B1 {formatCurrency(pagosB1.get(row.original.conductor_id)!.resumen.totalPagado)}
+            </span>
+          )}
         </div>
       )
     },
@@ -2189,6 +2237,17 @@ export function SaldosAbonosTab() {
         const tieneDeuda = row.original.saldo_actual < 0
         const puedeFraccionar = tieneDeuda && (isAdmin() || isAdministrativo())
 
+        // Fila solo con pagos de Licencia B1 (todavía sin saldo): solo se consulta
+        if (row.original.id.startsWith(PREFIJO_FILA_B1)) {
+          return (
+            <div className="fact-table-actions">
+              <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
+                <Eye size={14} />
+              </button>
+            </div>
+          )
+        }
+
         return (
           <div className="fact-table-actions">
             <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
@@ -2216,7 +2275,7 @@ export function SaldosAbonosTab() {
         )
       }
     }
-  ], [conductorFilter, conductoresUnicos, estadoFilter, openColumnFilter, conductoresConFraccionado])
+  ], [conductorFilter, conductoresUnicos, estadoFilter, openColumnFilter, conductoresConFraccionado, pagosB1])
 
   const saldosFiltrados = useMemo(() => {
     return saldos.filter(s => {
@@ -2489,6 +2548,8 @@ export function SaldosAbonosTab() {
           ? (Number((kardexModal.rows as any[])[0].saldo_pendiente) || 0)
           : s.saldo_actual
         const sColor = saldoRealKardex >= 0 ? '#16a34a' : '#dc2626'
+        // Pagos de Licencia B1 (PRM02): filas informativas dentro de la tabla (no cambian el saldo)
+        const pagosB1Kardex = pagosB1.get(s.conductor_id)?.pagos || []
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
               <div className="fact-modal-content" style={{ maxWidth: '1100px' }} onClick={(e) => e.stopPropagation()}>
@@ -2549,11 +2610,12 @@ export function SaldosAbonosTab() {
                 </div>
 
                 {/* Barra de filtros (v2) */}
-                {!kardexModal.loading && kardexModal.rows.length > 0 && (() => {
-                  // Opciones únicas de semanas para el dropdown
-                  const semanasUnicas = Array.from(new Set(
-                    (kardexModal.rows as any[]).map(r => `${r.anio}-${r.semana}`)
-                  )).sort((a, b) => {
+                {!kardexModal.loading && (kardexModal.rows.length > 0 || pagosB1Kardex.length > 0) && (() => {
+                  // Opciones únicas de semanas para el dropdown (movimientos + pagos B1)
+                  const semanasUnicas = Array.from(new Set([
+                    ...(kardexModal.rows as any[]).map(r => `${r.anio}-${r.semana}`),
+                    ...pagosB1Kardex.map(p => { const sem = semanaISO(p.fecha); return `${sem.anio}-${sem.semana}` }),
+                  ])).sort((a, b) => {
                     const [aA, aS] = a.split('-').map(Number)
                     const [bA, bS] = b.split('-').map(Number)
                     if (aA !== bA) return bA - aA
@@ -2621,7 +2683,7 @@ export function SaldosAbonosTab() {
                 {/* Tabla v2: saldo recalculado en runtime, fila top destacada */}
                 {kardexModal.loading ? (
                   <Spinner size="sm" message="Cargando..." />
-                ) : kardexModal.rows.length === 0 ? (
+                ) : kardexModal.rows.length === 0 && pagosB1Kardex.length === 0 ? (
                   <EmptyState size="sm" title="Sin registros" />
                 ) : (() => {
                   // Helpers
@@ -2722,6 +2784,29 @@ export function SaldosAbonosTab() {
                   const saldoNetoRango = totalAbonos - totalCargos
                   const saldoFinal = filasConSaldos.length > 0 ? filasConSaldos[0].saldo : (s.saldo_actual || 0)
 
+                  // Pagos B1 con los mismos filtros (semana, tipo y búsqueda). Son pagos: se ven
+                  // con "Abonos" o sin filtro de tipo. No entran en los totales ni en el saldo.
+                  const b1Filtrados = pagosB1Kardex.filter(p => {
+                    const sem = semanaISO(p.fecha)
+                    if (kardexSemanaFilter && `${sem.anio}-${sem.semana}` !== kardexSemanaFilter) return false
+                    if (kardexTipoFilter && kardexTipoFilter !== 'abono') return false
+                    if (kardexSearch.trim()) {
+                      const blob = `${norm(p.pagador || '')} ${norm(p.nota || '')} ${norm(String(p.monto))} ${norm(p.cargadoPor || '')} ${norm(tipoPagoSaldos(p))} b1`
+                      if (!blob.includes(norm(kardexSearch))) return false
+                    }
+                    return true
+                  })
+                  // Movimientos y pagos B1 juntos, por año, semana y fecha (más nuevo arriba)
+                  type FilaKardex = { b1: null; real: typeof filasConSaldos[number]; anio: number; semana: number; ts: string }
+                    | { b1: typeof b1Filtrados[number]; real: null; anio: number; semana: number; ts: string }
+                  const filasMezcladas: FilaKardex[] = [
+                    ...filasConSaldos.map(f => ({ b1: null, real: f, anio: Number(f.r.anio) || 0, semana: Number(f.r.semana) || 0, ts: String(f.r.created_at || '') })),
+                    ...b1Filtrados.map(p => {
+                      const sem = semanaISO(p.fecha)
+                      return { b1: p, real: null, anio: sem.anio, semana: sem.semana, ts: p.cargadoEn || `${p.fecha}T23:59:59` }
+                    }),
+                  ].sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana) || b.ts.localeCompare(a.ts)) as FilaKardex[]
+
                   return (
                     <>
                       <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)' }}>
@@ -2740,7 +2825,53 @@ export function SaldosAbonosTab() {
                             </tr>
                           </thead>
                           <tbody>
-                            {filasConSaldos.map(({ r, i, cls, monto, saldo }) => {
+                            {filasMezcladas.map(fila => {
+                              // Pago de Licencia B1: fila informativa, no se edita
+                              if (fila.b1) {
+                                const p = fila.b1
+                                const esManual = p.origen === 'manual'
+                                const detalleB1 = esManual
+                                  ? (p.nota || '-')
+                                  : [`Cresium ${p.empresa ? ETIQUETA_EMPRESA_CRESIUM[p.empresa] || p.empresa : ''}`.trim(), p.nota].filter(Boolean).join(' · ')
+                                return (
+                                  <tr key={`b1-${p.key}`} style={{
+                                    borderBottom: '1px solid var(--border-primary)',
+                                    // Colores de abono (pago a favor del conductor), como los pagos normales
+                                    background: 'rgba(240,253,244,0.4)', borderLeft: '3px solid transparent',
+                                  }} title="Pago de Licencia B1: informativo. Ya resta en la facturación de la semana (PRM02); no cambia el saldo. Se gestiona en Facturación > Licencia B1.">
+                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>{formatFecha(p.fecha)}</td>
+                                    <td style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                      {fila.anio} S{String(fila.semana).padStart(2, '0')}
+                                    </td>
+                                    <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', fontSize: '10px' }}>
+                                      <span style={{
+                                        display: 'inline-block', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '10px',
+                                        background: '#f0fdf4', color: '#16a34a',
+                                      }}>{esManual ? 'Pago Manual' : 'Transferencia Bancaria'}</span>
+                                    </td>
+                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      Pago B1{p.pagador ? ` · ${p.pagador}` : ''}
+                                      <span style={{
+                                        marginLeft: '6px', padding: '1px 5px', background: '#e5e7eb', color: 'var(--text-secondary)',
+                                        borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px',
+                                      }}>Informativo</span>
+                                    </td>
+                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={detalleB1}>
+                                      {detalleB1}
+                                    </td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#16a34a', whiteSpace: 'nowrap' }}>
+                                      +{formatCurrency(p.monto)}
+                                    </td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--text-tertiary)' }}>—</td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--text-tertiary)' }}>—</td>
+                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                                      {p.origen === 'auto' ? 'Automático' : p.cargadoPor || '-'}
+                                    </td>
+                                    {isAdmin() && <td />}
+                                  </tr>
+                                )
+                              }
+                              const { r, i, cls, monto, saldo } = fila.real
                               const tipo = r.tipo_movimiento || 'regularizado'
                               const labelBg = cls === 'cargo' ? '#fef2f2'
                                             : cls === 'abono' ? '#f0fdf4'
@@ -2918,7 +3049,8 @@ export function SaldosAbonosTab() {
                         fontSize: '10px', color: 'var(--text-tertiary)',
                       }}>
                         <span>
-                          Mostrando {filasConSaldos.length} de {kardexModal.rows.length} movimientos
+                          Mostrando {filasMezcladas.length} de {kardexModal.rows.length + pagosB1Kardex.length} movimientos
+                          {pagosB1Kardex.length > 0 && ' · los pagos B1 son informativos: no entran en los totales ni en el saldo'}
                           {(kardexSearch || kardexSemanaFilter || kardexTipoFilter) && (
                             <button
                               onClick={() => { setKardexSearch(''); setKardexSemanaFilter(''); setKardexTipoFilter('') }}

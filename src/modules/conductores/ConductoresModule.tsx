@@ -48,6 +48,9 @@ import { EmptyState } from '../../components/ui/EstadosVista'
 import { hoyART, sumarDiasISO } from '../../utils/fechaArgentina'
 import { formatPlata } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { AppBadges } from '../../components/ui/AppBadges'
+import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
+import { cargarAppsPagoSemana, etiquetasApps, type AppsPago } from '../../services/appsPagoService'
 import { TabsBar, type TabsBarItem } from "../../components/ui/TabsBar";
 import { formatFecha } from '../../utils/format'
 import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, licenciaSiNo } from '../leads/licenciaLead'
@@ -78,6 +81,11 @@ function formatFechaExport(valor?: string | null): string {
 
 // Mismas etiquetas que muestra el badge de la columna Turno: si hay asignación
 // activa manda el turno de la asignación; si no, la preferencia del conductor.
+/** Grupo de la categoría de licencia para filtrar y ordenar la columna Licencia. */
+function grupoLicencia(categoria?: string | null): string {
+  return categoria === 'B1' || categoria === 'D1' || categoria === 'Otros' ? categoria : 'Sin dato';
+}
+
 function formatTurnoExport(preferencia?: string | null, turnoAsignacion?: string | null): string {
   if (turnoAsignacion) {
     const t = turnoAsignacion.toLowerCase();
@@ -345,6 +353,19 @@ export function ConductoresModule() {
   const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
+  // App con la que trabaja cada conductor (Cabify / DiDi) en la semana actual. Misma regla
+  // que Facturación y el Panel (appsPagoService). Solo visual: si falla, queda vacío.
+  const [appsPorConductor, setAppsPorConductor] = useState<Map<string, AppsPago>>(new Map());
+  useEffect(() => {
+    let activo = true;
+    const hoy = hoyART();
+    const dia = new Date(`${hoy}T12:00:00Z`).getUTCDay();
+    const lunes = sumarDiasISO(hoy, -((dia + 6) % 7));
+    cargarAppsPagoSemana(lunes)
+      .then(r => { if (activo) setAppsPorConductor(r); })
+      .catch(err => console.error('Error cargando app de los conductores:', err));
+    return () => { activo = false; };
+  }, []);
   const [error, setError] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [syncMenuOpen, setSyncMenuOpen] = useState(false);
@@ -413,6 +434,8 @@ export function ConductoresModule() {
   const [showImpactoModal, setShowImpactoModal] = useState(false);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
+  /** Filtro de la columna Licencia: categoría actual B1 / D1 / Otros / Sin dato. */
+  const [licenciaCatFilter, setLicenciaCatFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
   const [companeroFilter, setCompaneroFilter] = useState<string[]>([]);
   const [vencimientoFilter, setVencimientoFilter] = useState<string[]>([]);
@@ -876,6 +899,13 @@ export function ConductoresModule() {
         onClear: () => setCategoriaFilter([])
       });
     }
+    if (licenciaCatFilter.length > 0) {
+      filters.push({
+        id: 'licencia_categoria',
+        label: `Licencia: ${licenciaCatFilter.join(', ')}`,
+        onClear: () => setLicenciaCatFilter([])
+      });
+    }
     if (asignacionFilter.length > 0) {
       filters.push({
         id: 'asignacion',
@@ -914,7 +944,7 @@ export function ConductoresModule() {
     }
 
     return filters;
-  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter, companeroFilter, vencimientoFilter, telefonoFilter, guiaFilter]);
+  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, licenciaCatFilter, asignacionFilter, companeroFilter, vencimientoFilter, telefonoFilter, guiaFilter]);
 
   const handleClearAllFilters = () => {
     setActiveStatCard(null);
@@ -927,6 +957,7 @@ export function ConductoresModule() {
     setEstadoFilter([]);
     setTurnoFilter([]);
     setCategoriaFilter([]);
+    setLicenciaCatFilter([]);
     setAsignacionFilter([]);
     setCompaneroFilter([]);
     setVencimientoFilter([]);
@@ -973,6 +1004,8 @@ export function ConductoresModule() {
             created_at,
             updated_at,
             url_documentacion,
+            categoria_licencia,
+            categoria_licencia_otra,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
@@ -2933,6 +2966,7 @@ export function ConductoresModule() {
       if (cbuSet.size > 0 && !cbuSet.has(c.numero_cuit || '')) return false
       if (estadoSet.size > 0 && !estadoSet.has(estadoCodigo)) return false
       if (turnoSet.size > 0 && !turnoSet.has((c as any).preferencia_turno || 'SIN_PREFERENCIA')) return false
+      if (licenciaCatFilter.length > 0 && !licenciaCatFilter.includes(grupoLicencia((c as any).categoria_licencia))) return false
       if (categoriaSet.size > 0) {
         const cats = c.licencias_categorias
         if (!Array.isArray(cats) || cats.length === 0) return false
@@ -3004,7 +3038,7 @@ export function ConductoresModule() {
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, guiaFilter, vencimientoFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, licenciaCatFilter, asignacionFilter, companeroFilter, telefonoFilter, guiaFilter, vencimientoFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -3313,6 +3347,38 @@ export function ConductoresModule() {
         enableSorting: true,
       },
       {
+        id: "app",
+        header: "App",
+        // Cabify / DiDi / ambos (semana actual, ver appsPagoService)
+        accessorFn: (row) => etiquetasApps(appsPorConductor.get(row.id)).join(' y ') || '',
+        cell: ({ row }) => <AppBadges apps={appsPorConductor.get(row.original.id)} size="xs" sinDato="-" />,
+        enableSorting: true,
+      },
+      {
+        // Categoría de licencia actual (B1 / D1 / Otros con su detalle)
+        id: "licencia_categoria",
+        accessorFn: (row) => grupoLicencia((row as any).categoria_licencia),
+        header: () => (
+          <ExcelColumnFilter
+            label="Licencia"
+            options={['B1', 'D1', 'Otros', 'Sin dato']}
+            selectedValues={licenciaCatFilter}
+            onSelectionChange={setLicenciaCatFilter}
+            filterId="licencia_categoria"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
+        cell: ({ row }) => (
+          <LicenciaBadge
+            categoria={(row.original as any).categoria_licencia}
+            otra={(row.original as any).categoria_licencia_otra}
+            sinDato="-"
+          />
+        ),
+        enableSorting: true,
+      },
+      {
         accessorKey: "licencia_vencimiento",
         header: () => (
           <ExcelColumnFilter
@@ -3599,7 +3665,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombresUnicos, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, uniqueTelefonos, guiaFilter, uniqueGuias, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
+    [canUpdate, canDelete, nombreFilter, nombresUnicos, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, uniqueTelefonos, guiaFilter, uniqueGuias, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard, appsPorConductor, licenciaCatFilter],
   );
 
   return (
@@ -4029,6 +4095,7 @@ export function ConductoresModule() {
           getEstadoBadgeClass={getEstadoBadgeClass}
           getEstadoLabel={getEstadoLabel}
           onConductorUpdated={() => loadConductores(true)}
+          apps={appsPorConductor.get(selectedConductor.id)}
         />
       )}
       {showBajaConfirmModal && selectedConductor && (
@@ -5401,6 +5468,7 @@ function ModalDetalles({
   selectedConductor,
   setShowDetailsModal,
   onConductorUpdated,
+  apps,
 }: any) {
   const { nombrePorId: embajadorPorId } = useConductoresEmbajador();
   const [vehiculosAsignados, setVehiculosAsignados] = useState<any[]>([]);
@@ -5726,6 +5794,13 @@ function ModalDetalles({
                 if (t === 'SIN_PREFERENCIA' || !t) return 'Ambos';
                 return t;
               })()}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">APP</label>
+            <div className="detail-value">
+              {/* Cabify / DiDi / ambos en la semana actual (appsPagoService) */}
+              <AppBadges apps={apps} sinDato="Sin app esta semana" />
             </div>
           </div>
         </div>

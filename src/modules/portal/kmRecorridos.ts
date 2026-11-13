@@ -162,11 +162,17 @@ export interface KmConductorResult {
 // patente normalizada, igual que el modulo interno.
 const LOTE_PATENTES = 20
 
+// porVentana (calculo masivo del panel): se pide la ventana de fechas COMPLETA, sin
+// los patrones ilike, con las paginas en paralelo. Con todas las patentes de la
+// flota el filtro por patente casi no recorta filas y los lotes encadenados
+// tardaban ~17 s. El resultado es el mismo: el filtro que manda es el client-side
+// por patente normalizada, y las filas se procesan en el mismo orden (fecha, id).
 async function fetchTripsDePatentes(
   supabase: typeof SupabaseClientType,
   patentes: Set<string>,
   desdeISO: string,
   hastaISO?: string,
+  porVentana = false,
 ): Promise<TripEnriched[]> {
   const lista = [...patentes].filter(Boolean)
   if (lista.length === 0) return []
@@ -176,6 +182,22 @@ async function fetchTripsDePatentes(
   // Dedupe GLOBAL por (tabla, id): una patente puede matchear el patrón ilike
   // de otra en un lote distinto, y sin esto el mismo viaje se contaria dos veces.
   const vistos = new Set<string>()
+
+  const procesar = (tabla: string, origen: GpsOrigen, byId: Map<number, TripRow>): void => {
+    for (const r of byId.values()) {
+      const clave = `${tabla}:${r.id}`
+      if (vistos.has(clave)) continue
+      const pn = normalizarPatente(r.patente)
+      if (!patentes.has(pn)) continue // filtro autoritativo client-side
+      vistos.add(clave)
+      const km = parseFloat(String(r.kilometraje || '0').replace(/[^\d.]/g, '')) || 0
+      const inicioMs = new Date(`${r.fecha_hora_inicio_gmt3.replace(' ', 'T')}-03:00`).getTime()
+      const finMs = r.fecha_hora_fin_gmt3
+        ? new Date(`${r.fecha_hora_fin_gmt3.replace(' ', 'T')}-03:00`).getTime()
+        : inicioMs
+      trips.push({ ...r, patenteNorm: pn, condEf: null, inicioMs, finMs, kmNum: Math.round(km * 100) / 100, gpsOrigen: origen })
+    }
+  }
 
   const fetchTabla = async (
     tabla: 'uss_historico' | 'geotab_historico',
@@ -197,27 +219,57 @@ async function fetchTripsDePatentes(
       for (const r of batch) byId.set(r.id, { ...r, conductor_raw: r.conductor_raw ?? null })
       if (batch.length < PAGE) break
     }
-    for (const r of byId.values()) {
-      const clave = `${tabla}:${r.id}`
-      if (vistos.has(clave)) continue
-      const pn = normalizarPatente(r.patente)
-      if (!patentes.has(pn)) continue // filtro autoritativo client-side
-      vistos.add(clave)
-      const km = parseFloat(String(r.kilometraje || '0').replace(/[^\d.]/g, '')) || 0
-      const inicioMs = new Date(`${r.fecha_hora_inicio_gmt3.replace(' ', 'T')}-03:00`).getTime()
-      const finMs = r.fecha_hora_fin_gmt3
-        ? new Date(`${r.fecha_hora_fin_gmt3.replace(' ', 'T')}-03:00`).getTime()
-        : inicioMs
-      trips.push({ ...r, patenteNorm: pn, condEf: null, inicioMs, finMs, kmNum: Math.round(km * 100) / 100, gpsOrigen: origen })
-    }
+    procesar(tabla, origen, byId)
   }
 
-  for (let i = 0; i < lista.length; i += LOTE_PATENTES) {
-    const patrones = lista.slice(i, i + LOTE_PATENTES).map(patronPatente)
+  // Primera pagina con el total; el resto de las paginas, todas a la vez.
+  const fetchVentana = async (
+    tabla: 'uss_historico' | 'geotab_historico',
+    cols: string,
+    origen: GpsOrigen,
+  ): Promise<void> => {
+    const pagina = (offset: number, conTotal: boolean) => {
+      let q = supabase.from(tabla).select(cols, conTotal ? { count: 'exact' } : undefined).gte('fecha_hora_inicio_gmt3', desdeISO)
+      if (hastaISO) q = q.lte('fecha_hora_inicio_gmt3', hastaISO)
+      return q
+        .order('fecha_hora_inicio_gmt3', { ascending: true })
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE - 1)
+    }
+    const primera = await pagina(0, true)
+    if (primera.error) throw primera.error
+    const paginas = [(primera.data || []) as unknown as TripRow[]]
+    const total = primera.count ?? 0
+    const offsets: number[] = []
+    for (let offset = PAGE; offset < total; offset += PAGE) offsets.push(offset)
+    const resto = await Promise.all(offsets.map(async offset => {
+      const { data, error } = await pagina(offset, false)
+      if (error) throw error
+      return (data || []) as unknown as TripRow[]
+    }))
+    paginas.push(...resto)
+    const byId = new Map<number, TripRow>()
+    for (const batch of paginas) {
+      for (const r of batch) byId.set(r.id, { ...r, conductor_raw: r.conductor_raw ?? null })
+    }
+    procesar(tabla, origen, byId)
+  }
+
+  const COLS_USS = 'id, patente, conductor, conductor_raw, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje'
+  const COLS_GEOTAB = 'id, patente, conductor, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje'
+  if (porVentana) {
     await Promise.all([
-      fetchTabla('uss_historico', 'id, patente, conductor, conductor_raw, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje', patrones, 'USS'),
-      fetchTabla('geotab_historico', 'id, patente, conductor, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje', patrones, 'GEOTAB'),
+      fetchVentana('uss_historico', COLS_USS, 'USS'),
+      fetchVentana('geotab_historico', COLS_GEOTAB, 'GEOTAB'),
     ])
+  } else {
+    for (let i = 0; i < lista.length; i += LOTE_PATENTES) {
+      const patrones = lista.slice(i, i + LOTE_PATENTES).map(patronPatente)
+      await Promise.all([
+        fetchTabla('uss_historico', COLS_USS, patrones, 'USS'),
+        fetchTabla('geotab_historico', COLS_GEOTAB, patrones, 'GEOTAB'),
+      ])
+    }
   }
 
   // Orden (origen, patente, inicio): requisito de la resolucion de vecinos.
@@ -498,13 +550,16 @@ export async function calcularKmSemanasConductor(
 // margen cubre ese caso sin traer meses de viajes en cada carga del panel.
 const MARGEN_DIAS = 3
 
+type ConductoresKm = readonly { id: string; nombres: string | null; apellidos: string | null }[]
+
 export async function calcularKmSemanaConductores(
   supabase: typeof SupabaseClientType,
-  conductores: readonly { id: string; nombres: string | null; apellidos: string | null }[],
+  // Puede llegar como promesa: asignaciones y viajes se piden mientras la lista de
+  // conductores todavia se esta cargando (solo hace falta para el paso 3).
+  conductoresEntrada: ConductoresKm | Promise<ConductoresKm>,
   semana: { inicio: string; fin: string },   // lunes y domingo 'yyyy-MM-dd'
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>()
-  if (conductores.length === 0) return out
 
   const lunesMs = new Date(`${semana.inicio}T00:00:00-03:00`).getTime()
   const domingoMs = new Date(`${semana.fin}T23:59:59-03:00`).getTime()
@@ -551,8 +606,10 @@ export async function calcularKmSemanaConductores(
   // 2) Trips de TODAS esas patentes en una sola pasada, y atribucion compartida.
   const desdeISO = new Date(lunesMs - MARGEN_DIAS * 86400000).toISOString().slice(0, 10) + 'T00:00:00'
   const hastaISO = new Date(domingoMs + MARGEN_DIAS * 86400000).toISOString().slice(0, 10) + 'T23:59:59'
-  const trips = await fetchTripsDePatentes(supabase, todasLasPatentes, desdeISO, hastaISO)
+  const trips = await fetchTripsDePatentes(supabase, todasLasPatentes, desdeISO, hastaISO, true)
   asignarConductorEfectivo(trips)
+  const conductores = await conductoresEntrada
+  if (conductores.length === 0) return out
 
   // 3) Acumulado por conductor, con el mismo redondeo que el calculo por semana.
   const porPatente = new Map<string, TripEnriched[]>()

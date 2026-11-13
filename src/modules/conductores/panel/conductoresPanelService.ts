@@ -192,6 +192,34 @@ export interface PanelOpciones {
   // (appsPagoService). `inicio` = lunes de la semana en curso ("YYYY-MM-DD"): cuenta
   // la carga de Pagos Cabify / DiDi de la última semana cerrada + pagos manuales de esta.
   appsPago?: { inicio: string }
+  // true = no calcula KM GEO (kmGeo queda undefined): el llamador lo pide aparte con
+  // cargarKmGeoPanel para mostrar la tabla sin esperar los viajes de GPS.
+  sinKmGeo?: boolean
+}
+
+/**
+ * KM GEO de la semana por conductor, aparte del panel (misma cuenta que hace
+ * cargarPanelConductores). Trae su propia lista de conductores (mismo filtro y
+ * sede) para arrancar en paralelo con la carga principal.
+ */
+export async function cargarKmGeoPanel(
+  sedeId: string | null | undefined,
+  semana: { startDate: string; endDate: string },
+): Promise<Map<string, number>> {
+  const conductores = fetchAll<{ id: string; nombres: string | null; apellidos: string | null }>((from, to) => {
+    let q = supabase
+      .from('conductores')
+      .select('id, nombres, apellidos').not(...FILTRO_SIN_INTERNOS)
+      .range(from, to)
+    if (sedeId) q = q.eq('sede_id', sedeId)
+    return q
+  })
+  conductores.catch(() => {}) // si el calculo corta antes de usarla, que no quede sin manejar
+  return calcularKmSemanaConductores(
+    supabase,
+    conductores,
+    { inicio: semana.startDate.slice(0, 10), fin: semana.endDate.slice(0, 10) },
+  )
 }
 
 /**
@@ -441,7 +469,7 @@ export async function cargarPanelConductores(
   // pidio Cabify, que es lo que define la semana. Si falla, la columna queda
   // vacia y el panel sigue cargando.
   let kmGeoPorConductor = new Map<string, number>()
-  if (opciones?.cabify) {
+  if (opciones?.cabify && !opciones.sinKmGeo) {
     try {
       kmGeoPorConductor = await calcularKmSemanaConductores(
         supabase,
@@ -551,7 +579,7 @@ export async function cargarPanelConductores(
       // undefined si no se pidio Cabify; null si se pidio y no hubo cruce.
       cabify: cabifyDrivers ? (cabifyPorConductor.get(c.id) ?? null) : undefined,
       apps: appsPago ? etiquetasApps(appsPago.get(c.id)) : undefined,
-      kmGeo: opciones?.cabify ? (kmGeoPorConductor.get(c.id) ?? null) : undefined,
+      kmGeo: opciones?.cabify && !opciones.sinKmGeo ? (kmGeoPorConductor.get(c.id) ?? null) : undefined,
     }
   })
 

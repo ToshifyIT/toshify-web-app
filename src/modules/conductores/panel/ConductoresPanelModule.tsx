@@ -14,7 +14,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
 import { cabifyService } from '../../../services/cabifyService'
-import { cargarPanelConductores, type ConductorPanelRow } from './conductoresPanelService'
+import { cargarPanelConductores, cargarKmGeoPanel, type ConductorPanelRow } from './conductoresPanelService'
 import { ConductorDetalleModal } from './ConductorDetalleModal'
 import { calificacionDesdeGuardada, calificarConductor, referenciaIngresos, type Calificacion, type ExtrasCalificacion } from './calificacionConductor'
 import { CalificacionCelda } from './CalificacionEstrellas'
@@ -104,7 +104,15 @@ function diaCorto(iso: string): string {
 export function ConductoresPanelModule() {
   const { sedeActualId } = useSede()
 
-  const [rows, setRows] = useState<ConductorPanelRow[]>([])
+  // La tabla se muestra con los datos principales; KM GEO (viajes de GPS, lo más
+  // lento) llega después y se completa en las mismas filas.
+  const [rowsBase, setRowsBase] = useState<ConductorPanelRow[]>([])
+  const [kmGeo, setKmGeo] = useState<Map<string, number> | null>(null)
+  const [kmGeoCargando, setKmGeoCargando] = useState(true)
+  const rows = useMemo(
+    () => kmGeo ? rowsBase.map(r => ({ ...r, kmGeo: kmGeo.get(r.id) ?? null })) : rowsBase,
+    [rowsBase, kmGeo],
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   // Por defecto: solo conductores con auto asignado ahora mismo.
@@ -115,19 +123,19 @@ export function ConductoresPanelModule() {
   // Excesos de km de las últimas 4 semanas (Facturación), para el factor "Límite de km"
   const [excesosKm, setExcesosKm] = useState<Awaited<ReturnType<typeof cargarExcesosRecientes>>>(null)
   useEffect(() => {
-    if (!rows.length) return
+    if (!rowsBase.length) return
     let activo = true
-    cargarExcesosRecientes(rows.map(r => r.id)).then(e => { if (activo) setExcesosKm(e) })
+    cargarExcesosRecientes(rowsBase.map(r => r.id)).then(e => { if (activo) setExcesosKm(e) })
     return () => { activo = false }
-  }, [rows])
+  }, [rowsBase])
   // Semana en curso (avance parcial): se ve dentro del detalle, pestaña Calificación
   const [extrasCal, setExtrasCal] = useState<ExtrasCalificacion | null>(null)
   useEffect(() => {
-    if (!rows.length) return
+    if (!rowsBase.length) return
     let activo = true
-    cargarExtrasCalificacion(rows.map(r => r.id)).then(e => { if (activo) setExtrasCal(e) })
+    cargarExtrasCalificacion(rowsBase.map(r => r.id)).then(e => { if (activo) setExtrasCal(e) })
     return () => { activo = false }
-  }, [rows])
+  }, [rowsBase])
   const calificacionesEnCurso = useMemo(() => {
     const ref = referenciaIngresos(rows)
     const m = new Map<string, Calificacion>()
@@ -157,10 +165,10 @@ export function ConductoresPanelModule() {
   // Historial: la primera vez que se abre el panel desde el lunes se calcula y guarda
   // la calificación de la semana que terminó (en segundo plano, sin trabar la pantalla).
   useEffect(() => {
-    if (loading || !rows.length) return
-    void guardarSemanaCerradaSiFalta(sedeActualId ?? null, rows.map(r => r.id))
+    if (loading || !rowsBase.length) return
+    void guardarSemanaCerradaSiFalta(sedeActualId ?? null, rowsBase.map(r => r.id))
       .then(guardo => { if (guardo) setRecargarCerradas(k => k + 1) })
-  }, [loading, rows, sedeActualId])
+  }, [loading, rowsBase, sedeActualId])
   // Filas realmente visibles en la tabla: el DataTable las reporta ya pasadas por
   // TODOS sus filtros internos (columna, rangos numéricos, búsqueda global).
   // Es null hasta el primer aviso de la tabla; ahí se cae a filteredRows.
@@ -184,13 +192,21 @@ export function ConductoresPanelModule() {
     let activo = true
     setLoading(true)
     setError('')
+    setKmGeo(null)
+    setKmGeoCargando(true)
     cargarPanelConductores(sedeActualId, {
       cabify: { startDate: semanaCabify.startDate, endDate: semanaCabify.endDate },
       appsPago: { inicio: semanaCabify.startDate.slice(0, 10) },
+      sinKmGeo: true,
     })
-      .then(data => { if (activo) setRows(data) })
+      .then(data => { if (activo) setRowsBase(data) })
       .catch(e => { if (activo) setError(e?.message || 'Error al cargar el panel') })
       .finally(() => { if (activo) setLoading(false) })
+    // En paralelo: si falla, la columna queda en "—" como antes
+    cargarKmGeoPanel(sedeActualId, semanaCabify)
+      .catch(() => new Map<string, number>())
+      .then(m => { if (activo) setKmGeo(m) })
+      .finally(() => { if (activo) setKmGeoCargando(false) })
     return () => { activo = false }
   }, [sedeActualId, reloadKey, semanaCabify])
 
@@ -666,6 +682,9 @@ export function ConductoresPanelModule() {
       sortingFn: (a, b) => (a.original.kmGeo ?? -1) - (b.original.kmGeo ?? -1),
       cell: ({ row }) => {
         const v = row.original.kmGeo
+        if (v === undefined && kmGeoCargando) {
+          return <span className="cpanel-num cpanel-nulo" title="Calculando km de GPS...">…</span>
+        }
         if (v === null || v === undefined) {
           return <span className="cpanel-num cpanel-nulo" title="Sin viajes de GPS en la semana">—</span>
         }
@@ -713,7 +732,7 @@ export function ConductoresPanelModule() {
         />
       ),
     },
-  ], [rangoCabifyLabel, calificaciones])
+  ], [rangoCabifyLabel, calificaciones, kmGeoCargando])
 
   return (
     <div className="cond-module">
@@ -782,9 +801,11 @@ export function ConductoresPanelModule() {
             <button
               className="btn-secondary"
               onClick={handleExportar}
-              disabled={loading || filasAExportar.length === 0}
+              disabled={loading || kmGeoCargando || filasAExportar.length === 0}
               title={
-                filasAExportar.length === 0
+                kmGeoCargando
+                  ? 'Esperando los km de GPS para exportar completo'
+                  : filasAExportar.length === 0
                   ? 'No hay filas para exportar'
                   : `Exporta las ${filasAExportar.length} filas que pasan los filtros actuales`
               }

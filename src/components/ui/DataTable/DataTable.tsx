@@ -577,6 +577,11 @@ function FilterHeader({
   );
 }
 
+/** Texto para comparar en la búsqueda: minúsculas y sin tildes (á → a, ñ → n, ü → u). */
+function textoBusqueda(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
 export interface DataTableProps<T> {
   /** Array de datos a mostrar en la tabla */
   data: T[];
@@ -1422,7 +1427,7 @@ export function DataTable<T>({
     // búsqueda sirva tanto a la tabla como a onBaseDataChange.
     const index = new WeakMap<object, string>()
     for (const row of baseFilteredData) {
-      index.set(row as object, collectStrings(row).toLowerCase())
+      index.set(row as object, textoBusqueda(collectStrings(row)))
     }
     return index
   }, [baseFilteredData])
@@ -1431,7 +1436,8 @@ export function DataTable<T>({
   const coincideBusqueda = useCallback((original: T, filterValue: unknown) => {
     if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
 
-    const searchLower = filterValue.toLowerCase().trim()
+    // Sin tildes en los dos lados: "jose gonzalez" encuentra a "JOSÉ GONZÁLEZ"
+    const searchLower = textoBusqueda(filterValue).trim()
     const allText = searchIndex.get(original as object) || ''
 
     if (allText.includes(searchLower)) return true

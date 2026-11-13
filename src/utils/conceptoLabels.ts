@@ -32,6 +32,23 @@ export const CONCEPTO_LABELS: Record<string, string> = {
   P016: 'Alquiler a Cargo Sin GNC',
 }
 
+/**
+ * Quita la cantidad de días de las líneas de promoción: "… · 10% alquiler (1 día)" →
+ * "… · 10% alquiler" (también "10% ToshiPass (2 días)"). Solo ese sufijo generado por las
+ * promociones; el resto del texto queda igual. Sirve también para facturas ya calculadas.
+ */
+export function quitarDiasPromocion(texto: string): string {
+  return texto.replace(/(·\s*10%\s+(?:alquiler|ToshiPass))\s*\(\d+\s+d[ií]as?\)\s*$/i, '$1')
+}
+
+/**
+ * Pagos B1 guardados con un texto anterior ("B1-Pago semanal - Pago Manual",
+ * "B1-Pago Manual", etc.): se muestran con el actual, "B1 - Pago Transferencia Bancaria".
+ */
+export function normalizarTextoPagoB1(texto: string): string {
+  return /^B1\s*-\s*Pago\b/i.test(texto.trim()) ? 'B1 - Pago Transferencia Bancaria' : texto
+}
+
 /** Siempre mostrar el label del concepto para códigos conocidos.
  *  Si la descripción aporta info adicional (cuota, plan de pagos), se agrega. */
 export function getConceptoLabel(item: ConceptoFacturable): string {
@@ -39,7 +56,8 @@ export function getConceptoLabel(item: ConceptoFacturable): string {
   const baseLabel = CONCEPTO_LABELS[item.concepto_codigo]
 
   // Si no tenemos label para este código, usar la descripción tal cual
-  if (!baseLabel) return desc || item.concepto_codigo
+  // (las promociones PRM... caen acá: sin la cantidad de días)
+  if (!baseLabel) return desc ? normalizarTextoPagoB1(quitarDiasPromocion(desc)) : item.concepto_codigo
 
   // P003 = Cuota de Garantía: mostrar solo el label base
   if (item.concepto_codigo === 'P003') {
