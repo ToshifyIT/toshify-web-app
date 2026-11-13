@@ -338,7 +338,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           <>
             <Tarjeta titulo="Identidad">
               <Item label="DNI" valor={lead.dni} />
-              <Item label="CUIT" valor={lead.cuit} />
+              <Item label={estadoMonotributo(lead.monotributo) === 'no' ? 'CUIL' : 'CUIT'} valor={lead.cuit} />
               <Item label="Fecha de nacimiento" valor={formatDateOnly(lead.fecha_de_nacimiento)} />
               <Item label="Edad" valor={calcularEdad(lead.fecha_de_nacimiento) ?? lead.edad} />
               <Item label="Nacionalidad" valor={lead.nacionalidad} />

@@ -24,6 +24,8 @@ import { hoyART } from '../../../utils/fechaArgentina'
 import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { LicenciaBadge } from '../../../components/ui/LicenciaBadge'
+import { etiquetaLicencia } from '../../../utils/etiquetaLicencia'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 
 // Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
@@ -233,6 +235,7 @@ export function ConductoresPanelModule() {
       'Guía': c.guia || '',
       'App (pagó)': c.apps?.join(' + ') || '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
+      'Licencia': etiquetaLicencia(c.categoriaLicencia, c.categoriaLicenciaOtra) || '',
       'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
       'Grupo de Flota': grupoFlotaLabel(c.grupoFlotaAsignado),
       'Turno': turnoLabel(c.turno),
@@ -416,6 +419,15 @@ export function ConductoresPanelModule() {
         <span className={`cpanel-badge ${row.original.activo ? 'ok' : 'off'}`}>
           {row.original.activo ? 'Activo' : (row.original.estadoCodigo || 'Inactivo')}
         </span>
+      ),
+    },
+    {
+      // Categoría de licencia actual: B1, D1 o el detalle de Otros (ej. D2)
+      id: 'licencia',
+      accessorFn: (r) => etiquetaLicencia(r.categoriaLicencia, r.categoriaLicenciaOtra) || 'Sin cargar',
+      header: 'Licencia',
+      cell: ({ row }) => (
+        <LicenciaBadge categoria={row.original.categoriaLicencia} otra={row.original.categoriaLicenciaOtra} sinDato="—" />
       ),
     },
     // Columnas de conteo con filtro de RANGO (Desde/Hasta). Para que el DataTable las

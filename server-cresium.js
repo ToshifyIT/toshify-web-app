@@ -6,7 +6,7 @@
  *    cresium_movimientos (sql/cresium_integracion.sql). La pantalla lee SIEMPRE
  *    de la base; a Cresium solo se va para traer lo nuevo: desde el último
  *    movimiento guardado (con un margen para refrescar estados), con el botón
- *    "Traer nuevos" o solo cada hora si CRESIUM_SYNC_AUTO=1.
+ *    "Traer nuevos" o solo cada 30 minutos (las 24 h) cuando corre en server.js.
  *  - Propone cómo cargar cada uno en Alegra, con el mismo criterio que ya se usa
  *    a mano: contacto por CUIT, cobros de Cabify a "Ventas", pagos que coinciden
  *    con una factura de proveedor abierta contra esa factura, el resto a la cuenta
@@ -22,7 +22,9 @@
  *  - ALEGRA_GRUPOCG_EMAIL,  ALEGRA_GRUPOCG_TOKEN
  *  - CRESIUM_BASE_URL (opcional, default https://api.cresium.app)
  *  - CRESIUM_DESDE    (opcional, default 2026-05-01): desde qué día se importa la primera vez
- *  - CRESIUM_SYNC_AUTO (opcional) "1" trae lo nuevo de cada empresa sola, cada hora de 9 a 18 h ART
+ *  - CRESIUM_SYNC_AUTO (opcional) "0" apaga la actualización automática. Por defecto server.js
+ *    trae lo nuevo de cada empresa cada 30 minutos, las 24 h (solo movimientos: no toca Alegra).
+ *    En desarrollo (npm run dev / vite) no corre.
  *  - VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (ya existen)
  *
  * Permisos: ver = can_view del submenú; cargar en Alegra = can_edit del submenú
@@ -1563,38 +1565,46 @@ cresiumRouter.post('/:empresa/conciliar', async (req, res) => {
 })
 
 /* -------------------------------------------------------------------------- */
-/* Actualización automática (CRESIUM_SYNC_AUTO=1)                             */
+/* Actualización automática de movimientos (cada 30 minutos, las 24 h)        */
 /* -------------------------------------------------------------------------- */
+// Solo trae los movimientos de Cresium a cresium_movimientos (lo mismo que "Traer nuevos").
+// No consulta ni carga nada en Alegra. La arranca server.js (producción); el dev server de
+// vite no, para no duplicar las consultas. CRESIUM_SYNC_AUTO=0 la apaga.
 
-const SYNC_AUTO_HORA_DESDE = 9
-const SYNC_AUTO_HORA_HASTA = 18
+const SYNC_AUTO_CADA_MIN = 30
 
-/** Cada hora en punto de 9 a 18 h ART trae lo nuevo de cada empresa con claves */
+/** Cada 30 minutos (en punto y y media, hora Argentina) trae lo nuevo de cada empresa con claves */
 export function iniciarSyncAutomaticoCresium() {
+  if (process.env.CRESIUM_SYNC_AUTO === '0') {
+    console.log('[cresium] Actualización automática apagada (CRESIUM_SYNC_AUTO=0)')
+    return
+  }
   if (globalThis.__cresiumSyncAuto) return
   globalThis.__cresiumSyncAuto = true
-  let ultimaHoraCorrida = null
+  let ultimoTurno = null
   const revisar = async () => {
     const art = new Date(Date.now() - 3 * 60 * 60 * 1000)
-    const hora = art.getUTCHours()
-    if (hora < SYNC_AUTO_HORA_DESDE || hora > SYNC_AUTO_HORA_HASTA || art.getUTCMinutes() > 5) return
-    const clave = `${art.toISOString().slice(0, 10)} ${hora}`
-    if (ultimaHoraCorrida === clave) return
-    ultimaHoraCorrida = clave
+    const minuto = art.getUTCMinutes()
+    // Ventana de 5 minutos al inicio de cada turno (por si el reloj del intervalo se corre)
+    if (minuto % SYNC_AUTO_CADA_MIN > 4) return
+    const turnoMin = String(minuto - (minuto % SYNC_AUTO_CADA_MIN)).padStart(2, '0')
+    const clave = `${art.toISOString().slice(0, 10)} ${String(art.getUTCHours()).padStart(2, '0')}:${turnoMin}`
+    if (ultimoTurno === clave) return
+    ultimoTurno = clave
     const cfg = config()
     if (!cfg.url || !cfg.serviceKey) return
     for (const empresa of Object.keys(EMPRESAS)) {
       if (!credenciales(empresa).cresiumOk) continue
       try {
         const r = await sincronizarEmpresa(cfg, empresa, { forzar: true })
-        console.log(`[cresium] Automático ${clave}:00 ART ${empresa}: ${r.nuevos ?? 0} nuevos de ${r.traidos ?? 0}`)
+        console.log(`[cresium] Automático ${clave} ART ${empresa}: ${r.nuevos ?? 0} nuevos de ${r.traidos ?? 0}`)
       } catch (err) {
-        console.error(`[cresium] Automático ${clave}:00 ART ${empresa} falló:`, err.message)
+        console.error(`[cresium] Automático ${clave} ART ${empresa} falló:`, err.message)
       }
     }
   }
   setInterval(() => { void revisar() }, 60 * 1000).unref?.()
-  console.log(`[cresium] Actualización automática activa: cada hora de ${SYNC_AUTO_HORA_DESDE} a ${SYNC_AUTO_HORA_HASTA} h (Argentina)`)
+  const conClaves = Object.keys(EMPRESAS).filter((e) => credenciales(e).cresiumOk).map((e) => EMPRESAS[e].label)
+  console.log(`[cresium] Actualización automática activa: cada ${SYNC_AUTO_CADA_MIN} minutos, las 24 h ` +
+    `(${conClaves.length ? conClaves.join(' y ') : 'sin claves de Cresium cargadas'})`)
 }
-
-if (process.env.CRESIUM_SYNC_AUTO === '1') iniciarSyncAutomaticoCresium()

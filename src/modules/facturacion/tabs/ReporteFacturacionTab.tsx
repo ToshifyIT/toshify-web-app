@@ -77,6 +77,7 @@ import { DiscrepancyReportModal } from '../../../components/ui/DiscrepancyReport
 import { DiscrepancyBadge } from '../../../components/ui/DiscrepancyBadge'
 import logoToshifyUrl from '../../../assets/logo-toshify.png'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { LicenciaBadge } from '../../../components/ui/LicenciaBadge'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 
@@ -967,6 +968,33 @@ export function ReporteFacturacionTab() {
       })
     return () => { cancelado = true }
   }, [facturaciones, semanaActual, modoVistaPrevia])
+
+  // Categoría de licencia actual de cada conductor (chip B1 / D1 / Otros bajo el nombre).
+  // Solo visual: no cambia ningún cálculo.
+  const [licenciaPorConductor, setLicenciaPorConductor] = useState<Map<string, { categoria: string | null; otra: string | null }>>(new Map())
+  useEffect(() => {
+    let cancelado = false
+    const ids = [...new Set((modoVistaPrevia ? vistaPreviaData : facturaciones).map(f => f.conductor_id).filter(Boolean))]
+    if (ids.length === 0) {
+      setLicenciaPorConductor(new Map())
+      return
+    }
+    ;(async () => {
+      const mapa = new Map<string, { categoria: string | null; otra: string | null }>()
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data, error } = await (supabase.from('conductores') as any)
+          .select('id, categoria_licencia, categoria_licencia_otra')
+          .in('id', ids.slice(i, i + 200))
+        if (error) throw error
+        for (const c of (data || []) as any[]) mapa.set(c.id, { categoria: c.categoria_licencia, otra: c.categoria_licencia_otra })
+      }
+      if (!cancelado) setLicenciaPorConductor(mapa)
+    })().catch(error => {
+      console.error('Error cargando licencias de conductores:', error)
+      if (!cancelado) setLicenciaPorConductor(new Map())
+    })
+    return () => { cancelado = true }
+  }, [facturaciones, vistaPreviaData, modoVistaPrevia])
 
   // Cargar conceptos de nómina y parámetros de descuento al montar
   useEffect(() => {
@@ -11864,6 +11892,11 @@ export function ReporteFacturacionTab() {
             {appsPorConductor.get(row.original.conductor_id)?.didi && (
               <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(249, 115, 22, 0.14)', color: '#c2410c' }}>DiDi</span>
             )}
+            {/* Licencia actual del conductor (B1 / D1 / Otros) */}
+            {(() => {
+              const lic = licenciaPorConductor.get(row.original.conductor_id)
+              return lic ? <LicenciaBadge categoria={lic.categoria} otra={lic.otra} size="xs" /> : null
+            })()}
             {/* Promociones aplicadas en la semana (Parámetros > Promociones). Salen de las
                 líneas de su factura, así que coinciden con el detalle. */}
             {(row.original._codigosPromocion || []).map(codigo => (
@@ -12371,7 +12404,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, conductoresUnicos, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados, appsPorConductor])
+  ], [excesos, modoVistaPrevia, conductorFilter, conductoresUnicos, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados, appsPorConductor, licenciaPorConductor])
 
   // Info de la semana
   const infoSemana = useMemo(() => {

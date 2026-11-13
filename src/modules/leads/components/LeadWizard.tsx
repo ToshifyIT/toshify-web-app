@@ -405,7 +405,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>CUIT {!sinMonotributo && <span className="required">*</span>}</label>
+                {/* Sin monotributo el número es CUIL; con monotributo (o sin elegir) es CUIT */}
+                <label>{sinMonotributo ? 'CUIL' : 'CUIT'} {!sinMonotributo && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className={errors.cuit ? 'field-error' : ''}
@@ -707,12 +708,6 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   {formData.categoria_licencia === 'Otros' && campoFechaLicencia('fecha_categoria_licencia', 'Fecha de obtención de la categoría', true)}
                   {!formData.categoria_licencia && <div className="lead-wizard-field" />}
                 </div>
-                {formData.categoria_licencia === 'D1' && (
-                  <div className="lead-wizard-form-group">
-                    {campoFechaLicencia('fecha_licencia_b1', 'Fecha de obtención B1 (opcional)', false)}
-                    <div className="lead-wizard-field" />
-                  </div>
-                )}
                 {formData.categoria_licencia === 'Otros' && (
                   <div className="lead-wizard-form-group full-width">
                     <div className="lead-wizard-field">
