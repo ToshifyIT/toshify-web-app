@@ -626,6 +626,12 @@ export interface DataTableProps<T> {
   stickyLeftColumns?: number;
   /** Filtros externos (ej: desde stat cards) para mostrar en la barra de filtros activos */
   externalFilters?: Array<{ id: string; label: string; onClear: () => void }>;
+  /**
+   * Sin filas, muestra igual la tabla (encabezados con sus filtros y "No se encontraron
+   * resultados") en vez del estado vacío. Para módulos que filtran los datos por fuera:
+   * si el filtro deja la lista vacía, el usuario tiene que poder cambiarlo. @default false
+   */
+  mostrarTablaSinDatos?: boolean;
   /** Callback para limpiar todos los filtros (internos y externos) */
   onClearAllFilters?: () => void;
   /** Función de filtrado global personalizada */
@@ -703,6 +709,7 @@ export function DataTable<T>({
   resetFiltersKey,
   disableAutoFilters = false,
   externalFilters = [],
+  mostrarTablaSinDatos = false,
   onClearAllFilters,
   globalFilterFn: customGlobalFilterFn,
   globalFilter: controlledGlobalFilter,
@@ -1637,7 +1644,7 @@ export function DataTable<T>({
     );
   }
 
-  if (data.length === 0) {
+  if (data.length === 0 && !mostrarTablaSinDatos) {
     return (
       <div className="dt-wrapper">
         {/* Header with Search and Action - mostrar incluso cuando no hay datos */}

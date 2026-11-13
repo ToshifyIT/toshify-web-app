@@ -180,7 +180,15 @@ export function ExcelDateRangeFilter({
       left = window.innerWidth - dropdownWidth - 8
     }
     if (left < 8) left = 8
-    return { top: rect.bottom + 4, left }
+    // Que el calendario se vea entero: si no entra abajo del botón, se abre arriba; y si
+    // tampoco entra arriba, se acomoda dentro de la pantalla.
+    const alto = dropdownRef.current?.offsetHeight || 440
+    let top = rect.bottom + 4
+    if (top + alto > window.innerHeight - 8) {
+      const arriba = rect.top - alto - 4
+      top = arriba >= 8 ? arriba : Math.max(8, window.innerHeight - alto - 8)
+    }
+    return { top, left }
   }, [])
 
   useLayoutEffect(() => {
@@ -190,15 +198,14 @@ export function ExcelDateRangeFilter({
 
   useLayoutEffect(() => {
     if (!isOpen || !dropdownRef.current || !buttonRef.current) return
+    // Ya montado: recalcular con el alto real del calendario
+    const pos = calculatePosition()
     const dropdownRect = dropdownRef.current.getBoundingClientRect()
     const viewportWidth = window.innerWidth
-    if (dropdownRect.right > viewportWidth - 8) {
-      setPosition(prev => ({
-        ...prev,
-        left: Math.max(8, viewportWidth - dropdownRect.width - 8)
-      }))
-    }
-  }, [isOpen])
+    if (dropdownRect.right > viewportWidth - 8) pos.left = Math.max(8, viewportWidth - dropdownRect.width - 8)
+    setPosition(pos)
+    // También al cambiar de mes o elegir fechas: el calendario cambia de alto
+  }, [isOpen, calculatePosition, viewDate, startDate, endDate])
 
   useEffect(() => {
     if (!isOpen) return

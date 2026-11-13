@@ -15,7 +15,7 @@
 }
 
 .lb1-ayuda {
-  margin: 0 0 12px;
+  margin: 0 0 16px;
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
@@ -40,32 +40,6 @@
 }
 .lb1-verde { color: #16a34a; }
 .lb1-der { text-align: right; }
-
-/* Semáforo: verde al día, amarillo debe 1 día, rojo debe 2 o más */
-.lb1-semaforo {
-  display: inline-block;
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.lb1-semaforo-verde { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18); }
-.lb1-semaforo-amarillo { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
-.lb1-semaforo-rojo { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18); }
-
-/* Semáforo: solo una barra de color al inicio de la fila (sin pintar la celda) */
-.lb1 .dt-table td:has(> .lb1-celda-verde) {
-  box-shadow: inset 4px 0 0 #16a34a;
-}
-
-.lb1 .dt-table td:has(> .lb1-celda-amarillo) {
-  box-shadow: inset 4px 0 0 #f59e0b;
-}
-
-.lb1 .dt-table td:has(> .lb1-celda-rojo) {
-  box-shadow: inset 4px 0 0 #dc2626;
-}
 
 /* Modal del conductor */
 .lb1-modal {
@@ -205,13 +179,6 @@
   cursor: not-allowed !important;
 }
 
-.lb1-girando {
-  animation: lb1-girar 0.9s linear infinite;
-}
-
-@keyframes lb1-girar {
-  to { transform: rotate(360deg); }
-}
 
 /* =====================================================
    Formato Saldos / Control de Saldos (2026-11-13)
@@ -471,4 +438,83 @@
   .lb1-totales {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Columna Acciones centrada (encabezado y botón) */
+.lb1 .dt-table th.dt-sticky-col,
+.lb1 .dt-table td.dt-sticky-col {
+  text-align: center;
+}
+
+
+/* Separación entre el texto de la promoción, las tarjetas y la tabla */
+.lb1 .fact-stats {
+  margin-bottom: 16px;
+}
+
+/* "Filtros activos" de la tabla con el estilo de Saldos (solo en esta pestaña) */
+.lb1 .dt-active-filters {
+  padding: 8px 12px;
+  background: rgba(255, 0, 51, 0.04);
+  border: 1px solid rgba(255, 0, 51, 0.12);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.lb1 .dt-active-filters-label {
+  gap: 4px;
+  color: #ff0033;
+  font-weight: 600;
+}
+
+.lb1 .dt-active-filters-label svg {
+  width: 12px;
+  height: 12px;
+  color: #ff0033;
+}
+
+.lb1 .dt-active-filter-chip {
+  gap: 4px;
+  padding: 2px 8px;
+  background: #ff0033;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lb1 .dt-chip-value {
+  font-weight: 500;
+}
+
+.lb1 .dt-chip-remove {
+  width: auto;
+  height: auto;
+  background: transparent;
+  font-weight: 700;
+}
+
+.lb1 .dt-chip-remove:hover {
+  background: transparent;
+  opacity: 0.8;
+}
+
+.lb1 .dt-clear-all-filters {
+  padding: 2px 8px;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* Ícono embudo de contorno (como Saldos) en lugar del triángulo de la tabla */
+.lb1 .dt-active-filters-label svg {
+  display: none;
+}
+
+.lb1 .dt-active-filters-label::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  background-color: #ff0033;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3'/%3E%3C/svg%3E") center / contain no-repeat;
 }
