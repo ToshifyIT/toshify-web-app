@@ -248,7 +248,7 @@ export function ConductoresPanelModule() {
       'Calificación (1-5)': calificaciones.get(c.id)?.estrellas ?? '',
       'DNI': c.dni || '',
       'CUIT': c.ruc || '',
-      'Guía': c.guia || '',
+      'Capitán': c.guia || '',
       'App (pagó)': c.apps?.join(' + ') || '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
       'Licencia': etiquetaLicencia(c.categoriaLicencia, c.categoriaLicenciaOtra) || '',
@@ -395,8 +395,8 @@ export function ConductoresPanelModule() {
     },
     {
       id: 'guia',
-      accessorFn: (r) => r.guia || 'Sin guía',
-      header: 'Guía',
+      accessorFn: (r) => r.guia || 'Sin capitán',
+      header: 'Capitán',
       cell: ({ row }) => row.original.guia
         ? <span>{row.original.guia}</span>
         : <span className="cpanel-num cpanel-nulo">—</span>,

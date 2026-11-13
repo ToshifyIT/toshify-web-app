@@ -85,7 +85,7 @@ function AvatarGuia({ guia, vacio = false, titulo }: { guia?: string | null; vac
   return (
     <span
       className={`asig-guia-avatar asig-guia-avatar--${guia ? clave : 'sin'}`}
-      title={titulo ?? (guia ? `Guía del conductor: ${guia}` : 'Conductor sin guía cargado')}
+      title={titulo ?? (guia ? `Capitán del conductor: ${guia}` : 'Conductor sin capitán cargado')}
     >
       {inicial}
     </span>
@@ -247,7 +247,7 @@ function verMovimientos(titulo: string, lista: MovimientoConductor[]) {
                 <th style="text-align:left;padding:6px 10px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;">Fecha</th>
                 <th style="text-align:left;padding:6px 10px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;">Vehículo</th>
                 <th style="text-align:left;padding:6px 10px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;">Conductor</th>
-                <th style="text-align:left;padding:6px 10px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;" title="Agente que cargó al conductor">Agente</th>
+                <th style="text-align:left;padding:6px 10px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;" title="Capitán que cargó al conductor">Capitán</th>
                 <th style="text-align:center;padding:6px 10px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;">Turno</th>
               </tr>
             </thead>
@@ -282,7 +282,7 @@ function verMovimientosAgente(titulo: string, lista: MovimientoAgente[]) {
               <tr>
                 <th style="${th}">Fecha</th>
                 <th style="${th}">Conductor</th>
-                <th style="${th}">Agente</th>
+                <th style="${th}">Capitán</th>
                 ${conMotivo ? `<th style="${th}">Motivo</th>` : ''}
               </tr>
             </thead>
@@ -324,7 +324,7 @@ function verRetencion(lista: HitoRetencion[]) {
   Alerta.fire({
     title: 'Retención a 12 semanas',
     html: `<p style="margin:0 0 10px;color:#6B7280;font-size:13px;text-align:left;">
-        Conductores nuevos del agente que cumplieron 12 semanas desde su primer turno en los últimos 12 meses,
+        Conductores nuevos del capitán que cumplieron 12 semanas desde su primer turno en los últimos 12 meses,
         y si seguían sin baja en ese momento.</p>` + (doce.length === 0
       ? '<p style="margin:0;color:#6B7280;">Todavía nadie cumplió 12 semanas.</p>'
       : `<div style="max-height:360px;overflow:auto;">
@@ -332,7 +332,7 @@ function verRetencion(lista: HitoRetencion[]) {
             <thead>
               <tr>
                 <th style="${th}">Conductor</th>
-                <th style="${th}">Agente</th>
+                <th style="${th}">Capitán</th>
                 <th style="${th}">Primer turno</th>
                 <th style="${th}">A las 12 semanas</th>
               </tr>
@@ -1474,30 +1474,30 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
               <>
               <div
                 className="stat-card stat-card-clickable"
-                title="Conductores nuevos que cargó el agente con su primer turno esta semana (como en el Dashboard General) - Click para ver cuáles"
-                onClick={() => verMovimientosAgente('Altas como agente', altasAgente)}
+                title="Conductores nuevos que cargó el capitán con su primer turno esta semana (como en el Dashboard General) - Click para ver cuáles"
+                onClick={() => verMovimientosAgente('Altas como capitán', altasAgente)}
               >
                 <UserPlus size={18} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{altasAgente.length}</span>
-                  <span className="stat-label">Altas como agente</span>
+                  <span className="stat-label">Altas como capitán</span>
                 </div>
               </div>
               <div
                 className="stat-card stat-card-clickable"
-                title="Bajas de conductores del agente esta semana (como en el Dashboard General) - Click para ver cuáles"
-                onClick={() => verMovimientosAgente('Bajas como agente', bajasAgente)}
+                title="Bajas de conductores del capitán esta semana (como en el Dashboard General) - Click para ver cuáles"
+                onClick={() => verMovimientosAgente('Bajas como capitán', bajasAgente)}
               >
                 <UserMinus size={18} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{bajasAgente.length}</span>
-                  <span className="stat-label">Bajas como agente</span>
+                  <span className="stat-label">Bajas como capitán</span>
                 </div>
               </div>
               {MOSTRAR_RETENCION && (
               <div
                 className="stat-card stat-card-clickable"
-                title={`Conductores nuevos del agente que seguían sin baja al cumplir 12 semanas desde su primer turno (hitos de los últimos 12 meses): ${ret12.retenidos} de ${ret12.base}. A las 4 semanas: ${ret4.retenidos} de ${ret4.base}. - Click para ver cuáles`}
+                title={`Conductores nuevos del capitán que seguían sin baja al cumplir 12 semanas desde su primer turno (hitos de los últimos 12 meses): ${ret12.retenidos} de ${ret12.base}. A las 4 semanas: ${ret4.retenidos} de ${ret4.base}. - Click para ver cuáles`}
                 onClick={() => verRetencion(retencionAgente)}
               >
                 <ShieldCheck size={18} className="stat-icon" />

@@ -246,9 +246,9 @@ button.resumen-chip:disabled {
 .stat-card--positivo .stat-value { color: #059669; }
 .stat-card--negativo .stat-value { color: #dc2626; }
 
-/* Íconos neutros en todas las tarjetas */
+/* Íconos con el color de la marca, como en los demás módulos */
 .siniestros-stats--v2 .stat-card .stat-icon {
-  color: var(--text-tertiary);
+  color: var(--color-primary);
 }
 
 .btn-secondary.btn-secondary--activo {

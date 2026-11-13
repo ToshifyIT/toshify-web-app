@@ -938,7 +938,7 @@ export function ConductoresModule() {
     if (guiaFilter.length > 0) {
       filters.push({
         id: 'guia',
-        label: `Guía: ${guiaFilter.length === 1 ? guiaFilter[0] : `${guiaFilter.length} seleccionados`}`,
+        label: `Capitán: ${guiaFilter.length === 1 ? guiaFilter[0] : `${guiaFilter.length} seleccionados`}`,
         onClear: () => setGuiaFilter([])
       });
     }
@@ -1508,7 +1508,7 @@ export function ConductoresModule() {
         email: 'Email',
         direccion: 'Dirección',
         estado_id: 'Estado',
-        guia: 'Guía',
+        guia: 'Capitán',
         embajador_id: 'Embajador (es referido)',
       };
       const faltantes = Object.keys(newErrors).map(k => labels[k] || k);
@@ -2982,7 +2982,7 @@ export function ConductoresModule() {
         if (!companeroSet.has((c as any).companero_estado || 'na')) return false
       }
       if (guiaFilter.length > 0) {
-        if (!guiaFilter.includes((c as any).guia || 'Sin guía')) return false
+        if (!guiaFilter.includes((c as any).guia || 'Sin capitán')) return false
       }
       if (telefonoFilter.length > 0) {
         if (!telefonoFilter.includes((c as any).telefono_contacto || '')) return false
@@ -3056,8 +3056,8 @@ export function ConductoresModule() {
 
   const uniqueGuias = useMemo(() => {
     const guias = new Set<string>()
-    conductores.forEach(c => guias.add((c as any).guia || 'Sin guía'))
-    return Array.from(guias).sort((a, b) => (a === 'Sin guía' ? 1 : b === 'Sin guía' ? -1 : a.localeCompare(b, 'es')))
+    conductores.forEach(c => guias.add((c as any).guia || 'Sin capitán'))
+    return Array.from(guias).sort((a, b) => (a === 'Sin capitán' ? 1 : b === 'Sin capitán' ? -1 : a.localeCompare(b, 'es')))
   }, [conductores])
 
   const uniqueTelefonos = useMemo(() => {
@@ -3167,7 +3167,7 @@ export function ConductoresModule() {
           "Estado Licencia": d.licencias_estados?.descripcion || "",
           "Tipo Licencia": d.licencias_tipos?.descripcion || "",
           "Teléfono": c.telefono_contacto || "",
-          "Guía": (c as any).guia || "",
+          "Capitán": (c as any).guia || "",
           "Email": d.email || "",
           "Dirección": d.direccion || "",
           "Contacto Emergencia": d.contacto_emergencia || "",
@@ -3422,7 +3422,7 @@ export function ConductoresModule() {
         accessorFn: (row) => (row as any).guia || "",
         header: () => (
           <ExcelColumnFilter
-            label="Guía"
+            label="Capitán"
             options={uniqueGuias}
             selectedValues={guiaFilter}
             onSelectionChange={setGuiaFilter}
@@ -4939,14 +4939,14 @@ function ModalEditar({
           </div>
           {formData.guia !== undefined && (
             <div className="form-group">
-              <label className="form-label">Guía *</label>
+              <label className="form-label">Capitán *</label>
               <select
                 className={`form-input ${editErrors.guia ? 'input-error' : ''}`}
                 value={formData.guia}
                 onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
                 disabled={saving}
               >
-                <option value="">Elegí el guía</option>
+                <option value="">Elegí el capitán</option>
                 {GUIAS_CONDUCTOR.map(g => <option key={g} value={g}>{g}</option>)}
                 {/* Si tenía otro valor (p. ej. quien convirtió el lead) se conserva como opción */}
                 {formData.guia && !GUIAS_CONDUCTOR.includes(formData.guia) && <option value={formData.guia}>{formData.guia}</option>}
@@ -5911,7 +5911,7 @@ function ModalDetalles({
           </div>
           {(selectedConductor as any).guia ? (
             <div>
-              <label className="detail-label">Guía</label>
+              <label className="detail-label">Capitán</label>
               <div className="detail-value">{(selectedConductor as any).guia}</div>
             </div>
           ) : null}

@@ -29,6 +29,7 @@ import { SearchableSelect } from '../../components/ui/SearchableSelect/Searchabl
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import { formatFechaART, formatHoraART, timestampART, toDateART, hoyART } from '../../utils/fechaArgentina'
 import { VEHICULO_CATEGORIAS, VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
+import { EstadoVehiculoBadge } from './EstadoVehiculoBadge'
 import { useGruposFlota } from '../../hooks/useGruposFlota'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
@@ -1976,7 +1977,7 @@ export function VehicleManagement() {
     const actual = ((vehiculo as any).guia_responsable as string | null) || ''
     const r = await Alerta.fire({
       title: `Capitán de ${vehiculo.patente}`,
-      text: 'Guía que se encarga de llenar los turnos de este vehículo.',
+      text: 'Capitán que se encarga de llenar los turnos de este vehículo.',
       input: 'select',
       inputOptions: Object.fromEntries(GUIAS_ACTIVOS.map(g => [g, g])),
       inputValue: actual || GUIAS_ACTIVOS[0],
@@ -2269,81 +2270,7 @@ export function VehicleManagement() {
           const estado = row.original.vehiculos_estados
           const codigo = estado?.codigo || 'N/A'
 
-          // Etiquetas cortas para el badge
-          const etiquetasCortas: Record<string, string> = {
-            'DISPONIBLE': 'Disponible',
-            'EN_USO': 'En Uso',
-            'CORPORATIVO': 'Corporativo',
-            'PKG_ON_BASE': 'PKG ON',
-            'PKG_OFF_BASE': 'PKG OFF',
-            'PKG_OFF_FRANCIA': 'PKG Francia',
-            'TALLER_AXIS': 'Taller Axis',
-            'TALLER_CHAPA_PINTURA': 'Chapa&Pintura',
-            'TALLER_ALLIANCE': 'Taller Alliance',
-            'TALLER_KALZALO': 'Taller Kalzalo',
-            'TALLER_BASE_VALIENTE': 'Base Valiente',
-            'TALLER_MJ': 'Taller MJ',
-            'TALLER_AUTODOC': 'Taller Autodoc',
-            'TALLER_CP_PAINT_CARS': 'C&P Paint Cars',
-            'TALLER_CP_ANDRADA': 'C&P Andrada',
-            'DEPOSITO_RDA': 'Depósito RDA',
-            'INSTALACION_GNC': 'Inst. GNC',
-            'RETENIDO_COMISARIA': 'Retenido',
-            'ROBO': 'Robo',
-            'DESTRUCCION_TOTAL': 'Destrucción',
-            'JUBILADO': 'Jubilado',
-            'PROGRAMADO': 'Programado',
-            'DEVUELTO_PROVEEDOR': 'Dev. Proveedor',
-          }
-
-          let badgeClass = 'dt-badge dt-badge-solid-gray'
-          switch (codigo) {
-            case 'EN_USO':
-              badgeClass = 'dt-badge dt-badge-solid-green'
-              break
-            case 'DISPONIBLE':
-              badgeClass = 'dt-badge dt-badge-solid-amber'
-              break
-            case 'CORPORATIVO':
-              badgeClass = 'dt-badge dt-badge-solid-blue'
-              break
-            case 'PKG_ON_BASE':
-              badgeClass = 'dt-badge dt-badge-solid-yellow'
-              break
-            case 'PKG_OFF_BASE':
-            case 'PKG_OFF_FRANCIA':
-              badgeClass = 'dt-badge dt-badge-solid-gray'
-              break
-            case 'TALLER_CHAPA_PINTURA':
-            case 'TALLER_CP_PAINT_CARS':
-            case 'TALLER_CP_ANDRADA':
-              badgeClass = 'dt-badge dt-badge-solid-purple'
-              break
-            case 'TALLER_AXIS':
-            case 'TALLER_ALLIANCE':
-            case 'TALLER_KALZALO':
-            case 'TALLER_BASE_VALIENTE':
-            case 'TALLER_MJ':
-            case 'TALLER_AUTODOC':
-            case 'INSTALACION_GNC':
-              badgeClass = 'dt-badge dt-badge-solid-orange'
-              break
-            case 'DEVUELTO_PROVEEDOR':
-              badgeClass = 'dt-badge dt-badge-solid-red'
-              break
-            case 'ROBO':
-            case 'DESTRUCCION_TOTAL':
-            case 'RETENIDO_COMISARIA':
-            case 'JUBILADO':
-              badgeClass = 'dt-badge dt-badge-solid-red'
-              break
-          }
-
-          return (
-            <span className={badgeClass} title={estado?.descripcion || codigo}>
-              {etiquetasCortas[codigo] || codigo}
-            </span>
-          )
+          return <EstadoVehiculoBadge codigo={codigo} descripcion={estado?.descripcion} />
         },
         enableSorting: true,
       },

@@ -160,7 +160,7 @@ export function UserMenuPermissionsManager() {
           if (missingGuias.length > 0) {
             const newSubmenus = missingGuias.map((g: any, idx: number) => ({
               name: `guia-${g.id}`,
-              label: g.full_name || 'Guía sin nombre',
+              label: g.full_name || 'Capitán sin nombre',
               route: `/seguimiento-conductores/guias/${g.id}`,
               menu_id: seguimientoMenu.id,
               parent_id: null,

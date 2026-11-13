@@ -143,7 +143,7 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
     const camposFaltantes: string[] = []
     if (!lead.nombre_completo?.trim()) camposFaltantes.push('Nombre completo')
     // Guía obligatorio: queda en conductores.guia (ver guias.ts)
-    if (!lead.entrevistador_asignado?.trim()) camposFaltantes.push('Guía')
+    if (!lead.entrevistador_asignado?.trim()) camposFaltantes.push('Capitán')
     if (!lead.dni?.trim()) camposFaltantes.push('DNI')
     // Con monotributo: CUIT obligatorio. Sin monotributo: el motivo (ver ./monotributo.ts)
     camposFaltantes.push(...faltantesMonotributo(lead))

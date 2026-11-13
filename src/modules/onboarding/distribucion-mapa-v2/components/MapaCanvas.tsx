@@ -776,7 +776,7 @@ function InfoEntidad({
 
       {e.tipo === 'lead' && e.guia && (
         <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>
-          <span style={{ color: '#6B7280' }}>Guía: </span>
+          <span style={{ color: '#6B7280' }}>Capitán: </span>
           <b>{e.guia}</b>
         </p>
       )}

@@ -440,7 +440,7 @@ export function FiltrosSidebar({
               <Hint>Turno que el lead declaró como preferencia.</Hint>
             </Acordeon>
 
-            <Acordeon titulo="Guía" resumen={resumen(filtros.guias)}>
+            <Acordeon titulo="Capitán" resumen={resumen(filtros.guias)}>
               {guiasDisponibles.map((g) => (
                 <CheckRow
                   key={claveGuia(g)}
@@ -451,8 +451,8 @@ export function FiltrosSidebar({
               ))}
               <Hint>
                 {guiasDisponibles.length > 0
-                  ? 'Guía asignado al lead. Sin selección se muestran todos, con y sin guía.'
-                  : 'Ningún lead cargado tiene guía asignado.'}
+                  ? 'Capitán asignado al lead. Sin selección se muestran todos, con y sin capitán.'
+                  : 'Ningún lead cargado tiene capitán asignado.'}
               </Hint>
             </Acordeon>
 

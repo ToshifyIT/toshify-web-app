@@ -172,7 +172,7 @@ export function DetalleBajasModal({ periodo, guia = null, onClose }: { periodo: 
                     <th title="Alta del conductor en el sistema">Creación</th>
                     <th title="Primera vez que recibió auto">Asignación</th>
                     <th>Baja</th>
-                    <th>Guía</th>
+                    <th>Capitán</th>
                     <th>Tema</th>
                     <th>Motivo cargado</th>
                   </tr>

@@ -120,7 +120,7 @@ export function ConductorWizard({
 
     if (step === 1) {
       if (!formData.sede_id) newErrors.sede_id = 'La sede es requerida'
-      if (!formData.guia?.trim()) newErrors.guia = 'El guía es requerido'
+      if (!formData.guia?.trim()) newErrors.guia = 'El capitán es requerido'
       if (!formData.nombres.trim()) newErrors.nombres = 'Requerido'
       if (!formData.apellidos.trim()) newErrors.apellidos = 'Requerido'
       if (!formData.numero_dni.trim()) newErrors.numero_dni = 'Requerido'
@@ -195,14 +195,14 @@ export function ConductorWizard({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Guía *</label>
+              <label className="form-label">Capitán *</label>
               <select
                 className={`form-input ${errors.guia ? 'input-error' : ''}`}
                 value={formData.guia || ''}
                 onChange={(e) => setFormData({ ...formData, guia: e.target.value })}
                 disabled={saving}
               >
-                <option value="">Elegí el guía</option>
+                <option value="">Elegí el capitán</option>
                 {GUIAS_ACTIVOS.map(g => <option key={g} value={g}>{g}</option>)}
                 {/* Un valor que no está en la lista (p. ej. quien convirtió el lead) no se pierde */}
                 {formData.guia && !GUIAS_ACTIVOS.includes(formData.guia) && <option value={formData.guia}>{formData.guia}</option>}

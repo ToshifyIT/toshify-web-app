@@ -894,7 +894,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Guia</label>
+                <label>Capitán</label>
                 <select
                   value={formData.entrevistador_asignado || ''}
                   onChange={e => updateField('entrevistador_asignado', e.target.value)}

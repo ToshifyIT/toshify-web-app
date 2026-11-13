@@ -2182,7 +2182,7 @@ function FilaLista({
       </div>
       {e.tipo === 'lead' && e.guia && (
         <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 21 }}>
-          Guía: <b style={{ color: 'var(--text-secondary)' }}>{e.guia}</b>
+          Capitán: <b style={{ color: 'var(--text-secondary)' }}>{e.guia}</b>
         </div>
       )}
       {e.companeroNombre && (
