@@ -882,6 +882,8 @@ export function VencimientosModule() {
           globalFilter={search}
           onGlobalFilterChange={setSearch}
           pageSize={100}
+          // Titular / patente, estado y documento quedan fijos al scrollear de costado
+          stickyLeftColumns={3}
           emptyIcon={<Shield size={40}
         />}
           emptyTitle="No hay vencimientos para mostrar"

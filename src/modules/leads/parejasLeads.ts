@@ -181,7 +181,7 @@ export function detallePareja(p: ParejaLead): string {
   const partes = [
     `${p.conductor.nombre} (${turno(p.conductor.turnoOcupado)}) necesita compañero ${turno(p.conductor.turnoLibre)}`,
     p.conductor.patente ? `Auto ${p.conductor.patente}` : '',
-    p.conductor.responsable ? `Responsable: ${p.conductor.responsable}` : '',
+    p.conductor.responsable ? `Capitán: ${p.conductor.responsable}` : '',
     p.fuente === 'calle'
       ? `${p.minutos} min en auto (${p.km.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km por calle)`
       : `~${p.minutos} min (${p.km.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km en línea recta)`,
@@ -192,7 +192,7 @@ export function detallePareja(p: ParejaLead): string {
 
 const TURNO_CORTO: Record<TurnoEfectivo, string> = { DIURNO: 'Diurno', NOCTURNO: 'Nocturno', SIN_PREFERENCIA: 'Sin pref.' }
 
-function escaparHtml(t: string): string {
+export function escaparHtml(t: string): string {
   return t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
 }
 
@@ -218,20 +218,20 @@ export interface LeadCercaHtml {
 /** Filas por página en la alerta de opciones. */
 const FILAS_POR_PAGINA = 10
 
-const ESTILO_CELDA = 'padding:5px 8px;vertical-align:middle;'
-const ESTILO_TH = 'padding:4px 8px;font-size:10.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;opacity:.6;'
+const ESTILO_CELDA = 'padding:4px 8px;vertical-align:middle;'
+const ESTILO_TH = 'padding:4px 8px;font-size:9.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;opacity:.6;'
 
 function celdaTiempo(minutos: number, km: number, porCalle: boolean): string {
   const color = minutos <= UMBRAL_MINUTOS_DEFAULT ? '#6D28D9' : 'inherit'
   const kmTxt = km.toLocaleString('es-AR', { maximumFractionDigits: 1 })
   return `<td style="${ESTILO_CELDA}text-align:right;white-space:nowrap;">
     <b style="color:${color};">${porCalle ? '' : '~'}${minutos} min</b>
-    <span style="opacity:.6;font-size:11px;margin-left:4px;">${kmTxt} km</span></td>`
+    <span style="opacity:.6;font-size:10px;margin-left:4px;">${kmTxt} km</span></td>`
 }
 
 function nombreConZona(nombre: string, zona: string | null): string {
   return `<td style="${ESTILO_CELDA}text-align:left;max-width:260px;">
-    <span style="font-weight:600;">${escaparHtml(nombre)}</span>${zona ? `<span style="opacity:.55;font-size:11px;margin-left:6px;">${escaparHtml(zona)}</span>` : ''}</td>`
+    <span style="font-weight:600;">${escaparHtml(nombre)}</span>${zona ? `<span style="opacity:.55;font-size:10px;margin-left:6px;">${escaparHtml(zona)}</span>` : ''}</td>`
 }
 
 /** Tabla con su paginador; las filas llevan data-pagina y se muestran de a una página. */
@@ -244,20 +244,20 @@ function tablaPaginada(id: string, titulo: string, encabezados: string[], filas:
     return f.replace('<tr>', `<tr data-pagina="${pagina}" style="${zebra}${pagina > 0 ? 'display:none;' : ''}">`)
   }).join('')
   const boton = (accion: string, texto: string) =>
-    `<button type="button" data-pager-accion="${accion}" style="border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;border-radius:6px;padding:2px 10px;font-size:12px;cursor:pointer;">${texto}</button>`
+    `<button type="button" data-pager-accion="${accion}" style="border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;">${texto}</button>`
   const pager = paginas <= 1 ? '' : `
-    <div data-pager style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:6px;font-size:12px;">
+    <div data-pager style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:6px;font-size:11px;">
       ${boton('ant', '‹ Anterior')}
       <span data-pager-texto style="opacity:.7;">1–${Math.min(FILAS_POR_PAGINA, filas.length)} de ${filas.length}</span>
       ${boton('sig', 'Siguiente ›')}
     </div>`
   return `<section data-tabla-paginada="${id}" data-total="${filas.length}" data-pagina-actual="0" style="margin-top:12px;">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
-      <span style="font-weight:700;font-size:13px;">${titulo}</span>
-      <span style="opacity:.6;font-size:11.5px;">${filas.length}</span>
+      <span style="font-weight:700;font-size:12px;">${titulo}</span>
+      <span style="opacity:.6;font-size:10.5px;">${filas.length}</span>
     </div>
     <div data-tabla-cuerpo>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
       <thead><tr style="border-bottom:1px solid rgba(128,128,128,.3);">${encabezados.join('')}</tr></thead>
       <tbody>${cuerpo}</tbody>
     </table>
@@ -316,7 +316,7 @@ export function htmlOpcionesPareja(p: ParejaLead | null, leadId: string, leadsCe
     return `<tr>
       ${nombreConZona(c.nombre, c.zona)}
       <td style="${ESTILO_CELDA}text-align:left;white-space:nowrap;"><span style="opacity:.7;">${TURNO_CORTO[c.turnoOcupado]} →</span> <b>${TURNO_CORTO[c.turnoLibre]}</b></td>
-      <td style="${ESTILO_CELDA}text-align:left;font-family:monospace;font-size:12px;white-space:nowrap;">${escaparHtml(c.patente || '-')}</td>
+      <td style="${ESTILO_CELDA}text-align:left;font-family:monospace;font-size:11px;white-space:nowrap;">${escaparHtml(c.patente || '-')}</td>
       <td style="${ESTILO_CELDA}text-align:left;white-space:nowrap;opacity:.85;">${escaparHtml(c.responsable || '-')}</td>
       ${celdaTiempo(o.minutos, o.km, o.fuente === 'calle')}
       <td style="${ESTILO_CELDA}text-align:right;white-space:nowrap;">
@@ -339,9 +339,9 @@ export function htmlOpcionesPareja(p: ParejaLead | null, leadId: string, leadsCe
     ? `Tiempo en auto. Hasta ${UMBRAL_MINUTOS_DEFAULT} min = cerca (en violeta).`
     : `Tiempo en auto (~ = estimado). Hasta ${UMBRAL_MINUTOS_DEFAULT} min = cerca (en violeta).`
 
-  return `<div style="font-size:13px;text-align:left;">
-    <p style="margin:0 0 2px;opacity:.7;font-size:12px;text-align:center;">${explicacion}</p>
-    ${tablaPaginada('conductores', 'Conductores sin compañero con el turno que le sirve', [th('Conductor'), th('Turno → falta'), th('Auto'), th('Responsable'), th('Tiempo', 'right'), th('')], filasConductores)}
+  return `<div style="font-size:12px;text-align:left;">
+    <p style="margin:0 0 2px;opacity:.7;font-size:11px;text-align:center;">${explicacion}</p>
+    ${tablaPaginada('conductores', 'Conductores sin compañero con el turno que le sirve', [th('Conductor'), th('Turno → falta'), th('Auto'), th('Capitán'), th('Tiempo', 'right'), th('')], filasConductores)}
     ${tablaPaginada('leads', `Otros leads a ${UMBRAL_MINUTOS_MAX} min o menos por calle`, [th('Lead'), th('Turno'), th('Estado'), th('Tiempo', 'right')], filasLeads)}
   </div>`
 }

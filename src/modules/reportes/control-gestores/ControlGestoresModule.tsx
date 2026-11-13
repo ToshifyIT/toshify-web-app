@@ -5,6 +5,8 @@
 // Textos (pedido de Operaciones, 2026-11-06): a quien tiene el auto se lo llama siempre
 // «capitán», y cada subtítulo dice qué muestra el gráfico y para qué sirve; las
 // fórmulas van en las notas al pie.
+// Ocupación y turnos: por el capitán del auto. Churn, altas, bajas y retención: por el
+// capitán que onboardeó al conductor (conductores.guia), pedido 2026-11-12.
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -23,11 +25,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import type { ChurnGestor, ControlGestores, FotoGestor, Granularidad, HorizonteRetencion } from './controlGestoresService'
+import type {
+  ChurnGestor, ControlGestores, FotoGestor, Granularidad, HorizonteRetencion, MotivosChurn,
+} from './controlGestoresService'
 import { useSede } from '../../../contexts/SedeContext'
 import { etiquetaMes, fechaCorta, fmtInt, fmtMonedaCorta, fmtPct, hoyArgentina, numeroSemana, sumarDias } from '../kpis-v2/kpisV2Types'
 import {
-  cargarControlGestores, finDe, HORIZONTES_RETENCION, META_OCUPACION, mesesElegibles, ocupacion, semanasElegibles, SIN_GESTOR, TOTAL,
+  cargarControlGestores, EX_GESTORES, finDe, HORIZONTES_RETENCION, META_OCUPACION, mesesElegibles, ocupacion, semanasElegibles, SIN_GESTOR, TOTAL,
 } from './controlGestoresService'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import '../kpis-v2/DashboardKpisV2Module.css'
@@ -58,7 +62,7 @@ const fmtPctEje = (v: number) => `${v}%`
 /** "Ali Verenzuela" -> "Ali V." para los ejes */
 const corto = (g: string) => {
   if (g === TOTAL) return 'Total'
-  if (g === SIN_GESTOR) return g
+  if (g === SIN_GESTOR || g === EX_GESTORES) return g
   const [n, a] = g.split(' ')
   return a ? `${n} ${a[0]}.` : n
 }
@@ -242,6 +246,7 @@ export function ControlGestoresModule() {
         <div className={cargando ? 'cg-cargando' : undefined}>
           <Ocupacion datos={datos} colorDe={colorDe} />
           <Churn datos={datos} colorDe={colorDe} />
+          <MotivosDeChurn datos={datos} />
           <Detalle datos={datos} />
         </div>
       ) : null}
@@ -538,10 +543,204 @@ function Churn({ datos, colorDe }: { datos: ControlGestores; colorDe: Map<string
         {tx.churn} = bajas {tx.del} (las mismas del Dashboard KPI) ÷ conductores activos {tx.inicio}{g0 === 'mes' ? ' más los que entraron en el mes' : ''}. Límite {fmtPct(LIMITE_CHURN)}
         {g0 === 'mes' ? ' (el 5 % semanal llevado a los días del mes)' : ''}.
         {' '}Retención a N días = de los que arrancaron en un mes, porcentaje sin baja N días después. Se usa el último mes cuyos conductores ya cumplieron todos esos días ({horizonte} días: {nombreMes(retencion.mes)}).
-        {' '}A cada conductor se lo cuenta en el capitán del auto que manejaba.
+        {' '}A cada conductor se lo cuenta en el capitán que lo onboardeó (no en el del auto que manejaba).
         {' '}En la evolución, cada punto es la foto al cierre; {tx.enCurso} cuenta hasta hoy. Línea gruesa: total empresa.
       </p>
     </>
+  )
+}
+
+// ───────────── Motivos de churn ─────────────
+
+/** Un color fijo por tema (el mismo en todos los gráficos); gris para lo que no se sabe. */
+const COLOR_TEMA: Record<string, string> = {
+  'No le rinde': '#dc2626',
+  'Consiguió otro trabajo': '#2a78d6',
+  'Baja voluntaria': '#e8833a',
+  'Deuda': '#ca8a04',
+  'Conducta o no responde': '#c026d3',
+  'Siniestro o robo': '#7c3aed',
+  'Salud o familia': '#16a34a',
+  'Se mudó': '#0891b2',
+  'Otros': '#94a3b8',
+  'Sin motivo cargado': '#cbd5e1',
+}
+const colorTema = (t: string) => COLOR_TEMA[t] ?? '#94a3b8'
+
+function MotivosDeChurn({ datos }: { datos: ControlGestores }) {
+  const g0 = datos.periodo.granularidad
+  const tx = textosDe(g0, datos.historia.length)
+  // Por defecto la ventana larga: en una sola semana hay muy pocas bajas para ver un patrón
+  const [rango, setRango] = useState<'historia' | 'elegido'>('historia')
+  const m: MotivosChurn = datos.motivos[rango]
+  const rangoTexto = rango === 'historia' ? `las ${tx.evolucion}` : tx.elegido
+  const gestores = m.porGestor.filter((g) => g.total > 0)
+  const max = Math.max(1, ...m.temas.map((t) => t.cantidad))
+  // 100 %: qué parte de las bajas de cada capitán es cada tema
+  const barras = gestores.map((g) => {
+    const fila: Record<string, number | string> = { nombre: corto(g.gestor), total: g.total }
+    for (const t of m.temas) fila[t.tema] = ((g.cuenta[t.tema] ?? 0) / g.total) * 100
+    return fila
+  })
+  const principal = (g: MotivosChurn['porGestor'][number]) => {
+    const [tema, n] = Object.entries(g.cuenta).filter(([t]) => t !== 'Sin motivo cargado').sort((a, b) => b[1] - a[1])[0] ?? []
+    return tema ? `${tema} (${n})` : '-'
+  }
+
+  return (
+    <section className="dkv2-card">
+      <header className="dkv2-card-header">
+        <div>
+          <h2 className="dkv2-card-title">Motivos de churn</h2>
+          <p className="dkv2-card-subtitle">
+            Por qué se van los conductores de cada capitán ({rangoTexto}: {fmtInt(m.total)} {m.total === 1 ? 'baja' : 'bajas'}).
+            Si un motivo se repite en un capitán, ahí hay algo para trabajar.
+          </p>
+        </div>
+        <div className="dkv2-seg" role="tablist" aria-label="Rango de los motivos">
+          {([['historia', tx.evolucion[0].toUpperCase() + tx.evolucion.slice(1)], ['elegido', g0 === 'semana' ? 'Semana elegida' : 'Mes elegido']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={rango === id}
+              className={`dkv2-seg-btn${rango === id ? ' is-active' : ''}`}
+              onClick={() => setRango(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {m.total === 0 ? (
+        <p className="dkv2-card-subtitle">No hubo bajas en {rangoTexto}.</p>
+      ) : (
+        <div className="cg-grid">
+          <section className="dkv2-card cg-panel">
+            <h3 className="cg-panel-titulo">Por qué se van</h3>
+            <p className="cg-panel-sub">Todas las bajas, agrupadas por tema según lo que se escribió al darlas de baja.</p>
+            <ul className="dkv2-motivos">
+              {m.temas.map((t) => (
+                <li key={t.tema}>
+                  <span className="dkv2-motivo-texto" title={t.tema}>{t.tema}</span>
+                  <span className="dkv2-motivo-barra" aria-hidden="true">
+                    <span style={{ width: `${(t.cantidad / max) * 100}%`, background: colorTema(t.tema) }} />
+                  </span>
+                  <span className="dkv2-motivo-n">
+                    {t.cantidad}
+                    <span className="dkv2-muted"> · {Math.round((t.cantidad / m.total) * 100)}%</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <Panel
+            titulo="Motivos por capitán"
+            subtitulo="Qué parte de las bajas de cada capitán es cada motivo. Sirve para comparar: el mismo color más largo en uno que en otro."
+            alto={Math.max(160, 56 + barras.length * 40)}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={barras} layout="vertical" margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid horizontal={false} stroke="var(--dkv2-grid)" />
+                <XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} allowDataOverflow tick={tick} tickFormatter={fmtPctEje} />
+                <YAxis type="category" dataKey="nombre" tick={tick} width={90} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  cursor={{ fill: 'var(--dkv2-cursor)' }}
+                  formatter={(v: unknown, n: unknown, item: { payload?: Record<string, number> }) => {
+                    const total = item?.payload?.total ?? 0
+                    const cant = Math.round((Number(v) / 100) * total)
+                    return [`${cant} de ${total} · ${Math.round(Number(v))}%`, String(n)]
+                  }}
+                />
+                {/* Leyenda en el orden de los temas (de más a menos bajas), no alfabético */}
+                <Legend wrapperStyle={{ fontSize: 11 }} itemSorter={null} />
+                {m.temas.map((t, i) => (
+                  <Bar
+                    key={t.tema}
+                    dataKey={t.tema}
+                    stackId="m"
+                    fill={colorTema(t.tema)}
+                    isAnimationActive={false}
+                    maxBarSize={20}
+                    radius={i === m.temas.length - 1 ? [0, 3, 3, 0] : undefined}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </Panel>
+
+          <section className="dkv2-card cg-panel">
+            <h3 className="cg-panel-titulo">Bajas por motivo y capitán</h3>
+            <p className="cg-panel-sub">Los números de cada capitán, con su motivo más repetido.</p>
+            <div className="dkv2-table-wrap">
+              <table className="dkv2-table cg-tabla cg-tabla--compacta">
+                <thead>
+                  <tr>
+                    <th>Motivo</th>
+                    {gestores.map((g) => <th key={g.gestor}>{corto(g.gestor)}</th>)}
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {m.temas.map((t) => (
+                    <tr key={t.tema}>
+                      <td>
+                        <span className="cg-tema-punto" style={{ background: colorTema(t.tema) }} aria-hidden="true" />
+                        {t.tema}
+                      </td>
+                      {gestores.map((g) => <td key={g.gestor}>{g.cuenta[t.tema] ? fmtInt(g.cuenta[t.tema]) : '·'}</td>)}
+                      <td>{fmtInt(t.cantidad)}</td>
+                    </tr>
+                  ))}
+                  <tr className="cg-fila-total">
+                    <td>Total</td>
+                    {gestores.map((g) => <td key={g.gestor}>{fmtInt(g.total)}</td>)}
+                    <td>{fmtInt(m.total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <ul className="cg-principal">
+              {gestores.map((g) => (
+                <li key={g.gestor}><b>{corto(g.gestor)}</b>: {principal(g)}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="dkv2-card cg-panel">
+            <h3 className="cg-panel-titulo">Últimas bajas</h3>
+            <p className="cg-panel-sub">Las {Math.min(m.ultimas.length, 15)} más recientes de {rangoTexto}, con lo que se escribió al darlas de baja.</p>
+            <div className="dkv2-table-wrap cg-ultimas">
+              <table className="dkv2-table cg-tabla cg-tabla--compacta cg-tabla--texto">
+                <thead>
+                  <tr><th>Fecha</th><th>Conductor</th><th>Capitán</th><th>Motivo</th></tr>
+                </thead>
+                <tbody>
+                  {m.ultimas.map((b, i) => (
+                    <tr key={`${b.dia}-${b.conductor}-${i}`}>
+                      <td>{fechaCorta(b.dia)}</td>
+                      <td>{b.conductor}</td>
+                      <td>{corto(b.gestor)}</td>
+                      <td title={b.texto ?? undefined}>
+                        <span className="cg-tema-punto" style={{ background: colorTema(b.tema) }} aria-hidden="true" />
+                        <span className="cg-motivo-texto">{b.texto ?? b.tema}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
+      <p className="cg-nota">
+        El motivo se carga como texto libre al dar la baja y se agrupa en temas por palabras clave, igual que en el Dashboard KPI.
+        {' '}A cada baja se la cuenta en el capitán que onboardeó al conductor.
+      </p>
+    </section>
   )
 }
 

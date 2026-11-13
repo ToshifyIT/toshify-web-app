@@ -20,7 +20,8 @@
 //  - Retención = de los conductores que arrancaron en un mes (alta = primer turno, como
 //    kpi_altas_conductores), cuántos siguen sin baja N semanas después.
 import { supabase } from '../../../lib/supabase'
-import { lunesDe, sumarDias } from '../kpis-v2/kpisV2Types'
+import { lunesDe, sumarDias, temaDeBaja } from '../kpis-v2/kpisV2Types'
+import { GUIAS_ACTIVOS, homologarGuia } from '../../leads/guias'
 
 export const META_OCUPACION = 0.9
 export const LIMITE_CHURN = 0.05
@@ -31,6 +32,8 @@ export const SEMANAS_RETENCION = 8
 export const HORIZONTES_RETENCION = [30, 60, 90] as const
 export type HorizonteRetencion = typeof HORIZONTES_RETENCION[number]
 export const SIN_GESTOR = 'Sin capitán'
+/** Motivos de churn: los capitanes que ya no están (Manuel, Marina…) van juntos */
+export const EX_GESTORES = 'Ex capitanes'
 export const TOTAL = 'Total empresa'
 
 const ESTADOS_OPERATIVOS = new Set(['DISPONIBLE', 'PKG_ON_BASE', 'EN_USO'])
@@ -101,6 +104,27 @@ export interface RetencionHorizonte {
   curvas: CurvaRetencion[]
 }
 
+/** Una baja con su motivo, para la lista de las últimas. */
+export interface BajaConMotivo {
+  dia: string
+  conductor: string
+  gestor: string
+  tema: string
+  /** Lo que se escribió al dar la baja */
+  texto: string | null
+}
+
+/** Motivos de baja de un rango, agrupados en temas (mismo criterio que los KPIs). */
+export interface MotivosChurn {
+  desde: string
+  hasta: string
+  total: number
+  /** Temas presentes, de más a menos bajas ('Otros' y 'Sin motivo cargado' al final) */
+  temas: { tema: string; cantidad: number }[]
+  porGestor: { gestor: string; total: number; cuenta: Record<string, number> }[]
+  ultimas: BajaConMotivo[]
+}
+
 export interface ControlGestores {
   periodo: { granularidad: Granularidad; inicio: string; fin: string; enCurso: boolean }
   foto: FotoFlota
@@ -108,6 +132,8 @@ export interface ControlGestores {
   churn: { porGestor: ChurnGestor[]; total: ChurnGestor; promedio: number | null; limite: number }
   historia: PeriodoHistoria[]
   retencion: Record<HorizonteRetencion, RetencionHorizonte>
+  /** Motivos del período elegido y de toda la ventana de la evolución */
+  motivos: { elegido: MotivosChurn; historia: MotivosChurn }
   gestores: string[]
   precios: { diurno: number; nocturno: number; aCargo: number; conPrecio: boolean }
   hoy: string
@@ -204,7 +230,7 @@ export async function cargarControlGestores(
   const desdeDia = mesCohorteMin < periodosHistoria[0] ? mesCohorteMin : periodosHistoria[0]
   const desdeISO = new Date(inicioDiaMs(desdeDia) - 7 * DIA_MS).toISOString()
 
-  const [vehiculosRaw, cambiosRaw, historialGuia, asignacionesRaw, conceptos, bajasRaw, altasRaw] = await Promise.all([
+  const [vehiculosRaw, cambiosRaw, historialGuia, asignacionesRaw, conceptos, bajasRaw, altasRaw, conductoresRaw] = await Promise.all([
     leerTodo((a, b) => filtroSede(supabase
       .from('vehiculos')
       .select('id, created_at, guia_responsable, vehiculos_estados (codigo)')
@@ -239,7 +265,7 @@ export async function cargarControlGestores(
       .select('codigo, precio_base, precio_semanal')
       .in('codigo', [CONCEPTO_DIURNO, CONCEPTO_NOCTURNO, CONCEPTO_A_CARGO]),
     leerTodo((a, b) => filtroSede((supabase.from('kpi_bajas' as any) as any)
-      .select('fecha, conductor_id')
+      .select('fecha, conductor_id, motivo')
       .gte('fecha', desdeDia)
       .lte('fecha', hoy))
       .range(a, b)),
@@ -248,6 +274,13 @@ export async function cargarControlGestores(
       console.error('[ControlGestores] Sin altas (falta sql/kpi_altas_conductores.sql):', err)
       return [] as any[]
     }),
+    // Agente que onboardeó a cada conductor (conductores.guia): altas, bajas, churn y
+    // retención van por él, no por el capitán del auto que manejaba.
+    leerTodo((a, b) => filtroSede(supabase
+      .from('conductores')
+      .select('id, guia, nombres, apellidos'))
+      .order('id')
+      .range(a, b)),
   ])
 
   // ── Precios por día (semanal / 7, sin IVA) ──
@@ -329,10 +362,8 @@ export async function cargarControlGestores(
     }
   }
   const estadiasPorAuto = new Map<string, Estadia[]>()
-  const estadiasPorConductor = new Map<string, Estadia[]>()
   for (const e of estadias) {
     estadiasPorAuto.set(e.vehiculoId, [...(estadiasPorAuto.get(e.vehiculoId) ?? []), e])
-    estadiasPorConductor.set(e.conductorId, [...(estadiasPorConductor.get(e.conductorId) ?? []), e])
   }
   const asignacionesPorAuto = new Map<string, AsignacionAuto[]>()
   for (const a of asignacionesAuto) {
@@ -380,22 +411,19 @@ export async function cargarControlGestores(
     return { momento: new Date(t).toISOString(), porGestor, total }
   }
 
-  /** Gestor del auto en el que estaba el conductor en `t` (o en su último auto antes de `t`). */
-  const gestorDeConductor = (conductorId: string, t: number): string => {
-    const lista = estadiasPorConductor.get(conductorId) ?? []
-    const actual = lista.find((e) => e.ini <= t && t <= e.fin)
-    if (actual) return gestorEn(actual.vehiculoId, t)
-    const previas = lista.filter((e) => e.ini <= t).sort((a, b) => b.fin - a.fin)
-    if (previas[0]) return gestorEn(previas[0].vehiculoId, Math.min(t, previas[0].fin))
-    const posteriores = lista.filter((e) => e.ini > t).sort((a, b) => a.ini - b.ini)
-    if (posteriores[0]) return gestorEn(posteriores[0].vehiculoId, posteriores[0].ini)
-    return SIN_GESTOR
-  }
+  /** Agente que onboardeó al conductor (conductores.guia, homologado). */
+  const guiaPorConductor = new Map<string, string>(
+    conductoresRaw.map((c) => [c.id as string, homologarGuia(c.guia) ?? SIN_GESTOR]),
+  )
+  const gestorDeConductor = (conductorId: string): string => guiaPorConductor.get(conductorId) ?? SIN_GESTOR
+  const nombrePorConductor = new Map<string, string>(
+    conductoresRaw.map((c) => [c.id as string, `${c.nombres || ''} ${c.apellidos || ''}`.replace(/\s+/g, ' ').trim()]),
+  )
 
   // Bajas y altas con su día
   const bajas = bajasRaw
     .filter((b) => b.conductor_id && b.fecha)
-    .map((b) => ({ id: b.conductor_id as string, dia: String(b.fecha).slice(0, 10) }))
+    .map((b) => ({ id: b.conductor_id as string, dia: String(b.fecha).slice(0, 10), motivo: (b.motivo as string | null) ?? null }))
   const altas = altasRaw
     .filter((x) => x.conductor_id && x.fecha)
     .map((x) => ({ id: x.conductor_id as string, dia: String(x.fecha).slice(0, 10) }))
@@ -419,18 +447,18 @@ export async function cargarControlGestores(
     const activosLunes = new Map<string, string>()
     for (const e of estadias) {
       if (e.ini <= tLunes && tLunes < e.fin && !activosLunes.has(e.conductorId)) {
-        activosLunes.set(e.conductorId, gestorEn(e.vehiculoId, tLunes))
+        activosLunes.set(e.conductorId, gestorDeConductor(e.conductorId))
       }
     }
     for (const g of activosLunes.values()) { fila(g).activos++; total.activos++ }
     for (const b of bajas) {
       if (b.dia < lunes || b.dia > dom) continue
-      fila(gestorDeConductor(b.id, inicioDiaMs(b.dia) + DIA_MS - 1)).bajas++
+      fila(gestorDeConductor(b.id)).bajas++
       total.bajas++
     }
     for (const x of altas) {
       if (x.dia < lunes || x.dia > dom) continue
-      fila(gestorDeConductor(x.id, inicioDiaMs(x.dia) + DIA_MS - 1)).altas++
+      fila(gestorDeConductor(x.id)).altas++
       total.altas++
     }
     // Semana: bajas / activos el lunes (definición de Operaciones). Mes: bajas /
@@ -476,7 +504,7 @@ export async function cargarControlGestores(
     dias.push(horizonte)
     const porGestor = new Map<string, { id: string; dia: string }[]>()
     for (const x of cohorte) {
-      const g = gestorDeConductor(x.id, inicioDiaMs(x.dia) + DIA_MS - 1)
+      const g = gestorDeConductor(x.id)
       porGestor.set(g, [...(porGestor.get(g) ?? []), x])
     }
     const curva = (gestor: string, lista: { id: string; dia: string }[]): CurvaRetencion => {
@@ -512,6 +540,45 @@ export async function cargarControlGestores(
     return a.localeCompare(b, 'es')
   })
 
+  // ── Motivos de baja (por el capitán que onboardeó al conductor) ──
+  const ULTIMOS_TEMAS = new Set(['Otros', 'Sin motivo cargado'])
+  const motivosDe = (desde: string, hasta: string): MotivosChurn => {
+    const lista = bajas.filter((b) => b.dia >= desde && b.dia <= hasta)
+    const porTema = new Map<string, number>()
+    const porGestor = new Map<string, { gestor: string; total: number; cuenta: Record<string, number> }>()
+    const ultimas: BajaConMotivo[] = []
+    for (const b of lista) {
+      const tema = temaDeBaja(b.motivo)
+      const gestor = gestorDeConductor(b.id)
+      const grupo = gestor === SIN_GESTOR || GUIAS_ACTIVOS.includes(gestor) ? gestor : EX_GESTORES
+      porTema.set(tema, (porTema.get(tema) ?? 0) + 1)
+      const g = porGestor.get(grupo) ?? { gestor: grupo, total: 0, cuenta: {} }
+      g.total++
+      g.cuenta[tema] = (g.cuenta[tema] ?? 0) + 1
+      porGestor.set(grupo, g)
+      ultimas.push({ dia: b.dia, conductor: nombrePorConductor.get(b.id) || '-', gestor, tema, texto: b.motivo?.trim() || null })
+    }
+    const temas = [...porTema].map(([tema, cantidad]) => ({ tema, cantidad })).sort((a, b) =>
+      Number(ULTIMOS_TEMAS.has(a.tema)) - Number(ULTIMOS_TEMAS.has(b.tema))
+      || b.cantidad - a.cantidad || a.tema.localeCompare(b.tema, 'es'))
+    return {
+      desde,
+      hasta,
+      total: lista.length,
+      temas,
+      porGestor: [...porGestor.values()].sort((a, b) => {
+        const orden = (g: string) => (g === SIN_GESTOR ? 2 : g === EX_GESTORES ? 1 : 0)
+        return orden(a.gestor) - orden(b.gestor) || a.gestor.localeCompare(b.gestor, 'es')
+      }),
+      ultimas: ultimas.sort((a, b) => b.dia.localeCompare(a.dia)).slice(0, 15),
+    }
+  }
+  const hastaMotivos = finPeriodo < hoy ? finPeriodo : hoy
+  const motivos = {
+    elegido: motivosDe(inicioPeriodo, hastaMotivos),
+    historia: motivosDe(periodosHistoria[0], hastaMotivos),
+  }
+
   const churnPorGestor = [...churnSemana.porGestor.values()].sort((a, b) => (b.churn ?? -1) - (a.churn ?? -1))
 
   return {
@@ -520,6 +587,7 @@ export async function cargarControlGestores(
     churn: { porGestor: churnPorGestor, total: churnSemana.total, promedio, limite },
     historia,
     retencion,
+    motivos,
     gestores,
     precios,
     hoy,
