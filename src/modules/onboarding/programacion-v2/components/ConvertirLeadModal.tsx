@@ -13,7 +13,8 @@
 // faltan: asi tambien se puede corregir un dato mal cargado sin salir de aca.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Loader2, AlertTriangle, ChevronLeft } from 'lucide-react'
+import { X, Loader2, AlertTriangle, ChevronLeft, User, IdCard, Phone, Briefcase, FileText } from 'lucide-react'
+import { TabsBar, type TabsBarItem } from '../../../../components/ui/TabsBar'
 import { supabase } from '../../../../lib/supabase'
 import {
   buscarConductorExistente,
@@ -86,6 +87,38 @@ const inputStyle: React.CSSProperties = {
  * perdia el foco en cada tecla. Declarado aca la identidad es estable y se
  * puede escribir de corrido.
  */
+type Pestana = 'personal' | 'contacto' | 'licencia' | 'operativo' | 'documentacion'
+
+const PESTANAS: TabsBarItem<Pestana>[] = [
+  { id: 'personal', label: 'Personal', icon: User },
+  { id: 'contacto', label: 'Contacto', icon: Phone },
+  { id: 'licencia', label: 'Licencia', icon: IdCard },
+  { id: 'operativo', label: 'Operativo', icon: Briefcase },
+  { id: 'documentacion', label: 'Documentación', icon: FileText },
+]
+
+/** Pestaña de un campo faltante (por el texto que devuelve la validación). */
+function pestanaDeFaltante(texto: string): Pestana {
+  if (/tel[eé]fono|email|direcci[oó]n/i.test(texto)) return 'contacto'
+  if (/licencia|obtenci[oó]n|categor[ií]a|vencimiento/i.test(texto)) return 'licencia'
+  if (/experiencia|cochera/i.test(texto)) return 'operativo'
+  if (/documentaci[oó]n|drive/i.test(texto)) return 'documentacion'
+  return 'personal'
+}
+
+/** Pestaña de cada campo con error de formato. */
+const PESTANA_DE_CAMPO: Partial<Record<keyof Lead, Pestana>> = {
+  nombre_completo: 'personal', dni: 'personal', cuit: 'personal', fecha_de_nacimiento: 'personal',
+  phone: 'contacto', email: 'contacto', direccion: 'contacto',
+  numero_licencia: 'licencia', vencimiento_licencia: 'licencia',
+  url_folder: 'documentacion',
+}
+
+const tituloSeccion: React.CSSProperties = {
+  fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)',
+  paddingBottom: '8px', marginBottom: '14px', borderBottom: '1px solid var(--border-primary)',
+}
+
 function Campo({
   label,
   obligatorio,
@@ -227,6 +260,15 @@ export function ConvertirLeadModal({
     poner('url_folder', validarUrl(lead.url_folder))
     return e
   }, [lead])
+
+  const [pestana, setPestana] = useState<Pestana>('personal')
+  // Campos faltantes o con error de formato por pestaña (contador de cada pestaña)
+  const pendientesPorPestana = useMemo(() => {
+    const n: Record<Pestana, number> = { personal: 0, contacto: 0, licencia: 0, operativo: 0, documentacion: 0 }
+    for (const f of faltantes) n[pestanaDeFaltante(f)]++
+    for (const campo of Object.keys(errores) as Array<keyof Lead>) n[PESTANA_DE_CAMPO[campo] || 'personal']++
+    return n
+  }, [faltantes, errores])
 
   const hayErroresFormato = Object.keys(errores).length > 0
   const puedeConvertir = !!lead && faltantes.length === 0 && !hayErroresFormato && !guardando
@@ -423,7 +465,9 @@ export function ConvertirLeadModal({
           borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: '820px',
-          maxHeight: '90vh',
+          // Alto fijo: el modal no cambia de tamaño al pasar de pestaña; si una sección
+          // tiene más campos, se desplaza por dentro del cuerpo.
+          height: 'min(90vh, 760px)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -546,6 +590,24 @@ export function ConvertirLeadModal({
                 </div>
               )}
 
+              {/* Secciones como en Conductores (Editar conductor). El contador de cada
+                  pestaña dice cuántos campos le faltan o tienen error. */}
+              <TabsBar
+                className="tabs-bar--modal"
+                ariaLabel="Secciones del lead"
+                tabs={PESTANAS.map(t => {
+                  const n = pendientesPorPestana[t.id]
+                  return n > 0
+                    ? { ...t, count: n, countVariant: 'danger' as const, countTitle: `${n} campo(s) por completar o corregir` }
+                    : t
+                })}
+                active={pestana}
+                onChange={setPestana}
+              />
+              <div style={{ marginTop: '16px' }}>
+                {pestana === 'personal' && (
+                  <>
+                    <div style={tituloSeccion}>Información Personal</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px' }}>
                 <Campo label="Nombre completo" obligatorio error={errores.nombre_completo}>
                   <input style={inputStyle} value={lead.nombre_completo || ''} onChange={(e) => set('nombre_completo', e.target.value)} />
@@ -605,6 +667,13 @@ export function ConvertirLeadModal({
                     ))}
                   </select>
                 </Campo>
+              </div>
+                  </>
+                )}
+                {pestana === 'contacto' && (
+                  <>
+                    <div style={tituloSeccion}>Contacto</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px' }}>
                 <Campo label="Teléfono" obligatorio error={errores.phone}>
                   <input style={inputStyle} value={lead.phone || ''} onChange={(e) => set('phone', e.target.value)} />
                 </Campo>
@@ -614,6 +683,13 @@ export function ConvertirLeadModal({
                 <Campo label="Dirección" obligatorio error={errores.direccion}>
                   <input style={inputStyle} value={lead.direccion || ''} onChange={(e) => set('direccion', e.target.value)} />
                 </Campo>
+              </div>
+                  </>
+                )}
+                {pestana === 'licencia' && (
+                  <>
+                    <div style={tituloSeccion}>Licencia de Conducir</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px' }}>
                 <Campo label="¿Tiene licencia?" obligatorio>
                   <select style={inputStyle} value={licenciaSiNo(lead.licencia)} onChange={(e) => set('licencia', e.target.value)}>
                     <option value="">Seleccionar...</option>
@@ -671,6 +747,22 @@ export function ConvertirLeadModal({
                     ))}
                   </select>
                 </Campo>
+              </div>
+                    <div style={{ marginTop: '14px', display: 'grid', gap: '14px' }}>
+                <AlertasLicencia mensajes={alertasLicencia(clasesDeLicencia(lead.categorias_licencia || [], lead.categoria_licencia, lead.categoria_licencia_otra))} />
+                {(lead.categorias_licencia?.length ?? 0) > 0 && (
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Categorías cargadas antes (histórico): <strong>{lead.categorias_licencia?.join(', ')}</strong>
+                  </span>
+                )}
+              
+                    </div>
+                  </>
+                )}
+                {pestana === 'operativo' && (
+                  <>
+                    <div style={tituloSeccion}>Operativo</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px' }}>
                 <Campo label="Cochera" obligatorio>
                   <select style={inputStyle} value={lead.cochera || ''} onChange={(e) => set('cochera', e.target.value)}>
                     <option value="">Seleccionar...</option>
@@ -681,9 +773,14 @@ export function ConvertirLeadModal({
                 <Campo label="Experiencia previa" obligatorio>
                   <input style={inputStyle} value={lead.experiencia_previa || ''} onChange={(e) => set('experiencia_previa', e.target.value)} />
                 </Campo>
+              
               </div>
-
-              <div style={{ marginTop: '14px', display: 'grid', gap: '14px' }}>
+                  </>
+                )}
+                {pestana === 'documentacion' && (
+                  <>
+                    <div style={tituloSeccion}>Documentación</div>
+                    <div style={{ display: 'grid', gap: '14px' }}>
                 <Campo label="Link de Documentación (Drive)" error={errores.url_folder}>
                   <input
                     style={inputStyle}
@@ -695,12 +792,8 @@ export function ConvertirLeadModal({
                     Opcional. Si lo dejás vacío, la carpeta se crea automáticamente al convertir.
                   </span>
                 </Campo>
-
-                <AlertasLicencia mensajes={alertasLicencia(clasesDeLicencia(lead.categorias_licencia || [], lead.categoria_licencia, lead.categoria_licencia_otra))} />
-                {(lead.categorias_licencia?.length ?? 0) > 0 && (
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Categorías cargadas antes (histórico): <strong>{lead.categorias_licencia?.join(', ')}</strong>
-                  </span>
+                    </div>
+                  </>
                 )}
               </div>
             </>
