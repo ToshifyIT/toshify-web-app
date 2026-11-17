@@ -56,6 +56,7 @@ import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 import { categoriaDesdeTexto, d1DesdeCategoria, estadoLicencia, licenciaSiNo, normalizarLicenciaAlGuardar } from './licenciaLead'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
+import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatNumero } from '../../utils/format'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
@@ -299,6 +300,12 @@ function normalizarTurno(turno: string | null | undefined): string {
   if (t.includes('cargo')) return TURNO_A_CARGO
   if (t.includes('indiferente') || t.includes('any') || t.includes('ambos') || t.includes('cualquier') || t.includes('sin pref')) return TURNO_SIN_PREF
   return turno || '-'
+}
+
+/** Turnos normalizados que se muestran con el TurnoBadge sobrio (el resto, como texto) */
+const TURNOS_BADGE = new Set(['Diurno', 'Nocturno', TURNO_A_CARGO, TURNO_SIN_PREF])
+function turnoParaBadge(turno: string): string {
+  return turno === TURNO_A_CARGO ? 'a_cargo' : turno
 }
 
 /**
@@ -3090,20 +3097,7 @@ export function LeadsModule() {
               <div className="lead-etiquetas">
               {enZonaRestringida && (
                 <span
-                  className="lead-zona-badge"
-                  style={{
-                    fontSize: '9px',
-                    padding: '2px 6px',
-                    borderRadius: 'var(--radius-xs)',
-                    fontWeight: 600,
-                    marginTop: '2px',
-                    display: 'inline-block',
-                    background: 'var(--badge-red-bg)',
-                    color: 'var(--badge-red-text)',
-                    width: 'fit-content',
-                    cursor: 'default',
-                    position: 'relative',
-                  }}
+                  className="lead-zona-badge lead-zona-badge--restringida"
                   title={`Zona Restringida: ${zonaRestringida}${direccion ? ` · ${direccion}` : ''}`}
                 >
                   <MapPin size={12} />
@@ -3111,20 +3105,7 @@ export function LeadsModule() {
               )}
               {tieneCoordenadas && !enZonaRestringida && (
                 <span
-                  className="lead-zona-badge"
-                  style={{
-                    fontSize: '9px',
-                    padding: '2px 6px',
-                    borderRadius: 'var(--radius-xs)',
-                    fontWeight: 600,
-                    marginTop: '2px',
-                    display: 'inline-block',
-                    background: 'var(--badge-green-bg)',
-                    color: 'var(--badge-green-text)',
-                    width: 'fit-content',
-                    cursor: 'default',
-                    position: 'relative',
-                  }}
+                  className="lead-zona-badge lead-zona-badge--ok"
                   title={`Zona Aprobada${direccion ? ` · ${direccion}` : ''}`}
                 >
                   <MapPin size={12} />
@@ -3325,7 +3306,10 @@ export function LeadsModule() {
           selectAll
         />
       ),
-      cell: ({ row }) => normalizarTurno(row.original.turno),
+      cell: ({ row }) => {
+        const turno = normalizarTurno(row.original.turno)
+        return TURNOS_BADGE.has(turno) ? <TurnoBadge turno={turnoParaBadge(turno)} /> : turno
+      },
       size: 90,
       enableSorting: true,
     },
@@ -4197,7 +4181,6 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
     return v === 'si' ? 'Si' : v === 'no' ? 'No' : null
   })()
   const display = norm || value || '-'
-  const color = norm === 'Si' ? '#16a34a' : norm === 'No' ? '#dc2626' : '#9ca3af'
 
   useLayoutEffect(() => {
     if (!isOpen || !cellRef.current) return
@@ -4231,18 +4214,16 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
     <span style={{ display: 'inline-block' }}>
       <span
         ref={cellRef}
+        className={`lead-sino-cell lead-sino-cell--${norm === 'Si' ? 'si' : norm === 'No' ? 'no' : 'vacio'}${canEdit ? ' lead-sino-cell--editable' : ''}`}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: '3px',
           fontSize: '11px',
           fontWeight: 600,
-          color,
           cursor: canEdit ? 'pointer' : 'default',
           padding: '2px 8px',
           borderRadius: 'var(--radius-xs)',
-          background: norm === 'Si' ? '#DCFCE7' : norm === 'No' ? '#FEE2E2' : 'transparent',
-          border: canEdit ? '1px dashed #d1d5db' : 'none',
         }}
         onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(dropdownKey) } : undefined}
       >
@@ -4257,11 +4238,11 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
             top: pos.top,
             left: pos.left,
             zIndex: 'var(--z-dropdown)',
-            background: '#fff',
+            background: 'var(--bg-primary, #fff)',
             borderRadius: 'var(--radius-md)',
             boxShadow: '0 4px 20px rgba(0,0,0,.15)',
             padding: '4px 0',
-            minWidth: '100px',
+            minWidth: '70px',
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -4271,25 +4252,25 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '6px',
                 width: '100%',
-                padding: '8px 14px',
+                padding: '5px 10px',
                 border: 'none',
-                background: opt.val === norm ? '#F3F4F6' : 'transparent',
+                background: opt.val === norm ? 'var(--bg-tertiary, #F3F4F6)' : 'transparent',
                 cursor: 'pointer',
-                fontSize: '13px',
+                fontSize: '11px',
                 fontWeight: opt.val === norm ? 600 : 400,
                 textAlign: 'left',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
-              onMouseLeave={e => (e.currentTarget.style.background = opt.val === norm ? '#F3F4F6' : 'transparent')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, #F3F4F6)')}
+              onMouseLeave={e => (e.currentTarget.style.background = opt.val === norm ? 'var(--bg-tertiary, #F3F4F6)' : 'transparent')}
               onClick={(e) => {
                 e.stopPropagation()
                 if (opt.val !== value) onChange(leadId, field, opt.val)
                 onClose()
               }}
             >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.dot, flexShrink: 0 }} />
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: opt.dot, flexShrink: 0 }} />
               {opt.label}
             </button>
           ))}
@@ -4329,7 +4310,7 @@ function GuiaDropdownCell({ leadId, field = 'entrevistador_asignado', value, gui
   useLayoutEffect(() => {
     if (!isOpen || !cellRef.current) return
     const rect = cellRef.current.getBoundingClientRect()
-    const alto = Math.min(MAX_H, (guias.length + 1) * 36 + 8)
+    const alto = Math.min(MAX_H, (guias.length + 1) * 26 + 8)
     const vh = window.innerHeight
     let top = rect.bottom + 4
     if (top + alto > vh - 8) top = rect.top - alto - 4
@@ -4386,11 +4367,11 @@ function GuiaDropdownCell({ leadId, field = 'entrevistador_asignado', value, gui
             top: pos.top,
             left: pos.left,
             zIndex: 'var(--z-dropdown)',
-            background: '#fff',
+            background: 'var(--bg-primary, #fff)',
             borderRadius: 'var(--radius-md)',
             boxShadow: '0 4px 20px rgba(0,0,0,.15)',
             padding: '4px 0',
-            minWidth: '160px',
+            minWidth: '120px',
             maxHeight: MAX_H,
             overflowY: 'auto',
           }}
@@ -4402,18 +4383,18 @@ function GuiaDropdownCell({ leadId, field = 'entrevistador_asignado', value, gui
               style={{
                 display: 'block',
                 width: '100%',
-                padding: '8px 14px',
+                padding: '5px 10px',
                 border: 'none',
-                background: esActual(opt.val) ? '#F3F4F6' : 'transparent',
+                background: esActual(opt.val) ? 'var(--bg-tertiary, #F3F4F6)' : 'transparent',
                 cursor: 'pointer',
-                fontSize: '13px',
+                fontSize: '11px',
                 fontWeight: esActual(opt.val) ? 600 : 400,
                 color: opt.val ? 'inherit' : '#9ca3af',
                 textAlign: 'left',
                 whiteSpace: 'nowrap',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
-              onMouseLeave={e => (e.currentTarget.style.background = esActual(opt.val) ? '#F3F4F6' : 'transparent')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, #F3F4F6)')}
+              onMouseLeave={e => (e.currentTarget.style.background = esActual(opt.val) ? 'var(--bg-tertiary, #F3F4F6)' : 'transparent')}
               onClick={(e) => {
                 e.stopPropagation()
                 if (!esActual(opt.val)) onChange(leadId, field, opt.val)

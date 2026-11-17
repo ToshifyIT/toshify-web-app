@@ -777,13 +777,14 @@
 .dt-actions-dropdown-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 10px 14px;
+  /* Misma escala que la tabla (2026-11-17): antes 13px y 10px 14px */
+  padding: 6px 12px;
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 11px;
   text-align: left;
   cursor: pointer;
   transition: background 0.15s;
@@ -799,8 +800,8 @@
 }
 
 .dt-actions-dropdown-item svg {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -2227,3 +2228,29 @@
 
 #root td button:has(> svg.lucide-ellipsis-vertical:only-child) { color: var(--text-secondary); }
 #root td button:has(> svg.lucide-ellipsis-vertical:only-child):hover:not(:disabled) { color: var(--text-primary); background: var(--bg-tertiary); }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Todas las etiquetas de estado (dt-badge, suaves y "solid") van sin fondo:
+   punto de color + texto del color. Se distinguen igual y la tabla no se
+   ve cargada. Va al final para pisar las variantes y el modo oscuro.
+   ===================================================== */
+.dt-badge:not(.dt-badge-more) {
+  background: transparent !important;
+  padding: 2px 0;
+  gap: 5px;
+}
+.dt-badge:not(.dt-badge-more)::before {
+  width: 6px;
+  height: 6px;
+  opacity: 1;
+}
+.dt-badge-solid-green { color: var(--color-success); }
+.dt-badge-solid-blue { color: var(--color-info); }
+.dt-badge-solid-yellow,
+.dt-badge-solid-amber { color: #d97706; }
+.dt-badge-solid-red { color: var(--color-danger); }
+.dt-badge-solid-gray { color: var(--text-secondary); }
+.dt-badge-solid-purple { color: #7c3aed; }
+.dt-badge-solid-orange { color: #ea580c; }
+.dt-badge-gray { color: var(--text-secondary); }

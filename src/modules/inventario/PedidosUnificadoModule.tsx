@@ -1792,9 +1792,6 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
             fontSize: '15px',
             fontWeight: 700,
             color: 'var(--badge-yellow-text)',
-            background: 'var(--badge-yellow-bg)',
-            padding: '4px 12px',
-            borderRadius: 'var(--radius-md)'
           }}>
             {row.original.cantidad}
           </span>
@@ -4802,15 +4799,15 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
                                       const pendienteReal = Math.max(0, objetivo - (item.cantidad_recibida || 0))
 
                                       if (rechazado) {
-                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-red-bg, #fef2f2)', color: 'var(--badge-red-text, #dc2626)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Rechazado</span>
+                                        return <span className="dt-badge dt-badge-red">Rechazado</span>
                                       }
                                       if (pendienteReal <= 0) {
-                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-green-bg)', color: 'var(--badge-green-text)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Completo</span>
+                                        return <span className="dt-badge dt-badge-green">Completo</span>
                                       }
                                       if ((item.cantidad_recibida || 0) > 0) {
-                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-blue-bg, #eff6ff)', color: 'var(--badge-blue-text, #1d4ed8)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Parcial</span>
+                                        return <span className="dt-badge dt-badge-blue">Parcial</span>
                                       }
-                                      return <span style={{ padding: '6px 12px', background: 'var(--badge-yellow-bg)', color: 'var(--badge-yellow-text)', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 600 }}>Pendiente</span>
+                                      return <span className="dt-badge dt-badge-yellow">Pendiente</span>
                                     })()}
                                   </td>
                                 </tr>

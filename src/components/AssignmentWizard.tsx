@@ -7,10 +7,11 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSede } from '../contexts/SedeContext'
 import { TimeInput24h } from './ui/TimeInput24h'
 import { Alerta } from './ui/alertas'
+import { TurnoBadge } from './ui/TurnoBadge'
 import { showError, showSuccess } from '../utils/toast'
 import type { Vehicle } from '../types/vehiculo.types'
 import type { Conductor } from '../types/conductor.types'
-import { formatPreferencia, getPreferenciaBadge, FILTRO_SIN_INTERNOS } from '../utils/conductorUtils'
+import { FILTRO_SIN_INTERNOS } from '../utils/conductorUtils'
 
 import { hoyART } from '../utils/fechaArgentina'
 import { formatFecha } from '../utils/format'
@@ -1927,15 +1928,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 </p>
                                 <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span>DNI: {conductor.numero_dni || '-'}</span>
-                                  <span style={{
-                                    fontSize: '9px',
-                                    padding: '2px 6px',
-                                    borderRadius: 'var(--radius-xs)',
-                                    fontWeight: '600',
-                                    background: getPreferenciaBadge(conductor.preferencia_turno).bg,
-                                    color: getPreferenciaBadge(conductor.preferencia_turno).color
-                                  }}>
-                                    {formatPreferencia(conductor.preferencia_turno)}
+                                  <span style={{ fontSize: '10px' }} title="Preferencia de turno">
+                                    <TurnoBadge turno={conductor.preferencia_turno} />
                                   </span>
                                 </p>
                                 {infoMsg ? (
@@ -1979,7 +1973,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       {/* Turno Diurno */}
                       <div className="conductores-column turno-diurno">
                         <h4>
-                          <span className="turno-badge diurno">DIURNO</span>
+                          <TurnoBadge turno="diurno" conTexto />
                         </h4>
                         <div
                           className={`drop-zone ${conductorDiurno ? 'has-conductor' : ''}`}
@@ -1998,15 +1992,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 </p>
                                 <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span>DNI: {conductorDiurno.numero_dni || '-'}</span>
-                                  <span style={{
-                                    fontSize: '9px',
-                                    padding: '2px 6px',
-                                    borderRadius: 'var(--radius-xs)',
-                                    fontWeight: '600',
-                                    background: getPreferenciaBadge(conductorDiurno.preferencia_turno).bg,
-                                    color: getPreferenciaBadge(conductorDiurno.preferencia_turno).color
-                                  }}>
-                                    {formatPreferencia(conductorDiurno.preferencia_turno)}
+                                  <span style={{ fontSize: '10px' }} title="Preferencia de turno">
+                                    <TurnoBadge turno={conductorDiurno.preferencia_turno} />
                                   </span>
                                 </p>
                               </div>
@@ -2029,7 +2016,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       {/* Turno Nocturno */}
                       <div className="conductores-column turno-nocturno">
                         <h4>
-                          <span className="turno-badge nocturno">NOCTURNO</span>
+                          <TurnoBadge turno="nocturno" conTexto />
                         </h4>
                         <div
                           className={`drop-zone ${conductorNocturno ? 'has-conductor' : ''}`}
@@ -2048,15 +2035,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 </p>
                                 <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span>DNI: {conductorNocturno.numero_dni || '-'}</span>
-                                  <span style={{
-                                    fontSize: '9px',
-                                    padding: '2px 6px',
-                                    borderRadius: 'var(--radius-xs)',
-                                    fontWeight: '600',
-                                    background: getPreferenciaBadge(conductorNocturno.preferencia_turno).bg,
-                                    color: getPreferenciaBadge(conductorNocturno.preferencia_turno).color
-                                  }}>
-                                    {formatPreferencia(conductorNocturno.preferencia_turno)}
+                                  <span style={{ fontSize: '10px' }} title="Preferencia de turno">
+                                    <TurnoBadge turno={conductorNocturno.preferencia_turno} />
                                   </span>
                                 </p>
                               </div>
@@ -2082,7 +2062,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   {!isTurnoMode && (
                     <div className="conductores-column a-cargo">
                       <h4>
-                        <span className="turno-badge cargo">A CARGO</span>
+                        <TurnoBadge turno="a_cargo" conTexto />
                       </h4>
                       <div
                         className={`drop-zone ${conductorCargo ? 'has-conductor' : ''}`}
@@ -2101,15 +2081,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                               </p>
                               <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                 <span>DNI: {conductorCargo.numero_dni || '-'}</span>
-                                <span style={{
-                                  fontSize: '9px',
-                                  padding: '2px 6px',
-                                  borderRadius: 'var(--radius-xs)',
-                                  fontWeight: '600',
-                                  background: getPreferenciaBadge(conductorCargo.preferencia_turno).bg,
-                                  color: getPreferenciaBadge(conductorCargo.preferencia_turno).color
-                                }}>
-                                  {formatPreferencia(conductorCargo.preferencia_turno)}
+                                <span style={{ fontSize: '10px' }} title="Preferencia de turno">
+                                  <TurnoBadge turno={conductorCargo.preferencia_turno} />
                                 </span>
                               </p>
                             </div>

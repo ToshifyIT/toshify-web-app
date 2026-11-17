@@ -513,3 +513,17 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: texto del color, como dt-badge.
+   ===================================================== */
+.prov-op-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}

@@ -26,6 +26,8 @@ export function Badge({
   children: React.ReactNode
 }) {
   const t = TONOS[tono]
+  // Estilo sobrio (2026-11-17): sin fondo, punto + texto del color, igual que las
+  // etiquetas de estado del resto del sistema.
   return (
     <span
       style={{
@@ -33,14 +35,14 @@ export function Badge({
         alignItems: 'center',
         gap: 4,
         fontSize: 10,
-        fontWeight: 700,
-        borderRadius: 'var(--radius-sm)',
-        padding: '2px 6px',
-        background: t.bg,
+        fontWeight: 600,
+        padding: '1px 0',
+        background: 'transparent',
         color: t.color,
         whiteSpace: 'nowrap',
       }}
     >
+      <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
       {children}
     </span>
   )
@@ -71,7 +73,7 @@ export function Chip({
         color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)',
         borderRadius: 'var(--radius-full)',
         padding: '4px 10px',
-        fontSize: 11.5,
+        fontSize: 10.5,
         fontWeight: 600,
         cursor: onClick ? 'pointer' : 'default',
         whiteSpace: 'nowrap',
@@ -105,7 +107,7 @@ export function CheckRow({
         display: 'flex',
         alignItems: 'center',
         gap: 7,
-        fontSize: 12,
+        fontSize: 11,
         color: 'var(--text-primary)',
         cursor: deshabilitado ? 'not-allowed' : 'pointer',
         padding: '1px 0',
@@ -189,7 +191,7 @@ export function Acordeon({
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: 650,
           color,
           textAlign: 'left',
@@ -198,7 +200,7 @@ export function Acordeon({
         <span>{titulo}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {resumen && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: destacado ? color : 'var(--text-tertiary)' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: destacado ? color : 'var(--text-tertiary)' }}>
               {resumen}
             </span>
           )}
@@ -243,7 +245,7 @@ export function BotonPrimario({
         borderRadius: 'var(--radius-md)',
         background: disabled ? '#f0a7b6' : 'var(--color-primary, #ff0033)',
         color: '#fff',
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 650,
         cursor: disabled ? 'not-allowed' : 'pointer',
         width: full ? '100%' : undefined,
@@ -278,7 +280,7 @@ export function BotonSecundario({
         borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)',
         color: 'var(--text-secondary)',
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 600,
         cursor: 'pointer',
         width: full ? '100%' : undefined,

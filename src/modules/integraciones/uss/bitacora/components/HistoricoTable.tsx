@@ -224,11 +224,7 @@ export function HistoricoTable({
                   alignSelf: 'flex-start',
                   fontSize: '11px',
                   fontWeight: 600,
-                  color: '#92400e',
-                  background: '#fef3c7',
-                  border: '1px solid #fcd34d',
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-full)',
+                  color: '#b45309',
                   whiteSpace: 'nowrap',
                 }}
               >

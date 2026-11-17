@@ -13,6 +13,7 @@ import { supabase } from '../../../../../lib/supabase';
 import { Spinner } from '../../../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../../../components/ui/EstadosVista'
 import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { TurnoBadge } from '../../../../../components/ui/TurnoBadge'
 import { formatFecha } from '../../../../../utils/format'
 
 interface ConductorHistorialModalProps {
@@ -67,10 +68,9 @@ function estadoBadge(conductorEstado: string, asignacionEstado?: string) {
   return estados[conductorEstado] || { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: conductorEstado };
 }
 
-function turnoBadge(turno: string) {
-  if (turno === 'diurno') return { bg: '#FDE68A', color: '#92400E', label: 'DIURNO' };
-  if (turno === 'nocturno') return { bg: '#DBEAFE', color: '#1E40AF', label: 'NOCTURNO' };
-  return { bg: '#F3F4F6', color: '#374151', label: 'A CARGO' };
+/** diurno / nocturno; cualquier otro horario (todo_dia) es A cargo */
+function turnoDeHorario(horario: string) {
+  return horario === 'diurno' || horario === 'nocturno' ? horario : 'a_cargo';
 }
 
 const fmtFecha = (v: string | null | undefined) =>
@@ -145,7 +145,6 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                 const asig = item.asignaciones;
                 const v = asig?.vehiculos;
                 const eb = estadoBadge(item.estado, asig?.estado);
-                const tb = turnoBadge(item.horario);
                 const isActiva = asig?.estado === 'activa';
                 const ini = item.fecha_inicio || asig?.fecha_inicio;
                 const fin = item.fecha_fin || asig?.fecha_fin;
@@ -171,8 +170,8 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                         </div>
                       )}
                     </div>
-                    <span style={{ background: tb.bg, color: tb.color, fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)' }}>
-                      {tb.label}
+                    <span style={{ fontSize: '11px' }}>
+                      <TurnoBadge turno={turnoDeHorario(item.horario)} conTexto />
                     </span>
                     <span style={{ background: eb.bg, color: eb.color, fontSize: '11px', fontWeight: 600, padding: '3px 8px', borderRadius: 'var(--radius-sm)' }}>
                       {eb.label}

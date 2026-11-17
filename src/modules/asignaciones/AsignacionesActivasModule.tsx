@@ -23,6 +23,7 @@ import { showError } from '../../utils/toast'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatFecha, formatFechaHora } from '../../utils/format'
 import { fechaISOART, hoyART } from '../../utils/fechaArgentina'
 
@@ -211,14 +212,13 @@ function porTurno(lista: MovimientoConductor[]): { turno: Turno; cantidad: numbe
 
 /** Desglose D / N / C de una tarjeta (los turnos en cero no se muestran). */
 function DesgloseTurnos({ lista }: { lista: MovimientoConductor[] }) {
-  const clase: Record<Turno, string> = { D: 'asig-label-diurno', N: 'asig-label-nocturno', C: 'asig-label-cargo' }
   const items = porTurno(lista).filter(x => x.cantidad > 0)
   if (items.length === 0) return null
   return (
     <div className="asig-turnos-desglose">
       {items.map(x => (
         <span key={x.turno} className="asig-turnos-desglose-item" title={x.turno === 'C' ? 'A cargo' : x.turno === 'D' ? 'Diurno' : 'Nocturno'}>
-          <span className={`asig-turno-label ${clase[x.turno]}`}>{x.turno}</span>
+          <TurnoBadge turno={x.turno === 'D' ? 'diurno' : x.turno === 'N' ? 'nocturno' : 'a_cargo'} size={12} />
           {x.cantidad}
         </span>
       ))}
@@ -981,7 +981,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
             return (
               <div className="asig-conductores-compact">
                 <span className={conductorCargo ? 'asig-conductor-turno' : 'asig-turno-vacante asig-turno-cargo'} title="A cargo">
-                  <span className="asig-turno-label asig-label-cargo">C</span>
+                  <TurnoBadge turno="a_cargo" size={12} />
                   {esAgentes && <AvatarGuia guia={conductorCargo?.guia} vacio={!conductorCargo} />}
                   {conductorCargo ? conductorCargo.nombre : 'Sin asignar'}
                 </span>
@@ -996,12 +996,12 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
           return (
             <div className="asig-conductores-compact">
               <span className={diurno ? 'asig-conductor-turno asig-turno-diurno' : 'asig-turno-vacante asig-turno-diurno'}>
-                <span className="asig-turno-label asig-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {esAgentes && <AvatarGuia guia={diurno?.guia} vacio={!diurno} />}
                 {diurno ? diurno.nombre : 'Vacante'}
               </span>
               <span className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}>
-                <span className="asig-turno-label asig-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {esAgentes && <AvatarGuia guia={nocturno?.guia} vacio={!nocturno} />}
                 {nocturno ? nocturno.nombre : 'Vacante'}
               </span>
@@ -1357,11 +1357,11 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
             />
             <div className="asig-turnos-desglose">
               <span className="asig-turnos-desglose-item">
-                <span className="asig-turno-label asig-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {stats.turnosDisponiblesD}
               </span>
               <span className="asig-turnos-desglose-item">
-                <span className="asig-turno-label asig-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {stats.turnosDisponiblesN}
               </span>
             </div>
@@ -1799,13 +1799,11 @@ function DetalleAsignacionModal({ asignacion, onClose }: { asignacion: Asignacio
             {conductores.map(ac => {
               const det = conductoresDet.get(ac.conductor_id)
               const letra = ac.horario === 'diurno' ? 'D' : ac.horario === 'nocturno' ? 'N' : 'C'
-              const claseLetra = letra === 'D' ? 'asig-label-diurno' : letra === 'N' ? 'asig-label-nocturno' : 'asig-label-cargo'
-              const turnoLabel = letra === 'D' ? 'Diurno' : letra === 'N' ? 'Nocturno' : 'A cargo'
               return (
                 <div key={ac.id} className="efd-card">
                   <div className="efd-card-head">
                     <div className="efd-conductor-nombre">
-                      <span className={`asig-turno-label ${claseLetra}`} title={turnoLabel}>{letra}</span>
+                      <TurnoBadge turno={letra === 'D' ? 'diurno' : letra === 'N' ? 'nocturno' : 'a_cargo'} size={12} />
                       <span>{`${ac.conductores?.nombres || ''} ${ac.conductores?.apellidos || ''}`.trim()}</span>
                     </div>
                     <div className="efd-head-badges">

@@ -1809,3 +1809,239 @@ tr:hover .pen-check-cell,
     align-items: stretch;
   }
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.estado-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.estado-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.estado-gray { color: var(--text-secondary); }
+.estado-blue { color: #1d4ed8; }
+.estado-orange { color: #c2410c; }
+.estado-green { color: #15803d; }
+.estado-purple { color: #7c3aed; }
+.estado-red { color: #b91c1c; }
+.estado-yellow { color: #b45309; }
+[data-theme="dark"] .estado-gray { color: var(--text-secondary); }
+[data-theme="dark"] .estado-blue { color: #60a5fa; }
+[data-theme="dark"] .estado-orange { color: #fb923c; }
+[data-theme="dark"] .estado-green { color: #4ade80; }
+[data-theme="dark"] .estado-purple { color: #c4b5fd; }
+[data-theme="dark"] .estado-red { color: #f87171; }
+[data-theme="dark"] .estado-yellow { color: #fbbf24; }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.conductor-estado-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.conductor-estado-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.conductor-estado-activo { color: #15803d; }
+.conductor-estado-asignado { color: #1d4ed8; }
+.conductor-estado-baja { color: #b91c1c; }
+[data-theme="dark"] .conductor-estado-activo { color: #4ade80; }
+[data-theme="dark"] .conductor-estado-asignado { color: #60a5fa; }
+[data-theme="dark"] .conductor-estado-baja { color: #f87171; }
+
+/* =====================================================
+   DETALLE (ojo de cada tab) — misma estructura en los 5 tabs (2026-11-17)
+   Cabecera fija con conductor + patente + estado; cuerpo en secciones con
+   filas etiqueta/valor; botones en el pie fijo. Sin cajas grandes ni fondos.
+   ===================================================== */
+.inc-detalle-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 40px;
+}
+.inc-detalle-head-sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: var(--text-secondary);
+}
+.inc-detalle-head-conductor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.inc-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.inc-detalle-seccion {
+  border-top: 1px solid var(--border-primary);
+  padding-top: 10px;
+}
+.inc-detalle-seccion:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.inc-detalle-titulo {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  margin: 0 0 8px;
+}
+.inc-detalle-grilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 24px;
+}
+.inc-detalle-fila {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+.inc-detalle-fila-label {
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.inc-detalle-fila-valor {
+  color: var(--text-primary);
+  font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.inc-detalle-texto {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+.inc-detalle-texto-vacio {
+  color: var(--text-tertiary);
+}
+.inc-detalle-rechazo {
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--color-danger, #ef4444);
+}
+.inc-detalle-rechazo + .inc-detalle-rechazo {
+  margin-top: 6px;
+}
+.inc-detalle-rechazo-meta {
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+.inc-detalle-ref {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  opacity: 0.8;
+}
+@media (max-width: 640px) {
+  .inc-detalle-grilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inc-detalle-head {
+    padding: 0 32px 0 0;
+    align-items: flex-start;
+  }
+  .inc-detalle-head-sub {
+    justify-content: flex-start;
+  }
+}
+
+/* =====================================================
+   FILTRO RÁPIDO (Incidencia Facturación) — chips compactos (2026-11-17)
+   Mismo tamaño que el resto de los filtros rápidos: 11px, alto 24px, punto 6px.
+   ===================================================== */
+.inc-filtro-rapido {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0 0 6px;
+}
+.inc-filtro-rapido-titulo {
+  color: var(--text-tertiary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+#root .inc-filtro-rapido .inc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 3px 10px !important;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px !important;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#root .inc-filtro-rapido .inc-chip:hover {
+  border-color: var(--text-tertiary);
+}
+#root .inc-filtro-rapido .inc-chip.activo {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.inc-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.inc-chip.activo .inc-chip-dot {
+  box-shadow: 0 0 0 1px #fff;
+}
+#root .inc-filtro-rapido .inc-chip-count {
+  color: var(--text-tertiary);
+  font-weight: 500;
+  font-size: 11px !important;
+}
+#root .inc-filtro-rapido .inc-chip.activo .inc-chip-count {
+  color: rgba(255, 255, 255, 0.8);
+}

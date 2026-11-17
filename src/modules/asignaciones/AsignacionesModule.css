@@ -751,14 +751,14 @@ input[type="date"].asig-status-select {
 
 /* Diurno (D) - Amarillo */
 .asig-turno-label.asig-label-diurno {
-  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
-  color: #92400E;
+  background: transparent;
+  color: #d97706; /* sobrio: letra de color sin fondo (como TurnoBadge) */
 }
 
 /* Nocturno (N) - Azul (mismo que badge Nocturno en Conductores) */
 .asig-turno-label.asig-label-nocturno {
-  background: var(--badge-blue-bg);
-  color: var(--badge-blue-text);
+  background: transparent;
+  color: #4f46e5;
 }
 
 /* Botones de acción específicos */
@@ -2550,8 +2550,8 @@ input[type="date"].asig-status-select {
 
 /* A cargo (C) - Violeta, mismo tono que el badge "A CARGO" de la tabla */
 .asig-turno-label.asig-label-cargo {
-  background: var(--badge-purple-bg);
-  color: var(--badge-purple-text);
+  background: transparent;
+  color: #7c3aed;
 }
 
 /* Vacante A cargo - Violeta (Estado de Flota, columna Asignados) */
@@ -2888,9 +2888,10 @@ input[type="date"].asig-status-select {
 
 /* Guía responsable de llenar los turnos del vehículo: badge del sistema (dt-badge)
    con el color del agente. Mismo ancho para todos. */
+/* Sin fondo (etiquetas sobrias): alineado a la izquierda para que los nombres
+   queden en línea recta en la columna (2026-11-17) */
 .asig-responsable {
-  justify-content: center;
-  min-width: 64px;
+  justify-content: flex-start;
   box-sizing: border-box;
   cursor: default;
 }
@@ -3032,17 +3033,6 @@ input[type="date"].asig-status-select {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
 }
-.asig-det-turno {
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  background: #e5e7eb;
-  color: #374151;
-}
-.asig-det-turno--diurno { background: #fef3c7; color: #92400e; }
-.asig-det-turno--nocturno { background: #dbeafe; color: #1e40af; }
 .asig-det-nombre { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--text-primary); }
 .asig-det-baja {
   margin-left: 8px;
@@ -3116,3 +3106,11 @@ input[type="date"].asig-status-select {
   .asig-det-datos { grid-template-columns: 1fr; }
   .asig-det-cabecera { flex-direction: column; }
 }
+
+/* Documento (C.Oferta / Anexo / N/A) sobrio: sin fondo, texto del color (2026-11-17) */
+.asig-documento-badge {
+  background: transparent !important;
+  padding: 1px 0;
+  font-weight: 600;
+}
+.asig-doc-na { color: var(--text-tertiary); }

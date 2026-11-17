@@ -67,12 +67,10 @@
 [data-theme="dark"] [style^="color: rgb(107, 114, 128)"],
 [data-theme="dark"] [style*="; color: rgb(107, 114, 128)"] { color: #a3a3a3 !important; }
 
-/* Chips de estado de leads (y similares): en claro son fondo pastel + texto fuerte.
-   En oscuro el pastel queda como una pastilla blanca que encandila: fondo translúcido
-   del mismo color y texto un poco más claro. */
+/* Estado de leads: sin fondo (punto + texto). Los colores para oscuro están en
+   LeadsModule.css ("ETIQUETAS SOBRIAS"). */
 [data-theme="dark"] .lead-estado-badge {
-  background: color-mix(in srgb, currentColor 18%, transparent) !important;
-  filter: brightness(1.35) saturate(0.9);
+  background: transparent !important;
 }
 
 /* Selectores "en línea" de las tablas (borde punteado gris claro): en oscuro casi no se ve el gris claro, se usa uno oscuro */

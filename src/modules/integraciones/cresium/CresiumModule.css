@@ -338,3 +338,35 @@
   padding: 4px 10px;
   margin: -8px 0;
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.cr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.cr-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.cr-badge--cargado { color: #15803d; }
+.cr-badge--conciliado { color: #1d4ed8; }
+.cr-badge--pendiente { color: #b45309; }
+.cr-badge--ignorado { color: var(--text-secondary); }
+.cr-badge--error { color: #b91c1c; }
+[data-theme="dark"] .cr-badge--cargado { color: #4ade80; }
+[data-theme="dark"] .cr-badge--conciliado { color: #60a5fa; }
+[data-theme="dark"] .cr-badge--pendiente { color: #fbbf24; }
+[data-theme="dark"] .cr-badge--ignorado { color: var(--text-secondary); }
+[data-theme="dark"] .cr-badge--error { color: #f87171; }

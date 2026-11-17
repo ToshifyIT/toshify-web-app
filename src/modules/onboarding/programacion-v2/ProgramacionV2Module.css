@@ -248,14 +248,14 @@
 
 /* Label Diurno */
 .prog-label-diurno {
-  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
-  color: #92400E;
+  background: transparent;
+  color: #d97706; /* sobrio: letra de color sin fondo (como TurnoBadge) */
 }
 
 /* Label Nocturno */
 .prog-label-nocturno {
-  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
-  color: #1E40AF;
+  background: transparent;
+  color: #4f46e5;
 }
 
 /* Turno Diurno - fondo sutil */
@@ -1494,3 +1494,31 @@
 .dt-card-value .prog-turno-vacante {
   white-space: nowrap;
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.prog-modalidad-badge,
+.prog-estado-badge,
+.prog-documento-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.prog-modalidad-badge::before,
+.prog-estado-badge::before,
+.prog-documento-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.prog-modalidad-badge.cargo { color: #b45309; }
+[data-theme="dark"] .prog-modalidad-badge.cargo { color: #fbbf24; }

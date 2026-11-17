@@ -79,6 +79,7 @@ import { documentoSegunTarifa, permiteAnexo } from './documentoTarifa'
 import { esConductorInterno } from '../../../utils/conductorUtils'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 import { TabsBar } from '../../../components/ui/TabsBar'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 import { formatFecha } from '../../../utils/format'
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
@@ -2472,11 +2473,11 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-conductores-compact">
               <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
-                <span className="prog-turno-label prog-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {conductor_diurno_nombre || 'Vacante'}
               </span>
               <span className={conductor_nocturno_nombre ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
-                <span className="prog-turno-label prog-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {conductor_nocturno_nombre || 'Vacante'}
               </span>
             </div>
@@ -2490,11 +2491,11 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-conductores-compact">
               <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
-                <span className="prog-turno-label prog-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {isDiurno ? nombre : 'Vacante'}
               </span>
               <span className={!isDiurno ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
-                <span className="prog-turno-label prog-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {!isDiurno ? nombre : 'Vacante'}
               </span>
             </div>
@@ -2867,11 +2868,11 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-conductores-compact" style={{ fontSize: '13px' }}>
               <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
-                <span className="prog-turno-label prog-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {conductor_diurno_nombre || 'Vacante'}
               </span>
               <span className={conductor_nocturno_nombre ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
-                <span className="prog-turno-label prog-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {conductor_nocturno_nombre || 'Vacante'}
               </span>
             </div>
@@ -2884,11 +2885,11 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-conductores-compact" style={{ fontSize: '13px' }}>
               <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
-                <span className="prog-turno-label prog-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {isDiurno ? nombre : 'Vacante'}
               </span>
               <span className={!isDiurno ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
-                <span className="prog-turno-label prog-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {!isDiurno ? nombre : 'Vacante'}
               </span>
             </div>

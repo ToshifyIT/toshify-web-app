@@ -621,6 +621,9 @@ export function ZonasManagement() {
           onLoad={setGeneralMapRef}
           options={{
             streetViewControl: false,
+            // Sin los lugares de Google (plazas, comercios): al tocarlos abrían un
+            // cartel "No se ha podido cargar la información del sitio"
+            clickableIcons: false,
             mapTypeControl: false,
             fullscreenControl: true,
             zoomControl: true,
@@ -677,6 +680,9 @@ export function ZonasManagement() {
           onClick={agregarPunto}
           options={{
             streetViewControl: false,
+            // Sin los lugares de Google (plazas, comercios): al tocarlos abrían un
+            // cartel "No se ha podido cargar la información del sitio"
+            clickableIcons: false,
             mapTypeControl: false,
             fullscreenControl: false,
             zoomControl: true,

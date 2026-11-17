@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Clock, User, ArrowRight, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { formatFechaHora } from '../../utils/format'
+import { EstadoVehiculoBadge } from '../../modules/vehiculos/EstadoVehiculoBadge';
 
 interface HistorialEntry {
   id: string;
@@ -72,6 +73,7 @@ function formatDetalles(detalles: Record<string, unknown>): string[] {
     motivo_cancelacion: 'Motivo cancelación',
     fecha_terminacion: 'Fecha terminación',
     asignacion_codigo: 'Asignación',
+    codigo: 'Código',
     codigo_asignacion: 'Asignación',
     asignaciones_afectadas: 'Asignaciones afectadas',
     asignaciones_finalizadas: 'Asignaciones finalizadas',
@@ -96,6 +98,14 @@ function formatDetalles(detalles: Record<string, unknown>): string[] {
     }
   }
   return lines;
+}
+
+/** Estado del historial: el de vehículos usa el mismo badge que la tabla; el de
+ *  conductores, un badge neutro con el código legible (EN_USO -> En uso). */
+function EstadoHistorial({ tipo, codigo }: { tipo: 'vehiculo' | 'conductor'; codigo: string }) {
+  if (tipo === 'vehiculo') return <EstadoVehiculoBadge codigo={codigo} />;
+  const texto = codigo.replace(/_/g, ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
+  return <span className="dt-badge dt-badge-gray">{texto}</span>;
 }
 
 /**
@@ -173,10 +183,7 @@ export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conduct
                 }}>
                   {/* Tipo + fecha */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600, color,
-                      background: `${color}15`, padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                    }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color }}>
                       {EVENTO_LABELS[entry.tipo_evento] || entry.tipo_evento}
                     </span>
                     <span style={{ fontSize: 11, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -191,25 +198,12 @@ export function HistorialLista({ tipo, entityId }: { tipo: 'vehiculo' | 'conduct
                       display: 'flex', alignItems: 'center', gap: 6,
                       fontSize: 11, color: '#374151', marginBottom: 2,
                     }}>
-                      {entry.estado_anterior && (
-                        <span style={{
-                          padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                          background: '#FEE2E2', color: '#991B1B', fontSize: 11,
-                        }}>
-                          {entry.estado_anterior}
-                        </span>
-                      )}
+                      {/* Mismo badge de estado que se ve en la tabla (2026-11-17) */}
+                      {entry.estado_anterior && <EstadoHistorial tipo={tipo} codigo={entry.estado_anterior} />}
                       {entry.estado_anterior && entry.estado_nuevo && (
                         <ArrowRight size={12} style={{ color: '#9CA3AF' }} />
                       )}
-                      {entry.estado_nuevo && (
-                        <span style={{
-                          padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                          background: '#D1FAE5', color: '#065F46', fontSize: 11,
-                        }}>
-                          {entry.estado_nuevo}
-                        </span>
-                      )}
+                      {entry.estado_nuevo && <EstadoHistorial tipo={tipo} codigo={entry.estado_nuevo} />}
                     </div>
                   )}
 

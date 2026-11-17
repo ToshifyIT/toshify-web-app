@@ -246,9 +246,6 @@ export function AsignacionesActivasModule() {
             fontWeight: 700,
             fontSize: '14px',
             color: 'var(--text-primary)',
-            background: 'var(--badge-blue-bg)',
-            padding: '4px 12px',
-            borderRadius: 'var(--radius-sm)'
           }}>
             {row.original.cantidad}
           </span>

@@ -16,13 +16,14 @@ import {
   getEstadoConductorDisplay,
   getEstadoConductorBadgeStyle,
 } from '../../../../utils/conductorUtils'
+import { TurnoBadge } from '../../../../components/ui/TurnoBadge'
 import { IconoEntidad } from './iconos'
 import { HALO_SOBRE_PUNTA, TAMANO_HALO, URL_HALO_ACTIVO, urlEtiquetaPill, urlIconoMarcador } from './marcadores'
 import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
 import type { EntidadMapa, ParSugerido, Radar } from '../types'
 import type { ZonaPeligrosa } from '../distribucionMapaV2Service'
-import { formatKm, formatTiempoPar, LABEL_TURNO, LABEL_TURNO_CONDUCTOR, turnoConductor } from '../utils'
+import { formatKm, formatTiempoPar, LABEL_TURNO, LABEL_TURNO_CONDUCTOR, turnoConductor, turnoLeadATurno } from '../utils'
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
@@ -72,6 +73,16 @@ interface Props {
    * el mapa está listo, aunque cargue después que los datos. `tick` distingue pedidos.
    */
   enfoqueForzado?: { puntos: { lat: number; lng: number }[]; tick: number } | null
+}
+
+/** Margen para fitBounds que entra en el mapa: con filtros, lista y sugerencias
+ *  abiertos el mapa queda angosto, y un margen fijo grande hace que Google aleje
+ *  el zoom a todo el país en vez de encuadrar (2026-11-17). */
+function margenSeguro(map: google.maps.Map, deseado: number): number {
+  const div = map.getDiv()
+  const lado = Math.min(div.clientWidth || 0, div.clientHeight || 0)
+  if (!lado) return deseado
+  return Math.max(8, Math.min(deseado, Math.floor(lado * 0.12)))
 }
 
 export function MapaCanvas({
@@ -151,7 +162,7 @@ export function MapaCanvas({
     }
     const bounds = new google.maps.LatLngBounds()
     enfoqueForzado.puntos.forEach((p) => bounds.extend(p))
-    map.fitBounds(bounds, 140)
+    map.fitBounds(bounds, margenSeguro(map, 140))
     return true
   }, [enfoqueForzado])
   // Espejo para usarlo en el auto-encuadre sin re-ejecutarlo cuando cambia el enfoque
@@ -163,12 +174,18 @@ export function MapaCanvas({
   // Encuadre automático sobre lo visible. Con un enfoque pedido desde Leads
   // vigente, en vez de abrir a todo lo visible (que puede ser todo el país) se
   // vuelve a enfocar al lead y su pareja: los datos se recargan después de abrir.
+  // Si hay alguien seleccionado (o pares/compañero en pantalla), la lista puede
+  // recalcularse (sugerencias, filtros) sin que el operador quiera perder el foco:
+  // en ese caso no se re-encuadra a todo el país (2026-11-17).
+  const hayFocoRef = useRef(false)
+  hayFocoRef.current = !!entidadActiva || paresDibujados.length > 0 || !!radar
   useEffect(() => {
     if (!mapRef.current || entidades.length === 0) return
     if (aplicarEnfoqueForzadoRef.current()) return
+    if (hayFocoRef.current) return
     const bounds = new google.maps.LatLngBounds()
     entidades.forEach((e) => bounds.extend({ lat: e.lat, lng: e.lng }))
-    mapRef.current.fitBounds(bounds, 60)
+    mapRef.current.fitBounds(bounds, margenSeguro(mapRef.current, 60))
   }, [entidades])
 
   // Al seleccionar una entidad (desde el mapa o desde la lista lateral),
@@ -185,7 +202,8 @@ export function MapaCanvas({
     map.panTo({ lat: entidadActiva.lat, lng: entidadActiva.lng })
     // Centrar el conjunto pin + ficha (no sólo el pin): si no, la ficha queda cortada
     // contra el borde del mapa. Se corre el centro media ficha hacia su lado.
-    const dx = (ANCHO_FICHA + SEPARACION_FICHA) / 2
+    // En un mapa angosto no se corre más de un cuarto del ancho (si no, el pin queda afuera)
+    const dx = Math.min((ANCHO_FICHA + SEPARACION_FICHA) / 2, (map.getDiv().clientWidth || 0) / 4)
     const escucha = google.maps.event.addListenerOnce(map, 'idle', () => {
       map.panBy(ladoFicha === 'derecha' ? dx : -dx, 0)
     })
@@ -201,7 +219,7 @@ export function MapaCanvas({
       bounds.extend({ lat: p.a.lat, lng: p.a.lng })
       bounds.extend({ lat: p.b.lat, lng: p.b.lng })
     })
-    mapRef.current.fitBounds(bounds, paresDibujados.length === 1 ? 140 : 80)
+    mapRef.current.fitBounds(bounds, margenSeguro(mapRef.current, paresDibujados.length === 1 ? 140 : 80))
   }, [paresDibujados])
 
   // Al activar "Ver todos en mapa", encuadrar sobre la base y sus conexiones.
@@ -210,7 +228,7 @@ export function MapaCanvas({
     const bounds = new google.maps.LatLngBounds()
     bounds.extend({ lat: radar.base.lat, lng: radar.base.lng })
     radar.conexiones.forEach((c) => bounds.extend({ lat: c.entidad.lat, lng: c.entidad.lng }))
-    mapRef.current.fitBounds(bounds, 90)
+    mapRef.current.fitBounds(bounds, margenSeguro(mapRef.current, 90))
   }, [radar])
 
   // Enfoque pedido desde Leads: va después de los demás encuadres para ganarles
@@ -231,7 +249,7 @@ export function MapaCanvas({
     if (bounds && puntos.every((p) => bounds.contains({ lat: p.lat, lng: p.lng }))) return
     const nuevo = new google.maps.LatLngBounds()
     puntos.forEach((p) => nuevo.extend({ lat: p.lat, lng: p.lng }))
-    map.fitBounds(nuevo, 140)
+    map.fitBounds(nuevo, margenSeguro(map, 140))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parActual?.id])
 
@@ -265,6 +283,9 @@ export function MapaCanvas({
         onLoad={onMapLoad}
         options={{
           streetViewControl: false,
+          // Sin los lugares de Google (plazas, comercios): al tocarlos abrían un
+          // cartel "No se ha podido cargar la información del sitio"
+          clickableIcons: false,
           mapTypeControl: false,
           fullscreenControl: false,
           zoomControl: true,
@@ -415,7 +436,7 @@ export function MapaCanvas({
             zIndex={5}
             icon={{
               url: urlEtiquetaPill(
-                `Compañero actual · ${formatKm(parActual.distanciaKm)} · ${formatTiempoPar(parActual)}`,
+                parActual.distanciaKm < 0.05 ? 'Compañero actual · mismo domicilio' : `Compañero actual · ${formatKm(parActual.distanciaKm)} · ${formatTiempoPar(parActual)}`,
                 '#ff0033'
               ),
               anchor: new google.maps.Point(0, 10),
@@ -535,12 +556,12 @@ export function MapaCanvas({
       {/* Barra del modo "Dibujar todos los pares" */}
       {!parDestacado && paresDibujados.length > 1 && (
         <BarraFlotante onCerrar={onLimpiarPar}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
             Mostrando todas las sugerencias:
           </span>
           <Pildora>{paresDibujados.length} pares</Pildora>
           {!rotularPares && (
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
               sin etiquetas por cantidad
             </span>
           )}
@@ -554,14 +575,14 @@ export function MapaCanvas({
       {/* Barra del modo "Ver todos en mapa" */}
       {radar && paresDibujados.length === 0 && (
         <BarraFlotante onCerrar={onLimpiarRadar} posicion="abajo">
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
             Cercanos a:
           </span>
           <ExtremoPar entidad={radar.base} />
           <Pildora fondo={COLOR_CONEXION_CERCA}>
             {radar.conexiones.filter((c) => c.dentroDelUmbral).length} dentro del umbral
           </Pildora>
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
             {radar.conexiones.length} medidos
           </span>
         </BarraFlotante>
@@ -633,7 +654,7 @@ function Pildora({ children, fondo }: { children: React.ReactNode; fondo?: strin
   return (
     <span
       style={{
-        fontSize: 11.5,
+        fontSize: 10.5,
         fontWeight: 750,
         background: fondo || 'var(--color-primary, #ff0033)',
         color: '#fff',
@@ -651,7 +672,7 @@ function ExtremoPar({ entidad }: { entidad: EntidadMapa }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
       <IconoEntidad tipo={entidad.tipo} color={colorEntidad(entidad)} size={15} />
-      <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{entidad.nombre}</span>
+      <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>{entidad.nombre}</span>
     </span>
   )
 }
@@ -709,7 +730,7 @@ function InfoEntidad({
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={17} />
-        <p style={{ margin: 0, fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>{e.nombre}</p>
+        <p style={{ margin: 0, fontWeight: 700, fontSize: 11, flex: 1, minWidth: 0 }}>{e.nombre}</p>
         <button
           type="button"
           onClick={onCerrar}
@@ -753,12 +774,16 @@ function InfoEntidad({
               }`}
           </Badge>
         ) : e.tipo === 'conductor' && e.turnoEfectivo ? (
-          <Badge tono="info">
-            {turnoConductor(e) === 'A_CARGO' ? LABEL_TURNO_CONDUCTOR.A_CARGO : LABEL_TURNO[e.turnoEfectivo]} ·{' '}
-            {ORIGEN_TURNO_LABEL[e.turnoOrigen] || 'sin dato'}
-          </Badge>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+            <TurnoBadge turno={turnoConductor(e) ?? e.turnoEfectivo} conTexto />
+            <span style={{ color: 'var(--text-tertiary)' }}>· {ORIGEN_TURNO_LABEL[e.turnoOrigen] || 'sin dato'}</span>
+          </span>
         ) : null}
-        {e.tipo === 'lead' && e.turnoLead && <Badge tono="info">{e.turnoLead}</Badge>}
+        {e.tipo === 'lead' && e.turnoLead && (
+          /cargo/i.test(e.turnoLead) ? <TurnoBadge turno="a_cargo" conTexto />
+            : turnoLeadATurno(e.turnoLead) ? <TurnoBadge turno={turnoLeadATurno(e.turnoLead)} conTexto />
+              : <Badge tono="info">{e.turnoLead}</Badge>
+        )}
         {e.estadoCompanero === 'sin_companero' && (
           <Badge tono="info">
             Sin compañero{e.turnoLibreAsignacion ? ` · falta ${e.turnoLibreAsignacion}` : ''}
@@ -767,7 +792,7 @@ function InfoEntidad({
         {e.estadoCompanero === 'con_companero' && <Badge tono="info">Con compañero</Badge>}
       </div>
 
-      <p style={{ margin: '6px 0 0', fontSize: 11, color: '#6B7280' }}>
+      <p style={{ margin: '6px 0 0', fontSize: 10, color: '#6B7280' }}>
         DNI: {e.documento || '-'}
         {d.edad != null && ` · ${d.edad} años`}
         {e.zona && ` · ${e.zona}`}
@@ -775,21 +800,22 @@ function InfoEntidad({
       </p>
 
       {e.tipo === 'lead' && e.guia && (
-        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>
+        <p style={{ margin: '4px 0 0', fontSize: 10, color: '#374151' }}>
           <span style={{ color: '#6B7280' }}>Capitán: </span>
           <b>{e.guia}</b>
         </p>
       )}
 
       {e.companeroNombre && (
-        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#374151' }}>
+        <p style={{ margin: '4px 0 0', fontSize: 10, color: '#374151' }}>
           <span style={{ color: '#6B7280' }}>Compañero actual: </span>
           <b>{e.companeroNombre}</b>
           {parActual && (
             <span style={{ color: '#6B7280' }}>
               {' · '}
-              {formatKm(parActual.distanciaKm)} · {formatTiempoPar(parActual)}
-              {parActual.fuenteTiempo === 'estimado' && ' (estimado)'}
+              {parActual.distanciaKm < 0.05
+                ? 'mismo domicilio'
+                : <>{formatKm(parActual.distanciaKm)} · {formatTiempoPar(parActual)}{parActual.fuenteTiempo === 'estimado' && ' (estimado)'}</>}
             </span>
           )}
         </p>
@@ -833,7 +859,7 @@ function InfoEntidad({
           style={{
             display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '6px 8px',
             borderRadius: 'var(--radius-md)', background: 'rgba(255,0,51,.05)', border: '1px solid rgba(255,0,51,.35)',
-            fontSize: 11, color: '#374151',
+            fontSize: 10, color: '#374151',
           }}
         >
           <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -862,14 +888,14 @@ function InfoEntidad({
             {parConBase && <BotonQuitar onClick={onLimpiarPar} />}
           </div>
           {midiendo && !parConBase ? (
-            <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 4 }}>Midiendo…</div>
+            <div style={{ fontSize: 10.5, color: '#6B7280', marginTop: 4 }}>Midiendo…</div>
           ) : parConBase ? (
             <>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 3 }}>
-                <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-.3px' }}>
+                <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '-.3px' }}>
                   {formatKm(parConBase.distanciaKm)}
                 </span>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#6B7280' }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#6B7280' }}>
                   {formatTiempoPar(parConBase)}
                 </span>
                 <span style={{ marginLeft: 'auto' }}>
@@ -933,7 +959,7 @@ function BotonSoltarBase({ onClick }: { onClick: () => void }) {
         borderRadius: 'var(--radius-md)',
         background: '#fff1f3',
         color: 'var(--color-primary, #ff0033)',
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 700,
         cursor: 'pointer',
         whiteSpace: 'nowrap',
