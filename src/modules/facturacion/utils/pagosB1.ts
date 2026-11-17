@@ -10,16 +10,21 @@
 //       'manual'   → pago cargado a mano,
 //       'excluido' → depósito tomado solo que no es de la promoción.
 //
-// Días cubiertos: se suma todo lo pagado y se reparte de a $15.000 por día en orden desde
-// el primer día (dos depósitos de $10.000 y $5.000 = 1 día; uno de $30.000 = 2 días).
-// Saldo a favor de la semana = lo pagado con fecha en esa semana.
+// Lo que paga por día es un ADELANTO de su facturación semanal, no una deuda: lo que no
+// adelanta se le cobra igual al facturar la semana. Por eso cada semana (lunes a domingo)
+// se mira sola y empieza en cero: lo pagado con fecha en la semana se reparte de a $15.000
+// por día en orden desde el lunes (dos depósitos de $10.000 y $5.000 = 1 día; uno de
+// $30.000 = 2 días). Lo que faltó en semanas anteriores no se arrastra: queda como
+// historial (ResumenB1.semanas). Es la misma regla que la facturación: saldo a favor de la
+// semana = lo pagado con fecha en esa semana.
 //
 // Estos pagos restan en la facturación de la semana como línea de la promoción. En Saldos
 // se muestran como informativos (licenciaB1Service): no se guardan en el kardex ni cambian
 // el saldo, para no contarlos dos veces.
 
 import { supabase } from '../../../lib/supabase'
-import { hoyART } from '../../../utils/fechaArgentina'
+import { hoyART, sumarDiasISO } from '../../../utils/fechaArgentina'
+import { semanaISO } from '../../../utils/semanaISO'
 
 export const PROMO_B1_PAGO_DIARIO = 15000
 
@@ -84,16 +89,52 @@ export interface DiaB1 {
   estado: EstadoDiaB1
 }
 
+/** Cómo quedó el adelanto de una semana. */
+export type EstadoSemanaB1 = 'completa' | 'parcial' | 'sin_pago' | 'en_curso' | 'sin_dias'
+
+export interface SemanaB1 {
+  /** Lunes y domingo (yyyy-MM-dd). */
+  lunes: string
+  domingo: string
+  /** Semana ISO. */
+  numero: number
+  anio: number
+  esActual: boolean
+  /** Días que le toca adelantar en la semana (con turno, dentro de su período). */
+  dias: number
+  /** Días cerrados (hasta ayer). */
+  diasVencidos: number
+  /** Días cerrados cubiertos con lo adelantado en la semana. */
+  diasPagados: number
+  /** Días cerrados × $15.000. */
+  aPagar: number
+  /** Lo pagado con fecha en la semana. */
+  pagado: number
+  /** Lo que no adelantó de los días cerrados (se cobra igual en la facturación). */
+  faltante: number
+  /** Pagado de más sobre los días cerrados (cubre los que siguen de la semana). */
+  adelantado: number
+  estado: EstadoSemanaB1
+}
+
 export interface ResumenB1 {
   dias: DiaB1[]
-  /** Días cerrados (hasta ayer): los que ya tenía que pagar. Hoy no cuenta hasta que termina. */
+  /** Todas sus semanas, de la más vieja a la actual. */
+  semanas: SemanaB1[]
+  /** Semana actual (cada lunes empieza en cero). */
   diasVencidos: number
   diasPagados: number
-  totalPagado: number
-  /** Lo que debía por los días cerrados menos lo pagado (0 si está al día). */
-  deuda: number
-  /** Pagado de más sobre lo vencido (días adelantados). */
+  pagadoSemana: number
+  /** Lo que no adelantó esta semana de los días cerrados. Hoy no cuenta hasta que termina. */
+  faltante: number
+  /** Pagado de más esta semana sobre lo vencido. */
   adelantado: number
+  /** Total pagado en toda la promoción. */
+  totalPagado: number
+  /** Semanas anteriores (cerradas) en que no adelantó todo. */
+  semanasIncompletas: number
+  /** Lo que no adelantó en semanas anteriores (informativo: ya se facturó). */
+  faltanteAnteriores: number
 }
 
 const LOTE = 1000
@@ -244,47 +285,95 @@ export async function cargarPagosB1(
   return resultado
 }
 
+/** Lunes (yyyy-MM-dd) de la semana de una fecha. */
+export function lunesSemanaB1(fecha: string): string {
+  const dia = new Date(`${fecha}T12:00:00Z`).getUTCDay()
+  return sumarDiasISO(fecha, -((dia + 6) % 7))
+}
+
+const redondear = (n: number) => Math.round(n * 100) / 100
+
 /**
- * Reparte lo pagado de a $15.000 por día en orden desde el primer día. `dias` son los días
- * que le toca pagar (ordenados). Solo los días cerrados (hasta ayer) pueden quedar como deuda:
- * hoy sale "en curso" mientras no lo cubra, y los días que vienen "próximo" / "adelantado".
+ * Reparte lo pagado semana por semana: lo pagado con fecha en la semana cubre de a $15.000
+ * los días de esa semana en orden desde el lunes. `dias` son los días que le toca pagar
+ * (ordenados). Solo los días cerrados (hasta ayer) cuentan como no adelantados: hoy sale
+ * "en curso" mientras no lo cubra, y los días que vienen "próximo" / "adelantado".
  */
 export function repartirPagosB1(dias: string[], pagos: PagoB1[], hoy = hoyART()): ResumenB1 {
   const ordenados = [...pagos].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.key.localeCompare(b.key))
-  const totalPagado = Math.round(ordenados.reduce((s, p) => s + p.monto, 0) * 100) / 100
   const pagosPorDia = new Map<string, PagoB1[]>()
   for (const p of ordenados) pagosPorDia.set(p.fecha, [...(pagosPorDia.get(p.fecha) || []), p])
 
-  // Fecha en que el acumulado pagado alcanzó cada monto
-  let idxPago = 0
-  let acumulado = 0
-  const fechaQueAlcanza = (objetivo: number): string | null => {
-    while (acumulado < objetivo - 0.005 && idxPago < ordenados.length) acumulado += ordenados[idxPago++].monto
-    return acumulado >= objetivo - 0.005 ? ordenados[idxPago - 1]?.fecha ?? null : null
+  // Días y pagos agrupados por semana (también las semanas con pagos y sin días)
+  const diasPorSemana = new Map<string, string[]>()
+  const pagosPorSemana = new Map<string, PagoB1[]>()
+  for (const d of dias) {
+    const l = lunesSemanaB1(d)
+    diasPorSemana.set(l, [...(diasPorSemana.get(l) || []), d])
+  }
+  for (const p of ordenados) {
+    const l = lunesSemanaB1(p.fecha)
+    pagosPorSemana.set(l, [...(pagosPorSemana.get(l) || []), p])
+  }
+  const lunesHoy = lunesSemanaB1(hoy)
+
+  const resultadoDias: DiaB1[] = []
+  const semanas: SemanaB1[] = []
+  for (const lunes of [...new Set([...diasPorSemana.keys(), ...pagosPorSemana.keys()])].sort()) {
+    const diasSemana = diasPorSemana.get(lunes) || []
+    const pagosSemana = pagosPorSemana.get(lunes) || []
+    const pagado = redondear(pagosSemana.reduce((s, p) => s + p.monto, 0))
+
+    // Fecha en que lo pagado en la semana alcanzó cada monto
+    let idxPago = 0
+    let acumulado = 0
+    const fechaQueAlcanza = (objetivo: number): string | null => {
+      while (acumulado < objetivo - 0.005 && idxPago < pagosSemana.length) acumulado += pagosSemana[idxPago++].monto
+      return acumulado >= objetivo - 0.005 ? pagosSemana[idxPago - 1]?.fecha ?? null : null
+    }
+
+    for (const [i, fecha] of diasSemana.entries()) {
+      const cubierto = Math.max(0, Math.min(PROMO_B1_PAGO_DIARIO, pagado - i * PROMO_B1_PAGO_DIARIO))
+      const cubiertoEl = cubierto >= PROMO_B1_PAGO_DIARIO - 0.005 ? fechaQueAlcanza((i + 1) * PROMO_B1_PAGO_DIARIO) : null
+      let estado: EstadoDiaB1
+      if (fecha > hoy) estado = cubiertoEl ? 'adelantado' : 'proximo'
+      else if (fecha === hoy) estado = cubiertoEl ? 'pagado' : 'en_curso'
+      else if (cubiertoEl) estado = cubiertoEl > fecha ? 'atrasado' : 'pagado'
+      else estado = cubierto > 0 ? 'parcial' : 'no_pago'
+      resultadoDias.push({ fecha, pagos: pagosPorDia.get(fecha) || [], cubierto, cubiertoEl, estado })
+    }
+
+    // Hoy todavía no terminó: no cuenta como día sin adelantar
+    const diasVencidos = diasSemana.filter(d => d < hoy).length
+    const aPagar = diasVencidos * PROMO_B1_PAGO_DIARIO
+    const faltante = Math.max(0, redondear(aPagar - pagado))
+    const esActual = lunes === lunesHoy
+    const { semana: numero, anio } = semanaISO(lunes)
+    let estado: EstadoSemanaB1
+    if (diasVencidos === 0) estado = esActual || lunes > lunesHoy ? 'en_curso' : 'sin_dias'
+    else if (faltante === 0) estado = esActual && diasSemana.some(d => d >= hoy) ? 'en_curso' : 'completa'
+    else estado = esActual ? 'en_curso' : pagado > 0 ? 'parcial' : 'sin_pago'
+    semanas.push({
+      lunes, domingo: sumarDiasISO(lunes, 6), numero, anio, esActual,
+      dias: diasSemana.length, diasVencidos,
+      diasPagados: resultadoDias.filter(d => lunesSemanaB1(d.fecha) === lunes && d.fecha < hoy && d.cubiertoEl).length,
+      aPagar, pagado, faltante, adelantado: Math.max(0, redondear(pagado - aPagar)), estado,
+    })
   }
 
-  const resultadoDias: DiaB1[] = dias.map((fecha, i) => {
-    const necesario = (i + 1) * PROMO_B1_PAGO_DIARIO
-    const cubierto = Math.max(0, Math.min(PROMO_B1_PAGO_DIARIO, totalPagado - i * PROMO_B1_PAGO_DIARIO))
-    const cubiertoEl = cubierto >= PROMO_B1_PAGO_DIARIO - 0.005 ? fechaQueAlcanza(necesario) : null
-    let estado: EstadoDiaB1
-    if (fecha > hoy) estado = cubiertoEl ? 'adelantado' : 'proximo'
-    else if (fecha === hoy) estado = cubiertoEl ? 'pagado' : 'en_curso'
-    else if (cubiertoEl) estado = cubiertoEl > fecha ? 'atrasado' : 'pagado'
-    else estado = cubierto > 0 ? 'parcial' : 'no_pago'
-    return { fecha, pagos: pagosPorDia.get(fecha) || [], cubierto, cubiertoEl, estado }
-  })
-
-  // Hoy todavía no terminó: no cuenta como día adeudado
-  const diasVencidos = dias.filter(d => d < hoy).length
-  const debido = diasVencidos * PROMO_B1_PAGO_DIARIO
+  const actual = semanas.find(s => s.esActual)
+  const anteriores = semanas.filter(s => s.lunes < lunesHoy)
   return {
     dias: resultadoDias,
-    diasVencidos,
-    diasPagados: resultadoDias.filter(d => d.fecha < hoy && d.cubiertoEl).length,
-    totalPagado,
-    deuda: Math.max(0, Math.round((debido - totalPagado) * 100) / 100),
-    adelantado: Math.max(0, Math.round((totalPagado - debido) * 100) / 100),
+    semanas,
+    diasVencidos: actual?.diasVencidos ?? 0,
+    diasPagados: actual?.diasPagados ?? 0,
+    pagadoSemana: actual?.pagado ?? 0,
+    faltante: actual?.faltante ?? 0,
+    adelantado: actual?.adelantado ?? 0,
+    totalPagado: redondear(ordenados.reduce((s, p) => s + p.monto, 0)),
+    semanasIncompletas: anteriores.filter(s => s.faltante > 0).length,
+    faltanteAnteriores: redondear(anteriores.reduce((s, x) => s + x.faltante, 0)),
   }
 }
 
@@ -413,3 +502,4 @@ export async function quitarPagoB1(conductorId: string, pago: PagoB1, usuario: U
   })
   if (error && error.code !== '23505') throw errorTabla(error)
 }
+

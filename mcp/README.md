@@ -51,10 +51,10 @@ en memoria. Rate limit: 120 requests por minuto por key.
 | `obtener_lead` | leads:read | Ver todos los datos de un lead por ID |
 | `actualizar_lead` | leads:update | Actualizar estado y datos de un lead |
 | `buscar_hireflix` | hireflix:read | Buscar registros historicos de Hireflix |
-| `listar_datos` | datos:read | Conjuntos de datos de operacion disponibles (modulo y descripcion) |
-| `describir_datos` | datos:read | Campos y tipos de un conjunto de datos |
-| `consultar_datos` | datos:read | Registros con filtros, orden y paginacion (max 200 por pagina) |
-| `contar_datos` | datos:read | Totales y cantidades agrupadas por campo o por dia/mes/anio |
+| `listar_datos` | datos:read o administracion:read | Conjuntos de datos de operacion disponibles (modulo y descripcion) |
+| `describir_datos` | datos:read o administracion:read | Campos y tipos de un conjunto de datos |
+| `consultar_datos` | datos:read o administracion:read | Registros con filtros, orden y paginacion (max 200 por pagina) |
+| `contar_datos` | datos:read o administracion:read | Totales y cantidades agrupadas por campo o por dia/mes/anio |
 
 ### Datos de operacion (`datos:read`)
 
@@ -67,6 +67,20 @@ otra tabla ni otra columna, y nunca puede escribir.
 Quedan afuera la facturacion (y saldos, pagos, garantias, cobros fraccionados),
 la contabilidad, todo lo de Parametros, usuarios/roles/permisos/keys/logs,
 respaldos y temporales, y las columnas sensibles (ver `COLUMNAS_EXCLUIDAS`).
+
+### Administracion (`administracion:read`)
+
+Mismas cuatro herramientas, sobre los datasets del catalogo marcados con
+`permiso: 'administracion:read'`: facturacion (periodos, facturas por conductor y
+detalle, saldos, pagos, abonos, garantias, cobros fraccionados, tickets,
+promociones, conceptos), usuarios, roles, permisos de menu, procesos automaticos
+y prompts. Solo lectura. Siguen afuera las API keys, api_users, sesiones,
+contabilidad (Alegra, Cresium) y respaldos. Una key ve solo los datasets de sus
+permisos: los demas responden como si no existieran.
+
+Los permisos se pueden editar desde la app (lapiz en cada key) y rigen en el
+proximo pedido: /mcp y la API REST validan la key en cada request, y en /sse se
+revalida en cada mensaje y la sesion se corta si cambiaron los permisos.
 Los errores de la base no se le muestran al cliente. Cada llamada queda en
 `api_request_log` con endpoint `mcp/<herramienta>`.
 
