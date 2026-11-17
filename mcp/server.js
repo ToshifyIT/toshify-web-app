@@ -2,7 +2,10 @@
  * Toshify MCP Server
  * Model Context Protocol server para que chatbots accedan a datos de leads.
  * Transporte: Streamable HTTP en /mcp (claude.ai, Claude Desktop) y SSE en /sse (legacy)
- * Autenticacion: API key estatica via header x-api-key o query ?apiKey=
+ * Autenticacion en /mcp:
+ *   - login por persona (OAuth, lib/oauth.js): cada uno entra con su cuenta de Toshibase y
+ *     ve las mismas tablas que en el sistema (lib/accesoUsuario.js);
+ *   - API key (header x-api-key, Authorization: Bearer o ?apiKey=) para integraciones.
  */
 
 import { fileURLToPath } from 'node:url';
@@ -16,9 +19,12 @@ import { rateLimit } from 'express-rate-limit';
 import { supabaseRequest } from './lib/supabase.js';
 import { validateApiKey, hasPermission } from './lib/auth.js';
 import { registrarConsultaMcp } from './lib/audit.js';
+import oauthRouter, { esTokenOAuth, validarTokenOAuth, headerLogin } from './lib/oauth.js';
+import { CATALOGO } from './lib/catalogoDatos.js';
 import {
-  ErrorDatos, OPERADORES, PERIODOS, LIMITE_DEFAULT, LIMITE_MAX, MAX_FILAS_AGRUPAR,
-  listarDatasets, modulos, describirDataset, consultar, contar,
+  ErrorDatos, OPERADORES, PERIODOS, LIMITE_DEFAULT, LIMITE_MAX, MAX_FILAS_AGRUPAR, MAX_DESCRIBIR,
+  listarDatasets, modulos, describirDatasets, consultar, contar, reportesVisibles, consultarReporte,
+  tieneAccesoADatos,
 } from './lib/datos.js';
 import leadsRouter from './routes/leads.js';
 import vehiculosRouter from './routes/vehiculos.js';
@@ -86,6 +92,9 @@ const UPDATABLE_FIELDS = [
 ];
 
 const UPDATABLE_SET = new Set(UPDATABLE_FIELDS);
+
+/** Columnas que devuelve obtener_lead: las mismas del dataset leads del catalogo. */
+const COLUMNAS_LEAD = Object.keys(CATALOGO.leads.columnas).join(',');
 
 // =====================================================
 // Helpers de normalización de campos
@@ -185,13 +194,14 @@ function createMcpServer(apiKeyData) {
     // ----- Tool: obtener_lead -----
     server.tool(
       'obtener_lead',
-      'Obtener todos los datos de un lead por su ID (UUID). Devuelve toda la informacion del lead.',
+      'Obtener los datos de un lead por su ID (UUID). Devuelve los campos del dataset leads del catalogo (sin CBU, antecedentes, contactos de emergencia, BCRA ni documentos).',
       {
         id: z.string().uuid().describe('ID del lead (UUID)'),
       },
       async ({ id }) => {
         try {
-          const res = await supabaseRequest(`leads?id=eq.${id}&select=*`);
+          // Nunca select=*: solo las columnas permitidas del catalogo (ver COLUMNAS_EXCLUIDAS).
+          const res = await supabaseRequest(`leads?id=eq.${id}&select=${COLUMNAS_LEAD}`);
           const data = await res.json();
 
           if (!data.length) {
@@ -251,7 +261,7 @@ function createMcpServer(apiKeyData) {
             };
           }
 
-          const res = await supabaseRequest('leads', {
+          const res = await supabaseRequest(`leads?select=${COLUMNAS_LEAD}`, {
             method: 'POST',
             headers: { 'Prefer': 'return=representation' },
             body: JSON.stringify(allowed),
@@ -330,7 +340,7 @@ function createMcpServer(apiKeyData) {
           }
 
           // Actualizar
-          const updateRes = await supabaseRequest(`leads?id=eq.${id}`, {
+          const updateRes = await supabaseRequest(`leads?id=eq.${id}&select=${COLUMNAS_LEAD}`, {
             method: 'PATCH',
             headers: { 'Prefer': 'return=representation' },
             body: JSON.stringify(updates),
@@ -405,272 +415,12 @@ function createMcpServer(apiKeyData) {
     );
   }
 
-  // ----- Tool: buscar_hireflix -----
-  if (hasPermission(apiKeyData, 'hireflix:read')) {
-    server.tool(
-      'buscar_hireflix',
-      'Buscar registros historicos de Hireflix (entrevistas). Filtrar por nombre, email o fecha.',
-      {
-        search: z.string().optional().describe('Buscar en nombre o email'),
-        desde: z.string().optional().describe('Fecha desde (ISO 8601)'),
-        hasta: z.string().optional().describe('Fecha hasta (ISO 8601)'),
-        page: z.number().optional().default(1).describe('Numero de pagina'),
-        limit: z.number().optional().default(20).describe('Cantidad por pagina (max 100)'),
-      },
-      async (params) => {
-        try {
-          const page = Math.max(1, params.page || 1);
-          const limit = Math.min(100, Math.max(1, params.limit || 20));
-          const offset = (page - 1) * limit;
-
-          const filters = [];
-          if (params.desde) filters.push(`fecha=gte.${encodeURIComponent(params.desde)}`);
-          if (params.hasta) filters.push(`fecha=lte.${encodeURIComponent(params.hasta)}`);
-          if (params.search) {
-            const s = encodeURIComponent(params.search);
-            filters.push(`or=(nombre.ilike.*${s}*,email.ilike.*${s}*)`);
-          }
-
-          const filterStr = filters.length ? `&${filters.join('&')}` : '';
-          const path = `hireflix_historico?select=*&order=fecha.desc&offset=${offset}&limit=${limit}${filterStr}`;
-
-          const res = await supabaseRequest(path, {
-            headers: { 'Prefer': 'count=exact' },
-          });
-
-          const data = await res.json();
-          const total = parseInt(res.headers.get('content-range')?.split('/')[1]) || data.length;
-
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-                registros: data,
-              }, null, 2),
-            }],
-          };
-        } catch (error) {
-          return {
-            content: [{ type: 'text', text: `Error buscando hireflix: ${error.message}` }],
-            isError: true,
-          };
-        }
-      }
-    );
-  }
-
-  // ----- Tool: obtener_hireflix -----
-  if (hasPermission(apiKeyData, 'hireflix:read')) {
-    server.tool(
-      'obtener_hireflix',
-      'Obtener todos los datos de un registro Hireflix por su ID (UUID).',
-      {
-        id: z.string().uuid().describe('ID del registro Hireflix (UUID)'),
-      },
-      async ({ id }) => {
-        try {
-          const res = await supabaseRequest(`hireflix_historico?id=eq.${id}&select=*`);
-          const data = await res.json();
-
-          if (!data.length) {
-            return {
-              content: [{ type: 'text', text: `Registro Hireflix con ID ${id} no encontrado.` }],
-              isError: true,
-            };
-          }
-
-          return {
-            content: [{ type: 'text', text: JSON.stringify(data[0], null, 2) }],
-          };
-        } catch (error) {
-          return {
-            content: [{ type: 'text', text: `Error obteniendo registro Hireflix: ${error.message}` }],
-            isError: true,
-          };
-        }
-      }
-    );
-  }
-
-  // ----- Tool: crear_hireflix -----
-  if (hasPermission(apiKeyData, 'hireflix:create')) {
-    server.tool(
-      'crear_hireflix',
-      'Crear un nuevo registro en hireflix_historico. Campos: nombre, email, fecha.',
-      {
-        nombre: z.string().optional().describe('Nombre del candidato'),
-        email: z.string().optional().describe('Email del candidato'),
-        fecha: z.string().optional().describe('Fecha de la entrevista (ISO 8601)'),
-      },
-      async (params) => {
-        try {
-          const body = {};
-          if (params.nombre) body.nombre = params.nombre;
-          if (params.email) body.email = params.email;
-          if (params.fecha) body.fecha = params.fecha;
-
-          if (Object.keys(body).length === 0) {
-            return {
-              content: [{ type: 'text', text: 'Debes proporcionar al menos un campo: nombre, email o fecha.' }],
-              isError: true,
-            };
-          }
-
-          const res = await supabaseRequest('hireflix_historico', {
-            method: 'POST',
-            headers: { 'Prefer': 'return=representation' },
-            body: JSON.stringify(body),
-          });
-
-          const data = await res.json();
-
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                mensaje: 'Registro Hireflix creado exitosamente',
-                registro: data[0],
-              }, null, 2),
-            }],
-          };
-        } catch (error) {
-          return {
-            content: [{ type: 'text', text: `Error creando registro Hireflix: ${error.message}` }],
-            isError: true,
-          };
-        }
-      }
-    );
-  }
-
-  // ----- Tool: actualizar_hireflix -----
-  if (hasPermission(apiKeyData, 'hireflix:update')) {
-    server.tool(
-      'actualizar_hireflix',
-      'Actualizar un registro existente en hireflix_historico. Campos actualizables: nombre, email, fecha.',
-      {
-        id: z.string().uuid().describe('ID del registro Hireflix (UUID)'),
-        campos: z.record(z.string(), z.any()).describe('Campos a actualizar. Ej: { "nombre": "Maria Lopez", "email": "maria@mail.com" }'),
-      },
-      async ({ id, campos }) => {
-        try {
-          const HIREFLIX_FIELDS = new Set(['nombre', 'email', 'fecha']);
-          const updates = {};
-          const rejected = [];
-
-          for (const [key, value] of Object.entries(campos)) {
-            if (HIREFLIX_FIELDS.has(key)) {
-              updates[key] = value;
-            } else {
-              rejected.push(key);
-            }
-          }
-
-          if (Object.keys(updates).length === 0) {
-            return {
-              content: [{
-                type: 'text',
-                text: `Ningun campo valido para actualizar. Campos rechazados: ${rejected.join(', ')}. Campos permitidos: nombre, email, fecha`,
-              }],
-              isError: true,
-            };
-          }
-
-          // Verificar que existe
-          const checkRes = await supabaseRequest(`hireflix_historico?id=eq.${id}&select=id`);
-          const existing = await checkRes.json();
-          if (!existing.length) {
-            return {
-              content: [{ type: 'text', text: `Registro Hireflix con ID ${id} no encontrado.` }],
-              isError: true,
-            };
-          }
-
-          const updateRes = await supabaseRequest(`hireflix_historico?id=eq.${id}`, {
-            method: 'PATCH',
-            headers: { 'Prefer': 'return=representation' },
-            body: JSON.stringify(updates),
-          });
-
-          const updatedData = await updateRes.json();
-
-          const result = {
-            mensaje: 'Registro Hireflix actualizado exitosamente',
-            camposActualizados: Object.keys(updates),
-            registro: updatedData[0],
-          };
-
-          if (rejected.length > 0) {
-            result.camposRechazados = rejected;
-          }
-
-          return {
-            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-          };
-        } catch (error) {
-          return {
-            content: [{ type: 'text', text: `Error actualizando registro Hireflix: ${error.message}` }],
-            isError: true,
-          };
-        }
-      }
-    );
-  }
-
-  // ----- Tool: eliminar_hireflix -----
-  if (hasPermission(apiKeyData, 'hireflix:delete')) {
-    server.tool(
-      'eliminar_hireflix',
-      'Eliminar un registro de hireflix_historico por su ID (UUID). Esta accion es irreversible.',
-      {
-        id: z.string().uuid().describe('ID del registro Hireflix (UUID)'),
-      },
-      async ({ id }) => {
-        try {
-          // Verificar que existe
-          const checkRes = await supabaseRequest(`hireflix_historico?id=eq.${id}&select=id,nombre`);
-          const existing = await checkRes.json();
-          if (!existing.length) {
-            return {
-              content: [{ type: 'text', text: `Registro Hireflix con ID ${id} no encontrado.` }],
-              isError: true,
-            };
-          }
-
-          await supabaseRequest(`hireflix_historico?id=eq.${id}`, {
-            method: 'DELETE',
-          });
-
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                mensaje: 'Registro Hireflix eliminado exitosamente',
-                id,
-                nombre: existing[0].nombre,
-              }, null, 2),
-            }],
-          };
-        } catch (error) {
-          return {
-            content: [{ type: 'text', text: `Error eliminando registro Hireflix: ${error.message}` }],
-            isError: true,
-          };
-        }
-      }
-    );
-  }
-
   // =====================================================
   // Datos (solo lectura) — permiso datos:read (operación) y/o administracion:read
   // (facturación, usuarios, roles). Catálogo en lib/catalogoDatos.js; consultas en
   // lib/datos.js, que solo deja ver los datasets de los permisos de la key.
   // =====================================================
-  if (hasPermission(apiKeyData, 'datos:read') || hasPermission(apiKeyData, 'administracion:read')) {
+  if (tieneAccesoADatos(apiKeyData.permissions)) {
     const permisos = apiKeyData.permissions;
     const responder = (herramienta, params, resultado) => {
       registrarConsultaMcp({ apiKeyData, herramienta, params, status: 200, filas: resultado.filas?.length ?? resultado.grupos?.length ?? null });
@@ -704,11 +454,15 @@ function createMcpServer(apiKeyData) {
 
     server.tool(
       'describir_datos',
-      'Muestra los campos de un conjunto de datos y su tipo (texto, numero, fecha, booleano, id, json). Usalo antes de consultar para saber qué campos filtrar.',
-      { dataset: z.string().describe('Nombre del conjunto de datos (ver listar_datos)') },
+      `Muestra los campos y su tipo (texto, numero, fecha, booleano, id, json) de uno o varios conjuntos de datos en una sola llamada (hasta ${MAX_DESCRIBIR}). Pedí juntos todos los que vayas a usar en la pregunta en vez de llamar una vez por cada uno.`,
+      {
+        datasets: z.array(z.string()).optional().describe('Nombres de los conjuntos de datos (ver listar_datos)'),
+        dataset: z.string().optional().describe('Un solo conjunto de datos (alternativa a datasets)'),
+      },
       async (params) => {
         try {
-          return responder('describir_datos', params, describirDataset(params.dataset, permisos));
+          const nombres = [...(params.datasets || []), ...(params.dataset ? [params.dataset] : [])];
+          return responder('describir_datos', params, describirDatasets(nombres, permisos));
         } catch (error) {
           return fallar('describir_datos', params, error);
         }
@@ -717,7 +471,7 @@ function createMcpServer(apiKeyData) {
 
     server.tool(
       'consultar_datos',
-      `Devuelve registros de un conjunto de datos, con filtros, orden y paginación (máximo ${LIMITE_MAX} por página). Incluye el total de registros que cumplen los filtros. Los campos que terminan en _id se cruzan con el id de otro conjunto (por ejemplo conductor_id con conductores, vehiculo_id con vehiculos, sede_id con sedes). Solo lectura.`,
+      `Devuelve registros de un conjunto de datos, con filtros, orden y paginación (máximo ${LIMITE_MAX} por página). Incluye el total de registros que cumplen los filtros. Los campos que terminan en _id se cruzan con el id de otro conjunto (por ejemplo conductor_id con conductores, vehiculo_id con vehiculos). Si la fila tiene sede_id, también trae sede_nombre. Las patentes de prueba (PRUEBA…, PRUB…, PRB…) se excluyen solas. Solo lectura.`,
       {
         dataset: z.string().describe('Nombre del conjunto de datos'),
         campos: z.array(z.string()).optional().describe('Campos a devolver (por defecto todos)'),
@@ -726,6 +480,7 @@ function createMcpServer(apiKeyData) {
         descendente: z.boolean().optional().describe('Orden descendente (default false)'),
         limite: z.number().optional().describe(`Registros por página (default ${LIMITE_DEFAULT}, máximo ${LIMITE_MAX})`),
         pagina: z.number().optional().describe('Página (default 1)'),
+        incluir_pruebas: z.boolean().optional().describe('Incluir las patentes de prueba (default false)'),
       },
       async (params) => {
         try {
@@ -738,12 +493,14 @@ function createMcpServer(apiKeyData) {
 
     server.tool(
       'contar_datos',
-      `Cuenta registros de un conjunto de datos que cumplen los filtros. Con agrupar_por devuelve la cantidad por cada valor de ese campo; si el campo es una fecha se puede agrupar por día, mes o año (periodo). Para agrupar se recorren hasta ${MAX_FILAS_AGRUPAR} registros. Ideal para indicadores. Solo lectura.`,
+      `Cuenta registros de un conjunto de datos que cumplen los filtros. Con agrupar_por devuelve la cantidad por cada valor de ese campo; si el campo es una fecha se puede agrupar por día, mes o año (periodo). Con sumar (un campo numérico, por ejemplo un importe) devuelve además la suma y el promedio, en total o por grupo: no hace falta traer las filas para sumarlas. Para agrupar o sumar se recorren hasta ${MAX_FILAS_AGRUPAR} registros. Excluye las patentes de prueba. Ideal para indicadores. Solo lectura.`,
       {
         dataset: z.string().describe('Nombre del conjunto de datos'),
         filtros: esquemaFiltros,
         agrupar_por: z.string().optional().describe('Campo por el que agrupar'),
         periodo: z.enum(PERIODOS).optional().describe('Si agrupar_por es una fecha: dia, mes o anio'),
+        sumar: z.string().optional().describe('Campo numérico a sumar y promediar'),
+        incluir_pruebas: z.boolean().optional().describe('Incluir las patentes de prueba (default false)'),
       },
       async (params) => {
         try {
@@ -753,6 +510,29 @@ function createMcpServer(apiKeyData) {
         }
       }
     );
+
+    // Reportes: funciones RPC de una lista fija (lib/datos.js REPORTES), por GET.
+    const reportes = reportesVisibles(permisos);
+    if (reportes.length) {
+      server.tool(
+        'consultar_reporte',
+        `Devuelve un dashboard ya calculado, igual que en la app. Reportes: ${reportes.map((r) => `${r.reporte} (${r.descripcion})`).join(' | ')}. Fechas AAAA-MM-DD; sin sede_id es el total de todas las sedes. Solo lectura.`,
+        {
+          reporte: z.enum(reportes.map((r) => r.reporte)).describe('Reporte a consultar'),
+          desde: z.string().optional().describe('Inicio del período (AAAA-MM-DD)'),
+          hasta: z.string().optional().describe('Fin del período (AAAA-MM-DD)'),
+          hoy: z.string().optional().describe('Fecha de referencia "hoy" (AAAA-MM-DD, default hoy)'),
+          sede_id: z.string().optional().describe('Id de la sede (ver el dataset sedes); vacío = todas'),
+        },
+        async (params) => {
+          try {
+            return responder('consultar_reporte', params, await consultarReporte(params, permisos));
+          } catch (error) {
+            return fallar('consultar_reporte', params, error);
+          }
+        }
+      );
+    }
   }
 
   return server;
@@ -767,6 +547,9 @@ const app = express();
 // IMPORTANTE: NO usar express.json() globalmente
 // porque consume el body stream antes de que SSEServerTransport.handlePostMessage pueda leerlo.
 // Solo usar en rutas que lo necesiten explicitamente.
+
+// Login por persona (OAuth): /.well-known/*, /oauth/register, /oauth/authorize, /oauth/token
+app.use(oauthRouter);
 
 // Docs page
 app.get('/docs', (req, res) => {
@@ -912,8 +695,26 @@ function errorJsonRpc(res, status, message) {
 
 // express.json() solo en esta ruta: a nivel global rompe /messages (ver arriba).
 app.post('/mcp', mcpLimiter, express.json({ limit: '1mb' }), async (req, res) => {
-  const apiKeyData = await validateApiKey(apiKeyDeRequest(req));
-  if (!apiKeyData) return errorJsonRpc(res, 401, 'API key invalida o inactiva');
+  const credencial = apiKeyDeRequest(req);
+
+  // Sin credencial: 401 con el header que le indica a Claude dónde iniciar sesión
+  if (!credencial) {
+    res.set('WWW-Authenticate', headerLogin(req));
+    return errorJsonRpc(res, 401, 'Falta iniciar sesión');
+  }
+
+  let apiKeyData;
+  if (esTokenOAuth(credencial)) {
+    apiKeyData = await validarTokenOAuth(credencial);
+    if (!apiKeyData) {
+      // Vencido, revocado o la persona ya no tiene acceso: Claude renueva o pide login
+      res.set('WWW-Authenticate', headerLogin(req, 'invalid_token'));
+      return errorJsonRpc(res, 401, 'Sesión vencida o sin acceso. Volvé a conectar el conector.');
+    }
+  } else {
+    apiKeyData = await validateApiKey(credencial);
+    if (!apiKeyData) return errorJsonRpc(res, 401, 'API key invalida o inactiva');
+  }
 
   const server = createMcpServer(apiKeyData);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

@@ -42,6 +42,9 @@ export function registrarConsultaMcp({ apiKeyData, herramienta, params, status, 
       body: JSON.stringify({
         api_key_id: apiKeyData?.id ?? null,
         api_key_name: apiKeyData?.name ?? null,
+        // Con login por persona no hay key: queda quién preguntó. Solo se manda en ese
+        // caso, así el log de las keys sigue andando aunque falte sql/mcp_oauth.sql.
+        ...(apiKeyData?.usuario ? { user_id: apiKeyData.usuario.id, user_email: apiKeyData.usuario.email } : {}),
         endpoint: `mcp/${herramienta}`,
         query: params ?? {},
         status,
