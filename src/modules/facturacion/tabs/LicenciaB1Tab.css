@@ -519,6 +519,84 @@
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
+/* Activos / Bajas */
+.lb1-vistas {
+  margin-bottom: 12px;
+}
+
+.lb1-motivo {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.lb1-bajas-barra {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.lb1-baja-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Semanas: marcas en la tabla (✓ ◐ ✗) y resumen por semana en el detalle */
+.lb1-semanas-marcas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 320px;
+}
+
+.lb1-semana-marca {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lb1-semana-marca-completa { background: #f0fdf4; color: #16a34a; }
+.lb1-semana-marca-parcial { background: #fef3c7; color: #b45309; }
+.lb1-semana-marca-sin_pago { background: #fef2f2; color: #dc2626; }
+.lb1-semana-marca-en_curso,
+.lb1-semana-marca-sin_dias { background: #f3f4f6; color: var(--text-secondary); }
+
+[data-theme="dark"] .lb1-semana-marca-completa { background: rgba(22, 163, 74, 0.15); color: #4ade80; }
+[data-theme="dark"] .lb1-semana-marca-parcial { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+[data-theme="dark"] .lb1-semana-marca-sin_pago { background: rgba(220, 38, 38, 0.15); color: #f87171; }
+[data-theme="dark"] .lb1-semana-marca-en_curso,
+[data-theme="dark"] .lb1-semana-marca-sin_dias { background: var(--bg-tertiary); }
+
+.lb1-semanas {
+  margin-bottom: 12px;
+}
+
+.lb1-semanas tbody tr {
+  cursor: pointer;
+}
+
+.lb1-semanas tbody tr:hover td {
+  background: var(--bg-secondary);
+}
+
+.lb1-semanas tbody tr.lb1-semana-elegida td {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
 /* =====================================================
    ETIQUETAS SOBRIAS (2026-11-17)
    Sin fondo: punto de color + texto del color, como dt-badge.

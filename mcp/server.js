@@ -666,10 +666,12 @@ function createMcpServer(apiKeyData) {
   }
 
   // =====================================================
-  // Datos de operación (solo lectura) — permiso datos:read
-  // Catálogo en lib/catalogoDatos.js; consultas en lib/datos.js.
+  // Datos (solo lectura) — permiso datos:read (operación) y/o administracion:read
+  // (facturación, usuarios, roles). Catálogo en lib/catalogoDatos.js; consultas en
+  // lib/datos.js, que solo deja ver los datasets de los permisos de la key.
   // =====================================================
-  if (hasPermission(apiKeyData, 'datos:read')) {
+  if (hasPermission(apiKeyData, 'datos:read') || hasPermission(apiKeyData, 'administracion:read')) {
+    const permisos = apiKeyData.permissions;
     const responder = (herramienta, params, resultado) => {
       registrarConsultaMcp({ apiKeyData, herramienta, params, status: 200, filas: resultado.filas?.length ?? resultado.grupos?.length ?? null });
       return { content: [{ type: 'text', text: JSON.stringify(resultado, null, 2) }] };
@@ -689,11 +691,11 @@ function createMcpServer(apiKeyData) {
 
     server.tool(
       'listar_datos',
-      `Lista los conjuntos de datos de operación de Toshify que se pueden consultar, con su módulo y descripción. Empezá por acá. Módulos: ${modulos().join(', ')}. Solo lectura.`,
+      `Lista los conjuntos de datos de Toshify que se pueden consultar, con su módulo y descripción. Empezá por acá. Módulos: ${modulos(permisos).join(', ')}. Solo lectura.`,
       { modulo: z.string().optional().describe('Filtrar por módulo') },
       async (params) => {
         try {
-          return responder('listar_datos', params, { datasets: listarDatasets(params.modulo) });
+          return responder('listar_datos', params, { datasets: listarDatasets(params.modulo, permisos) });
         } catch (error) {
           return fallar('listar_datos', params, error);
         }
@@ -706,7 +708,7 @@ function createMcpServer(apiKeyData) {
       { dataset: z.string().describe('Nombre del conjunto de datos (ver listar_datos)') },
       async (params) => {
         try {
-          return responder('describir_datos', params, describirDataset(params.dataset));
+          return responder('describir_datos', params, describirDataset(params.dataset, permisos));
         } catch (error) {
           return fallar('describir_datos', params, error);
         }
@@ -727,7 +729,7 @@ function createMcpServer(apiKeyData) {
       },
       async (params) => {
         try {
-          return responder('consultar_datos', params, await consultar(params));
+          return responder('consultar_datos', params, await consultar(params, permisos));
         } catch (error) {
           return fallar('consultar_datos', params, error);
         }
@@ -745,7 +747,7 @@ function createMcpServer(apiKeyData) {
       },
       async (params) => {
         try {
-          return responder('contar_datos', params, await contar(params));
+          return responder('contar_datos', params, await contar(params, permisos));
         } catch (error) {
           return fallar('contar_datos', params, error);
         }
@@ -834,7 +836,7 @@ app.get('/sse', async (req, res) => {
 
   const transport = new SSEServerTransport('/messages', res);
   const sessionId = transport.sessionId;
-  transports[sessionId] = { transport, apiKeyData };
+  transports[sessionId] = { transport, apiKey, apiKeyData };
 
   const server = createMcpServer(apiKeyData);
 
@@ -850,11 +852,29 @@ app.get('/sse', async (req, res) => {
 app.post('/messages', async (req, res) => {
   const sessionId = req.query.sessionId;
 
-  if (!sessionId || !transports[sessionId]) {
+  const sesion = transports[sessionId];
+  if (!sessionId || !sesion) {
     return res.status(400).json({ error: 'Session invalida. Conectate primero a /sse' });
   }
 
-  await transports[sessionId].transport.handlePostMessage(req, res);
+  // La key se vuelve a validar en cada mensaje, igual que en /mcp: si la
+  // desactivaron, la borraron o le cambiaron los permisos desde la app, la sesion
+  // se corta y el cliente se reconecta con las herramientas que le corresponden.
+  const actual = await validateApiKey(sesion.apiKey);
+  const mismosPermisos = actual &&
+    [...(actual.permissions || [])].sort().join(',') === [...(sesion.apiKeyData.permissions || [])].sort().join(',');
+  if (!mismosPermisos) {
+    console.log(`[MCP] Sesion SSE cortada (${actual ? 'cambiaron los permisos' : 'key inactiva'}): ${sesion.apiKeyData.name}`);
+    delete transports[sessionId];
+    sesion.transport.close().catch(() => {});
+    return res.status(401).json({
+      error: actual
+        ? 'Cambiaron los permisos de la API key. Volvé a conectarte a /sse.'
+        : 'API key invalida o inactiva',
+    });
+  }
+
+  await sesion.transport.handlePostMessage(req, res);
 });
 
 // =====================================================

@@ -1,5 +1,6 @@
 // src/modules/facturacion/utils/licenciaB1Service.ts
-// Conductores de la promoción de licencia B1 (PRM02) con sus pagos diarios. Lo usan
+// Conductores de la promoción de licencia B1 (PRM02) con sus pagos diarios (adelantos de su
+// facturación semanal: lo que no adelanta se cobra igual al facturar). Lo usan
 // Facturación > Licencia B1 (gestión de los pagos) y Facturación > Saldos (los muestra como
 // informativos: ya restan en la facturación de la semana, no cambian el saldo).
 
@@ -7,7 +8,7 @@ import { supabase } from '../../../lib/supabase'
 import { hoyART, sumarDiasISO } from '../../../utils/fechaArgentina'
 import { PROMO_CYBER_LICENCIA_B1 } from '../../promociones/catalogoPromociones'
 import { cargarIngresosConductores, periodoPagoB1 } from './promocionesFacturacion'
-import { cargarPagosB1, repartirPagosB1 } from './pagosB1'
+import { cargarPagosB1, lunesSemanaB1, repartirPagosB1 } from './pagosB1'
 import type { PagoB1, ResumenB1 } from './pagosB1'
 
 export interface PromoB1 {
@@ -27,10 +28,16 @@ export interface FilaB1 {
   categoriaOtra: string | null
   /** Estado del conductor (ACTIVO, BAJA...). */
   estado: string | null
+  /** Dado de baja: paga por día solo hasta la fecha de baja. */
+  esBaja: boolean
+  fechaBaja: string | null
+  motivoBaja: string | null
   ingreso: string
   esReingreso: boolean
-  /** Último día que paga por día (día antes de la D1 o fin de la promoción). */
+  /** Último día que paga por día (día antes de la D1, fecha de baja o fin de la promoción). */
   pagaHasta: string
+  /** Por qué termina ahí. */
+  motivoHasta: 'd1' | 'baja' | 'fin'
   fechaD1: string | null
   pagos: PagoB1[]
   resumen: ResumenB1
@@ -38,8 +45,7 @@ export interface FilaB1 {
 
 /** Lunes (yyyy-MM-dd) de la semana de una fecha. */
 export function lunesDe(fecha: string): string {
-  const dia = new Date(`${fecha}T12:00:00Z`).getUTCDay()
-  return sumarDiasISO(fecha, -((dia + 6) % 7))
+  return lunesSemanaB1(fecha)
 }
 
 /**
@@ -67,24 +73,44 @@ export async function cargarConductoresLicenciaB1(
   // Candidatos: B1 hoy, o tenían B1 y ya obtuvieron la D1
   const { data: conductores, error: errCond } = await aplicarFiltroSede(
     (supabase.from('conductores') as any)
-      .select('id, nombres, apellidos, numero_dni, numero_cuit, categoria_licencia, categoria_licencia_otra, fecha_licencia_d1, conductores_estados(codigo)')
+      .select('id, nombres, apellidos, numero_dni, numero_cuit, categoria_licencia, categoria_licencia_otra, fecha_licencia_d1, fecha_terminacion, motivo_baja, conductores_estados(codigo)')
       .or('categoria_licencia.eq.B1,and(fecha_licencia_b1.not.is.null,fecha_licencia_d1.not.is.null)'),
   )
   if (errCond) throw new Error(`No se pudieron leer los conductores: ${errCond.message}`)
   const porId = new Map(((conductores || []) as any[]).map(c => [c.id, c]))
   const datos = await cargarIngresosConductores([...porId.keys()], hasta)
 
-  const elegibles: Array<{ c: any; ingreso: { fecha: string; esReingreso: boolean }; periodo: { desde: string; hasta: string }; dias: string[] }> = []
+  const elegibles: Array<{
+    c: any
+    ingreso: { fecha: string; esReingreso: boolean }
+    periodo: { desde: string; hasta: string }
+    /** Hasta dónde se toman solos los depósitos (sin cortar en la baja, como en la facturación). */
+    hastaAuto: string
+    motivoHasta: FilaB1['motivoHasta']
+    esBaja: boolean
+    fechaBaja: string | null
+    dias: string[]
+  }> = []
   for (const [id, d] of datos) {
     const periodo = periodoPagoB1(p, d)
     if (!periodo) continue
+    const c = porId.get(id)
+    const hastaAuto = periodo.hasta
+    const esBaja = c?.conductores_estados?.codigo === 'BAJA'
+    const fechaBaja: string | null = c?.fecha_terminacion ? String(c.fecha_terminacion).slice(0, 10) : null
+    let motivoHasta: FilaB1['motivoHasta'] = periodo.hasta < p.fecha_fin ? 'd1' : 'fin'
+    // Dado de baja: paga por día solo hasta la fecha de baja
+    if (esBaja && fechaBaja && fechaBaja < periodo.hasta) {
+      periodo.hasta = fechaBaja < periodo.desde ? periodo.desde : fechaBaja
+      motivoHasta = 'baja'
+    }
     // Todos los días con turno desde el primero, mientras maneja con B1
     const dias = d.dias.filter(dia => dia >= periodo.desde && dia <= periodo.hasta)
-    elegibles.push({ c: porId.get(id), ingreso: d.ingreso, periodo, dias })
+    elegibles.push({ c, ingreso: d.ingreso, periodo, hastaAuto, motivoHasta, esBaja, fechaBaja, dias })
   }
 
   const pagos = await cargarPagosB1(
-    elegibles.map(e => ({ id: e.c.id, dni: e.c.numero_dni, cuit: e.c.numero_cuit, ...e.periodo })),
+    elegibles.map(e => ({ id: e.c.id, dni: e.c.numero_dni, cuit: e.c.numero_cuit, desde: e.periodo.desde, hasta: e.hastaAuto })),
     { desde: p.fecha_inicio, hasta: p.fecha_fin },
   )
 
@@ -98,9 +124,13 @@ export async function cargarConductoresLicenciaB1(
       categoria: e.c.categoria_licencia,
       categoriaOtra: e.c.categoria_licencia_otra,
       estado: e.c.conductores_estados?.codigo || null,
+      esBaja: e.esBaja,
+      fechaBaja: e.fechaBaja,
+      motivoBaja: e.c.motivo_baja || null,
       ingreso: e.ingreso.fecha,
       esReingreso: e.ingreso.esReingreso,
       pagaHasta: e.periodo.hasta,
+      motivoHasta: e.motivoHasta,
       fechaD1: e.c.fecha_licencia_d1,
       pagos: pagosConductor,
       resumen: repartirPagosB1(e.dias, pagosConductor, hoy),
