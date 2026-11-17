@@ -155,7 +155,7 @@ export function IncidenciasConductorTab({ conductorId }: { conductorId: string }
               <td>
                 {/* estado_color viene como nombre ('yellow', 'green'…): mismo badge que en Incidencias/Siniestros */}
                 {f.estadoColor?.startsWith('#') ? (
-                  <span className="inc-cond-estado" style={{ background: `${f.estadoColor}22`, color: f.estadoColor }}>{f.estado}</span>
+                  <span className="inc-cond-estado" style={{ color: f.estadoColor }}>{f.estado}</span>
                 ) : (
                   <span className={`dt-badge dt-badge-${f.estadoColor || 'gray'}`}>{f.estado}</span>
                 )}

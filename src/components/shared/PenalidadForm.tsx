@@ -16,6 +16,7 @@ import type {
 } from '../../types/incidencias.types'
 
 import { numeroSemana } from '../../utils/semanaISO'
+import { TurnoBadge } from '../ui/TurnoBadge'
 interface ConductorAsignado {
   id: string
   nombre_completo: string
@@ -436,7 +437,7 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
                   onClick={() => handleSelectConductorFromModal(c)}
                 >
                   <span className="conductor-select-name">{c.nombre_completo}</span>
-                  <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
+                  <span style={{ fontSize: '11px', flexShrink: 0 }}><TurnoBadge turno={c.turno.toLowerCase().replace(' ', '_')} /></span>
                 </button>
               ))}
             </div>

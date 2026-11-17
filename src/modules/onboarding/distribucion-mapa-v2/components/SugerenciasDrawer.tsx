@@ -10,6 +10,7 @@
 
 import { AlertTriangle, Loader2, Sparkles, Waypoints, X } from 'lucide-react'
 import { Badge, BotonPrimario, BotonSecundario, Hint } from './ui'
+import { TurnoBadge } from '../../../../components/ui/TurnoBadge'
 import { IconoEntidad } from './iconos'
 import { colorEntidad } from './colores'
 import type { EntidadMapa, ParSugerido } from '../types'
@@ -119,7 +120,7 @@ export function SugerenciasDrawer({
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: 750,
               color: 'var(--text-primary)',
             }}
@@ -172,7 +173,7 @@ export function SugerenciasDrawer({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-primary)' }}>
               Tiempo máximo de viaje
             </span>
             <Badge tono="bad">{umbral} min</Badge>
@@ -223,7 +224,7 @@ export function SugerenciasDrawer({
                   : mostrarTodos
                     ? 'var(--color-primary, #ff0033)'
                     : 'var(--text-secondary)',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 650,
               cursor: pares.length === 0 ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
@@ -292,7 +293,7 @@ export function SugerenciasDrawer({
               gap: 8,
               padding: 24,
               color: 'var(--text-tertiary)',
-              fontSize: 12.5,
+              fontSize: 11.5,
             }}
           >
             <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
@@ -319,7 +320,7 @@ export function SugerenciasDrawer({
               padding: 22,
               textAlign: 'center',
               color: 'var(--text-tertiary)',
-              fontSize: 12.5,
+              fontSize: 11.5,
               lineHeight: 1.5,
             }}
           >
@@ -382,7 +383,7 @@ export function SugerenciasDrawer({
               background: 'var(--bg-primary)',
             }}
           >
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
               Sin pareja dentro de {umbral} min ({sinPareja.length})
             </div>
             <Hint>
@@ -445,8 +446,10 @@ function TarjetaPar({
         }
       }}
       style={{
-        background: 'var(--bg-primary)',
-        border: `1px solid ${seleccionado || esActual ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
+        // Sólo la sugerencia que se ve en el mapa va en rojo; el compañero actual
+        // es una referencia (fondo gris suave), así no hay dos tarjetas marcadas.
+        background: esActual ? 'var(--bg-secondary)' : 'var(--bg-primary)',
+        border: `1px solid ${seleccionado ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
         boxShadow: seleccionado ? '0 0 0 3px rgba(255,0,51,.10)' : undefined,
         borderRadius: 'var(--radius-lg)',
         padding: '11px 12px',
@@ -461,7 +464,7 @@ function TarjetaPar({
             fontWeight: 800,
             letterSpacing: '.4px',
             textTransform: 'uppercase',
-            color: 'var(--color-primary, #ff0033)',
+            color: 'var(--text-tertiary)',
             marginBottom: 6,
           }}
         >
@@ -476,15 +479,22 @@ function TarjetaPar({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0 6px 22px' }}>
         <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 7 }}>
-          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.3px', color: 'var(--text-primary)' }}>
-            {formatKm(par.distanciaKm)}
-          </span>
-          <span
-            style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)' }}
-            title="Tiempo habitual del recorrido en auto. Con ~ es estimado en línea recta (todavía no medido por calle)."
-          >
-            {formatTiempoPar(par)}
-          </span>
+          {/* Mismo domicilio (ej. hermanos que viven juntos): en vez de "0,0 km ~0 min" */}
+          {par.distanciaKm < 0.05 ? (
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Mismo domicilio</span>
+          ) : (
+            <>
+              <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '-.3px', color: 'var(--text-primary)' }}>
+                {formatKm(par.distanciaKm)}
+              </span>
+              <span
+                style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)' }}
+                title="Tiempo habitual del recorrido en auto. Con ~ es estimado en línea recta (todavía no medido por calle)."
+              >
+                {formatTiempoPar(par)}
+              </span>
+            </>
+          )}
         </span>
         <span style={{ flex: 1, borderTop: '2px dashed var(--border-primary)' }} />
         <Badge tono={par.score >= 70 ? 'ok' : par.score >= 45 ? 'warn' : 'bad'}>
@@ -531,6 +541,9 @@ function ExtremoTarjeta({ entidad }: { entidad: EntidadMapa }) {
         ? LABEL_TURNO[turno]
         : null
 
+  // Valor para el TurnoBadge sobrio; el lead "A Cargo" se muestra tal cual (no como Sin pref.)
+  const turnoBadge = entidad.tipo === 'lead' && /cargo/i.test(entidad.turnoLead || '') ? 'a_cargo' : turno
+
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
       <span style={{ marginTop: 2 }}>
@@ -538,12 +551,12 @@ function ExtremoTarjeta({ entidad }: { entidad: EntidadMapa }) {
       </span>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 750, letterSpacing: '-.1px', color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 11, fontWeight: 750, letterSpacing: '-.1px', color: 'var(--text-primary)' }}>
             {entidad.nombre}
           </span>
           {turnoLabel && (
             <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
-              <Badge tono="info">{turnoLabel}</Badge>
+              {turnoBadge ? <TurnoBadge turno={turnoBadge} /> : <Badge tono="info">{turnoLabel}</Badge>}
             </span>
           )}
         </div>

@@ -30,6 +30,7 @@ import { formatDateTimeAR } from '../../utils/dateUtils'
 import { formatFechaART, formatHoraART, timestampART, toDateART, hoyART } from '../../utils/fechaArgentina'
 import { VEHICULO_CATEGORIAS, VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import { EstadoVehiculoBadge } from './EstadoVehiculoBadge'
+import { LogoGeotab } from '../../components/ui/LogosApp'
 import { useGruposFlota } from '../../hooks/useGruposFlota'
 import { StatsGrid } from '../../components/ui/StatsGrid'
 import { EmptyState } from '../../components/ui/EstadosVista'
@@ -38,6 +39,7 @@ import { formatNumero } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { GUIAS_ACTIVOS } from '../leads/guias'
 import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
+import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatFecha, formatFechaHora } from '../../utils/format'
 
 
@@ -2225,27 +2227,10 @@ export function VehicleManagement() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1.3 }} title={tooltip}>
               {/* Mismo tamaño que el resto de la tabla (12px) */}
               <span>{formatNumero(km)} km</span>
-              {esGeotab && (
-                <span
-                  style={{
-                    background: '#3b82f6', color: '#fff',
-                    padding: '0 4px', borderRadius: 'var(--radius-xs)',
-                    fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
-                    width: 'fit-content',
-                  }}
-                >
-                  GEOTAB
-                </span>
-              )}
+              {/* Origen del km: logo de Geotab o texto USS, sin fondo (2026-11-17) */}
+              {esGeotab && <LogoGeotab alto={8} />}
               {esUss && (
-                <span
-                  style={{
-                    background: '#16a34a', color: '#fff',
-                    padding: '0 4px', borderRadius: 'var(--radius-xs)',
-                    fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
-                    width: 'fit-content',
-                  }}
-                >
+                <span style={{ color: '#15803d', fontSize: 8, fontWeight: 700, letterSpacing: 0.5 }}>
                   USS
                 </span>
               )}
@@ -3654,11 +3639,11 @@ export function VehicleManagement() {
                       href={folderUrl}
                       target="_blank"
                       rel="noopener noreferrer"
+                      // Mismo rojo de marca que el resto de los botones primarios
+                      className="btn-primary"
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: '6px',
-                        padding: '8px 16px', borderRadius: 'var(--radius-sm)', fontSize: '13px', fontWeight: 600,
-                        color: '#fff', backgroundColor: '#dc2626', textDecoration: 'none',
-                        border: 'none', cursor: 'pointer',
+                        textDecoration: 'none', cursor: 'pointer',
                       }}
                     >
                       <FolderOpen size={16} />
@@ -3778,7 +3763,7 @@ export function VehicleManagement() {
                         border: '1px solid rgba(239, 68, 68, 0.12)',
                       }}>
                         <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{c.nombre}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{c.horario}</span>
+                        <span style={{ fontSize: '11px' }}><TurnoBadge turno={c.horario} /></span>
                       </div>
                     ))}
                   </div>

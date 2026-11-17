@@ -25,6 +25,8 @@ import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 import { LicenciaBadge } from '../../../components/ui/LicenciaBadge'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
+import { AppBadges } from '../../../components/ui/AppBadges'
 import { etiquetaLicencia } from '../../../utils/etiquetaLicencia'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 
@@ -386,11 +388,8 @@ export function ConductoresPanelModule() {
         const apps = row.original.apps
         if (apps === undefined) return <span className="cpanel-num cpanel-nulo">…</span>
         if (!apps.length) return <span className="cpanel-num cpanel-nulo">—</span>
-        return (
-          <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
-            {apps.map(a => <span key={a} className={`cpanel-app cpanel-app--${a.toLowerCase()}`}>{a}</span>)}
-          </span>
-        )
+        // Logos en vez de etiquetas de texto (las etiquetas vienen de etiquetasApps)
+        return <AppBadges apps={{ cabify: apps.includes('Cabify'), didi: apps.includes('DiDi') }} size="xs" />
       },
     },
     {
@@ -423,9 +422,11 @@ export function ConductoresPanelModule() {
       id: 'turno',
       accessorFn: (r) => turnoLabel(r.turno),
       header: 'Turno',
-      cell: ({ row }) => row.original.turno
-        ? <span className={`cpanel-badge turno ${row.original.turno}`}>{turnoLabel(row.original.turno)}</span>
-        : <span className="cpanel-num">—</span>,
+      cell: ({ row }) => !row.original.turno
+        ? <span className="cpanel-num">—</span>
+        : TURNO_LABELS[row.original.turno]
+          ? <TurnoBadge turno={row.original.turno} />
+          : <span>{turnoLabel(row.original.turno)}</span>,
     },
     {
       id: 'estado',

@@ -859,3 +859,35 @@ button.resumen-chip:disabled {
   height: 28px;
   font-size: 12px !important;
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.ss-cobro-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.ss-cobro-estado::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.ss-cobro-estado { color: #b91c1c; }
+.ss-cobro-estado--aplicado { color: #1d4ed8; }
+.ss-cobro-estado--en_proceso { color: #b45309; }
+.ss-cobro-estado--pagado { color: #15803d; }
+.ss-cobro-estado--sin_incidencia { color: var(--text-secondary); }
+[data-theme="dark"] .ss-cobro-estado { color: #f87171; }
+[data-theme="dark"] .ss-cobro-estado--aplicado { color: #60a5fa; }
+[data-theme="dark"] .ss-cobro-estado--en_proceso { color: #fbbf24; }
+[data-theme="dark"] .ss-cobro-estado--pagado { color: #4ade80; }
+[data-theme="dark"] .ss-cobro-estado--sin_incidencia { color: var(--text-secondary); }

@@ -15,11 +15,12 @@ interface LicenciaBadgeProps {
   sinDato?: string | null
 }
 
-const COLORES: Record<string, { bg: string; fg: string }> = {
-  B1: { bg: 'rgba(245, 158, 11, 0.16)', fg: '#b45309' },
-  D1: { bg: 'rgba(22, 163, 74, 0.14)', fg: '#15803d' },
-  Otros: { bg: 'rgba(100, 116, 139, 0.15)', fg: '#475569' },
-  sin: { bg: 'transparent', fg: 'var(--text-tertiary)' },
+// Estilo sobrio (2026-11-17): sin fondo, borde fino del color y texto del color.
+const COLORES: Record<string, { borde: string; fg: string }> = {
+  B1: { borde: 'rgba(217, 119, 6, 0.45)', fg: '#b45309' },
+  D1: { borde: 'rgba(22, 163, 74, 0.45)', fg: '#15803d' },
+  Otros: { borde: 'rgba(100, 116, 139, 0.4)', fg: '#475569' },
+  sin: { borde: 'transparent', fg: 'var(--text-tertiary)' },
 }
 
 export function LicenciaBadge({ categoria, otra, size = 'sm', sinDato = null }: LicenciaBadgeProps) {
@@ -32,13 +33,14 @@ export function LicenciaBadge({ categoria, otra, size = 'sm', sinDato = null }: 
       title={texto ? `Licencia ${texto}${categoria === 'B1' ? ' (sin D1)' : ''}` : 'Sin categoría de licencia cargada'}
       style={{
         display: 'inline-block',
-        fontSize: xs ? '8px' : '11px',
-        lineHeight: xs ? '12px' : '16px',
-        padding: xs ? '1px 4px' : '1px 9px',
-        borderRadius: xs ? 'var(--radius-xs)' : 'var(--radius-lg)',
+        fontSize: xs ? '8px' : '10px',
+        lineHeight: xs ? '10px' : '14px',
+        padding: xs ? '0 3px' : '0 6px',
+        borderRadius: 'var(--radius-xs)',
         fontWeight: 700,
         whiteSpace: 'nowrap',
-        background: color.bg,
+        background: 'transparent',
+        border: `1px solid ${color.borde}`,
         color: color.fg,
       }}
     >

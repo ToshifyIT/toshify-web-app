@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Users, Building2, UserCheck, Plus, Eye, Trash2, Car, FileText, Edit2 } from 'lucide-react'
+import { User, Users, Building2, UserCheck, Plus, Eye, Trash2, Car, FileText, Edit2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -658,14 +658,11 @@ export function TitularesModule() {
       cell: ({ row }) => {
         const isPers = row.original.tipo === 'persona'
         return (
-          <span style={{
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-lg)',
-            fontSize: '12px',
-            fontWeight: 500,
-            background: isPers ? '#dbeafe' : '#fef3c7',
-            color: isPers ? '#1d4ed8' : '#92400e',
-          }}>
+          // Tipo sobrio (2026-11-17): ícono + texto gris, sin fondo
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-secondary)' }}>
+            {isPers
+              ? <User size={13} color="#2563eb" aria-hidden />
+              : <Building2 size={13} color="#b45309" aria-hidden />}
             {isPers ? 'Persona' : 'Empresa'}
           </span>
         )
@@ -708,15 +705,8 @@ export function TitularesModule() {
       cell: ({ row }) => {
         const isActivo = titularActivoMap.get(row.original.id) === true
         return (
-          <span style={{
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-lg)',
-            fontSize: '12px',
-            fontWeight: 500,
-            background: isActivo ? '#d1fae5' : '#fee2e2',
-            color: isActivo ? '#065f46' : '#991b1b',
-          }}>
-            {isActivo ? 'ACTIVO' : 'INACTIVO'}
+          <span className={`dt-badge ${isActivo ? 'dt-badge-green' : 'dt-badge-red'}`}>
+            {isActivo ? 'Activo' : 'Inactivo'}
           </span>
         )
       },
@@ -1177,9 +1167,7 @@ export function TitularesModule() {
                           {vt.fecha_hasta
                             ? formatFecha(vt.fecha_hasta)
                             : (
-                              <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
-                                Vigente
-                              </span>
+                              <span className="dt-badge dt-badge-green">Vigente</span>
                             )}
                         </td>
                         <td style={{ padding: '8px' }}>

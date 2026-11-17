@@ -1296,3 +1296,127 @@ button.lead-pareja-badge:hover { filter: brightness(0.95); text-decoration: unde
 }
 .lead-etiquetas:empty { display: none; }
 .lead-etiquetas > * { margin-top: 0 !important; }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Estado, zona, pareja y programado sin fondo: punto o ícono de color + texto
+   del color. Cada estado conserva su color (los más claros se oscurecen un poco
+   para que el texto se lea sobre blanco).
+   ===================================================== */
+.lead-estado-badge {
+  gap: 5px;
+  padding: 2px 0;
+  background: transparent !important;
+  border: none;
+  border-radius: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.lead-estado-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.lead-estado-badge:hover { opacity: 0.75; }
+.lead-estado-inicio-conversacion { color: #2563EB; }
+.lead-estado-edad-aprobada { color: #0284C7; }
+.lead-estado-pendiente---hireflix { color: #D97706; }
+.lead-estado-apto---hireflix { color: #16A34A; }
+.lead-estado-ayuda---hireflix { color: #EA580C; }
+.lead-estado-auto-del-pueblo { color: #7C3AED; }
+.lead-estado-acepta-oferta { color: #A16207; }
+.lead-estado-descartado { color: #B91C1C; }
+.lead-estado-conductor { color: #7C3AED; }
+
+[data-theme="dark"] .lead-estado-inicio-conversacion,
+[data-theme="dark"] .lead-estado-documentos-enviados { color: #60A5FA; }
+[data-theme="dark"] .lead-estado-propuesta-enviada { color: #A5B4FC; }
+[data-theme="dark"] .lead-estado-zona-aprobada { color: #2DD4BF; }
+[data-theme="dark"] .lead-estado-edad-aprobada,
+[data-theme="dark"] .lead-estado-convocatoria-induccion { color: #38BDF8; }
+[data-theme="dark"] .lead-estado-video-recibido { color: #A3E635; }
+[data-theme="dark"] .lead-estado-acepta-oferta,
+[data-theme="dark"] .lead-estado-pendiente---hireflix,
+[data-theme="dark"] .lead-estado-documentos-pendientes { color: #FBBF24; }
+[data-theme="dark"] .lead-estado-apto---hireflix,
+[data-theme="dark"] .lead-estado-apto-induccion { color: #4ADE80; }
+[data-theme="dark"] .lead-estado-no-apto---hireflix,
+[data-theme="dark"] .lead-estado-descartado { color: #F87171; }
+[data-theme="dark"] .lead-estado-ayuda---hireflix,
+[data-theme="dark"] .lead-estado-no-cumple-edad { color: #FB923C; }
+[data-theme="dark"] .lead-estado-auto-del-pueblo,
+[data-theme="dark"] .lead-estado-conductor { color: #C4B5FD; }
+[data-theme="dark"] .lead-estado-contactado-sellium { color: #F472B6; }
+[data-theme="dark"] .lead-estado-listo-emparejar { color: #E879F9; }
+[data-theme="dark"] .lead-estado-no-le-interesa { color: var(--text-secondary); }
+
+/* Zona (pin), pareja (manitos) y programado: ícono + texto de color, sin fondo */
+.lead-zona-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  background: transparent;
+  cursor: default;
+}
+.lead-zona-badge--ok { color: #16a34a; }
+.lead-zona-badge--restringida { color: #dc2626; }
+[data-theme="dark"] .lead-zona-badge--ok { color: #4ADE80; }
+[data-theme="dark"] .lead-zona-badge--restringida { color: #F87171; }
+
+.lead-pareja-badge,
+.lead-pareja-badge--cerca,
+.lead-pareja-badge--posible,
+.lead-pareja-badge--programado,
+[data-theme="dark"] .lead-pareja-badge--cerca {
+  background: transparent;
+  padding: 0 2px;
+  gap: 3px;
+  font-size: 10px;
+}
+.lead-pareja-badge--cerca { color: #7C3AED; }
+.lead-pareja-badge--posible { color: var(--text-secondary); }
+.lead-pareja-badge--programado { color: var(--color-info); }
+[data-theme="dark"] .lead-pareja-badge--cerca { color: #C4B5FD; }
+button.lead-pareja-badge { background: transparent; }
+button.lead-pareja-badge:hover { filter: none; }
+
+/* Licencia Sí/No editable: texto de color; borde suave sólo al pasar el mouse */
+.lead-sino-cell {
+  background: transparent;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.lead-sino-cell--editable:hover,
+.lead-sino-cell--editable:focus-visible {
+  border-color: var(--border-primary, #d1d5db);
+}
+.lead-sino-cell--si { color: #16a34a; }
+.lead-sino-cell--no { color: #dc2626; }
+[data-theme="dark"] .lead-sino-cell--si { color: #4ADE80; }
+[data-theme="dark"] .lead-sino-cell--no { color: #F87171; }
+.lead-sino-cell--vacio { color: var(--text-tertiary); }
+
+/* Menú de estado (y demás menús de la tabla): misma escala que la tabla */
+.lead-estado-dropdown {
+  min-width: 0;
+  width: max-content;
+  padding: 3px;
+}
+.lead-estado-dropdown-item {
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.lead-estado-dropdown-item.active {
+  background: var(--bg-tertiary, #f3f4f6);
+  font-weight: 700;
+}
+.lead-estado-dropdown .lead-estado-dot {
+  width: 6px;
+  height: 6px;
+}

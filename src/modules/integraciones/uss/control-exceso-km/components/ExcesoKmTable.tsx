@@ -358,7 +358,7 @@ export function ExcesoKmTable({
               {r.tipoTarifa && (
                 <span
                   title={`Tarifa de su asignación esa semana: ${r.tipoTarifa === 'nueva' ? 'nueva' : 'antigua'}`}
-                  style={{ fontSize: 9, padding: '1px 5px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}
+                  style={{ fontSize: 9, padding: '1px 2px', fontWeight: 700, color: '#2563eb' }}
                 >
                   {r.tipoTarifa === 'nueva' ? etiquetasTarifa.nueva : etiquetasTarifa.antigua}
                 </span>

@@ -77,7 +77,7 @@ function Kpi({ label, value, subtitle, variacion: v, esHoy, info }: KpiProps) {
     <div className="ddir-kpi">
       <span className="ddir-kpi-label">
         <span>{label}</span>
-        {esHoy ? <span className="ddir-badge-hoy">ACTUAL</span> : null}
+        {esHoy ? <span className="ddir-badge-hoy">· actual</span> : null}
         <InfoIcon text={info} />
       </span>
       <span className="ddir-kpi-value">{value ?? '—'}</span>
@@ -163,8 +163,9 @@ function SelectorPeriodo({ preset, desde, hasta, hastaVisible, anterior, onPrese
       </div>
       <div className="ddir-periodo-info">
         <span className="ddir-semana-hoy">Hoy: {etiquetaSemana(hoyArgentina())}</span>
+        {/* El rango ya se ve en el selector: acá sólo fechas y contra qué se compara */}
         <span className="ddir-periodo-rango">
-          <strong>{etiquetaRangoSemanas(desde, hasta)}</strong> ({fechaCorta(desde)} – {fechaCorta(hastaVisible)})
+          {fechaCorta(desde)} – {fechaCorta(hastaVisible)}
           {anterior ? ` · comparado con ${etiquetaRangoSemanas(anterior.desde, anterior.hasta)}` : ''}
         </span>
       </div>

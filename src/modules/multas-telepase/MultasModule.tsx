@@ -2622,7 +2622,7 @@ export default function MultasModule() {
                                   <td style={{ padding: '8px 10px', borderBottom: bb, textAlign: 'right', fontWeight: 700, color: acento }}>
                                     {formatMoney(monto)}
                                     {esFracc && (
-                                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-full)', background: '#e0e7ff', color: '#4338ca' }}>Fraccionada</span>
+                                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--color-info)' }}>Fraccionada</span>
                                     )}
                                   </td>
                                   <td style={{ padding: '8px 10px', borderBottom: bb, whiteSpace: 'normal' }}>{semanasPago && semanasPago.length ? semanasPago.join(', ') : '-'}</td>

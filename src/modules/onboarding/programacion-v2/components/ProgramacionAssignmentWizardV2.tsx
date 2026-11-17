@@ -22,11 +22,12 @@ import { useSede } from '../../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../../components/ui/TimeInput24h'
 import { LoadingOverlay } from '../../../../components/ui/LoadingOverlay'
 import { Alerta } from '../../../../components/ui/alertas'
+import { TurnoBadge } from '../../../../components/ui/TurnoBadge'
 import { showError, showSuccess } from '../../../../utils/toast'
 import type { TipoCandidatoV2, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../../types/onboarding.types'
 import type { Vehicle } from '../../../../types/vehiculo.types'
 import type { Conductor } from '../../../../types/conductor.types'
-import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../../utils/conductorUtils'
+import { PROGRAMACION_ESTADO_LABELS } from '../../../../utils/conductorUtils'
 import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../../lib/googleMaps'
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
 import { cargarConceptosTarifa, getEtiquetaTarifa, getPeriodoTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
@@ -5188,15 +5189,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 </p>
                                 <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span>DNI: {conductor.numero_dni || '-'}</span>
-                                  <span style={{
-                                    fontSize: '9px',
-                                    padding: '2px 6px',
-                                    borderRadius: 'var(--radius-xs)',
-                                    fontWeight: '600',
-                                    background: getPreferenciaBadge(conductor.preferencia_turno).bg,
-                                    color: getPreferenciaBadge(conductor.preferencia_turno).color
-                                  }}>
-                                    {formatPreferencia(conductor.preferencia_turno)}
+                                  <span style={{ fontSize: '10px' }} title="Preferencia de turno">
+                                    <TurnoBadge turno={conductor.preferencia_turno} />
                                   </span>
                                   {conductor.tieneAsignacionActiva && (conductor as any).tarifaActiva && (
                                     <span
@@ -5258,7 +5252,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                       {/* Turno Diurno */}
                       <div className="conductores-column turno-diurno">
                         <h4>
-                          <span className="turno-badge diurno"><Sun size={12} style={{ marginRight: 4 }} />DIURNO</span>
+                          <TurnoBadge turno="diurno" conTexto />
                         </h4>
                         <div
                           className={`drop-zone ${conductorDiurno ? 'has-conductor' : ''}`}
@@ -5300,7 +5294,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                       {/* Turno Nocturno */}
                       <div className="conductores-column turno-nocturno">
                         <h4>
-                          <span className="turno-badge nocturno"><Moon size={12} style={{ marginRight: 4 }} />NOCTURNO</span>
+                          <TurnoBadge turno="nocturno" conTexto />
                         </h4>
                         <div
                           className={`drop-zone ${conductorNocturno ? 'has-conductor' : ''}`}
@@ -5347,7 +5341,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                     <div className="turnos-stack">
                       <div className="conductores-column a-cargo">
                       <h4>
-                        <span className="turno-badge cargo">A CARGO</span>
+                        <TurnoBadge turno="a_cargo" conTexto />
                       </h4>
                       <div
                         className={`drop-zone ${conductorCargo ? 'has-conductor' : ''}`}

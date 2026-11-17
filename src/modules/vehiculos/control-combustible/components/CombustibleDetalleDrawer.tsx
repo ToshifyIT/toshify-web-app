@@ -125,6 +125,9 @@ function MapaLlenadoModal({ fillup, onClose }: MapaModalProps) {
               options={{
                 disableDefaultUI: false,
                 streetViewControl: false,
+                // Sin los lugares de Google (plazas, comercios): al tocarlos abrían un
+                // cartel "No se ha podido cargar la información del sitio"
+                clickableIcons: false,
                 mapTypeControl: false,
                 fullscreenControl: true,
               }}

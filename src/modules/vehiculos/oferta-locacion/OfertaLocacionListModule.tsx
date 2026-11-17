@@ -286,15 +286,8 @@ export function OfertaLocacionListModule() {
       cell: ({ row }) => {
         const s = row.original.socio
         if (!s) return '-'
-        const label = s
-        const es44Dreams = s.includes('44 DREAMS') || s === '44dreams'
-        const bg = es44Dreams ? '#fef3c7' : '#dbeafe'
-        const color = es44Dreams ? '#92400e' : '#1d4ed8'
-        return (
-          <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 500, background: bg, color }}>
-            {label}
-          </span>
-        )
+        // Texto simple, sin pastilla (etiquetas sobrias 2026-11-17)
+        return <span style={{ fontWeight: 500 }}>{s}</span>
       },
     },
     {

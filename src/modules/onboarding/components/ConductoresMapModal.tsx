@@ -11,6 +11,7 @@ import {
   GOOGLE_MAPS_REGION,
 } from '../../../lib/googleMaps'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
@@ -266,13 +267,8 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                         {c.apellidos}, {c.nombres}
                       </span>
                       {role && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, marginLeft: 'auto',
-                          color: role === 'diurno' ? '#92400E' : '#1E40AF',
-                          background: role === 'diurno' ? '#FEF3C7' : '#DBEAFE',
-                          padding: '1px 5px', borderRadius: 'var(--radius-xs)',
-                        }}>
-                          {role === 'diurno' ? 'DIURNO' : 'NOCTURNO'}
+                        <span style={{ fontSize: 10, marginLeft: 'auto' }}>
+                          <TurnoBadge turno={role} />
                         </span>
                       )}
                     </div>
@@ -357,6 +353,9 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                 onLoad={onMapLoad}
                 options={{
                   streetViewControl: false,
+                  // Sin los lugares de Google (plazas, comercios): al tocarlos abrían un
+                  // cartel "No se ha podido cargar la información del sitio"
+                  clickableIcons: false,
                   mapTypeControl: false,
                   fullscreenControl: false,
                   zoomControl: true,
