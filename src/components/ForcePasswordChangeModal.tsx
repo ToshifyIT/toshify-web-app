@@ -99,6 +99,23 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
           width: 100%;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
           border: 1px solid var(--border-primary, #e5e7eb);
+          /* En pantallas bajas el modal scrollea; cabecera y botón quedan fijos */
+          max-height: calc(100vh - 32px);
+          overflow-y: auto;
+        }
+
+        /* Cabecera fija (regla global *-modal-header). El margen negativo
+           compensa el padding: sin scroll se ve igual que antes. */
+        .fpc-modal-header {
+          display: flow-root;
+          padding-top: 12px;
+          margin-top: -12px;
+        }
+
+        /* Botón fijo abajo (regla global *-modal-footer) */
+        .fpc-modal-footer {
+          padding: 12px 0;
+          margin: -12px 0;
         }
 
         .fpc-icon {
@@ -299,6 +316,8 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
         /* Dark mode */
         [data-theme="dark"] .fpc-modal {
           background: #1e293b;
+          /* Cabecera y botón fijos usan el mismo fondo que el modal */
+          --modal-bg: #1e293b;
           border-color: #334155;
         }
 
@@ -370,16 +389,18 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
             </svg>
           </div>
 
-          <h2 className="fpc-title">Crear Nueva Contraseña</h2>
-          <p className="fpc-subtitle">
-            Ingresaste con una contraseña temporal. Ahora elegí una contraseña nueva y personal para tu cuenta. No repitas la contraseña temporal.
-          </p>
+          <div className="fpc-modal-header">
+            <h2 className="fpc-title">Crear Nueva Contraseña</h2>
+            <p className="fpc-subtitle">
+              Ingresaste con una contraseña temporal. Ahora elegí una contraseña nueva y personal para tu cuenta. No repitas la contraseña temporal.
+            </p>
 
-          {profile && (
-            <div className="fpc-user-info">
-              <span className="fpc-user-name">{profile.full_name}</span>
-            </div>
-          )}
+            {profile && (
+              <div className="fpc-user-info">
+                <span className="fpc-user-name">{profile.full_name}</span>
+              </div>
+            )}
+          </div>
 
           <form onSubmit={handleSubmit}>
             <div className="fpc-form-group">
@@ -450,9 +471,11 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
               </ul>
             </div>
 
-            <button type="submit" className="fpc-btn" disabled={loading}>
-              {loading ? <span className="fpc-spinner"></span> : 'Cambiar Contraseña'}
-            </button>
+            <div className="fpc-modal-footer">
+              <button type="submit" className="fpc-btn" disabled={loading}>
+                {loading ? <span className="fpc-spinner"></span> : 'Cambiar Contraseña'}
+              </button>
+            </div>
           </form>
         </div>
       </div>

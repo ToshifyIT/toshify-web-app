@@ -1234,6 +1234,8 @@ export function MovimientosModule() {
           max-height: 88vh;
           overflow-y: auto;
           background: var(--card-bg);
+          /* Cabecera y botones fijos (regla global) con el mismo fondo del modal */
+          --modal-bg: var(--card-bg);
           border: 1px solid var(--border-primary);
           border-radius: 10px;
           box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
@@ -2419,7 +2421,7 @@ export function MovimientosModule() {
       {recepcionPedidoModal && (
         <div className="mov-confirm-overlay" onClick={cerrarModalRecepcionPedido}>
           <div className="mov-confirm-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="mov-confirm-header">
+            <div className="mov-confirm-header mov-confirm-modal-header">
               <div>
                 <h3>Confirmar recepción del pedido</h3>
                 <p>Revisa lo que entrará a stock disponible antes de registrar la recepción.</p>
@@ -2475,7 +2477,7 @@ export function MovimientosModule() {
               </div>
             </div>
 
-            <div className="mov-confirm-footer">
+            <div className="mov-confirm-footer mov-confirm-modal-footer">
               <button
                 type="button"
                 className="mov-confirm-secondary"
