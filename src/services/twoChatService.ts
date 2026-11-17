@@ -69,7 +69,12 @@ export interface LlamadaTwoChat {
   id: string
   fecha: string
   agente_id: string | null
+  /** Quién llamó: la persona de Toshibase si salió desde el botón de Toshibase; si no, la cuenta de 2Chat */
   agente: string
+  /** Usuario de Toshibase que hizo la llamada (solo llamadas desde el botón de Toshibase) */
+  realizada_por?: string | null
+  /** Cuenta de 2Chat con la que salió la llamada */
+  cuenta_2chat?: string
   direccion: 'saliente' | 'entrante'
   numero: string | null
   conductor_id: string | null

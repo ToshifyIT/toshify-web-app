@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Users, CheckCircle2, Clock, PhoneOff, AlertTriangle, RefreshCw, UploadCloud,
-  Phone, PhoneCall, Timer, DollarSign, Download, MessageCircle, Headphones, FileText, Star,
+  Phone, PhoneCall, Timer, DollarSign, Download, Headphones, FileText, Star, UserCheck,
 } from 'lucide-react'
 import { Alerta } from '../../../components/ui/alertas'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -62,7 +62,8 @@ const ETIQUETA_SYNC: Record<EstadoSync2Chat, string> = {
 const ETIQUETA_RESULTADO: Record<ResultadoLlamada, string> = {
   atendida: 'Atendida',
   buzon_voz: 'Buzón de voz',
-  sin_conversacion: 'Sin conversación',
+  // Atendió pero nadie habló: cortó enseguida, silencio o número equivocado
+  sin_conversacion: 'Sin contacto',
   no_atendida: 'No atendida',
   ocupado: 'Ocupado',
   cancelada: 'Cancelada',
@@ -428,7 +429,8 @@ function LlamadasTab() {
     setError(null)
     try {
       const r = await obtenerLlamadasTwoChat({ desde, hasta, direccion, actualizar })
-      setLlamadas(r.llamadas)
+      // El agente es la persona de Toshibase que llamó; la cuenta de 2Chat queda aparte
+      setLlamadas(r.llamadas.map((l) => ({ ...l, agente: l.realizada_por || l.cuenta_2chat || l.agente })))
       setActualizadoEn(r.actualizado_en)
       setErrorSync(r.error_sync)
       setAgente('todos')
@@ -502,7 +504,7 @@ function LlamadasTab() {
         Llamadas: r.llamadas,
         Atendidas: r.atendidas,
         'No atendidas': r.noAtendidas,
-        Conversaciones: r.conversaciones,
+        'Contactos efectivos': r.conversaciones,
         'Buzón de voz': r.buzon,
         'Calidad promedio (1 a 5)': r.calidad == null ? '' : Number(r.calidad.toFixed(1)),
         'Minutos totales': Number((r.segundos / 60).toFixed(1)),
@@ -553,7 +555,7 @@ function LlamadasTab() {
     { accessorKey: 'atendidas', header: 'Atendidas' },
     { accessorKey: 'noAtendidas', header: 'No atendidas' },
     { accessorKey: 'buzon', header: 'Buzón de voz' },
-    { accessorKey: 'conversaciones', header: 'Conversaciones' },
+    { accessorKey: 'conversaciones', header: 'Contactos efectivos' },
     {
       accessorKey: 'calidad',
       header: 'Calidad prom.',
@@ -573,7 +575,20 @@ function LlamadasTab() {
 
   const columnasDetalle = useMemo<ColumnDef<LlamadaTwoChat, unknown>[]>(() => [
     { accessorKey: 'fecha', header: 'Fecha', cell: ({ getValue }) => formatFechaHoraART(getValue() as string) },
-    { accessorKey: 'agente', header: 'Agente' },
+    {
+      accessorKey: 'agente',
+      header: 'Agente',
+      cell: ({ row }) => {
+        const { agente, cuenta_2chat: cuenta } = row.original
+        // Llamadas por una cuenta compartida: abajo, con qué cuenta de 2Chat salió
+        return cuenta && cuenta !== agente ? (
+          <div className="tc-contacto">
+            <span>{agente}</span>
+            <span className="tc-muted">vía {cuenta}</span>
+          </div>
+        ) : agente
+      },
+    },
     {
       id: 'contacto',
       header: 'Contacto',
@@ -675,14 +690,14 @@ function LlamadasTab() {
               <span className="stat-label">Atendidas</span>
             </div>
           </div>
-          <div className="stat-card" title="Atendidas en las que se habló con una persona (sin buzón de voz ni cortes). Lo confirma Gemini al escuchar la grabación.">
-            <MessageCircle size={20} className="stat-icon" />
+          <div className="stat-card" title="Llamadas en las que se habló con la persona (sin buzón de voz ni cortes). Lo confirma Gemini al escuchar la grabación.">
+            <UserCheck size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.conversaciones}</span>
-              <span className="stat-label">Conversaciones{totales.buzon > 0 ? ` · ${totales.buzon} buzón` : ''}</span>
+              <span className="stat-label">Contactos efectivos{totales.buzon > 0 ? ` · ${totales.buzon} buzón` : ''}</span>
             </div>
           </div>
-          <div className="stat-card" title="Nota promedio de 1 a 5 de las conversaciones: presentación, indagación, claridad, objeciones y cierre">
+          <div className="stat-card" title="Nota promedio de 1 a 5 de los contactos efectivos: presentación, indagación, claridad, objeciones y cierre">
             <Star size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.calidad == null ? '-' : formatNumero(totales.calidad, 1)}</span>

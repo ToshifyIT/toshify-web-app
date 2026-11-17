@@ -705,6 +705,8 @@ export async function historialLlamadas(cfg, { desde, hasta, direccion }) {
       // Si salió desde Toshibase por una cuenta compartida: «Persona (vía Cuenta)»
       agente: persona && persona !== cuenta ? `${persona} (vía ${cuenta})` : cuenta,
       realizada_por: persona,
+      // Cuenta de 2Chat con la que salió (puede ser la compartida «Info Toshify»)
+      cuenta_2chat: cuenta,
       direccion: f.direccion,
       numero: f.numero,
       conductor_id: f.conductor_id,

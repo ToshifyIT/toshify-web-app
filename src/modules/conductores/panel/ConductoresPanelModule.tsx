@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone } from 'lucide-react'
+import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -18,6 +18,7 @@ import { cargarPanelConductores, cargarKmGeoPanel, type ConductorPanelRow } from
 import { ConductorDetalleModal } from './ConductorDetalleModal'
 import { calificacionDesdeGuardada, calificarConductor, referenciaIngresos, type Calificacion, type ExtrasCalificacion } from './calificacionConductor'
 import { CalificacionCelda } from './CalificacionEstrellas'
+import { cargarRiesgoDeuda, textoRiesgo, NIVEL_RIESGO_LABEL, type RiesgoDeuda } from './riesgoDeuda'
 import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes, cargarExtrasCalificacion, cargarSemanaCerradaGuardada, lunesSemanaCerrada, type CalificacionSemana } from './calificacionesHistorial'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { hoyART } from '../../../utils/fechaArgentina'
@@ -37,7 +38,7 @@ function fmtKm(v: number): string {
   return `${v.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`
 }
 
-type CardKey = 'conAuto' | 'sinAuto' | 'conMultas' | 'pendientes' | 'alertaKm'
+type CardKey = 'conAuto' | 'sinAuto' | 'conMultas' | 'pendientes' | 'alertaKm' | 'riesgoAlto'
 
 const CARD_LABELS: Record<CardKey, string> = {
   conAuto: 'Con Auto Asignado',
@@ -45,6 +46,7 @@ const CARD_LABELS: Record<CardKey, string> = {
   conMultas: 'Con Multas',
   pendientes: 'Con Multas Pendientes',
   alertaKm: 'Alerta KM',
+  riesgoAlto: 'Riesgo de deuda alto',
 }
 
 // ALERTA DE USO OCIOSO DEL VEHICULO
@@ -215,13 +217,28 @@ export function ConductoresPanelModule() {
     return () => { activo = false }
   }, [sedeActualId, reloadKey, semanaCabify])
 
+  // Riesgo de no poder pagar la deuda (ver riesgoDeuda.ts). Si falla, la columna queda en "—".
+  const [riesgos, setRiesgos] = useState<Map<string, RiesgoDeuda> | null>(null)
+  useEffect(() => {
+    let activo = true
+    setRiesgos(null)
+    cargarRiesgoDeuda(sedeActualId ?? null)
+      .then(m => { if (activo) setRiesgos(m) })
+      .catch(e => {
+        console.error('Riesgo de deuda:', e)
+        if (activo) setRiesgos(new Map())
+      })
+    return () => { activo = false }
+  }, [sedeActualId, reloadKey])
+
   const stats = useMemo(() => ({
     conAuto: rows.filter(c => c.tieneAsignacion).length,
     sinAuto: rows.filter(c => !c.tieneAsignacion).length,
     conMultas: rows.filter(c => c.cantidadMultas > 0).length,
     pendientes: rows.filter(c => c.pendientes + c.enProceso > 0).length,
     alertaKm: rows.filter(tieneAlertaKm).length,
-  }), [rows])
+    riesgoAlto: rows.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto').length,
+  }), [rows, riesgos])
 
   const filteredRows = useMemo(() => {
     switch (activeCard) {
@@ -230,9 +247,10 @@ export function ConductoresPanelModule() {
       case 'conMultas': return rows.filter(c => c.cantidadMultas > 0)
       case 'pendientes': return rows.filter(c => c.pendientes + c.enProceso > 0)
       case 'alertaKm': return rows.filter(tieneAlertaKm)
+      case 'riesgoAlto': return rows.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto')
       default: return rows
     }
-  }, [rows, activeCard])
+  }, [rows, activeCard, riesgos])
 
   const handleCard = (card: CardKey) => setActiveCard(prev => prev === card ? null : card)
 
@@ -255,6 +273,8 @@ export function ConductoresPanelModule() {
       'CUIT': c.ruc || '',
       'Capitán': c.guia || '',
       'App (pagó)': c.apps?.join(' + ') || '',
+      'Riesgo deuda': riesgos?.get(c.id) ? NIVEL_RIESGO_LABEL[riesgos.get(c.id)!.nivel] : '',
+      'Deuda (semanas de alquiler)': riesgos?.get(c.id) ? Number(riesgos.get(c.id)!.semanasDeuda.toFixed(1)) : '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
       'Licencia': etiquetaLicencia(c.categoriaLicencia, c.categoriaLicenciaOtra) || '',
       'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
@@ -297,6 +317,8 @@ export function ConductoresPanelModule() {
       { wch: 14 }, // CUIT
       { wch: 18 }, // Guía
       { wch: 14 }, // App
+      { wch: 12 }, // Riesgo deuda
+      { wch: 14 }, // Deuda (semanas)
       { wch: 12 }, // Estado
       { wch: 16 }, // Patente Asignada
       { wch: 14 }, // Grupo de Flota
@@ -403,6 +425,32 @@ export function ConductoresPanelModule() {
         }
         // Logos en vez de etiquetas de texto (las etiquetas vienen de etiquetasApps)
         return <AppBadges apps={{ cabify: apps.includes('Cabify'), didi: apps.includes('DiDi') }} size="xs" />
+      },
+    },
+    {
+      // Riesgo de no poder pagar la deuda, con las últimas 4 semanas de facturación
+      id: 'riesgo_deuda',
+      accessorFn: (r) => {
+        const x = riesgos?.get(r.id)
+        return x ? NIVEL_RIESGO_LABEL[x.nivel] : 'Sin historial'
+      },
+      header: () => <span title="Riesgo de no poder pagar, según cómo pagó las últimas 4 semanas cerradas de facturación">Riesgo deuda</span>,
+      sortingFn: (a, b) => {
+        const orden = { alto: 3, medio: 2, bajo: 1 }
+        const va = riesgos?.get(a.original.id), vb = riesgos?.get(b.original.id)
+        return (va ? orden[va.nivel] : 0) - (vb ? orden[vb.nivel] : 0) || (va?.semanasDeuda ?? 0) - (vb?.semanasDeuda ?? 0)
+      },
+      cell: ({ row }) => {
+        if (riesgos === null) return <span className="cpanel-num cpanel-nulo">…</span>
+        const x = riesgos.get(row.original.id)
+        if (!x) {
+          return <span className="cpanel-num cpanel-nulo" title="Necesita 4 semanas seguidas de facturación cerrada">—</span>
+        }
+        return (
+          <span className={`cpanel-badge riesgo-${x.nivel}`} title={textoRiesgo(x)}>
+            {NIVEL_RIESGO_LABEL[x.nivel]}
+          </span>
+        )
       },
     },
     {
@@ -753,7 +801,7 @@ export function ConductoresPanelModule() {
         />
       ),
     },
-  ], [rangoCabifyLabel, calificaciones, kmGeoCargando, llamada])
+  ], [rangoCabifyLabel, calificaciones, kmGeoCargando, llamada, riesgos])
 
   return (
     <div className="cond-module">
@@ -799,6 +847,15 @@ export function ConductoresPanelModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.alertaKm}</span>
               <span className="stat-label">Alerta KM</span>
+            </div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeCard === 'riesgoAlto' ? 'stat-card-active' : ''}`}
+            onClick={() => handleCard('riesgoAlto')}
+            title="Conductores con auto que deben 1 semana o más y la deuda sube, o que pagaron menos del 90% tres semanas seguidas">
+            <TrendingDown size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{riesgos === null ? '…' : stats.riesgoAlto}</span>
+              <span className="stat-label">Riesgo de Deuda Alto</span>
             </div>
           </div>
         </StatsGrid>
