@@ -33,6 +33,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@2chat/voice-sdk": "0.2.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@react-google-maps/api": "^2.20.8",
     "@supabase/supabase-js": "^2.76.1",

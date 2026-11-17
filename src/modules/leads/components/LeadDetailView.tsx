@@ -341,6 +341,18 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
         <Dato label="Capitán" valor={lead.entrevistador_asignado || '-'} />
       </div>
 
+      {/* Leads de «Registrá tu auto» (web): dueño que ofrece su auto. Los datos del
+          auto no son de conductor, así que van aparte y a la vista, arriba de las pestañas. */}
+      {(lead.tipo === 'auto' || lead.marca_y_modelo_de_vehiculo || lead.km_de_auto) && (
+        <div className="lead-detail-cards" style={{ height: 'auto', overflow: 'visible' }}>
+          <Tarjeta titulo="Auto ofrecido">
+            <Item label="Vehículo" valor={lead.marca_y_modelo_de_vehiculo} />
+            <Item label="Kilometraje" valor={lead.km_de_auto ? `${Number(lead.km_de_auto).toLocaleString('es-AR')} km` : null} />
+            <Item label="Ciudad" valor={lead.city} />
+          </Tarjeta>
+        </div>
+      )}
+
       {/* Mismas partes que el formulario de carga (LeadWizard) */}
       <TabsBar tabs={PESTANAS_FICHA} active={pestana} onChange={setPestana} className="tabs-bar--modal" ariaLabel="Secciones del lead" />
 

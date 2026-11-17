@@ -7,11 +7,14 @@
 /** Estado que marca a un lead como listo para emparejar con un compañero. */
 export const ESTADO_LISTO_EMPAREJAR = 'Listo Emparejar'
 
+/** Empresas que piden una demo de flota (formulario web): no son candidatos a conductor, van fuera del embudo. */
+export const ESTADO_GESTION_FLOTA = 'Gestión flota'
+
 /** Todos los estados conocidos ("Conductor" se asigna solo, automáticamente). */
 export const ESTADOS_LEAD = [
   'Inicio conversación', 'Contactado Sellium', 'Edad aprobada', 'Zona aprobada', 'Propuesta enviada', 'Acepta oferta',
   'Video recibido', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
-  'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
+  'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', ESTADO_GESTION_FLOTA, 'No le interesa', 'No cumple edad',
   'Convocatoria Inducción', 'Apto Inducción', ESTADO_LISTO_EMPAREJAR, 'Descartado',
 ] as const
 
@@ -41,5 +44,5 @@ export const ESTADOS_LEAD_FILTRO: readonly string[] = ESTADOS_LEAD.filter(
  * "Descartado", así que cuenta igual que Descartado.
  */
 export const ESTADOS_SIN_PAREJA: ReadonlySet<string> = new Set([
-  'Descartado', 'No cumple edad', 'Auto del pueblo', 'No le interesa', 'Conductor', 'Reingreso',
+  'Descartado', 'No cumple edad', 'Auto del pueblo', ESTADO_GESTION_FLOTA, 'No le interesa', 'Conductor', 'Reingreso',
 ])

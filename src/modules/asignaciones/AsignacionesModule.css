@@ -3146,3 +3146,40 @@ input[type="date"].asig-status-select {
   flex-shrink: 0;
 }
 [data-theme="dark"] .asig-punto-nuevo { background: #60A5FA; }
+
+/* Celda de vehículo en un cambio de auto: patente entregada, patente devuelta y
+   modalidad apiladas, compactas para no ensanchar la columna ni agrandar la fila */
+.asig-vehiculo-cambio {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.asig-vehiculo-cambio-fila {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.asig-vehiculo-cambio-icono {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* Patente del vehículo devuelto: contorno en vez de relleno para distinguirla */
+.patente-badge-ui.asig-patente-cambio {
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: inset 0 0 0 1px var(--border-primary, var(--color-gray-400));
+  padding: 1px 4px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.dt-badge.asig-vehiculo-cambio-modalidad {
+  font-size: 9px;
+  line-height: 1.2;
+  padding: 0 4px;
+}

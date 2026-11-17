@@ -13,6 +13,8 @@
  *  - TWOCHAT_SYNC_AUTO      (opcional)     -> "1" activa la actualización automática de
  *                                             llamadas: todos los días, cada hora en punto
  *                                             de 9 a 17 h de Argentina (ver iniciarSyncAutomatico)
+ *  - GEMINI_API_KEY        (opcional)     -> transcribe las llamadas atendidas, detecta el buzón
+ *                                             de voz y califica la conversación (ver transcribirPendientes)
  *  - TWOCHAT_CHANNEL_UUID   (opcional)     -> solo si hay un canal de WhatsApp (WPN...). Si está,
  *                                             el contacto también se crea en ese WhatsApp. Con
  *                                             solo canal de voz se deja vacía.
@@ -70,6 +72,7 @@ const CLAVES_ENV = [
   'TWOCHAT_API_KEY',
   'TWOCHAT_SYNC_AUTO',
   'TWOCHAT_CHANNEL_UUID',
+  'GEMINI_API_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'VITE_SUPABASE_URL',
   'VITE_SUPABASE_ANON_KEY',
@@ -123,6 +126,7 @@ function config() {
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     apiKey: process.env.TWOCHAT_API_KEY,
     canal: process.env.TWOCHAT_CHANNEL_UUID || null,
+    geminiKey: process.env.GEMINI_API_KEY || null,
   }
 }
 
@@ -661,15 +665,48 @@ export async function historialLlamadas(cfg, { desde, hasta, direccion }) {
   if (direccion === 'inbound') query += '&direccion=eq.entrante'
   const filas = await selectTodo(cfg, query)
 
+  // Llamadas hechas desde el botón de Toshibase: quién llamó de verdad (importa con
+  // la cuenta compartida «Info Toshify», que usan varias personas). Se cruza por
+  // número, cuenta de 2Chat y hora (hasta 3 minutos de diferencia).
+  let registros = []
+  try {
+    const margen = 10 * 60 * 1000
+    registros = await selectTodo(
+      cfg,
+      'twochat_llamadas_toshibase?select=usuario,twochat_user_uuid,numero_clave,iniciada_en' +
+        `&iniciada_en=gte.${encodeURIComponent(new Date(inicio.getTime() - margen).toISOString())}` +
+        `&iniciada_en=lt.${encodeURIComponent(new Date(fin.getTime() + margen).toISOString())}`,
+    )
+  } catch {
+    // Sin la tabla (sql/twochat_voz.sql todavía no corrido)
+  }
+  const quienLlamo = (f) => {
+    if (f.direccion !== 'saliente' || !registros.length) return null
+    const t = new Date(f.fecha).getTime()
+    let mejor = null
+    for (const r of registros) {
+      if (r.numero_clave !== f.numero_clave || (f.agente_id && r.twochat_user_uuid !== f.agente_id)) continue
+      const dif = Math.abs(new Date(r.iniciada_en).getTime() - t)
+      if (dif <= 3 * 60 * 1000 && (!mejor || dif < mejor.dif)) mejor = { dif, usuario: r.usuario }
+    }
+    return mejor?.usuario || null
+  }
+
   return filas.map((f) => {
     const cond = f.conductores
     const lead = f.leads
+    const persona = quienLlamo(f)
+    const cuenta = f.agente || (f.direccion === 'entrante' ? AGENTE_ENTRANTES_SIN_RESPONDER : AGENTE_SALIENTES_SIN_AGENTE)
     return {
       id: f.uuid,
       fecha: f.fecha,
       agente_id: f.agente_id,
-      // Sin agente = nadie la tomó: en la práctica, entrantes que no se respondieron
-      agente: f.agente || (f.direccion === 'entrante' ? AGENTE_ENTRANTES_SIN_RESPONDER : AGENTE_SALIENTES_SIN_AGENTE),
+      // Sin agente = nadie la tomó: en la práctica, entrantes que no se respondieron.
+      // Si salió desde Toshibase por una cuenta compartida: «Persona (vía Cuenta)»
+      agente: persona && persona !== cuenta ? `${persona} (vía ${cuenta})` : cuenta,
+      realizada_por: persona,
+      // Cuenta de 2Chat con la que salió (puede ser la compartida «Info Toshify»)
+      cuenta_2chat: cuenta,
       direccion: f.direccion,
       numero: f.numero,
       conductor_id: f.conductor_id,
@@ -679,14 +716,179 @@ export async function historialLlamadas(cfg, { desde, hasta, direccion }) {
       lead: lead ? nombrePropio(lead.nombre_completo) : null,
       estado_lead: lead?.estado_de_lead || null,
       tipo_contacto: f.conductor_id ? 'conductor' : f.lead_id ? 'lead' : null,
-      resultado: f.resultado,
+      // El buzón de voz 2Chat lo cuenta como atendida: Gemini lo distingue al escuchar la grabación
+      resultado: f.resultado === 'atendida' && f.tipo_atencion === 'buzon_de_voz'
+        ? 'buzon_voz'
+        : f.resultado === 'atendida' && f.tipo_atencion === 'sin_conversacion'
+          ? 'sin_conversacion'
+          : f.resultado,
       status_2chat: f.status_2chat,
       duracion: f.duracion,
       por_whatsapp: f.por_whatsapp,
       costo_usd: Number(f.costo_usd) || 0,
       grabacion: f.grabacion,
+      transcripcion: f.transcripcion ?? null,
+      resumen: f.resumen ?? null,
+      calificacion: f.calificacion ?? null,
+      calificacion_detalle: f.calificacion_detalle ?? null,
+      resultado_conversacion: f.resultado_conversacion ?? null,
+      proximo_paso: f.proximo_paso ?? null,
+      analizada: f.transcripcion_estado === 'ok',
     }
   })
+}
+
+/* -------------------------------------------------------------------------- */
+/* Transcripción, buzón de voz y calidad (Gemini Flash-Lite)                  */
+/* -------------------------------------------------------------------------- */
+// 2Chat no transcribe y marca como "atendida" la llamada que atiende el buzón de voz.
+// Gemini escucha la grabación y devuelve el texto, qué pasó realmente y una nota de
+// calidad con criterios de QA de call center. ~1.500 tokens por minuto de audio:
+// menos de un centavo de dólar por llamada (decisión 2026-11-17: el modelo económico).
+
+const GEMINI_MODELO = 'gemini-flash-lite-latest'
+const GEMINI_TIMEOUT_MS = 120000
+const TRANSCRIPCION_MAX_INTENTOS = 3
+const TRANSCRIPCION_POR_TANDA = 40
+// Más de 25 min de audio no entra cómodo en un pedido inline: se marca como error
+const TRANSCRIPCION_MAX_SEG = 25 * 60
+const TIPOS_ATENCION = ['conversacion', 'buzon_de_voz', 'sin_conversacion']
+const RESULTADOS_CONVERSACION = ['interesado', 'agendado', 'volver_a_llamar', 'no_interesado', 'informativa', 'otro']
+const CRITERIOS_CALIDAD = ['presentacion', 'indagacion', 'claridad', 'objeciones', 'cierre']
+
+const PROMPT_LLAMADA = `Sos analista de calidad de un call center. Escuchá esta llamada telefónica de Toshify
+(empresa de Argentina que alquila autos a conductores de apps como Cabify y Uber). Habla un agente de
+Toshify con un conductor o con un candidato (lead) que quiere alquilar un auto o ofrecer el suyo.
+
+Devolvé SOLO un JSON con estas claves:
+- tipo_atencion: "conversacion" si el agente habló con una persona; "buzon_de_voz" si atendió un
+  contestador, casilla de mensajes o mensaje automático del operador (aunque el agente deje un mensaje);
+  "sin_conversacion" si nadie habló, se cortó enseguida, solo hay silencio o ruido, o fue número equivocado.
+- transcripcion: la llamada completa en español rioplatense, un turno por línea, cada uno empieza con
+  "Agente:" o "Contacto:" ("Buzón:" para el mensaje grabado). Vacío si no hay voz.
+- resumen: 1 o 2 oraciones con lo que se habló y lo que se acordó.
+- resultado_conversacion: uno de "interesado", "agendado" (quedó una cita, visita o entrega con día),
+  "volver_a_llamar", "no_interesado", "informativa" (consulta o aviso sin venta), "otro". null si no hubo conversación.
+- proximo_paso: el próximo paso concreto acordado, o null si no quedó ninguno.
+- criterios: solo si tipo_atencion es "conversacion" (si no, null). Puntaje de 1 a 5 al AGENTE en:
+  presentacion (saluda, dice su nombre y que llama de Toshify),
+  indagacion (pregunta por la situación y lo que necesita el contacto antes de ofrecer),
+  claridad (explica condiciones, precios o requisitos sin errores ni vueltas),
+  objeciones (responde dudas o reparos con argumentos; null si no hubo objeciones),
+  cierre (termina con un próximo paso concreto: fecha, documentación, visita).
+- calificacion: nota general de 1 a 5 de la llamada para el agente (null si no fue conversación).
+  5 = ejemplar, 4 = buena, 3 = correcta con mejoras, 2 = floja, 1 = mala.
+- motivo: una oración que justifique la nota con lo más importante a mejorar o a destacar (null si no aplica).`
+
+const nota15 = (v) => {
+  const n = Math.round(Number(v))
+  return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null
+}
+const textoONull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+
+function normalizarAnalisis(r) {
+  const tipo = TIPOS_ATENCION.includes(r?.tipo_atencion) ? r.tipo_atencion : 'sin_conversacion'
+  const esConversacion = tipo === 'conversacion'
+  const criterios = esConversacion && r?.criterios && typeof r.criterios === 'object' ? r.criterios : null
+  const detalle = criterios
+    ? { ...Object.fromEntries(CRITERIOS_CALIDAD.map((c) => [c, nota15(criterios[c])])), motivo: textoONull(r.motivo) }
+    : null
+  return {
+    tipo_atencion: tipo,
+    transcripcion: textoONull(r?.transcripcion),
+    resumen: textoONull(r?.resumen),
+    calificacion: esConversacion ? nota15(r?.calificacion) : null,
+    calificacion_detalle: detalle,
+    resultado_conversacion: esConversacion && RESULTADOS_CONVERSACION.includes(r?.resultado_conversacion)
+      ? r.resultado_conversacion
+      : null,
+    proximo_paso: esConversacion ? textoONull(r?.proximo_paso) : null,
+  }
+}
+
+export async function analizarGrabacion(geminiKey, urlGrabacion) {
+  const audio = await fetchConTimeout(urlGrabacion)
+  if (!audio.ok) throw new Error(`grabación HTTP ${audio.status}`)
+  const mime = (audio.headers.get('content-type') || 'audio/mpeg').split(';')[0]
+  const base64 = Buffer.from(await audio.arrayBuffer()).toString('base64')
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), GEMINI_TIMEOUT_MS)
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODELO}:generateContent`,
+      {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+        body: JSON.stringify({
+          contents: [{ parts: [{ inline_data: { mime_type: mime.startsWith('audio/') ? mime : 'audio/mpeg', data: base64 } }, { text: PROMPT_LLAMADA }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 12000 },
+        }),
+      },
+    )
+    const json = await res.json().catch(() => null)
+    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${json?.error?.message || ''}`.slice(0, 200))
+    const texto = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || ''
+    return normalizarAnalisis(JSON.parse(texto))
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+let transcripcionEnCurso = null
+
+/**
+ * Analiza las llamadas atendidas con grabación que todavía no tienen transcripción
+ * (las más nuevas primero). Corre una tanda por vez; si la tabla no tiene las
+ * columnas (falta sql/twochat_llamadas_transcripcion.sql) o no hay GEMINI_API_KEY, no hace nada.
+ */
+export async function transcribirPendientes(cfg, { limite = TRANSCRIPCION_POR_TANDA } = {}) {
+  if (!cfg.geminiKey) return { analizadas: 0, omitida: 'sin GEMINI_API_KEY' }
+  if (transcripcionEnCurso) return transcripcionEnCurso
+  transcripcionEnCurso = (async () => {
+    const res = await fetchConTimeout(
+      `${cfg.url}/rest/v1/twochat_llamadas?select=uuid,grabacion,duracion,transcripcion_intentos` +
+        '&resultado=eq.atendida&grabacion=not.is.null&or=(transcripcion_estado.is.null,transcripcion_estado.eq.error)' +
+        `&transcripcion_intentos=lt.${TRANSCRIPCION_MAX_INTENTOS}&order=fecha.desc&limit=${limite}`,
+      { headers: headersServicio(cfg) },
+    )
+    if (!res.ok) throw new Error(`twochat_llamadas (¿falta sql/twochat_llamadas_transcripcion.sql?): ${(await res.text()).slice(0, 150)}`)
+    const pendientes = await res.json()
+    let ok = 0
+    let errores = 0
+    for (const f of pendientes) {
+      let cambios
+      try {
+        if (f.duracion > TRANSCRIPCION_MAX_SEG) throw new Error('llamada demasiado larga')
+        cambios = { ...(await analizarGrabacion(cfg.geminiKey, f.grabacion)), transcripcion_estado: 'ok' }
+        ok += 1
+      } catch (err) {
+        errores += 1
+        console.error(`[2chat] Transcripción ${f.uuid}:`, err.message)
+        cambios = { transcripcion_estado: 'error' }
+      }
+      cambios.transcripcion_intentos = (f.transcripcion_intentos || 0) + 1
+      cambios.transcripcion_en = new Date().toISOString()
+      await fetchConTimeout(`${cfg.url}/rest/v1/twochat_llamadas?uuid=eq.${encodeURIComponent(f.uuid)}`, {
+        method: 'PATCH',
+        headers: { ...headersServicio(cfg), Prefer: 'return=minimal' },
+        body: JSON.stringify(cambios),
+      })
+    }
+    if (pendientes.length) console.log(`[2chat] Llamadas analizadas con Gemini: ${ok} ok, ${errores} con error`)
+    return { analizadas: ok, errores, quedan: pendientes.length === limite }
+  })()
+  try {
+    return await transcripcionEnCurso
+  } finally {
+    transcripcionEnCurso = null
+  }
+}
+
+/** Corre transcribirPendientes sin frenar la respuesta (tras el botón Consultar). */
+function transcribirEnSegundoPlano(cfg) {
+  transcribirPendientes(cfg).catch((err) => console.error('[2chat] Transcripción:', err.message))
 }
 
 /* -------------------------------------------------------------------------- */
@@ -856,6 +1058,553 @@ twoChatRouter.post('/crear-lead', async (req, res) => {
   }
 })
 
+/* -------------------------------------------------------------------------- */
+/* Chat de WhatsApp con un lead (botón «Chat» de la lista de Leads)            */
+/* -------------------------------------------------------------------------- */
+// Abre la conversación del lead en el WhatsApp de 2Chat («Toshify Clientes»). Si
+// todavía no hay conversación, la crea mandando un primer mensaje (la API de 2Chat
+// no permite crear un chat vacío). En los dos casos la etiqueta «Lead» y la asigna
+// al usuario de Toshibase que la abre (se cruza con los usuarios de 2Chat).
+
+// Parte fija de los links del Chat en vivo de la cuenta (app.2chat.io/live-chat/<esto>/<session_key>)
+const LIVE_CHAT_BASE = 'https://app.2chat.io/live-chat/STEc7fa4009-df4e-43e7-b267-2e9adc836ea7'
+const ETIQUETA_LEAD = 'Lead'
+const EQUIPO_LEADS = 'Ventas'
+const MAX_MENSAJE = 1000
+const CACHE_CANAL_MS = 10 * 60 * 1000
+
+let cacheCanalWa = { en: 0, canal: null }
+let cacheUsuarios2Chat = { en: 0, usuarios: [] }
+let cacheEquipos2Chat = { en: 0, equipos: [] }
+
+/** Equipo de 2Chat por nombre (sin distinguir mayúsculas) */
+async function equipo2Chat(apiKey, nombre) {
+  if (Date.now() - cacheEquipos2Chat.en >= CACHE_AGENTES_MS) {
+    const r = await twoChat(apiKey, '/teams')
+    cacheEquipos2Chat = { en: Date.now(), equipos: r.ok && Array.isArray(r.data?.data?.teams) ? r.data.data.teams : [] }
+  }
+  return cacheEquipos2Chat.equipos.find((t) => String(t.name || '').toLowerCase() === nombre.toLowerCase()) || null
+}
+
+/** Canal de WhatsApp conectado (uuid y número) */
+async function canalWhatsApp(apiKey) {
+  if (cacheCanalWa.canal && Date.now() - cacheCanalWa.en < CACHE_CANAL_MS) return cacheCanalWa.canal
+  const r = await twoChat(apiKey, '/whatsapp/get-numbers')
+  if (!r.ok) throw new Error(`2Chat: no se pudo leer el canal de WhatsApp (${mensajeError2Chat(r)})`)
+  const numeros = Array.isArray(r.data?.numbers) ? r.data.numbers : []
+  const canal = numeros.find((n) => n.connection_status === 'C') || numeros[0] || null
+  if (!canal) throw new Error('No hay ningún WhatsApp conectado en 2Chat')
+  cacheCanalWa = { en: Date.now(), canal: { uuid: canal.uuid, numero: canal.phone_number, conectado: canal.connection_status === 'C' } }
+  return cacheCanalWa.canal
+}
+
+async function usuarios2Chat(apiKey) {
+  if (Date.now() - cacheUsuarios2Chat.en < CACHE_AGENTES_MS) return cacheUsuarios2Chat.usuarios
+  const r = await twoChat(apiKey, '/users')
+  const usuarios = r.ok && Array.isArray(r.data?.data?.users) ? r.data.data.users : []
+  cacheUsuarios2Chat = { en: Date.now(), usuarios }
+  return usuarios
+}
+
+const soloLetras = (s) => String(s || '').normalize('NFD').replace(/[^a-zA-Z\s]/g, '').toLowerCase().trim()
+const primeraPalabra = (s) => soloLetras(s).split(/\s+/)[0] || ''
+const ultimaPalabra = (s) => soloLetras(s).split(/\s+/).pop() || ''
+const capitalizar = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())
+
+/**
+ * Usuario de 2Chat del usuario de Toshibase: mismo email (sin el «+algo») o mismo
+ * nombre y apellido (ignora segundos nombres y apóstrofes: «Eunice Durso» = «Eunice D'Urso»).
+ */
+function cruzarUsuario2Chat(perfil, usuarios) {
+  const email = String(perfil.email || '').toLowerCase()
+  const nombre = perfil.full_name || ''
+  return (
+    usuarios.find((u) => String(u.email || '').toLowerCase().replace(/\+[^@]*@/, '@') === email) ||
+    usuarios.find((u) => {
+      const completo = `${u.first_name || ''} ${u.last_name || ''}`
+      return primeraPalabra(completo) === primeraPalabra(nombre) && ultimaPalabra(completo) === ultimaPalabra(nombre)
+    }) ||
+    null
+  )
+}
+
+/**
+ * Cuenta de 2Chat del usuario de Toshibase: primero la vinculada a mano en
+ * twochat_usuarios (p. ej. admin, Karen y Gandhy → «Info Toshify», compartida);
+ * si no hay, la que coincide por email o nombre. compartida = la usa más de uno.
+ */
+async function usuario2ChatDe(cfg, userId) {
+  const [perfiles, usuarios] = await Promise.all([
+    selectTodo(cfg, `user_profiles?select=full_name,email&id=eq.${userId}`),
+    usuarios2Chat(cfg.apiKey),
+  ])
+  const perfil = perfiles[0] || {}
+  let vinculo = null
+  try {
+    vinculo = (await selectTodo(cfg, `twochat_usuarios?select=twochat_user_uuid&user_id=eq.${userId}`))[0] || null
+  } catch {
+    // Sin la tabla (sql/twochat_voz.sql todavía no corrido): solo cruce automático
+  }
+  if (vinculo) {
+    const agente = usuarios.find((u) => u.uuid === vinculo.twochat_user_uuid) || null
+    return { perfil, agente, compartida: true }
+  }
+  return { perfil, agente: cruzarUsuario2Chat(perfil, usuarios), compartida: false }
+}
+
+/** Conversación de WhatsApp con ese número (o null) */
+async function buscarConversacion(apiKey, canalUuid, telefono) {
+  const digitos = telefono.replace(/\D/g, '').slice(-10)
+  const r = await twoChat(apiKey, `/whatsapp/conversations/${canalUuid}?page_number=0&phone_number=${digitos}`)
+  if (!r.ok) throw new Error(`2Chat: no se pudo buscar la conversación (${mensajeError2Chat(r)})`)
+  const sesiones = Array.isArray(r.data?.sessions) ? r.data.sessions : []
+  const objetivo = telefono.replace(/\D/g, '')
+  return sesiones.find((s) => !s.is_group_chat && String(s.phone_number || '').replace(/\D/g, '') === objetivo) || null
+}
+
+async function contextoChatLead(ctx, leadId) {
+  const [leads, cuenta] = await Promise.all([
+    selectTodo(ctx.cfg, `leads?select=id,nombre_completo,primer_nombre,phone,whatsapp_number&id=eq.${leadId}`),
+    usuario2ChatDe(ctx.cfg, ctx.userId),
+  ])
+  const lead = leads[0]
+  if (!lead) return { error: 'No se encontró el lead', status: 404 }
+  const telefono = normalizarCelularAR(lead.whatsapp_number) || normalizarCelularAR(lead.phone)
+  if (!telefono) return { error: 'El lead no tiene un celular válido', status: 400 }
+  const { perfil, agente, compartida } = cuenta
+  const canal = await canalWhatsApp(ctx.cfg.apiKey)
+  const nombreLead = capitalizar(String(lead.primer_nombre || lead.nombre_completo || '').trim().split(/\s+/)[0] || '')
+  // Con la cuenta compartida (Info Toshify) el saludo va con el nombre de la persona
+  const nombreAgente = capitalizar(
+    (!compartida && agente?.first_name?.split(/\s+/)[0]) || String(perfil.full_name || '').split(/\s+/)[0] || '',
+  )
+  return { lead, telefono, canal, agente, nombreLead, nombreAgente }
+}
+
+function saludoSugerido(nombreLead, nombreAgente) {
+  return `Hola${nombreLead ? ` ${nombreLead}` : ''}, ¿cómo estás? Mi nombre es ${nombreAgente || '…'}, me comunico de Toshify. ` +
+    'Estamos buscando conductores para sumar a nuestra flota y me llegó tu solicitud. ¿Seguís interesado?'
+}
+
+/** Etiqueta «Lead» y asigna al agente. Devuelve avisos (no corta el flujo si falla) */
+async function etiquetarYAsignar(apiKey, sessionKey, agente) {
+  const avisos = []
+  const tag = await twoChat(apiKey, '/tags', { method: 'POST', body: { name: ETIQUETA_LEAD, session_key: sessionKey } })
+  if (!tag.ok) avisos.push(`No se pudo poner la etiqueta «${ETIQUETA_LEAD}»: ${mensajeError2Chat(tag)}`)
+  const equipo = await equipo2Chat(apiKey, EQUIPO_LEADS)
+  if (equipo) {
+    const eq = await twoChat(apiKey, `/conversations/${encodeURIComponent(sessionKey)}/assignment/team`, {
+      method: 'POST',
+      body: { team_uuid: equipo.uuid },
+    })
+    if (!eq.ok) avisos.push(`No se pudo asignar al equipo ${EQUIPO_LEADS}: ${mensajeError2Chat(eq)}`)
+  } else {
+    avisos.push(`No existe el equipo «${EQUIPO_LEADS}» en 2Chat`)
+  }
+  if (agente) {
+    const asig = await twoChat(apiKey, `/conversations/${encodeURIComponent(sessionKey)}/assignment/user`, {
+      method: 'POST',
+      body: { user_uuid: agente.uuid },
+    })
+    if (!asig.ok) avisos.push(`No se pudo asignar a ${agente.first_name}: ${mensajeError2Chat(asig)}`)
+  } else {
+    avisos.push('Tu usuario no está en 2Chat: la conversación quedó sin asignar')
+  }
+  return avisos
+}
+
+/** GET /api/2chat/lead-chat/:leadId -> si ya hay conversación y el saludo sugerido */
+twoChatRouter.get('/lead-chat/:leadId', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    if (!UUID_RE.test(req.params.leadId)) return res.status(400).json({ error: 'lead inválido' })
+    const c = await contextoChatLead(ctx, req.params.leadId)
+    if (c.error) return res.status(c.status).json({ error: c.error })
+    const conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
+    res.json({
+      telefono: c.telefono,
+      existe: !!conversacion,
+      canal: c.canal.numero,
+      canal_conectado: c.canal.conectado,
+      agente: c.agente ? `${c.agente.first_name} ${c.agente.last_name}`.trim() : null,
+      saludo: saludoSugerido(c.nombreLead, c.nombreAgente),
+    })
+  } catch (error) {
+    console.error('[2chat/lead-chat]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/2chat/lead-chat/:leadId { mensaje? }
+ * Si hay conversación: la etiqueta, la asigna y devuelve el link.
+ * Si no hay: manda `mensaje` (obligatorio), espera a que aparezca la conversación,
+ * la etiqueta, la asigna y devuelve el link.
+ */
+twoChatRouter.post('/lead-chat/:leadId', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    if (!UUID_RE.test(req.params.leadId)) return res.status(400).json({ error: 'lead inválido' })
+    const c = await contextoChatLead(ctx, req.params.leadId)
+    if (c.error) return res.status(c.status).json({ error: c.error })
+
+    let conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
+    let enviado = false
+    if (!conversacion) {
+      const mensaje = String(req.body?.mensaje || '').trim()
+      if (!mensaje) return res.status(400).json({ error: 'Escribí el primer mensaje para iniciar la conversación' })
+      if (mensaje.length > MAX_MENSAJE) return res.status(400).json({ error: `El mensaje no puede pasar de ${MAX_MENSAJE} caracteres` })
+      const envio = await twoChat(ctx.cfg.apiKey, '/whatsapp/send-message', {
+        method: 'POST',
+        body: { from_number: c.canal.numero, to_number: c.telefono, text: mensaje },
+      })
+      if (!envio.ok) return res.status(502).json({ error: `2Chat no pudo mandar el mensaje: ${mensajeError2Chat(envio)}` })
+      enviado = true
+      // El envío queda en cola: la conversación aparece a los pocos segundos
+      for (let intento = 0; intento < 6 && !conversacion; intento += 1) {
+        await esperar(1500)
+        conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
+      }
+    }
+
+    if (!conversacion) {
+      return res.json({
+        enviado,
+        url: LIVE_CHAT_BASE.replace(/\/STE.*$/, '/'),
+        avisos: ['El mensaje salió, pero la conversación todavía no aparece en 2Chat: buscala en el Chat en vivo en unos segundos'],
+      })
+    }
+    const avisos = await etiquetarYAsignar(ctx.cfg.apiKey, conversacion.session_key, c.agente)
+    res.json({ enviado, url: `${LIVE_CHAT_BASE}/${conversacion.session_key}`, avisos })
+  } catch (error) {
+    console.error('[2chat/lead-chat POST]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/* -------------------------------------------------------------------------- */
+/* Llamar desde Toshibase (kit de voz de 2Chat, sql/twochat_voz.sql)           */
+/* -------------------------------------------------------------------------- */
+// El navegador llama con un permiso temporal (JWT) para la cuenta de 2Chat del
+// usuario. La API key nunca sale del servidor. Cada permiso cuesta 1 crédito de la
+// API: dura una jornada (12 h) y se renueva solo.
+
+const TTL_TOKEN_VOZ = 12 * 60 * 60
+let cacheCallerId = { en: 0, numero: null }
+
+/** Número con el que salen las llamadas (caller ID de la cuenta de 2Chat) */
+async function callerId(apiKey) {
+  if (cacheCallerId.numero && Date.now() - cacheCallerId.en < CACHE_CANAL_MS) return cacheCallerId.numero
+  const r = await twoChat(apiKey, '/voip/caller-ids')
+  const ids = r.ok && Array.isArray(r.data?.caller_ids) ? r.data.caller_ids : []
+  const numero = ids[0]?.phone_number || null
+  if (!numero) throw new Error('La cuenta de 2Chat no tiene un número habilitado para llamar')
+  cacheCallerId = { en: Date.now(), numero }
+  return numero
+}
+
+/**
+ * GET /api/2chat/sdk/open/sdk/(sip-credentials|caller-ids)
+ * Puente para el kit de voz: 2Chat solo acepta esas consultas desde el navegador si
+ * vienen de app.2chat.io (CORS), así que el kit (apiBaseUrl) las hace por acá y el
+ * servidor las reenvía tal cual. La autorización es el permiso temporal (JWT) que dio
+ * /voz/token, no la sesión de Toshibase; la API key no se usa.
+ */
+twoChatRouter.get('/sdk/open/sdk/:recurso', async (req, res) => {
+  try {
+    const recurso = req.params.recurso
+    if (!['sip-credentials', 'caller-ids'].includes(recurso)) return res.status(404).json({ error: 'No encontrado' })
+    const auth = String(req.headers.authorization || '')
+    if (!auth.startsWith('Bearer ')) return res.status(401).json({ error: 'No autorizado' })
+    const qs = new URLSearchParams(req.query).toString()
+    const r = await fetchConTimeout(`${TWOCHAT_API}/sdk/${recurso}${qs ? `?${qs}` : ''}`, {
+      headers: { Authorization: auth, Accept: 'application/json' },
+    })
+    res.status(r.status).type('application/json').send(await r.text())
+  } catch (error) {
+    console.error('[2chat/sdk]', error.message)
+    res.status(502).json({ error: error.message })
+  }
+})
+
+/** POST /api/2chat/voz/token -> permiso de voz para la cuenta de 2Chat del usuario */
+twoChatRouter.post('/voz/token', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    const { perfil, agente, compartida } = await usuario2ChatDe(ctx.cfg, ctx.userId)
+    if (!agente) {
+      return res.status(403).json({ error: 'Tu usuario no tiene una cuenta de 2Chat para llamar. Pedile a un administrador que la vincule.' })
+    }
+    const [desde, tok] = await Promise.all([
+      callerId(ctx.cfg.apiKey),
+      twoChat(ctx.cfg.apiKey, '/sdk/access-token', {
+        method: 'POST',
+        body: { user_uuid: agente.uuid, label: `toshibase:${perfil.email || ctx.userId}`, ttl: TTL_TOKEN_VOZ },
+      }),
+    ])
+    const token = tok.data?.token || tok.data?.data?.token
+    if (!tok.ok || !token) return res.status(502).json({ error: `2Chat no dio el permiso para llamar: ${mensajeError2Chat(tok)}` })
+    res.json({
+      token,
+      expira: tok.data?.expires_at || null,
+      desde,
+      cuenta: `${agente.first_name || ''} ${agente.last_name || ''}`.trim(),
+      compartida,
+    })
+  } catch (error) {
+    console.error('[2chat/voz/token]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/2chat/voz/llamada { conductor_id } -> número a llamar y registro de quién llama.
+ * El registro (twochat_llamadas_toshibase) es lo que permite saber en Control de llamadas
+ * qué persona hizo una llamada que salió por una cuenta compartida.
+ */
+twoChatRouter.post('/voz/llamada', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    const conductorId = String(req.body?.conductor_id || '')
+    if (!UUID_RE.test(conductorId)) return res.status(400).json({ error: 'conductor inválido' })
+    const [conductores, cuenta] = await Promise.all([
+      selectTodo(ctx.cfg, `conductores?select=id,nombres,apellidos,telefono_contacto&id=eq.${conductorId}`),
+      usuario2ChatDe(ctx.cfg, ctx.userId),
+    ])
+    const c = conductores[0]
+    if (!c) return res.status(404).json({ error: 'No se encontró el conductor' })
+    const numero = normalizarCelularAR(c.telefono_contacto)
+    if (!numero) return res.status(400).json({ error: 'El conductor no tiene un celular válido cargado' })
+    if (!cuenta.agente) return res.status(403).json({ error: 'Tu usuario no tiene una cuenta de 2Chat para llamar' })
+    const nombre = `${nombrePropio(c.nombres)} ${nombrePropio(c.apellidos)}`.trim()
+    let registroId = null
+    try {
+      const ins = await fetchConTimeout(`${ctx.cfg.url}/rest/v1/twochat_llamadas_toshibase?select=id`, {
+        method: 'POST',
+        headers: { ...headersServicio(ctx.cfg), Prefer: 'return=representation' },
+        body: JSON.stringify({
+          user_id: ctx.userId,
+          usuario: cuenta.perfil.full_name || cuenta.perfil.email || null,
+          twochat_user_uuid: cuenta.agente.uuid,
+          twochat_nombre: `${cuenta.agente.first_name || ''} ${cuenta.agente.last_name || ''}`.trim(),
+          conductor_id: c.id,
+          numero,
+          numero_clave: ultimos10(numero),
+        }),
+      })
+      if (ins.ok) registroId = (await ins.json())[0]?.id ?? null
+      else console.warn('[2chat/voz/llamada] registro:', (await ins.text()).slice(0, 200))
+    } catch (err) {
+      console.warn('[2chat/voz/llamada] registro:', err.message)
+    }
+    res.json({ numero, nombre, registro_id: registroId })
+  } catch (error) {
+    console.error('[2chat/voz/llamada]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/** POST /api/2chat/voz/llamada/:id/fin { estado, duracion } -> cierra el registro */
+twoChatRouter.post('/voz/llamada/:id/fin', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    const id = Number(req.params.id)
+    const estado = ['atendida', 'no_atendida', 'fallida'].includes(req.body?.estado) ? req.body.estado : 'no_atendida'
+    const duracion = Math.max(0, Math.min(6 * 3600, Math.round(Number(req.body?.duracion) || 0)))
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'registro inválido' })
+    // Solo el mismo usuario puede cerrar su registro
+    await fetchConTimeout(`${ctx.cfg.url}/rest/v1/twochat_llamadas_toshibase?id=eq.${id}&user_id=eq.${ctx.userId}`, {
+      method: 'PATCH',
+      headers: { ...headersServicio(ctx.cfg), Prefer: 'return=minimal' },
+      body: JSON.stringify({ estado, duracion, terminada_en: new Date().toISOString() }),
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[2chat/voz/fin]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/* -------------------------------------------------------------------------- */
+/* Mensajes de WhatsApp (Control de mensajes, sql/twochat_mensajes.sql)        */
+/* -------------------------------------------------------------------------- */
+// Se guardan solo los datos del reporte (quién escribió, cuándo, si se leyó): el
+// texto NO se guarda. 2Chat no dice qué agente escribió cada mensaje, así que el
+// agente de una conversación es al que está asignada en 2Chat.
+
+const MAX_PAGINAS_MENSAJES = 40
+const ESPERA_SYNC_MENSAJES_MS = 60 * 1000
+const ENVIADO_POR = { user: 'cliente', agent: 'agente', api: 'api', flow: 'flujo', chatter: 'flujo' }
+let ultimaSyncMensajes = 0
+let syncMensajesEnCurso = null
+
+/** 2Chat devuelve la fecha sin zona («2026-11-17T22:42:57»): es UTC */
+const fechaUtc = (v) => (v && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(v) ? `${v}Z` : v)
+
+async function upsert(cfg, tabla, filas, conflicto) {
+  for (let i = 0; i < filas.length; i += 500) {
+    const res = await fetchConTimeout(`${cfg.url}/rest/v1/${tabla}?on_conflict=${conflicto}`, {
+      method: 'POST',
+      headers: { ...headersServicio(cfg), Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(filas.slice(i, i + 500)),
+    })
+    if (!res.ok) throw new Error(`No se pudo guardar en ${tabla}: ${(await res.text()).slice(0, 200)}`)
+  }
+}
+
+/**
+ * Trae de 2Chat los mensajes nuevos (de más nuevo a más viejo hasta encontrar una
+ * página ya guardada) y actualiza la asignación de las conversaciones tocadas.
+ */
+export async function sincronizarMensajes(cfg, { forzar = false } = {}) {
+  if (!forzar && Date.now() - ultimaSyncMensajes < ESPERA_SYNC_MENSAJES_MS) return { procesados: 0 }
+  if (syncMensajesEnCurso) return syncMensajesEnCurso
+  syncMensajesEnCurso = (async () => {
+    const canal = await canalWhatsApp(cfg.apiKey)
+    const cruce = await mapasCruce(cfg)
+    const nuevos = []
+    for (let pagina = 0; pagina < MAX_PAGINAS_MENSAJES; pagina += 1) {
+      const r = await twoChat(cfg.apiKey, `/whatsapp/messages/${encodeURIComponent(canal.numero)}?page_number=${pagina}`)
+      if (!r.ok) throw new Error(`2Chat: no se pudieron leer los mensajes (${mensajeError2Chat(r)})`)
+      const msgs = Array.isArray(r.data?.messages) ? r.data.messages : []
+      if (msgs.length === 0) break
+      const uuids = msgs.map((m) => m.uuid).filter(Boolean)
+      const guardados = await selectTodo(cfg, `twochat_mensajes?select=uuid&uuid=in.(${uuids.map(encodeURIComponent).join(',')})`)
+      const ya = new Set(guardados.map((g) => g.uuid))
+      const faltan = msgs.filter((m) => m.uuid && !ya.has(m.uuid))
+      nuevos.push(...faltan)
+      // Una página entera ya guardada: lo anterior también está
+      if (faltan.length === 0) break
+    }
+
+    const filas = nuevos.map((m) => {
+      const clave = ultimos10(m.remote_phone_number)
+      const conductor = cruce.conductores.get(clave) || null
+      return {
+        uuid: m.uuid,
+        session_key: m.session_key,
+        fecha: fechaUtc(m.created_at),
+        enviado_por: ENVIADO_POR[m.sent_by] || String(m.sent_by || 'desconocido'),
+        numero: m.remote_phone_number || null,
+        numero_clave: clave || null,
+        leido: typeof m.read === 'boolean' ? m.read : null,
+        conductor_id: conductor,
+        lead_id: conductor ? null : cruce.leads.get(clave) || null,
+        sincronizado_en: new Date().toISOString(),
+      }
+    }).filter((f) => f.session_key && f.fecha)
+    await upsert(cfg, 'twochat_mensajes', filas, 'uuid')
+
+    // Asignación de cada conversación tocada (1 crédito por conversación)
+    const porSesion = new Map(filas.map((f) => [f.session_key, f]))
+    const conversaciones = []
+    for (const [sessionKey, f] of porSesion) {
+      const a = await twoChat(cfg.apiKey, `/conversations/${encodeURIComponent(sessionKey)}/assignment`)
+      const usuario = a.ok ? a.data?.data?.assigned_user : null
+      const equipo = a.ok ? a.data?.data?.assigned_team : null
+      conversaciones.push({
+        session_key: sessionKey,
+        numero: f.numero,
+        numero_clave: f.numero_clave,
+        agente_id: usuario?.uuid || null,
+        agente: usuario ? `${usuario.first_name || ''} ${usuario.last_name || ''}`.trim() : null,
+        equipo: equipo?.name || null,
+        conductor_id: f.conductor_id,
+        lead_id: f.lead_id,
+        link: `${LIVE_CHAT_BASE}/${sessionKey}`,
+        actualizado_en: new Date().toISOString(),
+      })
+    }
+    await upsert(cfg, 'twochat_conversaciones', conversaciones, 'session_key')
+    ultimaSyncMensajes = Date.now()
+    return { procesados: filas.length }
+  })()
+  try {
+    return await syncMensajesEnCurso
+  } finally {
+    syncMensajesEnCurso = null
+  }
+}
+
+/** Mensajes del rango (fechas ART) con su conversación, agente y contacto */
+async function historialMensajes(cfg, { desde, hasta }) {
+  const inicio = new Date(`${desde}T00:00:00${OFFSET_ART}`)
+  const fin = new Date(new Date(`${hasta}T00:00:00${OFFSET_ART}`).getTime() + 24 * 60 * 60 * 1000)
+  const filas = await selectTodo(
+    cfg,
+    'twochat_mensajes?select=uuid,session_key,fecha,enviado_por,numero,leido,conductor_id,lead_id,' +
+      'conductores(nombres,apellidos),leads(nombre_completo,estado_de_lead)' +
+      `&fecha=gte.${encodeURIComponent(inicio.toISOString())}&fecha=lt.${encodeURIComponent(fin.toISOString())}` +
+      '&order=fecha.asc',
+  )
+  const sesiones = [...new Set(filas.map((f) => f.session_key))]
+  const conv = sesiones.length
+    ? await selectTodo(cfg, `twochat_conversaciones?select=session_key,agente,equipo,link&session_key=in.(${sesiones.map((s) => `"${s}"`).map(encodeURIComponent).join(',')})`)
+    : []
+  const porSesion = new Map(conv.map((c) => [c.session_key, c]))
+  return filas.map((f) => {
+    const c = porSesion.get(f.session_key)
+    return {
+      id: f.uuid,
+      session_key: f.session_key,
+      fecha: f.fecha,
+      enviado_por: f.enviado_por,
+      numero: f.numero,
+      leido: f.leido,
+      agente: c?.agente || null,
+      equipo: c?.equipo || null,
+      link: c?.link || `${LIVE_CHAT_BASE}/${f.session_key}`,
+      conductor_id: f.conductor_id,
+      conductor: f.conductores ? `${nombrePropio(f.conductores.nombres)} ${nombrePropio(f.conductores.apellidos)}`.trim() : null,
+      lead_id: f.lead_id,
+      lead: f.leads ? nombrePropio(f.leads.nombre_completo) : null,
+      estado_lead: f.leads?.estado_de_lead || null,
+      tipo_contacto: f.conductor_id ? 'conductor' : f.lead_id ? 'lead' : null,
+    }
+  })
+}
+
+/** GET /api/2chat/mensajes?desde=YYYY-MM-DD&hasta=YYYY-MM-DD[&actualizar=1] */
+twoChatRouter.get('/mensajes', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    const { desde, hasta } = req.query
+    if (!FECHA_RE.test(desde || '') || !FECHA_RE.test(hasta || '') || desde > hasta) {
+      return res.status(400).json({ error: 'Rango de fechas inválido (desde/hasta AAAA-MM-DD)' })
+    }
+    let errorSync = null
+    let procesados = 0
+    if (req.query.actualizar === '1') {
+      try {
+        procesados = (await sincronizarMensajes(ctx.cfg, { forzar: true })).procesados
+      } catch (err) {
+        errorSync = err.message
+        console.error('[2chat/mensajes] sync:', err.message)
+      }
+    }
+    const mensajes = await historialMensajes(ctx.cfg, { desde, hasta })
+    let actualizadoEn = ultimaSyncMensajes ? new Date(ultimaSyncMensajes).toISOString() : null
+    if (!actualizadoEn) {
+      const ult = await selectTodo(ctx.cfg, 'twochat_mensajes?select=sincronizado_en&order=sincronizado_en.desc&limit=1')
+      actualizadoEn = ult[0]?.sincronizado_en || null
+    }
+    // Todos los agentes de 2Chat, para mostrarlos aunque no tengan conversaciones
+    const agentes = (await usuarios2Chat(ctx.cfg.apiKey).catch(() => []))
+      .map((u) => `${u.first_name || ''} ${u.last_name || ''}`.trim())
+      .filter(Boolean)
+    res.json({ mensajes, agentes, procesados, actualizado_en: actualizadoEn, error_sync: errorSync })
+  } catch (error) {
+    console.error('[2chat/mensajes]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 /** GET /api/2chat/llamadas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&direccion=outbound|inbound|todas */
 twoChatRouter.get('/llamadas', async (req, res) => {
   try {
@@ -875,6 +1624,7 @@ twoChatRouter.get('/llamadas', async (req, res) => {
     if (req.query.actualizar === '1') {
       try {
         sync = await sincronizarLlamadas(ctx.cfg, { forzar: true })
+        transcribirEnSegundoPlano(ctx.cfg)
       } catch (err) {
         // Si 2Chat falla, igual se muestra lo guardado
         errorSync = err.message
@@ -937,6 +1687,18 @@ export function iniciarSyncAutomatico() {
     try {
       const r = await sincronizarLlamadas(cfg, { forzar: true })
       console.log(`[2chat] Actualización automática ${clave}:00 ART: ${r.procesadas ?? 0} llamadas procesadas`)
+      try {
+        await transcribirPendientes(cfg)
+      } catch (errTr) {
+        console.error('[2chat] Transcripción en la actualización automática:', errTr.message)
+      }
+      try {
+        const m = await sincronizarMensajes(cfg, { forzar: true })
+        console.log(`[2chat] Actualización automática ${clave}:00 ART: ${m.procesados ?? 0} mensajes nuevos`)
+      } catch (errMsg) {
+        // Sin la tabla (sql/twochat_mensajes.sql) o sin WhatsApp: no frena las llamadas
+        console.error('[2chat] Mensajes en la actualización automática:', errMsg.message)
+      }
     } catch (err) {
       console.error(`[2chat] Actualización automática ${clave}:00 ART falló:`, err.message)
     }
