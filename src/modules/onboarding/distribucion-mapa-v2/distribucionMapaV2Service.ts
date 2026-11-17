@@ -70,11 +70,13 @@ export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción
  *  - Descartado: misma definición que el contador "Descartados" de Leads.
  *  - No cumple edad: en Leads se muestra como "Descartado".
  *  - Auto del pueblo / No le interesa: no se convocan (pedido de operación).
+ *  - Gestión flota: empresas que piden demo de flota, no son conductores.
  */
 export const ESTADOS_LEAD_EXCLUIDOS: ReadonlySet<string> = new Set([
   'Descartado',
   'No cumple edad',
   'Auto del pueblo',
+  'Gestión flota',
   'No le interesa',
 ])
 

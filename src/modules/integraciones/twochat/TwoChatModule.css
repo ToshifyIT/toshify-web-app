@@ -227,13 +227,15 @@
 
 /* Tipo de contacto de la llamada */
 .tc-tipo {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  font-size: 10px;
-  font-weight: 600;
+  border-radius: var(--radius-full);
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .tc-tipo--conductor {
@@ -418,3 +420,147 @@
 [data-theme="dark"] .tc-badge--cancelada { color: var(--text-secondary); }
 [data-theme="dark"] .tc-badge--fallida { color: #f87171; }
 [data-theme="dark"] .tc-badge--ocupado { color: #fb923c; }
+
+/* Buzón de voz / sin conversación (Gemini distingue lo que 2Chat da como atendida) */
+.tc-badge--buzon_voz {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #ddd6fe;
+}
+
+.tc-badge--sin_conversacion {
+  background: #f3f4f6;
+  color: #4b5563;
+  border-color: #e5e7eb;
+}
+
+/* Calidad de la llamada (análisis con Gemini) */
+.tc-ver-analisis {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.tc-analisis-pend {
+  color: var(--text-tertiary);
+}
+
+.tc-nota {
+  display: inline-block;
+  min-width: 34px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.tc-nota--buena { background: #dcfce7; color: #166534; }
+.tc-nota--media { background: #fef3c7; color: #92400e; }
+.tc-nota--baja { background: #fee2e2; color: #991b1b; }
+.tc-nota--na { color: var(--text-tertiary); }
+
+.tc-analisis {
+  max-width: 720px;
+  width: calc(100% - 32px);
+}
+
+.tc-analisis-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.tc-analisis-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.tc-analisis-body p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.tc-analisis-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.tc-analisis-fila {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.tc-analisis-motivo {
+  margin-bottom: 10px !important;
+  color: var(--text-secondary) !important;
+}
+
+.tc-criterios {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tc-criterio {
+  display: grid;
+  grid-template-columns: 110px 1fr 64px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.tc-criterio-barra {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary, #f3f4f6);
+  overflow: hidden;
+}
+
+.tc-criterio-barra > div {
+  height: 100%;
+  background: var(--color-primary, #e11d48);
+}
+
+.tc-criterio-nota {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.tc-transcripcion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+.tc-turno--agente b {
+  color: var(--color-primary, #e11d48);
+}
+
+.tc-analisis-vacio {
+  color: var(--text-tertiary) !important;
+}

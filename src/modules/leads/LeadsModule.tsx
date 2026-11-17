@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Link2,
   AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
-  Handshake, CalendarCheck,
+  Handshake, CalendarCheck, MessageCircle, Truck,
   MapPin, CreditCard,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -39,9 +39,11 @@ import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
 import { esGuiaActivo, GUIAS_ACTIVOS, homologarGuia } from './guias'
-import { ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO, ESTADOS_SIN_PAREJA } from './leadEstados'
+import { ESTADO_GESTION_FLOTA, ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO, ESTADOS_SIN_PAREJA } from './leadEstados'
 import { LABELS_CUENTA_APP } from './cuentasApps'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
+import { ChatLeadModal } from './components/ChatLeadModal'
+import { nombresDelLead } from './nombreLead'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, MARCA_RECONTACTO_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
 import type { ConductorSinCompanero, LeadCercaHtml, ParejaLead, ProgramacionesActivas } from './parejasLeads'
@@ -458,6 +460,17 @@ function grupoCategoriaLicencia(categoria?: string | null): string {
   return categoria === 'B1' || categoria === 'D1' || categoria === 'Otros' ? categoria : 'Sin dato'
 }
 const OPCIONES_CATEGORIA_LIC = ['B1', 'D1', 'Otros', 'Sin dato']
+/** Zona como se muestra: siempre en mayúsculas («Norte» y «NORTE» son la misma) */
+function zonaVisible(zona: string | null | undefined): string {
+  return (zona || '').trim().toUpperCase()
+}
+
+// Opciones del desplegable de Categoría en la lista (valores de categoria_licencia)
+const OPCIONES_CATEGORIA_INLINE = [
+  { val: 'B1', label: 'B1', dot: '#2563eb' },
+  { val: 'D1', label: 'D1', dot: '#16a34a' },
+  { val: 'Otros', label: 'Otros…', dot: '#9ca3af' },
+]
 
 const COLUMNAS_LISTA = [
   'id', 'created_at', 'updated_at', 'sede', 'sede_id',
@@ -498,8 +511,9 @@ function leadToFormData(lead: Lead): LeadFormData {
   return {
     url_folder: lead.url_folder || '',
     nombre_completo: lead.nombre_completo || '',
-    primer_nombre: lead.primer_nombre || '',
-    apellido: lead.apellido || '',
+    // Si el lead no tiene nombres/apellidos por separado, se precargan separando el nombre completo
+    primer_nombre: nombresDelLead(lead).nombres,
+    apellido: nombresDelLead(lead).apellidos,
     email: lead.email || '',
     phone: lead.phone || '',
     // Solo si la columna existe (sql/telefono_secundario.sql): si no, no se manda al guardar
@@ -738,6 +752,7 @@ const GRUPO_TARJETA: Record<string, 'estado' | 'zona' | 'fuente' | 'vista'> = {
   noAptos: 'estado',
   convocatoria: 'estado',
   autoPueblo: 'estado',
+  gestionFlota: 'estado',
   zonaSegura: 'zona',
   zonaRestringida: 'zona',
   intercom: 'fuente',
@@ -780,6 +795,8 @@ export function LeadsModule() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  // Chat de WhatsApp (2Chat) del lead abierto desde la lista
+  const [chatLead, setChatLead] = useState<{ id: string; nombre: string } | null>(null)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [formData, setFormData] = useState<LeadFormData>({ ...emptyFormData })
   const [saving, setSaving] = useState(false)
@@ -847,6 +864,7 @@ export function LeadsModule() {
     'Documentos enviados': 5,
     'Documentos pendientes': 5,
     'Auto del pueblo': 5,
+    [ESTADO_GESTION_FLOTA]: 5,
     'No le interesa': 5,
     'No cumple edad': 5,
     'Convocatoria Inducción': 6,
@@ -867,6 +885,16 @@ export function LeadsModule() {
 
     // Conductor siempre gana (nivel 8, maximo)
     if (proceso === 'convertido' || proceso === 'conductor') return 'Conductor'
+
+    // Leads del formulario web «Registrá tu auto» (tipo 'auto'): son dueños de auto,
+    // no candidatos a conductor. Van a «Auto del pueblo», fuera del embudo de ventas.
+    if ((lead.tipo || '').toLowerCase() === 'auto' && (!lead.estado_de_lead || estadoActual === 'Inicio conversación')) {
+      return 'Auto del pueblo'
+    }
+    // Pedidos web de demo de flota (tipo 'flota'): empresas, no conductores. Fuera del embudo.
+    if ((lead.tipo || '').toLowerCase() === 'flota' && (!lead.estado_de_lead || estadoActual === 'Inicio conversación')) {
+      return ESTADO_GESTION_FLOTA
+    }
 
     // Calcular estado sugerido por las reglas automaticas
     let estadoSugerido = estadoActual
@@ -915,6 +943,35 @@ export function LeadsModule() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
       showError('Error', `No se pudo actualizar: ${msg}`)
+    }
+  }
+
+  // Categoría desde la lista: B1/D1 limpian el detalle de «Otros»; «Otros» pide cuál es
+  async function handleCambiarCategoriaInline(leadId: string, _field: keyof Lead, categoria: string) {
+    let otra: string | null = null
+    if (categoria === 'Otros') {
+      const lead = leads.find(l => l.id === leadId)
+      const r = await Alerta.fire({
+        title: 'Categoría de licencia',
+        text: '¿Qué categoría tiene? (por ejemplo A2, B2, C1, E1)',
+        input: 'text',
+        inputValue: lead?.categoria_licencia_otra || '',
+        showCancelButton: true,
+        confirmButtonText: 'Guardar',
+        cancelButtonText: 'Cancelar',
+        inputValidator: (v: string) => (v || '').trim() ? null : 'Escribí la categoría',
+      })
+      if (!r.isConfirmed) return
+      otra = String(r.value || '').trim().toUpperCase()
+    }
+    try {
+      const updateData = { categoria_licencia: categoria, categoria_licencia_otra: otra, updated_at: new Date().toISOString() }
+      const { error } = await supabase.from('leads').update(updateData).eq('id', leadId)
+      if (error) throw error
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updateData } as Lead : l))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      showError('Error', `No se pudo cambiar la categoría: ${msg}`)
     }
   }
 
@@ -1327,6 +1384,25 @@ export function LeadsModule() {
   // abrir Leads, al crear o editar, después de la carga masiva y con los leads
   // que entraron por la API. Cada lead se intenta una sola vez por sesión, así
   // una dirección que Google no encuentra no se reintenta en bucle.
+  // Leads que ya llegan con coordenadas (p. ej. los de la web) nunca pasan por el
+  // geocoding, así que la zona no se calculaba. Se calcula acá con las coordenadas:
+  // es cálculo local (inferZona), sin llamadas a Google. No pisa una zona cargada.
+  const completarZonasDesdeCoordenadas = useCallback(async (leadsList: Lead[]) => {
+    const pendientes = leadsList
+      .filter(l => !l.zona?.trim() && l.latitud != null && l.longitud != null)
+      .map(l => ({ id: l.id, zona: inferZona(l.direccion || '', Number(l.latitud), Number(l.longitud)) }))
+      .filter(p => p.zona)
+    if (pendientes.length === 0) return
+    const porZona = new Map<string, string[]>()
+    pendientes.forEach(p => porZona.set(p.zona, [...(porZona.get(p.zona) || []), p.id]))
+    for (const [zona, ids] of porZona) {
+      const { error } = await supabase.from('leads').update({ zona }).in('id', ids).or('zona.is.null,zona.eq.')
+      if (error) { console.error('No se pudo completar la zona:', error); return }
+    }
+    const zonaPorId = new Map(pendientes.map(p => [p.id, p.zona]))
+    setLeads(prev => prev.map(l => zonaPorId.has(l.id) && !l.zona?.trim() ? { ...l, zona: zonaPorId.get(l.id)! } : l))
+  }, [])
+
   const leadsActualesRef = useRef<Lead[]>([])
   leadsActualesRef.current = leads
   const geocodIntentadosRef = useRef<Set<string>>(new Set())
@@ -1340,12 +1416,13 @@ export function LeadsModule() {
         const nuevos = leadsActualesRef.current.filter((l) => !geocodIntentadosRef.current.has(l.id))
         if (nuevos.length === 0) break
         nuevos.forEach((l) => geocodIntentadosRef.current.add(l.id))
+        await completarZonasDesdeCoordenadas(nuevos)
         await geocodificarLeadsSinCoordenadas(nuevos)
       }
     } finally {
       geocodEnCursoRef.current = false
     }
-  }, [geocodificarLeadsSinCoordenadas])
+  }, [geocodificarLeadsSinCoordenadas, completarZonasDesdeCoordenadas])
   useEffect(() => {
     if (leads.length > 0) void procesarUbicacionesPendientes()
   }, [leads, procesarUbicacionesPendientes])
@@ -1604,8 +1681,9 @@ export function LeadsModule() {
   }, [leads, conductoresSinCompanero, programaciones, leadsEnZona, parejasCalle])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
+  // Zonas en mayúsculas (en la base conviven «Norte» y «NORTE»)
   const uniqueZonas = useMemo(() =>
-    [...new Set(leads.map(l => l.zona).filter(Boolean))].sort() as string[]
+    [...new Set(leads.map(l => zonaVisible(l.zona)).filter(Boolean))].sort() as string[]
   , [leads])
 
   // Guías existentes (entrevistador_asignado), sin duplicados por mayúsculas/espacios.
@@ -1653,6 +1731,7 @@ export function LeadsModule() {
       case 'intercom': return esFuenteIntercom(l)
       case 'damaro': return (l.fuente_de_lead || '').toLowerCase() === 'damaro'
       case 'autoPueblo': return l.estado_de_lead === 'Auto del pueblo'
+      case 'gestionFlota': return l.estado_de_lead === ESTADO_GESTION_FLOTA
       case 'recontacto': return tieneAlertaRecontacto(l.observaciones)
       case 'exConductor': return leadsConductorPrevio.has(l.id)
       // Solo las parejas cerca (violeta, hasta 25 min). Las grises (más lejos) se ven en
@@ -1693,7 +1772,7 @@ export function LeadsModule() {
     }
     if (zonaFilter.length > 0) {
       const set = new Set(zonaFilter)
-      result = result.filter(l => set.has(l.zona || ''))
+      result = result.filter(l => set.has(zonaVisible(l.zona)))
     }
     if (categoriaLicFilter.length > 0) {
       const set = new Set(categoriaLicFilter)
@@ -1775,6 +1854,7 @@ export function LeadsModule() {
       intercom: contar('intercom'),
       damaro: contar('damaro'),
       autoPueblo: contar('autoPueblo'),
+      gestionFlota: contar('gestionFlota'),
       descartados: contar('descartados'),
       recontacto: contar('recontacto'),
       exConductor: contar('exConductor'),
@@ -1803,6 +1883,7 @@ export function LeadsModule() {
     convocatoria: stats.convocatoria,
     enZonaSegura: stats.enZonaSegura,
     autoPueblo: stats.autoPueblo,
+    gestionFlota: stats.gestionFlota,
     recontacto: stats.recontacto,
   }, !loading && leads.length > 0 && vistaPorDefecto)
   const fotoAnterior = vistaPorDefecto ? fotoAnteriorLeads : null
@@ -3008,8 +3089,8 @@ export function LeadsModule() {
     {
       id: 'nombre',
       accessorFn: (row) => row.nombre_completo || '-',
-      size: 260,
-      maxSize: 300,
+      size: 220,
+      maxSize: 240,
       header: () => (
         <ExcelColumnFilter
           label="Candidato"
@@ -3024,7 +3105,6 @@ export function LeadsModule() {
       ),
       cell: ({ row }) => {
         const nombre = (row.original.nombre_completo || '-').toUpperCase()
-        const dni = row.original.dni || ''
         const phone = row.original.phone || ''
         const direccion = row.original.direccion || ''
         const alertaRecontacto = tieneAlertaRecontacto(row.original.observaciones)
@@ -3093,7 +3173,20 @@ export function LeadsModule() {
                     </button>
                   )
                 })()}
-              {/* Zona, programado y pareja al lado del nombre: la fila queda en dos líneas */}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                {phone || ''}
+                {phone && !normalizarCelularAR(phone) && (
+                  <span
+                    title="El teléfono no tiene formato de celular (+54 9 área número). Corregirlo desde Editar."
+                    style={{ marginLeft: '6px', color: 'var(--badge-red-text)', fontWeight: 600 }}
+                  >
+                    Tel. inválido
+                  </span>
+                )}
+              </span>
+              {/* Zona, programado y pareja al lado del teléfono (2026-11-17): la columna queda más angosta */}
               <div className="lead-etiquetas">
               {enZonaRestringida && (
                 <span
@@ -3183,22 +3276,10 @@ export function LeadsModule() {
               })()}
               </div>
               </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
-                {phone && !normalizarCelularAR(phone) && (
-                  <span
-                    title="El teléfono no tiene formato de celular (+54 9 área número). Corregirlo desde Editar."
-                    style={{ marginLeft: '6px', color: 'var(--badge-red-text)', fontWeight: 600 }}
-                  >
-                    Tel. inválido
-                  </span>
-                )}
-              </span>
             </div>
           </div>
         )
       },
-      meta: { expand: true },
       enableSorting: true,
     },
     {
@@ -3248,7 +3329,7 @@ export function LeadsModule() {
     /* Columna Disponibilidad oculta */
     {
       id: 'zona',
-      accessorFn: (row) => row.zona || '-',
+      accessorFn: (row) => zonaVisible(row.zona) || '-',
       header: () => (
         <ExcelColumnFilter
           label="Zona"
@@ -3261,7 +3342,7 @@ export function LeadsModule() {
           selectAll
         />
       ),
-      cell: ({ row }) => row.original.zona || '-',
+      cell: ({ row }) => zonaVisible(row.original.zona) || '-',
       size: 90,
       enableSorting: true,
     },
@@ -3281,11 +3362,19 @@ export function LeadsModule() {
           selectAll
         />
       ),
+      // Se puede cambiar desde la lista (B1 / D1 / Otros), igual que Licencia
       cell: ({ row }) => (
-        <LicenciaBadge
-          categoria={row.original.categoria_licencia}
-          otra={row.original.categoria_licencia_otra}
-          sinDato="-"
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="categoria_licencia"
+          value={row.original.categoria_licencia}
+          isOpen={sinoDropdownKey === `${row.original.id}::categoria_licencia`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleCambiarCategoriaInline}
+          onClose={() => setSinoDropdownKey(null)}
+          opciones={OPCIONES_CATEGORIA_INLINE}
+          vista={<LicenciaBadge categoria={row.original.categoria_licencia} otra={row.original.categoria_licencia_otra} sinDato="-" />}
         />
       ),
       size: 90,
@@ -3333,6 +3422,15 @@ export function LeadsModule() {
         />
       ),
       size: 70,
+      enableSorting: true,
+    },
+    {
+      // DNI en su propia columna, al lado de Fuente
+      id: 'dni',
+      accessorFn: (row) => row.dni || '-',
+      header: 'DNI',
+      cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{row.original.dni || '-'}</span>,
+      size: 85,
       enableSorting: true,
     },
     {
@@ -3558,6 +3656,13 @@ export function LeadsModule() {
         // Orden: Ver · Editar · (otras) · Eliminar
         actions.push(
           { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
+          {
+            label: 'Chat WhatsApp (2Chat)',
+            icon: <MessageCircle size={15} />,
+            onClick: () => setChatLead({ id: lead.id, nombre: lead.nombre_completo || lead.phone || 'el lead' }),
+            variant: 'success',
+            disabled: !(lead.phone || lead.whatsapp_number),
+          },
         )
         if (canEdit) {
           actions.push({ label: 'Editar', icon: <Edit2 size={15} />, onClick: () => handleOpenEdit(lead), variant: 'info' })
@@ -3654,6 +3759,7 @@ export function LeadsModule() {
         zonaSegura: 'Zona Aprobada',
         zonaRestringida: 'Zona Restringida',
         autoPueblo: 'Auto del pueblo',
+        gestionFlota: 'Gestión flota',
         exConductor: 'Ya fue conductor',
         conPareja: 'Con pareja cerca (≤ 25 min)',
         conLicencia: 'Con licencia',
@@ -3745,6 +3851,18 @@ export function LeadsModule() {
               <span className="stat-label">Auto del pueblo</span>
             </div>
             <ComparacionSemana actual={stats.autoPueblo} anterior={fotoAnterior?.autoPueblo} invertido />
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${esActiva('gestionFlota') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('gestionFlota')}
+            title="Empresas que pidieron una demo de flota desde la web (fuera del embudo de conductores)"
+          >
+            <Truck size={18} className="stat-icon" style={{ color: '#0d9488' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.gestionFlota}</span>
+              <span className="stat-label">Gestión flota</span>
+            </div>
+            <ComparacionSemana actual={stats.gestionFlota} anterior={fotoAnterior?.gestionFlota} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${esActiva('recontacto') ? 'stat-card-active' : ''}`}
@@ -3982,6 +4100,10 @@ export function LeadsModule() {
         </div>
       )}
 
+      {chatLead && (
+        <ChatLeadModal leadId={chatLead.id} nombre={chatLead.nombre} onClose={() => setChatLead(null)} />
+      )}
+
       {verLeadsConductores && (
         <LeadsConductoresModal
           onClose={() => setVerLeadsConductores(false)}
@@ -4168,9 +4290,12 @@ interface SiNoDropdownCellProps {
   onToggle: (key: string) => void
   onChange: (leadId: string, field: keyof Lead, value: string) => void
   onClose: () => void
+  /** Opciones propias (por defecto Si / No) y cómo se ve el valor (por defecto el texto) */
+  opciones?: { val: string; label: string; dot: string }[]
+  vista?: React.ReactNode
 }
 
-function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onChange, onClose }: SiNoDropdownCellProps) {
+function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onChange, onClose, opciones, vista }: SiNoDropdownCellProps) {
   const cellRef = useRef<HTMLSpanElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0 })
@@ -4178,6 +4303,7 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
   // "Sí", "SI", "si" -> "Si" (algunas fuentes guardan con tilde o en mayúsculas)
   const norm = (() => {
     const v = (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+    if (opciones) return opciones.find(o => o.val === value)?.val ?? null
     return v === 'si' ? 'Si' : v === 'no' ? 'No' : null
   })()
   const display = norm || value || '-'
@@ -4205,7 +4331,7 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
     return () => document.removeEventListener('mousedown', handler)
   }, [isOpen, onClose])
 
-  const options: { val: string; label: string; dot: string }[] = [
+  const options: { val: string; label: string; dot: string }[] = opciones ?? [
     { val: 'Si', label: 'Si', dot: '#16a34a' },
     { val: 'No', label: 'No', dot: '#dc2626' },
   ]
@@ -4227,7 +4353,7 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
         }}
         onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(dropdownKey) } : undefined}
       >
-        {display}
+        {vista ?? display}
         {canEdit && <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.4, flexShrink: 0 }}><path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
       </span>
       {isOpen && canEdit && createPortal(

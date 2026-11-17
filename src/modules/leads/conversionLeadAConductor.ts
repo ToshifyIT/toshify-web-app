@@ -21,6 +21,7 @@ import type { Lead } from '../../types/leads.types'
 import { guiaParaConductor } from './guias'
 import { estadoMonotributo, faltantesMonotributo } from './monotributo'
 import { codigosCategoriaParaConductor, estadoLicencia, faltantesLicencia, licenciaSiNo } from './licenciaLead'
+import { nombresDelLead } from './nombreLead'
 
 /**
  * Tope para la geocodificacion. Es una llamada a Google que puede quedarse sin
@@ -275,9 +276,8 @@ async function convertirLeadAConductorSinFreno(
   const esFusion = !!conductorExistente
 
 
-    const parts = (lead.nombre_completo || '').trim().split(' ')
-    const nombres = parts.slice(0, Math.ceil(parts.length / 2)).join(' ')
-    const apellidos = parts.slice(Math.ceil(parts.length / 2)).join(' ')
+    // Nombres y apellidos del lead (campos propios; si faltan, separados del nombre completo)
+    const { nombres, apellidos } = nombresDelLead(lead)
 
     let turnoMapped = 'SIN_PREFERENCIA'
     const turnoLead = (lead.turno || '').toLowerCase()
@@ -355,8 +355,8 @@ async function convertirLeadAConductorSinFreno(
 
     // Datos del lead mapeados a campos de conductor
     const leadMappedData: Record<string, unknown> = {
-      nombres: (nombres || lead.primer_nombre || '').toUpperCase(),
-      apellidos: (apellidos || lead.apellido || '').toUpperCase(),
+      nombres: (nombres || '').toUpperCase(),
+      apellidos: (apellidos || '').toUpperCase(),
       numero_dni: (lead.dni || '').replace(/\D/g, ''),
       numero_cuit: (lead.cuit || '').replace(/\D/g, ''),
       telefono_contacto: lead.phone || '',

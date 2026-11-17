@@ -491,6 +491,11 @@
   color: #8B5CF6;
 }
 
+.lead-estado-gestion-flota {
+  background: #CCFBF1;
+  color: #0F766E;
+}
+
 .lead-estado-no-le-interesa {
   background: #F3F4F6;
   color: #6B7280;
@@ -599,6 +604,7 @@
 .lead-estado-dot-documentos-enviados { background: #2563EB; }
 .lead-estado-dot-documentos-pendientes { background: #D97706; }
 .lead-estado-dot-auto-del-pueblo { background: #8B5CF6; }
+.lead-estado-dot-gestion-flota { background: #0D9488; }
 .lead-estado-dot-no-le-interesa { background: #6B7280; }
 .lead-estado-dot-no-cumple-edad { background: #EA580C; }
 .lead-estado-dot-convocatoria-induccion { background: #0891B2; }
@@ -1328,6 +1334,7 @@ button.lead-pareja-badge:hover { filter: brightness(0.95); text-decoration: unde
 .lead-estado-apto---hireflix { color: #16A34A; }
 .lead-estado-ayuda---hireflix { color: #EA580C; }
 .lead-estado-auto-del-pueblo { color: #7C3AED; }
+.lead-estado-gestion-flota { color: #0F766E; }
 .lead-estado-acepta-oferta { color: #A16207; }
 .lead-estado-descartado { color: #B91C1C; }
 .lead-estado-conductor { color: #7C3AED; }
@@ -1351,6 +1358,7 @@ button.lead-pareja-badge:hover { filter: brightness(0.95); text-decoration: unde
 [data-theme="dark"] .lead-estado-auto-del-pueblo,
 [data-theme="dark"] .lead-estado-conductor { color: #C4B5FD; }
 [data-theme="dark"] .lead-estado-contactado-sellium { color: #F472B6; }
+[data-theme="dark"] .lead-estado-gestion-flota { color: #2DD4BF; }
 [data-theme="dark"] .lead-estado-listo-emparejar { color: #E879F9; }
 [data-theme="dark"] .lead-estado-no-le-interesa { color: var(--text-secondary); }
 

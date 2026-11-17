@@ -14,6 +14,7 @@ import { ESTADO_DESCARTADO, pedirMotivoDescarte } from '../motivoDescarte'
 import { estadoMonotributo, faltantesMonotributo } from '../monotributo'
 import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, estadoLicencia, faltantesLicencia } from '../licenciaLead'
 import { AlertasLicencia } from './AlertasLicencia'
+import { unirNombre } from '../nombreLead'
 
 /** Cabecera de cada nota de la bitácora: "[02/11/2026 16:40 · Maria Flores]" */
 const RE_CABECERA = /^\[(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}[^\]]*)\]\s*/
@@ -137,6 +138,14 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  // Nombres y apellidos van separados (como en conductores); nombre_completo se arma con los dos
+  function updateNombre(field: 'primer_nombre' | 'apellido', value: string) {
+    setFormData(prev => {
+      const next = { ...prev, [field]: value }
+      return { ...next, nombre_completo: unirNombre(next.primer_nombre, next.apellido) }
+    })
+  }
+
   // ---------- Ya es / fue conductor (por DNI) ----------
   // Si el DNI cargado coincide con un conductor, se ofrece completar los datos
   // del lead con los del conductor. Solo se llenan los campos VACÍOS: lo que el
@@ -173,7 +182,9 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     const estadoCivil = estadosCiviles.find(e => e.id === c.estado_civil_id)?.descripcion
     const fechaNac = c.fecha_nacimiento ? String(c.fecha_nacimiento).slice(0, 10) : ''
     const candidatos: Partial<LeadFormData> = {
-      nombre_completo: `${c.nombres || ''} ${c.apellidos || ''}`.trim().toUpperCase(),
+      nombre_completo: unirNombre(c.nombres, c.apellidos).toUpperCase(),
+      primer_nombre: (c.nombres || '').trim().toUpperCase(),
+      apellido: (c.apellidos || '').trim().toUpperCase(),
       cuit: c.numero_cuit || '',
       fecha_de_nacimiento: fechaNac,
       edad: fechaNac ? calcularEdad(fechaNac) : undefined,
@@ -260,7 +271,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
   const lleno = (v: unknown) => Array.isArray(v) ? v.length > 0 : typeof v === 'boolean' ? true : !!String(v ?? '').trim()
   const faltantesPorPaso: Record<number, string[]> = {
     1: [
-      !lleno(formData.nombre_completo) && 'Nombre completo', !lleno(formData.dni) && 'DNI', ...faltantesMonotributo(formData),
+      !lleno(formData.primer_nombre) && 'Nombres', !lleno(formData.apellido) && 'Apellidos', !lleno(formData.dni) && 'DNI', ...faltantesMonotributo(formData),
       !lleno(formData.fecha_de_nacimiento) && 'Fecha de nacimiento', !lleno(formData.nacionalidad) && 'Nacionalidad',
       !lleno(formData.estado_civil) && 'Estado civil', !lleno(formData.sede || formData.sede_id) && 'Sede',
     ].filter(Boolean) as string[],
@@ -346,16 +357,29 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
           <>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Nombre Completo <span className="required">*</span></label>
+                <label>Nombres <span className="required">*</span></label>
                 <input
                   type="text"
-                  className={errors.nombre_completo ? 'field-error' : ''}
-                  value={formData.nombre_completo || ''}
-                  onChange={e => updateField('nombre_completo', e.target.value.toUpperCase())}
-                  placeholder="Nombre y apellido"
+                  className={errors.nombre_completo || errors.primer_nombre ? 'field-error' : ''}
+                  value={formData.primer_nombre || ''}
+                  onChange={e => updateNombre('primer_nombre', e.target.value.toUpperCase())}
+                  placeholder="Ej: JUAN CARLOS"
                 />
-                {errors.nombre_completo && <span className="error-text">{errors.nombre_completo}</span>}
+                {(errors.primer_nombre || errors.nombre_completo) && <span className="error-text">{errors.primer_nombre || errors.nombre_completo}</span>}
               </div>
+              <div className="lead-wizard-field">
+                <label>Apellidos <span className="required">*</span></label>
+                <input
+                  type="text"
+                  className={errors.apellido ? 'field-error' : ''}
+                  value={formData.apellido || ''}
+                  onChange={e => updateNombre('apellido', e.target.value.toUpperCase())}
+                  placeholder="Ej: PÉREZ GÓMEZ"
+                />
+                {errors.apellido && <span className="error-text">{errors.apellido}</span>}
+              </div>
+            </div>
+            <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
                 <label>DNI <span className="required">*</span></label>
                 <input

@@ -280,6 +280,7 @@ const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExceso
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
 const TwoChatLlamadasPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatLlamadasPage })))
 const TwoChatContactosPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatContactosPage })))
+const TwoChatMensajesPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatMensajesPage })))
 const Cresium44DreamsPage = lazy(() => import('./integraciones/cresium/CresiumPage').then(m => ({ default: m.Cresium44DreamsPage })))
 const CresiumGrupoCgPage = lazy(() => import('./integraciones/cresium/CresiumPage').then(m => ({ default: m.CresiumGrupoCgPage })))
 const AlegraCompras44DreamsPage = lazy(() => import('./integraciones/alegra/AlegraComprasPage').then(m => ({ default: m.AlegraCompras44DreamsPage })))
@@ -2209,6 +2210,11 @@ export function HomePage() {
               <Route path="/integraciones/2chat/llamadas" element={
                 <ProtectedRoute submenuName="twochat-llamadas" action="view">
                   <LazyPage><TwoChatLlamadasPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/integraciones/2chat/mensajes" element={
+                <ProtectedRoute submenuName="twochat-mensajes" action="view">
+                  <LazyPage><TwoChatMensajesPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/integraciones/2chat/contactos" element={

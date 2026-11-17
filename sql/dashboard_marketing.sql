@@ -68,7 +68,7 @@
 --   Causal = campo causal_de_cierre, o la línea "Causal de cierre:" que deja la
 --   carga de Sellium, o motivo_desinteres. Reglas (gana la primera):
 --   Edad                     estado "No cumple edad"
---   Auto del pueblo          estado "Auto del pueblo"
+--   (Auto del pueblo ya no aparece: esos leads quedan fuera del embudo)
 --   Zona / sin cobertura     causal "Sin cobertura"
 --   Desacuerdo con la oferta estado "No le interesa", o causal "disagreement" /
 --                            "Desacuerdo con oferta"
@@ -199,6 +199,11 @@ leads_base AS (
   FROM leads l
   WHERE l.created_at IS NOT NULL
     AND (p_sede_id IS NULL OR l.sede_id = p_sede_id)
+    -- «Auto del pueblo» (dueños de auto, formulario «Registrá tu auto») no es parte
+    -- del embudo de conductores: no cuenta como lead ni como descartado (2026-11-17)
+    -- Igual «Gestión flota» (empresas que piden demo de flota)
+    AND translate(LOWER(btrim(COALESCE(l.estado_de_lead, ''))), 'áéíóú', 'aeiou') NOT IN ('auto del pueblo', 'gestion flota')
+    AND LOWER(btrim(COALESCE(l.tipo, ''))) NOT IN ('auto', 'flota')
 ),
 leads_n AS (
   SELECT

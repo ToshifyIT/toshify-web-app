@@ -3624,14 +3624,43 @@ export function AsignacionesModule() {
       accessorFn: (row) => `${row.vehiculos?.patente || ''} ${row.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}`,
       id: 'vehiculo',
       header: 'Vehículo',
-      cell: ({ row }) => (
-        <div>
-          <div><PatenteBadge patente={row.original.vehiculos?.patente} size="sm" /></div>
+      cell: ({ row }) => {
+        const badgeModalidad = (
           <span className={getHorarioBadgeClass(row.original.horario)} style={{ fontSize: '10px', padding: '1px 6px' }}>
             {row.original.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
           </span>
-        </div>
-      )
+        )
+        // Cambio de auto: arriba el vehículo que se entrega, debajo el que se
+        // devuelve y al final la modalidad. Apilado y compacto para que la
+        // columna mantenga el ancho de las demás filas y la fila no crezca.
+        const patenteCambio = row.original.motivo === 'cambio_auto'
+          ? row.original.motivoDetalle?.vehiculoCambioPatente
+          : ''
+        if (patenteCambio) {
+          const modeloCambio = row.original.motivoDetalle?.vehiculoCambioModelo
+          return (
+            <div className="asig-vehiculo-cambio">
+              <PatenteBadge patente={row.original.vehiculos?.patente} size="sm" title="Vehículo que se entrega" />
+              <div
+                className="asig-vehiculo-cambio-fila"
+                title={`Cambio por ${patenteCambio}${modeloCambio ? ` (${modeloCambio})` : ''}`}
+              >
+                <ArrowLeftRight size={10} className="asig-vehiculo-cambio-icono" />
+                <PatenteBadge patente={patenteCambio} size="sm" className="asig-patente-cambio" />
+              </div>
+              <span className={`${getHorarioBadgeClass(row.original.horario)} asig-vehiculo-cambio-modalidad`}>
+                {row.original.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
+              </span>
+            </div>
+          )
+        }
+        return (
+          <div>
+            <div><PatenteBadge patente={row.original.vehiculos?.patente} size="sm" /></div>
+            {badgeModalidad}
+          </div>
+        )
+      }
     },
     {
       id: 'motivo',

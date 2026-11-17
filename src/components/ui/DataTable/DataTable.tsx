@@ -684,6 +684,13 @@ export interface DataTableProps<T> {
    * @default false
    */
   disableAutoResetPageIndex?: boolean;
+  /**
+   * Sin scroll propio: la tabla crece con sus filas y scrollea la página. Para tablas que
+   * van debajo de otro contenido (p. ej. una segunda tabla), donde el alto automático
+   * dejaba un recuadro chico con scroll adentro de una página que también scrollea.
+   * @default false
+   */
+  sinScrollInterno?: boolean;
 }
 
 export function DataTable<T>({
@@ -723,6 +730,7 @@ export function DataTable<T>({
   pageIndex: controlledPageIndex,
   onPaginationChange,
   disableAutoResetPageIndex = false,
+  sinScrollInterno = false,
 }: DataTableProps<T>) {
   const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
   const isControlled = controlledGlobalFilter !== undefined;
@@ -1959,7 +1967,7 @@ export function DataTable<T>({
           <div
             className="dt-table-wrapper"
             ref={tableWrapperRef}
-            style={dynamicMaxHeight ? { maxHeight: `${dynamicMaxHeight}px` } : undefined}
+            style={sinScrollInterno ? { maxHeight: 'none' } : dynamicMaxHeight ? { maxHeight: `${dynamicMaxHeight}px` } : undefined}
           >
             <table className="dt-table">
               <thead>

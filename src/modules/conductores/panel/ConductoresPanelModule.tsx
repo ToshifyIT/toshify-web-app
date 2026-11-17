@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw } from 'lucide-react'
+import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -29,6 +29,7 @@ import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 import { AppBadges } from '../../../components/ui/AppBadges'
 import { etiquetaLicencia } from '../../../utils/etiquetaLicencia'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
+import { LlamadaConductor } from '../../integraciones/twochat/LlamadaConductor'
 
 // Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
 // anteriores al 16/09/2026 no tienen kilometros sincronizados, y eso no es 0 km.
@@ -121,6 +122,8 @@ export function ConductoresPanelModule() {
   const [activeCard, setActiveCard] = useState<CardKey | null>('conAuto')
   const [reloadKey, setReloadKey] = useState(0)
   const [detalle, setDetalle] = useState<{ fila: ConductorPanelRow; tab: 'facturacion' | 'calificacion' } | null>(null)
+  // Llamada en curso desde Toshibase (2Chat): una a la vez
+  const [llamada, setLlamada] = useState<{ id: string; nombre: string } | null>(null)
   // Calificación 1-5 de cada conductor (ver calificacionConductor.ts)
   // Excesos de km de las últimas 4 semanas (Facturación), para el factor "Límite de km"
   const [excesosKm, setExcesosKm] = useState<Awaited<ReturnType<typeof cargarExcesosRecientes>>>(null)
@@ -387,7 +390,17 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => {
         const apps = row.original.apps
         if (apps === undefined) return <span className="cpanel-num cpanel-nulo">…</span>
-        if (!apps.length) return <span className="cpanel-num cpanel-nulo">—</span>
+        if (!apps.length) {
+          // Sin pagos por Cabify ni DiDi: alerta de cuenta no relacionada
+          return (
+            <span
+              title="Sin cuenta relacionada: no tiene pagos por Cabify ni DiDi en la última semana cerrada"
+              style={{ display: 'inline-flex', color: '#D97706' }}
+            >
+              <AlertTriangle size={15} aria-label="Sin cuenta relacionada" />
+            </span>
+          )
+        }
         // Logos en vez de etiquetas de texto (las etiquetas vienen de etiquetasApps)
         return <AppBadges apps={{ cabify: apps.includes('Cabify'), didi: apps.includes('DiDi') }} size="xs" />
       },
@@ -729,11 +742,18 @@ export function ConductoresPanelModule() {
         <ActionsMenu
           actions={[
             { icon: <Eye size={15} />, label: 'Ver detalle', onClick: () => setDetalle({ fila: row.original, tab: 'calificacion' }) },
+            {
+              icon: <Phone size={15} />,
+              label: llamada ? 'Ya hay una llamada en curso' : 'Llamar (2Chat)',
+              variant: 'success',
+              disabled: !!llamada,
+              onClick: () => setLlamada({ id: row.original.id, nombre: row.original.nombre }),
+            },
           ]}
         />
       ),
     },
-  ], [rangoCabifyLabel, calificaciones, kmGeoCargando])
+  ], [rangoCabifyLabel, calificaciones, kmGeoCargando, llamada])
 
   return (
     <div className="cond-module">
@@ -831,6 +851,9 @@ export function ConductoresPanelModule() {
           tabInicial={detalle.tab}
           calificacion={calificacionesEnCurso.get(detalle.fila.id) ?? null}
         />
+      )}
+      {llamada && (
+        <LlamadaConductor conductorId={llamada.id} nombre={llamada.nombre} onClose={() => setLlamada(null)} />
       )}
     </div>
   )

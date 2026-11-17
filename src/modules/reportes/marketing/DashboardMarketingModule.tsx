@@ -528,7 +528,7 @@ function Descartes({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
     <Card
       title="Motivos de descarte"
       subtitle={`${fmtInt(total)} leads descartados en el período`}
-      info="Motivo según los datos cargados en el lead: Edad (No cumple edad), Auto del pueblo, Zona (causal Sin cobertura) y Desacuerdo con la oferta (No le interesa o causal de desacuerdo). Lo demás, o sin causal, va a Otro. Solo se muestran los motivos con leads en el período. Abajo, las causales más frecuentes tal cual se cargaron."
+      info="Motivo según los datos cargados en el lead: Edad (No cumple edad), Zona (causal Sin cobertura) y Desacuerdo con la oferta (No le interesa o causal de desacuerdo). Lo demás, o sin causal, va a Otro. Solo se muestran los motivos con leads en el período. Abajo, las causales más frecuentes tal cual se cargaron. Los leads «Auto del pueblo» no entran en el embudo."
     >
       {motivos.length === 0 ? (
         <p className="ddir-note">No hay leads descartados en el período.</p>

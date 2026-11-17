@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Users, CheckCircle2, Clock, PhoneOff, AlertTriangle, RefreshCw, UploadCloud,
-  Phone, PhoneCall, Timer, DollarSign, Download, MessageCircle, UserPlus, ExternalLink, History,
+  Phone, PhoneCall, Timer, DollarSign, Download, MessageCircle, Headphones, FileText, Star,
 } from 'lucide-react'
 import { Alerta } from '../../../components/ui/alertas'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -20,8 +20,6 @@ import {
   obtenerContactosTwoChat,
   sincronizarContactosTwoChat,
   obtenerLlamadasTwoChat,
-  crearLeadDesdeLlamada,
-  abrirLeadEnPestana,
   LOTE_SINCRONIZACION,
 } from '../../../services/twoChatService'
 import type {
@@ -31,16 +29,16 @@ import type {
   ResultadoLlamada,
 } from '../../../services/twoChatService'
 import { useSede } from '../../../contexts/SedeContext'
-import { formatFechaHoraART, fechaISOART, hoyART, haceDiasART } from '../../../utils/fechaArgentina'
+import { formatFechaHoraART, fechaISOART, hoyART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import './TwoChatModule.css'
 import { formatMoneda, formatNumero } from '../../../utils/format'
-import { TabsBar } from '../../../components/ui/TabsBar'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
+import { LlamadaAnalisisModal, NotaCalidad } from './LlamadaAnalisisModal'
+import { TipoContactoIcono } from './TipoContactoIcono'
 
-type TabContactos = 'contactos' | 'registro'
 type FiltroSync = 'todos' | EstadoSync2Chat
 type FiltroEstadoConductor = 'activo' | 'todos' | 'baja'
 type Direccion = 'outbound' | 'inbound' | 'todas'
@@ -63,6 +61,8 @@ const ETIQUETA_SYNC: Record<EstadoSync2Chat, string> = {
 
 const ETIQUETA_RESULTADO: Record<ResultadoLlamada, string> = {
   atendida: 'Atendida',
+  buzon_voz: 'Buzón de voz',
+  sin_conversacion: 'Sin conversación',
   no_atendida: 'No atendida',
   ocupado: 'Ocupado',
   cancelada: 'Cancelada',
@@ -71,10 +71,6 @@ const ETIQUETA_RESULTADO: Record<ResultadoLlamada, string> = {
 
 /** Una llamada de pocos segundos suele ser buzón o corte: conversación = 30 seg o más */
 const SEGUNDOS_CONVERSACION = 30
-
-function escaparHtml(txt: string): string {
-  return txt.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
-}
 
 function mmss(segundos: number): string {
   const s = Math.round(segundos || 0)
@@ -93,7 +89,11 @@ interface ResumenAgente {
   llamadas: number
   atendidas: number
   noAtendidas: number
+  /** Conversaciones reales: atendidas que Gemini confirmó (o de 30 seg o más si todavía no se analizaron) */
   conversaciones: number
+  buzon: number
+  /** Nota de calidad promedio (1 a 5) de las conversaciones analizadas */
+  calidad: number | null
   segundos: number
   promedioAtendidas: number
   /** Números distintos llamados (conductores, leads y sin identificar). */
@@ -107,6 +107,15 @@ interface ResumenAgente {
   aLeads: number
   costo: number
   pctAtendidas: number
+}
+
+/** Atendida con conversación: Gemini lo confirma; si todavía no se analizó, 30 seg o más */
+const esConversacion = (l: LlamadaTwoChat) =>
+  l.resultado === 'atendida' && (l.analizada || l.duracion >= SEGUNDOS_CONVERSACION)
+
+function promedioCalidad(lista: LlamadaTwoChat[]): number | null {
+  const notas = lista.map((l) => l.calificacion).filter((n): n is number => n != null)
+  return notas.length ? notas.reduce((a, b) => a + b, 0) / notas.length : null
 }
 
 function resumirPorAgente(llamadas: LlamadaTwoChat[]): ResumenAgente[] {
@@ -126,7 +135,9 @@ function resumirPorAgente(llamadas: LlamadaTwoChat[]): ResumenAgente[] {
         llamadas: lista.length,
         atendidas: atendidas.length,
         noAtendidas: lista.length - atendidas.length,
-        conversaciones: lista.filter((l) => l.duracion >= SEGUNDOS_CONVERSACION).length,
+        conversaciones: lista.filter(esConversacion).length,
+        buzon: lista.filter((l) => l.resultado === 'buzon_voz').length,
+        calidad: promedioCalidad(lista),
         segundos,
         promedioAtendidas: conDuracion.length ? segundos / conDuracion.length : 0,
         conductores: new Set(lista.map((l) => l.numero).filter(Boolean)).size,
@@ -406,6 +417,7 @@ function LlamadasTab() {
   const [tipo, setTipo] = useState<FiltroTipo>('todos')
   const [actualizadoEn, setActualizadoEn] = useState<string | null>(null)
   const [errorSync, setErrorSync] = useState<string | null>(null)
+  const [analisis, setAnalisis] = useState<LlamadaTwoChat | null>(null)
 
   const consultar = useCallback(async (actualizar = false) => {
     if (desde > hasta) {
@@ -462,7 +474,9 @@ function LlamadasTab() {
     return {
       llamadas: detalle.length,
       atendidas: detalle.filter((l) => l.resultado === 'atendida').length,
-      conversaciones: detalle.filter((l) => l.duracion >= SEGUNDOS_CONVERSACION).length,
+      conversaciones: detalle.filter(esConversacion).length,
+      buzon: detalle.filter((l) => l.resultado === 'buzon_voz').length,
+      calidad: promedioCalidad(detalle),
       minutos: segundos / 60,
       costo: detalle.reduce((acc, l) => acc + l.costo_usd, 0),
     }
@@ -488,10 +502,12 @@ function LlamadasTab() {
         Llamadas: r.llamadas,
         Atendidas: r.atendidas,
         'No atendidas': r.noAtendidas,
-        [`Conversaciones (+${SEGUNDOS_CONVERSACION} seg)`]: r.conversaciones,
+        Conversaciones: r.conversaciones,
+        'Buzón de voz': r.buzon,
+        'Calidad promedio (1 a 5)': r.calidad == null ? '' : Number(r.calidad.toFixed(1)),
         'Minutos totales': Number((r.segundos / 60).toFixed(1)),
         'Duración promedio': mmss(r.promedioAtendidas),
-        'Números distintos': r.conductores,
+        'Contactos distintos': r.conductores,
         'Conductores distintos': r.conductoresDistintos,
         'Leads distintos': r.leadsDistintos,
         'Llamadas a conductores': r.aConductores,
@@ -520,7 +536,6 @@ function LlamadasTab() {
         'Estado 2Chat': l.status_2chat ?? '',
         'Duración (seg)': l.duracion,
         Duración: mmss(l.duracion),
-        WhatsApp: l.por_whatsapp ? 'Sí' : 'No',
         'Costo USD': l.costo_usd,
         Grabación: l.grabacion ?? '',
       }))
@@ -537,12 +552,19 @@ function LlamadasTab() {
     { accessorKey: 'llamadas', header: 'Llamadas' },
     { accessorKey: 'atendidas', header: 'Atendidas' },
     { accessorKey: 'noAtendidas', header: 'No atendidas' },
-    { accessorKey: 'conversaciones', header: `+${SEGUNDOS_CONVERSACION} seg` },
+    { accessorKey: 'buzon', header: 'Buzón de voz' },
+    { accessorKey: 'conversaciones', header: 'Conversaciones' },
+    {
+      accessorKey: 'calidad',
+      header: 'Calidad prom.',
+      sortingFn: (a, b) => (a.original.calidad ?? -1) - (b.original.calidad ?? -1),
+      cell: ({ getValue }) => <NotaCalidad nota={getValue() as number | null} />,
+    },
     { accessorKey: 'segundos', header: 'Minutos', cell: ({ getValue }) => formatNumero((getValue() as number) / 60, 1) },
-    { accessorKey: 'promedioAtendidas', header: 'Promedio', cell: ({ getValue }) => mmss(getValue() as number) },
-    // Todo en números distintos, para que se pueda comparar: conductores + leads
-    // + sin identificar = números distintos. Las llamadas a cada uno van en el Excel.
-    { accessorKey: 'conductores', header: 'Números distintos' },
+    { accessorKey: 'promedioAtendidas', header: 'Duración prom.', cell: ({ getValue }) => mmss(getValue() as number) },
+    // Todo en contactos (números) distintos, para que se pueda comparar: conductores + leads
+    // + sin identificar = contactos distintos. Las llamadas a cada uno van en el Excel.
+    { accessorKey: 'conductores', header: 'Contactos distintos' },
     { accessorKey: 'conductoresDistintos', header: 'Conductores' },
     { accessorKey: 'leadsDistintos', header: 'Leads' },
     { accessorKey: 'pctAtendidas', header: '% atendidas', cell: ({ getValue }) => `${formatNumero((getValue() as number) * 100)}%` },
@@ -564,9 +586,7 @@ function LlamadasTab() {
             <span className="tc-nombre">
               {nombre || 'Sin coincidencia'}
               {l.tipo_contacto && (
-                <span className={`tc-tipo tc-tipo--${l.tipo_contacto}`}>
-                  {l.tipo_contacto === 'conductor' ? 'Conductor' : 'Lead'}
-                </span>
+                <TipoContactoIcono tipo={l.tipo_contacto} />
               )}
             </span>
             <span className="tc-muted">
@@ -593,14 +613,41 @@ function LlamadasTab() {
       ),
     },
     { accessorKey: 'duracion', header: 'Duración', cell: ({ getValue }) => mmss(getValue() as number) },
-    { accessorKey: 'por_whatsapp', header: 'Vía', cell: ({ getValue }) => ((getValue() as boolean) ? 'WhatsApp' : 'Teléfono') },
     {
-      accessorKey: 'grabacion',
-      header: 'Grabación',
+      id: 'calificacion',
+      header: 'Calidad',
+      accessorFn: (r) => r.calificacion ?? -1,
+      cell: ({ row }) => {
+        const l = row.original
+        if (!l.analizada) return <span className="tc-analisis-pend" title="Se analiza en la próxima actualización">-</span>
+        return l.calificacion != null ? <NotaCalidad nota={l.calificacion} /> : '-'
+      },
+    },
+    {
+      // Acciones fija a la derecha (id 'acciones', como en el resto de la app)
+      id: 'acciones',
+      header: 'Acciones',
       enableSorting: false,
-      cell: ({ getValue }) => {
-        const url = getValue() as string | null
-        return url ? <a href={url} target="_blank" rel="noreferrer" className="tc-link">Escuchar</a> : '-'
+      cell: ({ row }) => {
+        const l = row.original
+        return (
+          <ActionsMenu
+            actions={[
+              {
+                icon: <Headphones size={15} />,
+                label: l.grabacion ? 'Escuchar grabación' : 'Sin grabación',
+                onClick: () => { if (l.grabacion) window.open(l.grabacion, '_blank', 'noopener') },
+                disabled: !l.grabacion,
+              },
+              {
+                icon: <FileText size={15} />,
+                label: l.analizada ? 'Ver resumen, calidad y transcripción' : 'Se analiza en la próxima actualización',
+                onClick: () => setAnalisis(l),
+                disabled: !l.analizada,
+              },
+            ]}
+          />
+        )
       },
     },
   ], [])
@@ -628,11 +675,18 @@ function LlamadasTab() {
               <span className="stat-label">Atendidas</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Atendidas en las que se habló con una persona (sin buzón de voz ni cortes). Lo confirma Gemini al escuchar la grabación.">
             <MessageCircle size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.conversaciones}</span>
-              <span className="stat-label">Conversaciones +{SEGUNDOS_CONVERSACION} seg</span>
+              <span className="stat-label">Conversaciones{totales.buzon > 0 ? ` · ${totales.buzon} buzón` : ''}</span>
+            </div>
+          </div>
+          <div className="stat-card" title="Nota promedio de 1 a 5 de las conversaciones: presentación, indagación, claridad, objeciones y cierre">
+            <Star size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totales.calidad == null ? '-' : formatNumero(totales.calidad, 1)}</span>
+              <span className="stat-label">Calidad promedio</span>
             </div>
           </div>
           <div className="stat-card">
@@ -688,9 +742,7 @@ function LlamadasTab() {
           <RefreshCw size={16} className={loading ? 'tc-girando' : undefined} />
           Consultar
         </button>
-        <span className="tc-actualizado">
-          {actualizadoEn ? `Actualizado ${formatFechaHoraART(actualizadoEn)}` : 'Sin actualizar aún'} · se actualiza solo cada hora
-        </span>
+        {/* La hora de la última actualización queda en el tooltip de «Consultar» */}
         <button className="btn-secondary" onClick={() => void exportar()} disabled={loading || porTipo.length === 0}>
           <Download size={16} />
           Exportar
@@ -714,6 +766,7 @@ function LlamadasTab() {
           showSearch={false}
           showPagination={resumen.length > 10}
           disableAutoFilters
+          sinScrollInterno
           emptyIcon={<Users size={40} />}
           emptyTitle="Sin llamadas en el rango"
         />
@@ -727,305 +780,13 @@ function LlamadasTab() {
           loading={loading}
           error={error}
           pageSize={100}
+          sinScrollInterno
           searchPlaceholder="Buscar conductor, lead o número..."
           emptyIcon={<Phone size={40} />}
           emptyTitle="Sin llamadas"
         />
       </section>
-    </>
-  )
-}
-
-// =====================================================
-// MÓDULO
-// =====================================================
-
-// =====================================================
-// REGISTRO DE LLAMADAS (por número)
-// =====================================================
-
-interface NumeroRegistro {
-  numero: string
-  tipo: LlamadaTwoChat['tipo_contacto']
-  nombre: string | null
-  estado: string | null
-  lead_id: string | null
-  conductor_id: string | null
-  llamadas: number
-  entrantesSinResponder: number
-  ultimaFecha: string
-  ultimoAgente: string
-  ultimoResultado: ResultadoLlamada
-  ultimaDireccion: LlamadaTwoChat['direccion']
-}
-
-function agruparPorNumero(llamadas: LlamadaTwoChat[]): NumeroRegistro[] {
-  const porNumero = new Map<string, NumeroRegistro>()
-  // Vienen ordenadas de la más nueva a la más vieja: la primera de cada número es la última
-  for (const l of llamadas) {
-    if (!l.numero) continue
-    const clave = l.numero.replace(/\D/g, '').slice(-10)
-    const actual = porNumero.get(clave)
-    const sinResponder = l.direccion === 'entrante' && l.resultado !== 'atendida' ? 1 : 0
-    if (actual) {
-      actual.llamadas += 1
-      actual.entrantesSinResponder += sinResponder
-      continue
-    }
-    porNumero.set(clave, {
-      numero: l.numero,
-      tipo: l.tipo_contacto,
-      nombre: l.conductor || l.lead,
-      estado: l.tipo_contacto === 'lead' ? l.estado_lead : l.estado_conductor,
-      lead_id: l.lead_id,
-      conductor_id: l.conductor_id,
-      llamadas: 1,
-      entrantesSinResponder: sinResponder,
-      ultimaFecha: l.fecha,
-      ultimoAgente: l.agente,
-      ultimoResultado: l.resultado,
-      ultimaDireccion: l.direccion,
-    })
-  }
-  return Array.from(porNumero.values())
-}
-
-function RegistroLlamadasTab({ pestanas }: { pestanas: ReactNode }) {
-  const { sedeActualId, sedeActual } = useSede()
-  const [desde, setDesde] = useState(() => haceDiasART(30))
-  const [hasta, setHasta] = useState(hoyART)
-  const [tipo, setTipo] = useState<FiltroTipo>('todos')
-  const [llamadas, setLlamadas] = useState<LlamadaTwoChat[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [actualizadoEn, setActualizadoEn] = useState<string | null>(null)
-
-  const consultar = useCallback(async (actualizar = false) => {
-    if (desde > hasta) {
-      showError('Rango inválido', 'La fecha desde no puede ser posterior a hasta')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const r = await obtenerLlamadasTwoChat({ desde, hasta, direccion: 'todas', actualizar })
-      setLlamadas(r.llamadas)
-      setActualizadoEn(r.actualizado_en)
-    } catch (err) {
-      console.error('Error cargando registro de llamadas 2Chat:', err)
-      setError(err instanceof Error ? err.message : 'No se pudo cargar el registro')
-    } finally {
-      setLoading(false)
-    }
-  }, [desde, hasta])
-
-  useEffect(() => { void consultar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  // El servidor trae lo nuevo de 2Chat cada hora; la pantalla abierta relee la base cada 15 min
-  useEffect(() => {
-    const id = setInterval(() => { void consultar() }, 15 * 60 * 1000)
-    return () => clearInterval(id)
-  }, [consultar])
-
-  const numeros = useMemo(() => agruparPorNumero(llamadas), [llamadas])
-  const conteoTipo = useMemo(() => ({
-    todos: numeros.length,
-    lead: numeros.filter((n) => n.tipo === 'lead').length,
-    conductor: numeros.filter((n) => n.tipo === 'conductor').length,
-    ninguno: numeros.filter((n) => !n.tipo).length,
-  }), [numeros])
-  const visibles = useMemo(() => {
-    if (tipo === 'todos') return numeros
-    if (tipo === 'ninguno') return numeros.filter((n) => !n.tipo)
-    return numeros.filter((n) => n.tipo === tipo)
-  }, [numeros, tipo])
-
-  const crearLead = useCallback(async (fila: NumeroRegistro) => {
-    const r = await Alerta.fire({
-      title: 'Crear lead',
-      html:
-        `<div style="text-align:left;font-size:13px;color:var(--text-secondary)">` +
-        `Teléfono: <b>${escaparHtml(fila.numero)}</b>` +
-        (sedeActual ? ` · Sede: <b>${escaparHtml(sedeActual.nombre)}</b>` : '') +
-        `<br/>Fuente: <b>2Chat</b></div>`,
-      input: 'text',
-      inputLabel: 'Nombre y apellido',
-      inputPlaceholder: 'Ej.: Juan Pérez',
-      inputAttributes: { maxlength: '120', autocomplete: 'off' },
-      inputValidator: (v) => (v && v.trim().length >= 3 ? null : 'Ingresá el nombre (mínimo 3 letras)'),
-      showCancelButton: true,
-      confirmButtonText: 'Crear lead',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#ff0033',
-      showLoaderOnConfirm: true,
-      allowOutsideClick: () => !Alerta.isLoading(),
-      preConfirm: async (nombre: string) => {
-        try {
-          return await crearLeadDesdeLlamada({ nombre, telefono: fila.numero, sedeId: sedeActualId })
-        } catch (err) {
-          Alerta.showValidationMessage(err instanceof Error ? err.message : 'No se pudo crear el lead')
-          return false
-        }
-      },
-    })
-    if (!r.isConfirmed || !r.value) return
-    const { lead_id: leadId, existente } = r.value as { lead_id: string; existente: boolean }
-    const abrir = await Alerta.fire({
-      icon: 'success',
-      title: existente ? 'Ese número ya era un lead' : 'Lead creado',
-      text: existente
-        ? 'Se vincularon las llamadas al lead que ya existía.'
-        : 'Se creó el lead y se vincularon sus llamadas.',
-      showCancelButton: true,
-      confirmButtonText: 'Ver lead',
-      cancelButtonText: 'Cerrar',
-      confirmButtonColor: '#ff0033',
-    })
-    if (abrir.isConfirmed) abrirLeadEnPestana(leadId)
-    await consultar()
-  }, [consultar, sedeActual, sedeActualId])
-
-  const columnas = useMemo<ColumnDef<NumeroRegistro, unknown>[]>(() => [
-    {
-      id: 'contacto',
-      header: 'Contacto',
-      accessorFn: (r) => `${r.nombre ?? ''} ${r.numero}`,
-      cell: ({ row }) => {
-        const n = row.original
-        return (
-          <div className="tc-contacto">
-            <span className="tc-nombre">
-              {n.nombre || 'Sin coincidencia'}
-              {n.tipo && (
-                <span className={`tc-tipo tc-tipo--${n.tipo}`}>{n.tipo === 'conductor' ? 'Conductor' : 'Lead'}</span>
-              )}
-            </span>
-            <span className="tc-muted">
-              {n.numero}
-              {n.tipo === 'lead' && n.estado ? ` · ${n.estado}` : ''}
-            </span>
-          </div>
-        )
-      },
-    },
-    { accessorKey: 'llamadas', header: 'Llamadas' },
-    {
-      accessorKey: 'entrantesSinResponder',
-      header: 'Entrantes sin responder',
-      cell: ({ getValue }) => {
-        const v = getValue() as number
-        return v > 0 ? <span className="tc-badge tc-badge--no_atendida">{v}</span> : '-'
-      },
-    },
-    { accessorKey: 'ultimaFecha', header: 'Última llamada', cell: ({ getValue }) => formatFechaHoraART(getValue() as string) },
-    {
-      id: 'ultima',
-      header: 'Último resultado',
-      accessorFn: (r) => ETIQUETA_RESULTADO[r.ultimoResultado],
-      cell: ({ row }) => (
-        <div className="tc-contacto">
-          <span className={`tc-badge tc-badge--${row.original.ultimoResultado}`}>
-            {ETIQUETA_RESULTADO[row.original.ultimoResultado]}
-          </span>
-          <span className="tc-muted">
-            {row.original.ultimaDireccion === 'saliente' ? 'Saliente' : 'Entrante'} · {row.original.ultimoAgente}
-          </span>
-        </div>
-      ),
-    },
-    {
-      id: 'accion',
-      header: 'Acciones',
-      enableSorting: false,
-      cell: ({ row }) => {
-        const n = row.original
-        if (n.tipo === 'lead' && n.lead_id) {
-          return <ActionsMenu actions={[{ icon: <ExternalLink size={15} />, label: 'Ver lead', onClick: () => abrirLeadEnPestana(n.lead_id as string) }]} />
-        }
-        if (n.tipo === 'conductor') return <span className="tc-muted">—</span>
-        return <ActionsMenu actions={[{ icon: <UserPlus size={15} />, label: 'Crear lead', onClick: () => void crearLead(n), variant: 'success' }]} />
-      },
-    },
-  ], [crearLead])
-
-  const metricas: Array<{ id: FiltroTipo; label: string; valor: number; icono: typeof Users }> = [
-    { id: 'todos', label: 'Números', valor: conteoTipo.todos, icono: Phone },
-    { id: 'lead', label: 'Leads', valor: conteoTipo.lead, icono: UserPlus },
-    { id: 'conductor', label: 'Conductores', valor: conteoTipo.conductor, icono: Users },
-    { id: 'ninguno', label: 'Sin coincidencia', valor: conteoTipo.ninguno, icono: AlertTriangle },
-  ]
-  const entrantesSinResponder = numeros.reduce((acc, n) => acc + n.entrantesSinResponder, 0)
-
-  return (
-    <>
-      <div className="tc-stats">
-        <StatsGrid className="stats-grid" storageKey="TwoChatModule-2">
-          {metricas.map((m) => {
-            const Icono = m.icono
-            return (
-              <div
-                key={m.id}
-                className={`stat-card ${tipo === m.id ? 'active' : ''}`}
-                onClick={() => setTipo(tipo === m.id ? 'todos' : m.id)}
-                style={{ cursor: 'pointer' }}
-              >
-                <Icono size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{m.valor}</span>
-                  <span className="stat-label">{m.label}</span>
-                </div>
-              </div>
-            )
-          })}
-          <div className="stat-card">
-            <PhoneOff size={20} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{entrantesSinResponder}</span>
-              <span className="stat-label">Entrantes sin responder</span>
-            </div>
-          </div>
-        </StatsGrid>
-      </div>
-
-      {pestanas}
-
-      <DataTable
-        data={visibles}
-        columns={columnas}
-        loading={loading}
-        error={error}
-        pageSize={100}
-        searchPlaceholder="Buscar nombre o número..."
-        emptyIcon={<History size={48} />}
-        emptyTitle="Sin llamadas en el rango"
-        emptyDescription="Probá ampliar las fechas"
-        headerAction={
-          <div className="tc-filtros-linea">
-            <label className="tc-campo">
-              <span>Desde</span>
-              <input type="date" className="form-input" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} />
-            </label>
-            <label className="tc-campo">
-              <span>Hasta</span>
-              <input type="date" className="form-input" value={hasta} min={desde} onChange={(e) => setHasta(e.target.value)} />
-            </label>
-            <label className="tc-campo">
-              <span>Contacto</span>
-              <select className="form-input" value={tipo} onChange={(e) => setTipo(e.target.value as FiltroTipo)}>
-                {(Object.keys(ETIQUETA_TIPO) as FiltroTipo[]).map((t) => (
-                  <option key={t} value={t}>{ETIQUETA_TIPO[t]} ({conteoTipo[t]})</option>
-                ))}
-              </select>
-            </label>
-            <button className="btn-primary" onClick={() => void consultar(true)} disabled={loading}>
-              <RefreshCw size={16} className={loading ? 'tc-girando' : undefined} />
-              Consultar
-            </button>
-          </div>
-        }
-      />
-      <p className="tc-actualizado tc-actualizado--pie">
-        {actualizadoEn ? `Actualizado ${formatFechaHoraART(actualizadoEn)}` : 'Sin actualizar aún'} · se actualiza solo cada hora; «Consultar» trae lo nuevo de 2Chat sin esperar.
-      </p>
+      {analisis && <LlamadaAnalisisModal llamada={analisis} onClose={() => setAnalisis(null)} />}
     </>
   )
 }
@@ -1043,27 +804,14 @@ export function TwoChatLlamadasModule() {
   )
 }
 
-/** Integraciones > 2Chat > Contactos: conductores en 2Chat + registro de llamadas por número */
+/**
+ * Integraciones > 2Chat > Contactos: conductores cargados en 2Chat.
+ * (La pestaña «Registro de llamadas» por número se sacó el 2026-11-18: repetía Control de llamadas.)
+ */
 export function TwoChatContactosModule() {
-  const [tab, setTab] = useState<TabContactos>('contactos')
-
-  // Orden de Toshibase: métricas arriba, debajo las pestañas, después filtros y tabla
-  const pestanas = (
-    <TabsBar
-      tabs={[
-        { id: 'contactos' as TabContactos, label: 'Contactos', icon: Users },
-        { id: 'registro' as TabContactos, label: 'Registro de llamadas', icon: History },
-      ]}
-      active={tab}
-      onChange={setTab}
-    />
-  )
-
   return (
     <div className="tc-module">
-      {tab === 'contactos'
-        ? <ContactosTab pestanas={pestanas} />
-        : <RegistroLlamadasTab pestanas={pestanas} />}
+      <ContactosTab pestanas={null} />
     </div>
   )
 }
