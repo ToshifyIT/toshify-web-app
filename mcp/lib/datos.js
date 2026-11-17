@@ -2,8 +2,10 @@
  * Consultas de solo lectura sobre el catálogo de datos (lib/catalogoDatos.js).
  *
  * Lo usan las herramientas MCP listar_datos, describir_datos, consultar_datos y
- * contar_datos (permiso datos:read). Todo pasa por el catálogo: solo se puede
- * leer un dataset que esté ahí y solo sus columnas permitidas; nunca select=*.
+ * contar_datos. Todo pasa por el catálogo: solo se puede leer un dataset que esté
+ * ahí, que la key tenga permitido (datos:read o el `permiso` del dataset) y solo
+ * sus columnas permitidas; nunca select=*. Los permisos se reciben en cada
+ * llamada: un dataset que la key no puede ver responde igual que uno inexistente.
  * Únicamente hace GET contra PostgREST: no hay forma de escribir desde acá.
  *
  * Los errores de la base no se devuelven al cliente (podrían mostrar detalles
@@ -26,24 +28,34 @@ export const PERIODOS = ['dia', 'mes', 'anio'];
 /** Error con mensaje apto para mostrarle al usuario. */
 export class ErrorDatos extends Error {}
 
-export function listarDatasets(modulo) {
-  return Object.entries(CATALOGO)
+/** Permiso que pide un dataset. */
+function permisoDe(d) {
+  return d.permiso || 'datos:read';
+}
+
+/** Datasets que puede leer una key con estos permisos. */
+function visibles(permisos = []) {
+  return Object.entries(CATALOGO).filter(([, d]) => permisos.includes(permisoDe(d)));
+}
+
+export function listarDatasets(modulo, permisos) {
+  return visibles(permisos)
     .filter(([, d]) => !modulo || d.modulo.toLowerCase() === String(modulo).toLowerCase())
     .map(([nombre, d]) => ({ dataset: nombre, modulo: d.modulo, descripcion: d.descripcion }));
 }
 
-export function modulos() {
-  return [...new Set(Object.values(CATALOGO).map(d => d.modulo))];
+export function modulos(permisos) {
+  return [...new Set(visibles(permisos).map(([, d]) => d.modulo))];
 }
 
-export function describirDataset(nombre) {
-  const d = dataset(nombre);
+export function describirDataset(nombre, permisos) {
+  const d = dataset(nombre, permisos);
   return { dataset: nombre, modulo: d.modulo, descripcion: d.descripcion, campos: d.columnas };
 }
 
-function dataset(nombre) {
-  const d = CATALOGO[nombre];
-  if (!d) throw new ErrorDatos(`No existe el dataset "${nombre}". Usá listar_datos para ver los disponibles.`);
+function dataset(nombre, permisos = []) {
+  const d = Object.hasOwn(CATALOGO, nombre) ? CATALOGO[nombre] : null;
+  if (!d || !permisos.includes(permisoDe(d))) throw new ErrorDatos(`No existe el dataset "${nombre}". Usá listar_datos para ver los disponibles.`);
   return d;
 }
 
@@ -111,8 +123,8 @@ function totalDe(res, filas) {
 }
 
 /** Listado paginado. */
-export async function consultar({ dataset: nombre, campos, filtros, orden, descendente, limite, pagina }) {
-  const d = dataset(nombre);
+export async function consultar({ dataset: nombre, campos, filtros, orden, descendente, limite, pagina }, permisos) {
+  const d = dataset(nombre, permisos);
   const seleccion = campos?.length ? campos : Object.keys(d.columnas);
   seleccion.forEach(c => validarCampo(d, nombre, c));
   if (orden) validarCampo(d, nombre, orden);
@@ -143,8 +155,8 @@ function claveGrupo(v, tipo, periodo) {
 }
 
 /** Total de registros, o cantidad por valor de un campo (opcionalmente por día/mes/año si es fecha). */
-export async function contar({ dataset: nombre, filtros, agrupar_por, periodo }) {
-  const d = dataset(nombre);
+export async function contar({ dataset: nombre, filtros, agrupar_por, periodo }, permisos) {
+  const d = dataset(nombre, permisos);
   const condiciones = armarFiltros(d, nombre, filtros);
 
   if (!agrupar_por) {

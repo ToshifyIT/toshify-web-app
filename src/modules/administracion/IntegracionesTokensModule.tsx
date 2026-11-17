@@ -4,12 +4,13 @@ import {
   ChevronDown, ChevronRight, Clock, Shield, Globe,
   Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff, Receipt, Landmark, Phone,
   AlertCircle,
-  Bot, Key, Plus, Trash2, Copy, Check, Power,
+  Bot, Key, Plus, Trash2, Copy, Check, Power, Pencil,
   CalendarClock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { formatFecha, formatFechaHora } from '../../utils/format';
+import { showSuccess, showError } from '../../utils/toast';
 import { Spinner } from '../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import { TabsBar } from '../../components/ui/TabsBar'
@@ -1212,6 +1213,7 @@ const AVAILABLE_PERMISSIONS = [
   { value: 'leads:delete', label: 'Leads: Eliminar', desc: 'Eliminar leads' },
   { value: 'hireflix:read', label: 'Hireflix: Lectura', desc: 'Buscar y ver registros de Hireflix' },
   { value: 'datos:read', label: 'Datos de operación: Lectura', desc: 'Solo lectura de conductores, vehículos, asignaciones, leads, onboarding, incidencias, siniestros, multas, telepase, inventario, visitas, guías, telemetría e indicadores. Sin facturación ni parámetros. Para conectar Claude u otro asistente.' },
+  { value: 'administracion:read', label: 'Administración: Lectura', desc: 'Solo lectura de facturación (períodos, facturas por conductor y su detalle, saldos, pagos, abonos, garantías, cobros fraccionados, tickets, promociones y conceptos), usuarios, roles y permisos de menú, procesos automáticos y prompts. Sin API keys ni contraseñas. Nunca modifica nada.' },
   { value: 'hireflix:create', label: 'Hireflix: Crear', desc: 'Crear registros de Hireflix' },
   { value: 'hireflix:update', label: 'Hireflix: Escritura', desc: 'Actualizar registros de Hireflix' },
   { value: 'hireflix:delete', label: 'Hireflix: Eliminar', desc: 'Eliminar registros de Hireflix' },
@@ -1232,6 +1234,9 @@ function McpTab() {
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editPermissions, setEditPermissions] = useState<string[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchKeys = useCallback(async () => {
     setLoading(true);
@@ -1331,6 +1336,62 @@ function McpTab() {
     );
   };
 
+  const startEdit = (key: ApiKeyData) => {
+    setEditingId(key.id);
+    setEditPermissions(key.permissions || []);
+  };
+
+  // Cambia los permisos de la misma key: el MCP y la API REST los leen en cada
+  // pedido, así que rigen enseguida sin cambiar la key en el cliente.
+  const saveEdit = async (key: ApiKeyData) => {
+    setSavingEdit(true);
+    try {
+      const { error } = await supabase
+        .from('api_keys')
+        .update({ permissions: editPermissions })
+        .eq('id', key.id);
+
+      if (error) throw error;
+      setEditingId(null);
+      showSuccess(`Permisos de "${key.name}" actualizados`);
+      await fetchKeys();
+    } catch (err) {
+      console.error('Error updating API key permissions:', err);
+      showError('No se pudieron guardar los permisos');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const renderPermissionList = (selected: string[], onToggle: (perm: string) => void) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {AVAILABLE_PERMISSIONS.map(perm => (
+        <label
+          key={perm.value}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '8px 12px',
+            background: selected.includes(perm.value) ? 'rgba(88, 166, 255, 0.08)' : 'var(--bg-secondary)',
+            border: `1px solid ${selected.includes(perm.value) ? 'var(--color-primary)' : 'var(--border-primary)'}`,
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            fontSize: '13px',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={selected.includes(perm.value)}
+            onChange={() => onToggle(perm.value)}
+          />
+          <div>
+            <div style={{ fontWeight: 600 }}>{perm.label}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{perm.desc}</div>
+          </div>
+        </label>
+      ))}
+    </div>
+  );
+
   const maskKey = (key: string) => `${key.substring(0, 8)}${'*'.repeat(48)}${key.substring(key.length - 8)}`;
 
   const formatDate = (date: string | null) => {
@@ -1355,7 +1416,8 @@ function McpTab() {
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
           Servidor MCP para que chatbots y asistentes (como Claude) accedan a datos de Toshify.
           Cada API key tiene permisos granulares. Con "Datos de operación: Lectura" el asistente
-          solo puede consultar datos de operación (sin facturación ni parámetros) y nunca modificarlos.
+          solo puede consultar datos de operación (sin facturación ni parámetros) y con
+          "Administración: Lectura", facturación, usuarios y roles. Nunca puede modificarlos.
         </p>
         <div style={{
           display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap',
@@ -1451,32 +1513,7 @@ function McpTab() {
             <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
               Permisos
             </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {AVAILABLE_PERMISSIONS.map(perm => (
-                <label
-                  key={perm.value}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '8px 12px',
-                    background: newPermissions.includes(perm.value) ? 'rgba(88, 166, 255, 0.08)' : 'var(--bg-secondary)',
-                    border: `1px solid ${newPermissions.includes(perm.value) ? 'var(--color-primary)' : 'var(--border-primary)'}`,
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={newPermissions.includes(perm.value)}
-                    onChange={() => togglePermission(perm.value)}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{perm.label}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{perm.desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
+            {renderPermissionList(newPermissions, togglePermission)}
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -1561,6 +1598,17 @@ function McpTab() {
                 </div>
                 <div style={{ display: 'flex', gap: '4px' }}>
                   <button
+                    onClick={() => (editingId === key.id ? setEditingId(null) : startEdit(key))}
+                    title="Editar permisos"
+                    style={{
+                      padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)',
+                      borderRadius: 'var(--radius-xs)', cursor: 'pointer',
+                      color: editingId === key.id ? 'var(--color-primary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
                     onClick={() => toggleActive(key)}
                     title={key.is_active ? 'Desactivar' : 'Activar'}
                     style={{
@@ -1633,6 +1681,53 @@ function McpTab() {
                   Ultimo uso: {formatDate(key.last_used_at)} &middot; Creada: {formatDate(key.created_at)}
                 </div>
               </div>
+
+              {/* Edit permissions */}
+              {editingId === key.id && (
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-primary)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Editar permisos
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                    La key no cambia. Los permisos nuevos rigen en el próximo pedido de quien la use.
+                  </div>
+                  {renderPermissionList(editPermissions, perm => setEditPermissions(prev =>
+                    prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]
+                  ))}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                    <button
+                      onClick={() => saveEdit(key)}
+                      disabled={savingEdit || editPermissions.length === 0}
+                      style={{
+                        padding: '8px 20px',
+                        background: savingEdit || editPermissions.length === 0 ? 'var(--border-primary)' : 'var(--color-primary)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: savingEdit || editPermissions.length === 0 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {savingEdit ? 'Guardando...' : 'Guardar permisos'}
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      style={{
+                        padding: '8px 20px',
+                        background: 'transparent',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

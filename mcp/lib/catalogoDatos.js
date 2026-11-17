@@ -1,10 +1,15 @@
 // mcp/lib/catalogoDatos.js
 // Catálogo de datos de solo lectura que expone el MCP (herramientas listar_datos,
-// describir_datos, consultar_datos y contar_datos; permiso datos:read).
+// describir_datos, consultar_datos y contar_datos).
 //
-// Generado el 2026-11-06 a partir de la base y revisado a mano. Quedan AFUERA:
+// Cada dataset pide un permiso: datos:read (operación) salvo los que tienen
+// `permiso: 'administracion:read'` (facturación, usuarios, roles, procesos), que se
+// agregaron el 2026-11-17 y solo los ve una key con ese permiso.
+//
+// Generado el 2026-11-06 a partir de la base y revisado a mano. Con datos:read quedan AFUERA:
 //   - Facturación (facturación, saldos, pagos, abonos, garantías, cobros fraccionados,
-//     períodos, tickets, excesos facturables) y contabilidad (Alegra, Cresium).
+//     períodos, tickets, excesos facturables): está en administracion:read.
+//   - Contabilidad (Alegra, Cresium): afuera para todas las keys.
 //   - Parámetros (conceptos de facturación, parámetros del sistema, grupos de flota,
 //     rango de seguimiento de guías, cuentas de Cabify).
 //   - Seguridad y sistema (usuarios, roles, permisos, API keys, logs, sincronizaciones,
@@ -16,7 +21,7 @@
 //
 // Agregar una tabla o columna es una decisión deliberada, no un ajuste.
 
-/** dataset -> { modulo, descripcion, columnas: { nombre: tipo } } */
+/** dataset -> { modulo, permiso?, descripcion, columnas: { nombre: tipo } } (sin permiso = datos:read) */
 export const CATALOGO = {
   conductores: {
     modulo: 'Conductores',
@@ -498,6 +503,227 @@ export const CATALOGO = {
     descripcion: 'Catálogo de tipos de zona.',
     columnas: { id: 'id', codigo: 'texto', nombre: 'texto', color: 'texto', descripcion: 'texto', activo: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
   },
+  // ---------------------------------------------------------------------------
+  // Administración (permiso administracion:read, aparte de datos:read).
+  // Facturación, usuarios, roles y permisos de menú, procesos y prompts. Siguen afuera
+  // las API keys, api_users y sesiones (credenciales) y los respaldos.
+  // ---------------------------------------------------------------------------
+  periodos_facturacion: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Períodos (semanas) de facturación: fechas, estado (abierto/cerrado), totales y quién lo cerró.',
+    columnas: { id: 'id', semana: 'numero', anio: 'numero', fecha_inicio: 'fecha', fecha_fin: 'fecha', estado: 'texto', fecha_cierre: 'fecha', total_conductores: 'numero', total_cargos: 'numero', total_descuentos: 'numero', total_neto: 'numero', created_at: 'fecha', updated_at: 'fecha', created_by: 'id', created_by_name: 'texto', cerrado_por: 'id', cerrado_por_name: 'texto', sede_id: 'id' },
+  },
+  facturacion_conductores: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Facturación semanal de cada conductor: turnos, alquiler, garantía, cargos, descuentos, saldo anterior, mora y total a pagar. Cruza con periodos_facturacion por periodo_id.',
+    columnas: { id: 'id', periodo_id: 'id', conductor_id: 'id', conductor_nombre: 'texto', conductor_dni: 'texto', conductor_cuit: 'texto', vehiculo_id: 'id', vehiculo_patente: 'texto', tipo_alquiler: 'texto', turnos_base: 'numero', turnos_cobrados: 'numero', factor_proporcional: 'numero', subtotal_alquiler: 'numero', subtotal_garantia: 'numero', subtotal_cargos: 'numero', subtotal_descuentos: 'numero', subtotal_neto: 'numero', saldo_anterior: 'numero', dias_mora: 'numero', monto_mora: 'numero', total_a_pagar: 'numero', estado: 'texto', created_at: 'fecha', updated_at: 'fecha', sede_id: 'id', saldo_aplicado: 'booleano', proyectado_alquiler: 'numero' },
+  },
+  facturacion_detalle: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Renglones (conceptos) de cada facturación de conductor: concepto, cantidad, precio, IVA y total. Cruza con facturacion_conductores por facturacion_id.',
+    columnas: { id: 'id', facturacion_id: 'id', concepto_id: 'id', concepto_codigo: 'texto', concepto_descripcion: 'texto', cantidad: 'numero', precio_unitario: 'numero', subtotal: 'numero', iva_porcentaje: 'numero', iva_monto: 'numero', total: 'numero', es_descuento: 'booleano', descripcion: 'texto', referencia_id: 'id', referencia_tipo: 'texto', created_at: 'fecha', sede_id: 'id' },
+  },
+  facturacion_cabify: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Datos de Cabify usados en la facturación semanal (importe generado, horas de conexión, efectivo).',
+    columnas: { id: 'id', periodo_id: 'id', conductor_id: 'id', conductor_nombre: 'texto', conductor_dni: 'texto', conductor_email: 'texto', vehiculo_patente: 'texto', importe_contrato: 'numero', excedentes: 'numero', horas_conexion: 'numero', importe_generado: 'numero', importe_generado_bonos: 'numero', generado_efectivo: 'numero', created_at: 'fecha', updated_at: 'fecha', sede_id: 'id' },
+  },
+  conductores_semana_facturacion: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Conductores incluidos en cada semana de facturación con patente, modalidad y valor de alquiler.',
+    columnas: { id: 'id', numero_dni: 'texto', semana: 'numero', anio: 'numero', created_at: 'fecha', estado: 'texto', patente: 'texto', modalidad: 'texto', valor_alquiler: 'numero', sede_id: 'id' },
+  },
+  saldos_conductores: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Saldo actual de cada conductor (deuda o a favor) y mora acumulada.',
+    columnas: { id: 'id', conductor_id: 'id', conductor_nombre: 'texto', conductor_dni: 'texto', conductor_cuit: 'texto', saldo_actual: 'numero', dias_mora: 'numero', monto_mora_acumulada: 'numero', ultima_actualizacion: 'fecha', created_at: 'fecha', updated_at: 'fecha', fecha_referencia: 'fecha', sede_id: 'id' },
+  },
+  v_ultimo_saldo_conductor: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Último saldo pendiente de cada conductor.',
+    columnas: { conductor_id: 'id', saldo_pendiente: 'numero' },
+  },
+  control_saldos: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Movimientos del saldo de cada conductor por semana (adeudado, a favor, pendiente, mora).',
+    columnas: { id: 'id', conductor_id: 'id', conductor_nombre: 'texto', conductor_dni: 'texto', conductor_cuit: 'texto', semana: 'numero', anio: 'numero', periodo_id: 'id', saldo_adeudado: 'numero', saldo_a_favor: 'numero', saldo_pendiente: 'numero', created_at: 'fecha', updated_at: 'fecha', dias_mora: 'numero', interes_mora: 'numero', tipo_movimiento: 'texto', monto_movimiento: 'numero', referencia: 'texto', created_by_name: 'texto', sede_id: 'id', saldo_previo: 'numero' },
+  },
+  pagos_conductores: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Pagos registrados de los conductores (tipo de cobro, monto, fecha, semana).',
+    columnas: { id: 'id', conductor_id: 'id', tipo_cobro: 'texto', referencia_id: 'texto', referencia_tabla: 'texto', numero_cuota: 'numero', monto: 'numero', fecha_pago: 'fecha', referencia: 'texto', semana: 'numero', anio: 'numero', conductor_nombre: 'texto', created_at: 'fecha', sede_id: 'id', created_by_name: 'texto' },
+  },
+  abonos_conductores: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Abonos (pagos o ajustes) cargados a conductores, con concepto y semana.',
+    columnas: { id: 'id', conductor_id: 'id', tipo: 'texto', monto: 'numero', concepto: 'texto', referencia: 'texto', fecha_abono: 'fecha', created_by: 'id', created_by_name: 'texto', created_at: 'fecha', anio: 'numero', semana: 'numero', sede_id: 'id' },
+  },
+  cobros_fraccionados: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Cobros en cuotas a conductores: monto total, cuota, semana de aplicación y estado.',
+    columnas: { id: 'id', conductor_id: 'id', monto_total: 'numero', monto_cuota: 'numero', numero_cuota: 'numero', semana: 'numero', anio: 'numero', descripcion: 'texto', aplicado: 'booleano', fecha_aplicacion: 'fecha', total_cuotas: 'numero', created_at: 'fecha', updated_at: 'fecha', sede_id: 'id', estado: 'texto' },
+  },
+  penalidades_cuotas: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Cuotas de penalidades fraccionadas, con semana y si ya se aplicaron.',
+    columnas: { id: 'id', penalidad_id: 'id', numero_cuota: 'numero', monto_cuota: 'numero', semana: 'numero', anio: 'numero', aplicado: 'booleano', fecha_aplicacion: 'fecha', created_at: 'fecha', sede_id: 'id', estado: 'texto' },
+  },
+  excesos_kilometraje: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Excesos de kilometraje facturados por conductor y período.',
+    columnas: { id: 'id', conductor_id: 'id', vehiculo_id: 'id', periodo_id: 'id', km_recorridos: 'numero', km_base: 'numero', km_exceso: 'numero', rango: 'texto', porcentaje: 'numero', valor_alquiler: 'numero', monto_base: 'numero', iva_porcentaje: 'numero', iva_monto: 'numero', monto_total: 'numero', aplicado: 'booleano', fecha_aplicacion: 'fecha', created_at: 'fecha', sede_id: 'id' },
+  },
+  tickets_favor: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Tickets a favor del conductor (reintegros): tipo, monto, estado y período aplicado.',
+    columnas: { id: 'id', conductor_id: 'id', conductor_nombre: 'texto', conductor_dni: 'texto', tipo: 'texto', descripcion: 'texto', monto: 'numero', estado: 'texto', fecha_solicitud: 'fecha', fecha_aprobacion: 'fecha', fecha_aplicacion: 'fecha', motivo_rechazo: 'texto', periodo_aplicado_id: 'id', created_by: 'id', created_by_name: 'texto', created_at: 'fecha', updated_at: 'fecha', sede_id: 'id' },
+  },
+  garantias_conductores: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Garantía de cada conductor: monto total, cuota semanal, cuotas pagadas, monto pagado y devuelto, estado.',
+    columnas: { id: 'id', conductor_id: 'id', conductor_nombre: 'texto', conductor_dni: 'texto', conductor_cuit: 'texto', tipo_alquiler: 'texto', monto_total: 'numero', monto_cuota_semanal: 'numero', cuotas_totales: 'numero', cuotas_pagadas: 'numero', monto_pagado: 'numero', estado: 'texto', fecha_inicio: 'fecha', fecha_completada: 'fecha', created_at: 'fecha', updated_at: 'fecha', created_by: 'id', created_by_name: 'texto', semana_inicio: 'numero', anio_inicio: 'numero', sede_id: 'id', monto_devuelto: 'numero', monto_realmente_pagado: 'numero' },
+  },
+  garantias_pagos: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Pagos de cuotas de garantía.',
+    columnas: { id: 'id', garantia_id: 'id', conductor_id: 'id', numero_cuota: 'numero', monto: 'numero', fecha_pago: 'fecha', referencia: 'texto', created_at: 'fecha', semana: 'numero', anio: 'numero', sede_id: 'id' },
+  },
+  garantias_devoluciones: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Devoluciones de garantía a conductores.',
+    columnas: { id: 'id', garantia_id: 'id', conductor_id: 'id', monto: 'numero', fecha_devolucion: 'fecha', referencia: 'texto', created_at: 'fecha', created_by: 'id', created_by_name: 'texto', sede_id: 'id' },
+  },
+  garantias_ediciones_historial: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Historial de ediciones manuales de garantías (antes y después, motivo).',
+    columnas: { id: 'id', garantia_id: 'id', conductor_id: 'id', monto_pagado_anterior: 'numero', monto_pagado_nuevo: 'numero', monto_total_anterior: 'numero', monto_total_nuevo: 'numero', estado_anterior: 'texto', estado_nuevo: 'texto', motivo: 'texto', created_by: 'id', created_by_name: 'texto', created_at: 'fecha' },
+  },
+  control_garantias: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Movimientos de garantía por semana (facturado, pagado real, deuda acumulada).',
+    columnas: { id: 'id', garantia_id: 'id', conductor_id: 'id', conductor_nombre: 'texto', conductor_dni: 'texto', conductor_cuit: 'texto', semana: 'numero', anio: 'numero', periodo_id: 'id', tipo_movimiento: 'texto', monto_facturado: 'numero', monto_pagado_real: 'numero', delta_deuda: 'numero', facturado_acumulado: 'numero', pagado_real_acumulado: 'numero', cuotas_facturadas: 'numero', estado_garantia: 'texto', referencia: 'texto', observaciones: 'texto', created_at: 'fecha', created_by_name: 'texto', sede_id: 'id' },
+  },
+  promociones: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Promociones (por ejemplo licencia B1): código, período y si está activa.',
+    columnas: { id: 'id', codigo: 'texto', nombre: 'texto', activa: 'booleano', fecha_inicio: 'fecha', fecha_fin: 'fecha', created_at: 'fecha', updated_at: 'fecha', updated_by: 'id', updated_by_name: 'texto', descripcion: 'texto', clave: 'texto' },
+  },
+  promociones_historial: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Historial de cambios de las promociones.',
+    columnas: { id: 'numero', promocion_codigo: 'texto', activa: 'booleano', fecha_inicio: 'fecha', fecha_fin: 'fecha', registrado_at: 'fecha', cambiado_por: 'id', usuario_nombre: 'texto', cambio: 'texto', descripcion: 'texto', promocion_id: 'id' },
+  },
+  promocion_b1_pagos: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Pagos diarios de la promoción licencia B1 (adelantos de la facturación semanal).',
+    columnas: { id: 'id', conductor_id: 'id', origen: 'texto', fecha: 'fecha', monto: 'numero', cresium_movimiento_id: 'id', pagador: 'texto', cuit: 'texto', nota: 'texto', created_by: 'id', created_by_name: 'texto', created_at: 'fecha', anulado_at: 'fecha', anulado_by: 'id', anulado_by_name: 'texto', editado_at: 'fecha', editado_by: 'id', editado_by_name: 'texto', abono_id: 'id' },
+  },
+  conceptos_nomina: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Conceptos de facturación con su precio base, IVA y precio final.',
+    columnas: { id: 'id', codigo: 'texto', descripcion: 'texto', precio_base: 'numero', iva_porcentaje: 'numero', precio_final: 'numero', tipo: 'texto', es_variable: 'booleano', aplica_turno: 'booleano', aplica_cargo: 'booleano', activo: 'booleano', orden: 'numero', created_at: 'fecha', updated_at: 'fecha', created_by_name: 'texto', updated_by: 'texto', tipo_parametro: 'texto', precio_semanal: 'numero', es_semanal: 'booleano' },
+  },
+  conceptos_facturacion_historial: {
+    modulo: 'Facturación',
+    permiso: 'administracion:read',
+    descripcion: 'Historial de precios de los conceptos de facturación con su vigencia.',
+    columnas: { id: 'id', concepto_id: 'id', codigo: 'texto', descripcion: 'texto', precio_base: 'numero', iva_porcentaje: 'numero', precio_final: 'numero', fecha_vigencia_desde: 'fecha', fecha_vigencia_hasta: 'fecha', created_at: 'fecha' },
+  },
+  user_profiles: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Usuarios del sistema: nombre, email, rol, sede y si está activo. Sin contraseñas.',
+    columnas: { id: 'id', full_name: 'texto', role_id: 'id', is_active: 'booleano', created_at: 'fecha', updated_at: 'fecha', phone: 'texto', email: 'texto', sede_id: 'id', puede_cambiar_sede: 'booleano', ver_todas_sedes: 'booleano' },
+  },
+  roles: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Roles de usuario.',
+    columnas: { id: 'id', name: 'texto', description: 'texto', created_at: 'fecha' },
+  },
+  menus: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Menús del sistema.',
+    columnas: { id: 'id', name: 'texto', label: 'texto', icon: 'texto', route: 'texto', order_index: 'numero', is_active: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  submenus: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Submenús del sistema.',
+    columnas: { id: 'id', menu_id: 'id', parent_id: 'id', name: 'texto', label: 'texto', icon: 'texto', route: 'texto', order_index: 'numero', level: 'numero', is_active: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  role_menu_permissions: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Permisos de cada rol por menú (ver, crear, editar, eliminar).',
+    columnas: { id: 'id', role_id: 'id', menu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  role_submenu_permissions: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Permisos de cada rol por submenú.',
+    columnas: { id: 'id', role_id: 'id', submenu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  role_tab_permissions: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Permisos de cada rol por pestaña.',
+    columnas: { id: 'id', role_id: 'id', tab_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  user_menu_permissions: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Permisos individuales de usuarios por menú.',
+    columnas: { id: 'id', user_id: 'id', menu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_by: 'id', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  user_submenu_permissions: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Permisos individuales de usuarios por submenú.',
+    columnas: { id: 'id', user_id: 'id', submenu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_by: 'id', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  user_tab_permissions: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Permisos individuales de usuarios por pestaña.',
+    columnas: { id: 'id', user_id: 'id', tab_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  cron_jobs: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Procesos automáticos (sincronizaciones): horario, si está activo y resultado de la última ejecución.',
+    columnas: { id: 'id', nombre: 'texto', descripcion: 'texto', schedule: 'texto', tipo: 'texto', integracion: 'texto', activo: 'booleano', ultima_ejecucion: 'fecha', ultimo_estado: 'texto', ultimo_error: 'texto', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  mynos_prompts: {
+    modulo: 'Administración',
+    permiso: 'administracion:read',
+    descripcion: 'Prompts del chatbot.',
+    columnas: { id: 'numero', created_at: 'fecha', updated_at: 'fecha', slug: 'texto', prompt: 'texto' },
+  },
 };
 
 /** Columnas que existen en la base pero no se exponen (referencia para revisar). */
@@ -513,5 +739,9 @@ export const COLUMNAS_EXCLUIDAS = {
   movimientos: ['documento_url'],
   proveedores: ['informacion_pago'],
   zonas_peligrosas: ['poligono'],
+  periodos_facturacion: ['lock_token', 'procesando_desde', 'procesando_por', 'procesando_actual', 'procesando_total'], // control interno del cierre
+  tickets_favor: ['comprobante_url'],
+  user_profiles: ['avatar_url', 'bio', 'preferences', 'must_change_password'],
+  cron_jobs: ['comando', 'metadata'],
   kpi_diario: ['fn', 'ac', 'co', 'cc', 'fa', 'fg', 'ft', 'pe'], // indicadores de facturación
 };
