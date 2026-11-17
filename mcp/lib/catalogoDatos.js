@@ -3,18 +3,20 @@
 // describir_datos, consultar_datos y contar_datos).
 //
 // Cada dataset pide un permiso: datos:read (operación) salvo los que tienen
-// `permiso: 'administracion:read'` (facturación, usuarios, roles, procesos), que se
-// agregaron el 2026-11-17 y solo los ve una key con ese permiso.
+// `permiso: 'administracion:read'` (facturación), que solo los ve una key con ese
+// permiso. Un dataset puede sumar columnas para otro permiso con `columnasPorPermiso`
+// (por ejemplo los indicadores de facturación de kpi_diario).
 //
 // Generado el 2026-11-06 a partir de la base y revisado a mano. Con datos:read quedan AFUERA:
 //   - Facturación (facturación, saldos, pagos, abonos, garantías, cobros fraccionados,
 //     períodos, tickets, excesos facturables): está en administracion:read.
-//   - Contabilidad (Alegra, Cresium): afuera para todas las keys.
+//   - Alegra y Cresium: están en Integraciones (datos:read), sin CUIT, cuentas ni links.
 //   - Parámetros (conceptos de facturación, parámetros del sistema, grupos de flota,
 //     rango de seguimiento de guías, cuentas de Cabify).
 //   - Seguridad y sistema (usuarios, roles, permisos, API keys, logs, sincronizaciones,
 //     prompts), respaldos y tablas temporales.
-//   - Titulares de vehículos y ofertas de locación (datos personales de terceros).
+//   - Datos personales de titulares (DNI/CUIT, domicilio, contacto, cónyuge): titulares y
+//     ofertas_locacion están, pero sin esas columnas.
 // Columnas quitadas: contraseñas y tokens, CBU, antecedentes, contactos de emergencia,
 // fecha de nacimiento, domicilio y coordenadas de personas, links a documentos y Drive,
 // datos de terceros en siniestros, BCRA/antecedentes de leads y estado de facturación. Ver COLUMNAS_EXCLUIDAS abajo.
@@ -90,7 +92,7 @@ export const CATALOGO = {
   },
   vehiculos: {
     modulo: 'Vehículos',
-    descripcion: 'Flota: patente, marca, modelo, año, estado, kilometraje, GNC, telepase, vencimientos, sede.',
+    descripcion: 'Flota: patente, marca, modelo, año, estado, kilometraje, GNC, telepase, vencimientos, sede. Vencimiento del seguro: usar vencimiento_seguro (se sincroniza con Vehículos > Vencimientos); seguro_vigencia es un dato manual de la ficha y no se mantiene. Estado actual con desde cuándo: mejor v_estado_flota_hoy. Excluir dados de baja: deleted_at vacío.',
     columnas: { id: 'id', patente: 'texto', marca: 'texto', modelo: 'texto', anio: 'numero', color: 'texto', tipo_id: 'id', tipo_combustible_id: 'id', tipo_gps_id: 'id', gps_uss: 'texto', numero_motor: 'texto', numero_chasis: 'texto', provisoria: 'texto', estado_id: 'id', kilometraje_actual: 'numero', fecha_adquisicion: 'fecha', fecha_ulti_inspeccion: 'fecha', fecha_prox_inspeccion: 'fecha', seguro_numero: 'texto', seguro_vigencia: 'fecha', notas: 'texto', titular: 'texto', created_by: 'id', created_at: 'fecha', updated_at: 'fecha', tipo_combustible: 'texto', tipo_vehiculo: 'texto', tipo_gps: 'texto', traccar: 'booleano', updated_by: 'texto', created_by_name: 'texto', sede_id: 'id', deleted_at: 'fecha', gnc: 'booleano', telepase: 'booleano', cobertura: 'texto', kilometraje_geotab: 'numero', kilometraje_geotab_updated_at: 'fecha', kilometraje_uss_updated_at: 'fecha', grupo_flota: 'texto', cantidad_llaves: 'numero', lugar_radicacion: 'texto', vencimiento_seguro: 'fecha', vto_vtv_aplica: 'booleano', vto_vtv_fecha: 'fecha', vto_gnc_aplica: 'booleano', vto_gnc_fecha: 'fecha', vto_matafuego_aplica: 'booleano', vto_matafuego_fecha: 'fecha', categoria: 'texto', guia_responsable: 'texto', motivo_cambio_estado: 'texto' },
   },
   vehiculos_estados: {
@@ -181,7 +183,7 @@ export const CATALOGO = {
   leads: {
     modulo: 'Leads',
     descripcion: 'Leads (candidatos): datos de contacto, estado, sede, fuente y responsables.',
-    columnas: { id: 'id', nombre_completo: 'texto', apellido: 'texto', email: 'texto', phone: 'texto', user_id: 'texto', fecha_creacion: 'fecha', last_seen: 'fecha', last_contacted: 'fecha', last_heard_from: 'fecha', country: 'texto', region: 'texto', city: 'texto', timezone: 'texto', sede: 'texto', utm_campaign: 'texto', utm_content: 'texto', utm_medium: 'texto', utm_source: 'texto', utm_term: 'texto', whatsapp_number: 'texto', estado_de_lead: 'texto', agente_asignado: 'texto', entrevistador_asignado: 'texto', patente: 'texto', turno: 'texto', companero: 'texto', tiempo_de_antiguedad: 'texto', tipo: 'texto', dni: 'texto', primer_nombre: 'texto', ultima_actividad: 'fecha', especialista_onboarding: 'texto', nombre_completo_2: 'texto', edad: 'numero', zona: 'texto', fuente_de_lead: 'texto', licencia: 'texto', monotributo: 'texto', experiencia_previa: 'texto', acepta_oferta: 'booleano', administrativo_asignado: 'texto', dataentry_asignado: 'texto', agente_logistico_asignado: 'texto', fecha_carga: 'fecha', fase_de_preguntas: 'texto', asistente_virtual: 'texto', documentos_pendientes: 'texto', cerrado_timeout_wpp: 'booleano', guia_asignado: 'texto', causal_de_cierre: 'texto', ayuda_entrevista: 'texto', codigo_referido: 'texto', anio_de_auto: 'texto', km_de_auto: 'texto', marca_y_modelo_de_vehiculo: 'texto', sede_vehiculo: 'texto', created_at: 'fecha', updated_at: 'fecha', experiencia_manejo: 'texto', id_lead: 'texto', estado_civil: 'texto', nacionalidad: 'texto', cuit: 'texto', proceso: 'texto', entrevista_ia: 'texto', induccion: 'texto', disponibilidad: 'fecha', estado_direccion: 'texto', clasificacion_domicilio: 'texto', d1: 'texto', vencimiento_licencia: 'fecha', cuenta_cabify: 'texto', cochera: 'texto', rueda: 'texto', fecha_de_inicio: 'fecha', mail_de_respaldo: 'texto', observaciones: 'texto', sede_id: 'id', fecha_convertido: 'fecha', usuario: 'texto', id_conversation: 'texto', resultado_hireflix: 'texto', resumen_hireflix: 'texto', id_hireflix: 'texto', numero_licencia: 'texto', categorias_licencia: 'json', estado_licencia: 'texto', tipo_licencia: 'texto', motivo_desinteres: 'texto', estado_manual_at: 'fecha', dispuesto_a_sacar_d1: 'texto', id_fuente: 'texto', fuente_pauta: 'texto', cuenta_didi: 'texto', referido: 'booleano', embajador_id: 'id', telefono_secundario: 'texto', motivo_sin_monotributo: 'texto' },
+    columnas: { id: 'id', nombre_completo: 'texto', apellido: 'texto', email: 'texto', phone: 'texto', user_id: 'texto', fecha_creacion: 'fecha', last_seen: 'fecha', last_contacted: 'fecha', last_heard_from: 'fecha', country: 'texto', region: 'texto', city: 'texto', timezone: 'texto', sede: 'texto', utm_campaign: 'texto', utm_content: 'texto', utm_medium: 'texto', utm_source: 'texto', utm_term: 'texto', whatsapp_number: 'texto', estado_de_lead: 'texto', agente_asignado: 'texto', entrevistador_asignado: 'texto', patente: 'texto', turno: 'texto', companero: 'texto', tiempo_de_antiguedad: 'texto', tipo: 'texto', dni: 'texto', primer_nombre: 'texto', ultima_actividad: 'fecha', especialista_onboarding: 'texto', nombre_completo_2: 'texto', edad: 'numero', zona: 'texto', fuente_de_lead: 'texto', licencia: 'texto', monotributo: 'texto', experiencia_previa: 'texto', acepta_oferta: 'booleano', administrativo_asignado: 'texto', dataentry_asignado: 'texto', agente_logistico_asignado: 'texto', fecha_carga: 'fecha', fase_de_preguntas: 'texto', asistente_virtual: 'texto', documentos_pendientes: 'texto', cerrado_timeout_wpp: 'booleano', guia_asignado: 'texto', causal_de_cierre: 'texto', ayuda_entrevista: 'texto', codigo_referido: 'texto', anio_de_auto: 'texto', km_de_auto: 'texto', marca_y_modelo_de_vehiculo: 'texto', sede_vehiculo: 'texto', created_at: 'fecha', updated_at: 'fecha', experiencia_manejo: 'texto', id_lead: 'texto', estado_civil: 'texto', nacionalidad: 'texto', cuit: 'texto', proceso: 'texto', entrevista_ia: 'texto', induccion: 'texto', disponibilidad: 'fecha', estado_direccion: 'texto', clasificacion_domicilio: 'texto', d1: 'texto', vencimiento_licencia: 'fecha', cuenta_cabify: 'texto', cochera: 'texto', rueda: 'texto', fecha_de_inicio: 'fecha', mail_de_respaldo: 'texto', observaciones: 'texto', sede_id: 'id', fecha_convertido: 'fecha', usuario: 'texto', id_conversation: 'texto', numero_licencia: 'texto', categorias_licencia: 'json', estado_licencia: 'texto', tipo_licencia: 'texto', motivo_desinteres: 'texto', estado_manual_at: 'fecha', dispuesto_a_sacar_d1: 'texto', id_fuente: 'texto', fuente_pauta: 'texto', cuenta_didi: 'texto', referido: 'booleano', embajador_id: 'id', telefono_secundario: 'texto', motivo_sin_monotributo: 'texto' },
   },
   parejas_lead: {
     modulo: 'Leads',
@@ -270,7 +272,7 @@ export const CATALOGO = {
   },
   multas_historico: {
     modulo: 'Multas y Telepase',
-    descripcion: 'Multas de tránsito por patente: fecha, importe, lugar, conductor responsable, estado.',
+    descripcion: 'Multas de tránsito por patente: fecha, importe, lugar, conductor responsable, estado. El importe es texto con formatos mezclados: para sumar u ordenar por importe usar v_multas_historico (importe_numero).',
     columnas: { id: 'numero', created_at: 'fecha', patente: 'texto', fecha_infraccion: 'fecha', importe: 'texto', lugar: 'texto', detalle: 'texto', fecha_anotacion: 'fecha', conductor_responsable: 'texto', observaciones: 'texto', infraccion: 'texto', lugar_detalle: 'texto', ibutton: 'texto', origen_actualizacion: 'texto', pagado: 'booleano', sede_id: 'id', deleted_at: 'fecha', deleted_reason: 'texto', deleted_by: 'texto', importe_descuento: 'texto', fecha_vencimiento_descuento: 'fecha', desestimada_at: 'fecha', desestimada_motivo: 'texto', desestimada_by: 'texto', updated_at: 'fecha', updated_by: 'texto', updated_by_name: 'texto', multa_origen_id: 'numero' },
   },
   telepase_historico: {
@@ -405,8 +407,11 @@ export const CATALOGO = {
   },
   kpi_diario: {
     modulo: 'Indicadores',
-    descripcion: 'KPIs diarios por sede: vi = vehículos ingresados, cd = conductores en calle al cierre del día, al = altas (primer turno), ba = bajas.',
+    descripcion: 'KPIs diarios por sede: vi = vehículos ingresados, cd = conductores en calle al cierre del día, al = altas (primer turno), ba = bajas. Con permiso de administración también: fn = facturado (alquiler + garantía + Toshipass), ac = a cobrar, co = cobrado (Cabify + manual), cc = cobrado por Cabify, fa = alquiler, fg = garantía, ft = Toshipass (repartidos por día) y pe = estado del período (abierto/cerrado).',
     columnas: { fecha: 'fecha', sede_id: 'id', vi: 'numero', cd: 'numero', al: 'numero', ba: 'numero', calculado_en: 'fecha' },
+    columnasPorPermiso: {
+      'administracion:read': { fn: 'numero', ac: 'numero', co: 'numero', cc: 'numero', fa: 'numero', fg: 'numero', ft: 'numero', pe: 'texto' },
+    },
   },
   kpi_bajas: {
     modulo: 'Indicadores',
@@ -503,10 +508,79 @@ export const CATALOGO = {
     descripcion: 'Catálogo de tipos de zona.',
     columnas: { id: 'id', codigo: 'texto', nombre: 'texto', color: 'texto', descripcion: 'texto', activo: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
   },
+  twochat_contactos: {
+    modulo: 'Integraciones',
+    descripcion: 'Contactos de conductores sincronizados con 2Chat (WhatsApp): teléfono y estado de la sincronización.',
+    columnas: { id: 'id', conductor_id: 'id', twochat_contact_uuid: 'texto', telefono: 'texto', estado: 'texto', error: 'texto', sincronizado_por: 'id', created_at: 'fecha', updated_at: 'fecha' },
+  },
+  twochat_llamadas: {
+    modulo: 'Integraciones',
+    descripcion: 'Llamadas de 2Chat: fecha, dirección (entrante/saliente), agente, número, resultado, duración en segundos y costo en USD. Cruza con conductores (conductor_id) y leads (lead_id).',
+    columnas: { uuid: 'texto', fecha: 'fecha', direccion: 'texto', agente_id: 'texto', agente: 'texto', numero: 'texto', numero_clave: 'texto', status_2chat: 'texto', resultado: 'texto', duracion: 'numero', por_whatsapp: 'booleano', costo_usd: 'numero', conductor_id: 'id', lead_id: 'id', sincronizado_en: 'fecha' },
+  },
+  cresium_movimientos: {
+    modulo: 'Integraciones',
+    descripcion: 'Movimientos bancarios de Cresium por empresa: fecha, tipo, dirección (entrada/salida), contraparte, banco, importe e impuesto, y su carga en Alegra (alegra_estado, alegra_conciliado). Sin CUIT ni cuenta de la contraparte.',
+    columnas: { id: 'id', empresa: 'texto', cresium_id: 'numero', fecha: 'fecha', procesado_en: 'fecha', tipo: 'texto', estado: 'texto', direccion: 'texto', contraparte: 'texto', banco_contraparte: 'texto', importe: 'numero', impuesto: 'numero', tag: 'texto', nota: 'texto', alegra_estado: 'texto', alegra_pago_id: 'texto', alegra_impuesto_pago_id: 'texto', alegra_ajuste_pago_id: 'texto', alegra_contacto_id: 'texto', alegra_categoria_id: 'texto', alegra_factura_id: 'texto', alegra_detalle: 'texto', alegra_error: 'texto', alegra_cargado_por: 'id', alegra_cargado_en: 'fecha', created_at: 'fecha', updated_at: 'fecha', alegra_conciliacion_id: 'texto', alegra_conciliado: 'booleano', alegra_conciliado_en: 'fecha' },
+  },
+  alegra_comprobantes: {
+    modulo: 'Integraciones',
+    descripcion: 'Comprobantes de proveedores importados para cargar en Alegra, por empresa: fecha, tipo, punto de venta y número, CAE, proveedor, moneda, neto gravado, IVA, no gravado, exentas, otros tributos y total, con la categoría y el estado de la carga en Alegra. Sin CUIT del proveedor ni links a los archivos.',
+    columnas: { id: 'id', empresa: 'texto', importacion_id: 'id', fila: 'numero', fecha: 'fecha', tipo_cod: 'texto', tipo: 'texto', punto_venta: 'numero', numero: 'numero', cae: 'texto', proveedor: 'texto', moneda: 'texto', tipo_cambio: 'numero', neto_gravado: 'numero', iva: 'numero', no_gravado: 'numero', exentas: 'numero', otros_tributos: 'numero', total: 'numero', cuenta_excel: 'texto', alegra_categoria_id: 'texto', alegra_categoria_nombre: 'texto', estado: 'texto', revisar: 'texto', alegra_tipo: 'texto', alegra_id: 'texto', alegra_numero: 'texto', alegra_total: 'numero', alegra_proveedor_id: 'texto', proveedor_creado: 'booleano', alegra_factura_asociada: 'texto', alegra_detalle: 'texto', alegra_error: 'texto', cargado_por: 'id', cargado_en: 'fecha', created_at: 'fecha', updated_at: 'fecha', confirmado: 'booleano', confirmado_por: 'id', confirmado_en: 'fecha' },
+  },
+  cabify_efectivo_log: {
+    modulo: 'Integraciones',
+    descripcion: 'Registro de los cambios de cobro en efectivo en Cabify por conductor y semana (alquiler, garantía, cobro por app, resultado).',
+    columnas: { id: 'id', conductor_dni: 'texto', conductor_nombre: 'texto', cabify_driver_id: 'texto', cabify_company_id: 'texto', accion: 'texto', semana: 'numero', anio: 'numero', alquiler: 'numero', garantia: 'numero', cobro_app: 'numero', estado_anterior: 'texto', resultado: 'texto', error_mensaje: 'texto', created_at: 'fecha' },
+  },
+  kpi_forecast: {
+    modulo: 'Reportes',
+    descripcion: 'Objetivos (forecast) semanales por sede: flota, ocupación y operatividad. Con permiso de administración también los de facturación y cobranza.',
+    columnas: { id: 'id', semana_inicio: 'fecha', sede_id: 'id', flota: 'numero', ocupacion: 'numero', operatividad: 'numero', actualizado_por: 'texto', updated_at: 'fecha' },
+    columnasPorPermiso: {
+      'administracion:read': { facturacion: 'numero', cobranza: 'numero' },
+    },
+  },
+  dashboard_insights: {
+    modulo: 'Reportes',
+    descripcion: 'Conclusiones generadas para el Dashboard Directivo por sede y semana (insights en JSON).',
+    columnas: { sede_key: 'texto', desde: 'fecha', hasta: 'fecha', semana: 'fecha', insights: 'json', modelo: 'texto', motivo: 'texto', generado_en: 'fecha' },
+  },
+  ofertas_locacion: {
+    modulo: 'Vehículos',
+    descripcion: 'Ofertas de locación de vehículos de terceros: vehículo, canon mensual, vencimientos, checklist de elementos, costos y estado. Del titular solo el nombre y el tipo.',
+    columnas: { id: 'id', vehiculo_titular_id: 'id', vehiculo_id: 'id', titular_id: 'id', titular_nombre: 'texto', patente: 'texto', marca: 'texto', modelo: 'texto', anio: 'texto', color: 'texto', numero_motor: 'texto', numero_chasis: 'texto', kilometraje: 'numero', fecha_ingreso: 'fecha', fecha_inicio_alquiler: 'fecha', canon_mensual: 'numero', socio: 'texto', nivel_nafta: 'texto', titulo_automotor: 'texto', tipo_cedula: 'texto', cantidad_llaves: 'numero', vencimiento_seguro: 'fecha', vto_vtv: 'fecha', vto_gnc: 'fecha', vto_matafuego: 'fecha', criquet: 'texto', mariposa: 'texto', llave_tuercas: 'texto', rueda_auxilio: 'texto', balizas: 'texto', chaleco_reflectivo: 'texto', guantes: 'texto', botiquin: 'texto', limpieza_interior: 'texto', limpieza_exterior: 'texto', detalle_parte_frontal: 'texto', detalle_parte_trasera: 'texto', detalle_lateral_derecho: 'texto', detalle_lateral_izquierdo: 'texto', detalle_capot_techo: 'texto', detalle_interior: 'texto', detalle_otros: 'texto', informe_dominio: 'texto', informe_multas: 'texto', gravamenes: 'texto', costo_multas: 'numero', costo_patente: 'numero', costo_mantenimiento_reparacion: 'numero', otros_costos: 'numero', estado: 'texto', sede_id: 'id', created_at: 'fecha', updated_at: 'fecha', created_by: 'id', created_by_name: 'texto', titular_tipo: 'texto', updated_by: 'id', updated_by_name: 'texto' },
+  },
+  titulares: {
+    modulo: 'Vehículos',
+    descripcion: 'Titulares de vehículos: nombre o razón social, tipo y estado. Sin DNI/CUIT, domicilio, email, teléfono, cónyuge ni representante.',
+    columnas: { id: 'id', tipo: 'texto', nombres: 'texto', apellidos: 'texto', razon_social: 'texto', estado: 'texto', sede_id: 'id', created_at: 'fecha', updated_at: 'fecha', created_by_name: 'texto', updated_by: 'id', updated_by_name: 'texto' },
+  },
+  // Vistas de sql/mcp_vistas.sql (respuestas listas para las preguntas frecuentes).
+  v_estado_flota_hoy: {
+    modulo: 'Vehículos',
+    descripcion: 'VISTA LISTA para "estado de la flota hoy": cada vehículo con su estado, desde cuándo (estado_desde, dias_en_estado), si está en taller y cuál, grupo (en_uso, pkg_on, pkg_off, taller, retenido) y en_flota (false = jubilado, devuelto, robo o destrucción). Ya trae sede_nombre y excluye patentes de prueba. Preferirla a cruzar vehiculos con estados e historial.',
+    columnas: { vehiculo_id: 'id', patente: 'texto', marca: 'texto', modelo: 'texto', anio: 'numero', grupo_flota: 'texto', kilometraje_actual: 'numero', sede_id: 'id', sede_nombre: 'texto', estado_codigo: 'texto', estado: 'texto', grupo: 'texto', en_flota: 'booleano', estado_desde: 'fecha', dias_en_estado: 'numero', en_taller: 'booleano', taller: 'texto', motivo_estado: 'texto' },
+  },
+  v_vencimientos_proximos: {
+    modulo: 'Vehículos',
+    descripcion: 'VISTA LISTA para "vencimientos próximos": documentos (VTV, GNC, Matafuegos, Seguro, etc.) vencidos o que vencen en los próximos 60 días, sin vehículos devueltos ni jubilados ni patentes de prueba. dias_restantes negativo = vencido. Ya trae sede_nombre y el estado del vehículo.',
+    columnas: { id: 'id', patente: 'texto', documento: 'texto', fecha_vencimiento: 'fecha', dias_restantes: 'numero', prioridad: 'texto', solicitado: 'booleano', fecha_iniciar_gestion: 'fecha', observacion: 'texto', vehiculo_id: 'id', marca: 'texto', modelo: 'texto', sede_id: 'id', sede_nombre: 'texto', estado_vehiculo_codigo: 'texto', estado_vehiculo: 'texto' },
+  },
+  v_leads_semanales: {
+    modulo: 'Leads',
+    descripcion: 'VISTA LISTA para "leads por semana": cantidad de leads por semana (lunes), fuente y sede, con cuántos se convirtieron en conductor y el porcentaje de conversión. Para totales por semana sumar con contar_datos (sumar: leads).',
+    columnas: { semana: 'fecha', fuente: 'texto', sede_id: 'id', sede_nombre: 'texto', leads: 'numero', convertidos: 'numero', conversion_pct: 'numero' },
+  },
+  v_multas_historico: {
+    modulo: 'Multas y Telepase',
+    descripcion: 'Multas con el importe como NÚMERO (importe_numero, importe_descuento_numero): usar esta para sumar, ordenar o filtrar por importe. Ya trae sede_nombre y excluye patentes de prueba. Multas vigentes: deleted_at y desestimada_at vacíos.',
+    columnas: { id: 'numero', created_at: 'fecha', patente: 'texto', fecha_infraccion: 'fecha', importe: 'texto', importe_numero: 'numero', importe_descuento: 'texto', importe_descuento_numero: 'numero', fecha_vencimiento_descuento: 'fecha', lugar: 'texto', lugar_detalle: 'texto', detalle: 'texto', infraccion: 'texto', fecha_anotacion: 'fecha', conductor_responsable: 'texto', observaciones: 'texto', ibutton: 'texto', origen_actualizacion: 'texto', pagado: 'booleano', sede_id: 'id', sede_nombre: 'texto', deleted_at: 'fecha', deleted_reason: 'texto', desestimada_at: 'fecha', desestimada_motivo: 'texto', updated_at: 'fecha', multa_origen_id: 'numero' },
+  },
   // ---------------------------------------------------------------------------
-  // Administración (permiso administracion:read, aparte de datos:read).
-  // Facturación, usuarios, roles y permisos de menú, procesos y prompts. Siguen afuera
-  // las API keys, api_users y sesiones (credenciales) y los respaldos.
+  // Facturación (permiso administracion:read, aparte de datos:read): solo la ve una
+  // key con ese permiso. Usuarios, roles, permisos, menús, procesos, prompts, API keys
+  // y respaldos siguen afuera para todas las keys.
   // ---------------------------------------------------------------------------
   periodos_facturacion: {
     modulo: 'Facturación',
@@ -652,85 +726,14 @@ export const CATALOGO = {
     descripcion: 'Historial de precios de los conceptos de facturación con su vigencia.',
     columnas: { id: 'id', concepto_id: 'id', codigo: 'texto', descripcion: 'texto', precio_base: 'numero', iva_porcentaje: 'numero', precio_final: 'numero', fecha_vigencia_desde: 'fecha', fecha_vigencia_hasta: 'fecha', created_at: 'fecha' },
   },
-  user_profiles: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Usuarios del sistema: nombre, email, rol, sede y si está activo. Sin contraseñas.',
-    columnas: { id: 'id', full_name: 'texto', role_id: 'id', is_active: 'booleano', created_at: 'fecha', updated_at: 'fecha', phone: 'texto', email: 'texto', sede_id: 'id', puede_cambiar_sede: 'booleano', ver_todas_sedes: 'booleano' },
-  },
-  roles: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Roles de usuario.',
-    columnas: { id: 'id', name: 'texto', description: 'texto', created_at: 'fecha' },
-  },
-  menus: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Menús del sistema.',
-    columnas: { id: 'id', name: 'texto', label: 'texto', icon: 'texto', route: 'texto', order_index: 'numero', is_active: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  submenus: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Submenús del sistema.',
-    columnas: { id: 'id', menu_id: 'id', parent_id: 'id', name: 'texto', label: 'texto', icon: 'texto', route: 'texto', order_index: 'numero', level: 'numero', is_active: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  role_menu_permissions: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Permisos de cada rol por menú (ver, crear, editar, eliminar).',
-    columnas: { id: 'id', role_id: 'id', menu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  role_submenu_permissions: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Permisos de cada rol por submenú.',
-    columnas: { id: 'id', role_id: 'id', submenu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  role_tab_permissions: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Permisos de cada rol por pestaña.',
-    columnas: { id: 'id', role_id: 'id', tab_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  user_menu_permissions: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Permisos individuales de usuarios por menú.',
-    columnas: { id: 'id', user_id: 'id', menu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_by: 'id', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  user_submenu_permissions: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Permisos individuales de usuarios por submenú.',
-    columnas: { id: 'id', user_id: 'id', submenu_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_by: 'id', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  user_tab_permissions: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Permisos individuales de usuarios por pestaña.',
-    columnas: { id: 'id', user_id: 'id', tab_id: 'id', can_view: 'booleano', can_create: 'booleano', can_edit: 'booleano', can_delete: 'booleano', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  cron_jobs: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Procesos automáticos (sincronizaciones): horario, si está activo y resultado de la última ejecución.',
-    columnas: { id: 'id', nombre: 'texto', descripcion: 'texto', schedule: 'texto', tipo: 'texto', integracion: 'texto', activo: 'booleano', ultima_ejecucion: 'fecha', ultimo_estado: 'texto', ultimo_error: 'texto', created_at: 'fecha', updated_at: 'fecha' },
-  },
-  mynos_prompts: {
-    modulo: 'Administración',
-    permiso: 'administracion:read',
-    descripcion: 'Prompts del chatbot.',
-    columnas: { id: 'numero', created_at: 'fecha', updated_at: 'fecha', slug: 'texto', prompt: 'texto' },
-  },
 };
 
 /** Columnas que existen en la base pero no se exponen (referencia para revisar). */
 export const COLUMNAS_EXCLUIDAS = {
   conductores: ['fecha_nacimiento', 'direccion', 'contacto_emergencia', 'telefono_emergencia', 'antecedentes_penales', 'antecedentes_transito', 'foto_url', 'documentos_urls', 'cbu', 'drive_folder_url', 'url_documentacion', 'direccion_lat', 'direccion_lng', 'drive_contract_folder_url', 'parentesco_emergencia', 'direccion_emergencia', 'portal_password_hash', 'portal_must_change_password', 'direccion_pais', 'direccion_ciudad', 'direccion_geocode_fecha', 'estado_facturacion'],
   vehiculos: ['foto_url', 'documentos_urls', 'drive_folder_id', 'drive_folder_url', 'url_documentacion'],
-  leads: ['direccion', 'antecedentes_penales', 'contacto_de_emergencia', 'link_facturacion', 'url_folder', 'fecha_de_nacimiento', 'direccion_complementaria', 'latitud', 'longitud', 'dni_archivo', 'certificado_direccion', 'cbu', 'datos_de_emergencia', 'telefono_emergencia', 'parentesco_emergencia', 'direccion_emergencia', 'verificacion_emergencia', 'direccion_latitud', 'direccion_longitud', 'direccion_geocode_estado', 'direccion_geocode_fecha', 'direccion_pais', 'direccion_ciudad', 'bcra', 'rnr', 'fecha_rnr'],
+  leads: ['direccion', 'antecedentes_penales', 'contacto_de_emergencia', 'link_facturacion', 'url_folder', 'fecha_de_nacimiento', 'direccion_complementaria', 'latitud', 'longitud', 'dni_archivo', 'certificado_direccion', 'cbu', 'datos_de_emergencia', 'telefono_emergencia', 'parentesco_emergencia', 'direccion_emergencia', 'verificacion_emergencia', 'direccion_latitud', 'direccion_longitud', 'direccion_geocode_estado', 'direccion_geocode_fecha', 'direccion_pais', 'direccion_ciudad', 'bcra', 'rnr', 'fecha_rnr',
+    'resultado_hireflix', 'resumen_hireflix', 'id_hireflix'],
   programaciones_onboarding: ['direccion'],
   v_programaciones_onboarding: ['direccion'],
   siniestros: ['tercero_dni', 'tercero_telefono', 'carpeta_drive_url'],
@@ -739,9 +742,13 @@ export const COLUMNAS_EXCLUIDAS = {
   movimientos: ['documento_url'],
   proveedores: ['informacion_pago'],
   zonas_peligrosas: ['poligono'],
+  twochat_llamadas: ['grabacion'],
+  cresium_movimientos: ['cuit', 'cuenta_contraparte', 'raw', 'external_id'],
+  alegra_comprobantes: ['cuit', 'raw', 'drive_archivo_id', 'drive_nombre', 'drive_ruta', 'drive_link'],
+  dashboard_insights: ['resumen_hash'],
+  ofertas_locacion: ['titular_dni_cuit', 'titular_domicilio', 'titular_email', 'titular_cuit', 'titular_conyugue', 'drive_folder_url', 'titular_dni_conyugue'],
+  titulares: ['dni_cuit', 'domicilio', 'email', 'telefono', 'conyugue', 'dni_conyugue', 'nombre_conyugue', 'representante_administrativo', 'dni_representante', 'email_representante', 'domicilio_fiscal', 'created_by'],
   periodos_facturacion: ['lock_token', 'procesando_desde', 'procesando_por', 'procesando_actual', 'procesando_total'], // control interno del cierre
   tickets_favor: ['comprobante_url'],
-  user_profiles: ['avatar_url', 'bio', 'preferences', 'must_change_password'],
-  cron_jobs: ['comando', 'metadata'],
-  kpi_diario: ['fn', 'ac', 'co', 'cc', 'fa', 'fg', 'ft', 'pe'], // indicadores de facturación
+  // kpi_diario: fn, ac, co, cc, fa, fg, ft y pe solo con administracion:read (columnasPorPermiso)
 };
