@@ -150,6 +150,16 @@ export function LlamadaConductor({ conductorId, nombre, onClose }: LlamadaConduc
     return () => clearInterval(id)
   }, [estado])
 
+  // Al terminar, la barrita se cierra sola (4 s; con error 8 s, para poder leerlo)
+  // (onClose por ref: la pantalla lo pasa como función nueva en cada render)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    if (estado !== 'terminada' && estado !== 'error') return
+    const id = setTimeout(() => onCloseRef.current(), estado === 'error' ? 8000 : 4000)
+    return () => clearTimeout(id)
+  }, [estado])
+
   const activa = estado === 'llamando' || estado === 'sonando' || estado === 'en_curso'
   const colgar = () => {
     colgadaPorUsuario.current = true
