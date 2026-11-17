@@ -15,7 +15,36 @@ verificar el conector).
 
 ## Autenticacion
 
-Se requiere una **API key** para conectarse. Las API keys se generan desde la app de Toshify en **Administracion > Integraciones > MCP**.
+Dos formas, segun quien se conecta:
+
+### Personas: login con la cuenta de Toshibase (OAuth)
+
+Para el conector de Claude (claude.ai, Claude Teams, Desktop, Claude Code). Cada persona
+inicia sesion con su cuenta de Toshibase (Google o correo y contraseña) y el MCP le
+muestra **las mismas tablas que ve en el sistema**: las de las pantallas que tiene
+habilitadas en Menu por rol / Menu por usuario. Solo lectura. No hace falta API key.
+
+- `lib/oauth.js`: servidor de autorizacion OAuth 2.1 (registro dinamico, PKCE S256,
+  permiso de acceso de 1 hora y renovacion de 30 dias con rotacion). Endpoints:
+  `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`,
+  `/oauth/register`, `/oauth/authorize`, `/oauth/token`.
+- `lib/accesoUsuario.js`: permisos de la persona con la misma logica que la app (rol admin
+  ve todo; el resto, menus y submenus con `can_view` de `get_user_permissions`). Se
+  recalculan cada 2 minutos: desactivar a alguien o sacarle una pantalla rige enseguida.
+- `lib/pantallasDatos.js`: que pantallas usan cada dataset. **Generado** desde el codigo
+  de la app con `node mcp/generadores/generarPantallasDatos.mjs` (volver a correrlo cuando
+  cambien las pantallas o el catalogo). Facturacion solo con la pantalla de Facturacion.
+- Cada consulta queda en `api_request_log` con `user_id` y `user_email`.
+
+Requisitos: `sql/mcp_oauth.sql`; variables `VITE_SUPABASE_ANON_KEY` (para la pantalla de
+login) y opcional `MCP_PUBLIC_URL`; en Supabase Auth > URL Configuration, agregar
+`https://mcp.toshify.com.ar/oauth/authorize**` a las Redirect URLs (vuelta del login con
+Google).
+
+### Integraciones: API key
+
+Para sistemas (API REST para terceros, automatismos). Las API keys se generan desde la app
+de Toshify en **Administracion > Integraciones > MCP**.
 
 Enviar la API key de una de estas formas:
 - Header: `x-api-key: TU_API_KEY`
@@ -24,12 +53,15 @@ Enviar la API key de una de estas formas:
 
 ## Conectarlo a Claude
 
-- **claude.ai / Claude Desktop:** Configuracion > Conectores > Agregar conector personalizado,
-  URL `https://mcp.toshify.com.ar/mcp?apiKey=TU_API_KEY`, sin OAuth.
-- **Claude Code:** `claude mcp add --transport http toshify "https://mcp.toshify.com.ar/mcp?apiKey=TU_API_KEY"`
+- **claude.ai / Claude Teams / Desktop:** Configuracion > Conectores > Agregar conector
+  personalizado, URL `https://mcp.toshify.com.ar/mcp` (sin apiKey). Al conectar se abre el
+  login de Toshify; cada persona entra con su cuenta.
+- **Claude Code:** `claude mcp add --transport http toshify https://mcp.toshify.com.ar/mcp`
+  y despues `/mcp` para iniciar sesion.
+- Con API key (integraciones): `https://mcp.toshify.com.ar/mcp?apiKey=TU_API_KEY`.
 
 `/mcp` funciona sin sesion: cada request crea y cierra su propio servidor, no guarda estado
-en memoria. Rate limit: 120 requests por minuto por key.
+en memoria. Rate limit: 120 requests por minuto por key o sesion.
 
 ## Configuracion del cliente
 
@@ -48,34 +80,37 @@ en memoria. Rate limit: 120 requests por minuto por key.
 | Herramienta | Permiso | Descripcion |
 |-------------|---------|-------------|
 | `buscar_leads` | leads:read | Buscar leads por nombre, DNI, email, estado, sede |
-| `obtener_lead` | leads:read | Ver todos los datos de un lead por ID |
+| `obtener_lead` | leads:read | Ver un lead por ID (solo las columnas del dataset `leads` del catalogo) |
 | `actualizar_lead` | leads:update | Actualizar estado y datos de un lead |
-| `buscar_hireflix` | hireflix:read | Buscar registros historicos de Hireflix |
-| `listar_datos` | datos:read o administracion:read | Conjuntos de datos de operacion disponibles (modulo y descripcion) |
-| `describir_datos` | datos:read o administracion:read | Campos y tipos de un conjunto de datos |
-| `consultar_datos` | datos:read o administracion:read | Registros con filtros, orden y paginacion (max 200 por pagina) |
-| `contar_datos` | datos:read o administracion:read | Totales y cantidades agrupadas por campo o por dia/mes/anio |
+| `listar_datos` | datos:read o administracion:read | Conjuntos de datos disponibles para la key (modulo y descripcion) |
+| `describir_datos` | datos:read o administracion:read | Campos y tipos de uno o varios conjuntos de datos (hasta 15 por llamada) |
+| `consultar_datos` | datos:read o administracion:read | Registros con filtros, orden y paginacion (max 200 por pagina); agrega `sede_nombre` |
+| `contar_datos` | datos:read o administracion:read | Totales, cantidades agrupadas por campo o por dia/mes/anio, y suma/promedio de un campo numerico (`sumar`) |
+| `consultar_reporte` | datos:read (Directivo, Marketing) / administracion:read (KPI's) | Dashboards calculados por RPC de una lista fija, por GET (transaccion de solo lectura) |
 
 ### Datos de operacion (`datos:read`)
 
-Solo lectura sobre ~96 conjuntos de datos de operacion (conductores, vehiculos,
-asignaciones, leads, onboarding, incidencias y penalidades, siniestros, multas y
-telepase, inventario, visitas, guias, Cabify, telemetria e indicadores). El
+Solo lectura sobre ~110 conjuntos de datos de operacion (conductores, vehiculos con
+titulares y ofertas de locacion sin datos personales, asignaciones, leads, onboarding,
+incidencias y penalidades, siniestros, multas y telepase, inventario, visitas, guias,
+Cabify, telemetria, indicadores, integraciones —2Chat, Cresium, Alegra, Cabify efectivo— y
+reportes). Incluye vistas listas de `sql/mcp_vistas.sql`: `v_estado_flota_hoy`,
+`v_vencimientos_proximos`, `v_leads_semanales` y `v_multas_historico` (importe numerico).
+Las patentes de prueba (PRUEBA…, PRUB…, PRB…) se excluyen solas salvo `incluir_pruebas`. El
 catalogo es fijo en el servidor (`lib/catalogoDatos.js`): el cliente no puede leer
 otra tabla ni otra columna, y nunca puede escribir.
 
-Quedan afuera la facturacion (y saldos, pagos, garantias, cobros fraccionados),
-la contabilidad, todo lo de Parametros, usuarios/roles/permisos/keys/logs,
-respaldos y temporales, y las columnas sensibles (ver `COLUMNAS_EXCLUIDAS`).
+Quedan afuera la facturacion (va con `administracion:read`), todo lo de
+Parametros, usuarios/roles/permisos/menus/keys/logs/cron/prompts, respaldos y
+temporales, y las columnas sensibles (ver `COLUMNAS_EXCLUIDAS`).
 
 ### Administracion (`administracion:read`)
 
-Mismas cuatro herramientas, sobre los datasets del catalogo marcados con
+Mismas herramientas, sobre los datasets del catalogo marcados con
 `permiso: 'administracion:read'`: facturacion (periodos, facturas por conductor y
 detalle, saldos, pagos, abonos, garantias, cobros fraccionados, tickets,
-promociones, conceptos), usuarios, roles, permisos de menu, procesos automaticos
-y prompts. Solo lectura. Siguen afuera las API keys, api_users, sesiones,
-contabilidad (Alegra, Cresium) y respaldos. Una key ve solo los datasets de sus
+promociones, conceptos). Suma las columnas de facturacion de `kpi_diario` y
+`kpi_forecast` (`columnasPorPermiso`) y el reporte `dashboard_kpis`. Solo lectura. Una key ve solo los datasets de sus
 permisos: los demas responden como si no existieran.
 
 Los permisos se pueden editar desde la app (lapiz en cada key) y rigen en el
@@ -92,7 +127,6 @@ Cada API key tiene permisos granulares:
 |---------|-------------|
 | `leads:read` | Buscar y ver leads |
 | `leads:update` | Actualizar campos de leads |
-| `hireflix:read` | Buscar registros de Hireflix |
 
 | `leads:api` | Consumir la API REST de leads (solo lectura) |
 
@@ -231,7 +265,7 @@ direccion, edad, estado_de_lead, sede, fecha_creacion
 
 La tabla `leads` contiene ademas datos que **no se exponen** y no deben
 agregarse sin una decision explicita: `cbu`, `bcra`, `antecedentes_penales`,
-coordenadas del domicilio, contacto de emergencia, evaluaciones de Hireflix y
+coordenadas del domicilio, contacto de emergencia y
 `observaciones` (texto libre).
 
 ### `GET /api/v1/vehiculos` y `/vehiculos/:id`

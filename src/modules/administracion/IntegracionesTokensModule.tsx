@@ -1211,12 +1211,8 @@ const AVAILABLE_PERMISSIONS = [
   { value: 'leads:create', label: 'Leads: Crear', desc: 'Crear nuevos leads' },
   { value: 'leads:update', label: 'Leads: Escritura', desc: 'Actualizar campos de leads' },
   { value: 'leads:delete', label: 'Leads: Eliminar', desc: 'Eliminar leads' },
-  { value: 'hireflix:read', label: 'Hireflix: Lectura', desc: 'Buscar y ver registros de Hireflix' },
-  { value: 'datos:read', label: 'Datos de operación: Lectura', desc: 'Solo lectura de conductores, vehículos, asignaciones, leads, onboarding, incidencias, siniestros, multas, telepase, inventario, visitas, guías, telemetría e indicadores. Sin facturación ni parámetros. Para conectar Claude u otro asistente.' },
-  { value: 'administracion:read', label: 'Administración: Lectura', desc: 'Solo lectura de facturación (períodos, facturas por conductor y su detalle, saldos, pagos, abonos, garantías, cobros fraccionados, tickets, promociones y conceptos), usuarios, roles y permisos de menú, procesos automáticos y prompts. Sin API keys ni contraseñas. Nunca modifica nada.' },
-  { value: 'hireflix:create', label: 'Hireflix: Crear', desc: 'Crear registros de Hireflix' },
-  { value: 'hireflix:update', label: 'Hireflix: Escritura', desc: 'Actualizar registros de Hireflix' },
-  { value: 'hireflix:delete', label: 'Hireflix: Eliminar', desc: 'Eliminar registros de Hireflix' },
+  { value: 'datos:read', label: 'Datos de operación: Lectura', desc: 'Solo lectura de conductores, vehículos (con titulares y ofertas de locación, sin datos personales), asignaciones, leads, onboarding, incidencias, siniestros, multas, telepase, inventario, visitas, guías, telemetría, indicadores, integraciones (2Chat, Cresium, Alegra, Cabify) y reportes (Directivo, Marketing). Sin facturación ni parámetros. Para conectar Claude u otro asistente.' },
+  { value: 'administracion:read', label: 'Administración: Lectura', desc: 'Solo lectura de facturación: períodos, facturas por conductor y su detalle, saldos, pagos, abonos, garantías, cobros fraccionados, tickets, promociones y conceptos; más los importes de facturación de los indicadores y el Dashboard KPI\'s. Usuarios, roles, permisos y API keys quedan afuera. Nunca modifica nada.' },
   { value: 'leads:api', label: 'Leads: API REST (externos)', desc: 'Acceso de solo lectura a GET /api/v1/leads. Para terceros fuera de Toshify.' },
   { value: 'vehiculos:api', label: 'Vehiculos: API REST (externos)', desc: 'Solo lectura de GET /api/v1/vehiculos. Sin chasis, motor, titular ni poliza.' },
   { value: 'conductores:api', label: 'Conductores: API REST (externos)', desc: 'Solo lectura de GET /api/v1/conductores. Sin CBU, antecedentes ni datos de emergencia.' },
@@ -1230,7 +1226,7 @@ function McpTab() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newPermissions, setNewPermissions] = useState<string[]>(['leads:read', 'hireflix:read']);
+  const [newPermissions, setNewPermissions] = useState<string[]>(['leads:read', 'datos:read']);
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
@@ -1417,7 +1413,9 @@ function McpTab() {
           Servidor MCP para que chatbots y asistentes (como Claude) accedan a datos de Toshify.
           Cada API key tiene permisos granulares. Con "Datos de operación: Lectura" el asistente
           solo puede consultar datos de operación (sin facturación ni parámetros) y con
-          "Administración: Lectura", facturación, usuarios y roles. Nunca puede modificarlos.
+          "Administración: Lectura", también facturación. Nunca puede modificarlos. Las personas
+          no necesitan key: conectan https://mcp.toshify.com.ar/mcp en Claude, inician sesión con
+          su cuenta y ven las mismas tablas que en el sistema. Las keys quedan para integraciones.
         </p>
         <div style={{
           display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap',
