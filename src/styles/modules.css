@@ -411,6 +411,29 @@ input[type="checkbox"] {
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
+/* Cabecera y botones siempre a la vista (2026-11-17): cuando un modal es largo y
+   scrollea entero, la cabecera queda fija arriba y los botones fijos abajo, para
+   saber siempre qué se está leyendo. Vale para cualquier "*-modal-header",
+   "*-modal-title" (si no está dentro de una cabecera), "*-modal-footer" y
+   "*-modal-actions". La sombra sólida tapa el padding del modal, así el
+   contenido no se asoma por encima de la cabecera ni por debajo de los botones. */
+body :is([class$="modal-header"], [class*="modal-header "]),
+body :is([class$="modal-title"], [class*="modal-title "]):not([class*="modal-header"] *) {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--modal-bg);
+  box-shadow: 0 -24px 0 var(--modal-bg);
+}
+
+body :is([class$="modal-footer"], [class*="modal-footer "], [class$="modal-actions"], [class*="modal-actions "]) {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--modal-bg);
+  box-shadow: 0 24px 0 var(--modal-bg);
+}
+
 /* Botón primario ROJO */
 .modal-footer .btn-primary {
   background: var(--color-primary) !important;

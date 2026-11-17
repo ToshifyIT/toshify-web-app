@@ -4387,9 +4387,9 @@ export function AsignacionesModule() {
               <>
                 {/* Detalle pensado para quien hace la entrega (2026-11-12): primero qué auto,
                     cuándo y en qué estado; después cada conductor con sus datos ordenados. */}
-                <h2 className="asig-modal-title">{viewAsignacion?.motivoDetalle?.cambioVehiculo ? 'Detalles de Cambio de Vehículo' : 'Detalles de Asignación'}</h2>
-                <div className="asig-detail-grid">
-                  {/* Encabezado: auto, estado y modalidad */}
+                {/* Título + auto, estado y modalidad: cabecera fija al scrollear */}
+                <div className="asig-det-modal-header">
+                  <h2 className="asig-modal-title">{viewAsignacion?.motivoDetalle?.cambioVehiculo ? 'Detalles de Cambio de Vehículo' : 'Detalles de Asignación'}</h2>
                   <div className="asig-det-cabecera">
                     <div className="asig-det-auto">
                       {viewAsignacion?.motivoDetalle?.cambioVehiculo && viewAsignacion?.motivoDetalle?.vehiculoCambioPatente ? null : (
@@ -4412,6 +4412,8 @@ export function AsignacionesModule() {
                       </span>
                     </div>
                   </div>
+                </div>
+                <div className="asig-detail-grid">
 
                   {viewAsignacion?.motivoDetalle?.cambioVehiculo && viewAsignacion?.motivoDetalle?.vehiculoCambioPatente && (
                     <div>

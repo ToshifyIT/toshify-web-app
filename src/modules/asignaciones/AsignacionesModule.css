@@ -2943,6 +2943,12 @@ input[type="date"].asig-status-select {
 
 /* ===== Detalles de Asignación: pensado para quien hace la entrega (2026-11-12) ===== */
 .asig-modal-content:has(.asig-det-cabecera) { max-width: 760px; }
+/* Título + datos del auto: queda fijo arriba al scrollear (regla general *-modal-header) */
+.asig-det-modal-header {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
 .asig-det-cabecera {
   display: flex;
   justify-content: space-between;

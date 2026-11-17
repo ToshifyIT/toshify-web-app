@@ -2179,11 +2179,11 @@ export function VehicleManagement() {
             'champán': '#f7e7ce',
           }
           return (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <span
                 style={{
-                  width: '16px',
-                  height: '16px',
+                  width: '12px',
+                  height: '12px',
                   borderRadius: '50%',
                   background: colorMap[colorNorm] || '#9ca3af',
                   border: colorNorm === 'blanco' ? '2px solid #d1d5db' : '2px solid var(--border-secondary)',
@@ -2191,7 +2191,7 @@ export function VehicleManagement() {
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontWeight: 500 }}>{colorDisplay}</span>
+              <span>{colorDisplay}</span>
             </div>
           )
         },
@@ -2223,13 +2223,14 @@ export function VehicleManagement() {
             : 'Carga manual'
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1.3 }} title={tooltip}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{formatNumero(km)} km</span>
+              {/* Mismo tamaño que el resto de la tabla (12px) */}
+              <span>{formatNumero(km)} km</span>
               {esGeotab && (
                 <span
                   style={{
                     background: '#3b82f6', color: '#fff',
-                    padding: '1px 5px', borderRadius: 'var(--radius-xs)',
-                    fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                    padding: '0 4px', borderRadius: 'var(--radius-xs)',
+                    fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
                     width: 'fit-content',
                   }}
                 >
@@ -2240,8 +2241,8 @@ export function VehicleManagement() {
                 <span
                   style={{
                     background: '#16a34a', color: '#fff',
-                    padding: '1px 5px', borderRadius: 'var(--radius-xs)',
-                    fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                    padding: '0 4px', borderRadius: 'var(--radius-xs)',
+                    fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
                     width: 'fit-content',
                   }}
                 >
