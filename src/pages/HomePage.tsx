@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase, UserCheck, Tag
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase, Calculator, UserCheck, Tag
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -38,6 +38,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'integraciones': Link2,
   'administracion': Settings,
   'gestion-administrativa': Briefcase,
+  'contabilidad': Calculator,
   'multas-telepase': CreditCard,
   'onboarding': Calendar,
   'inventario': Package,
@@ -247,6 +248,7 @@ const ConductoresPanelPage = lazy(() => import('./conductores/ConductoresPanelPa
 const ConductorDetallePage = lazy(() => import('./conductores/ConductorDetallePage').then(m => ({ default: m.ConductorDetallePage })))
 const LeadsPage = lazy(() => import('./leads/LeadsPage').then(m => ({ default: m.LeadsPage })))
 const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
+const ConsumoHerramientasPage = lazy(() => import('./administracion/ConsumoHerramientasPage').then(m => ({ default: m.ConsumoHerramientasPage })))
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
 const ProgramacionV2Page = lazy(() => import('./onboarding/ProgramacionV2Page'))
 const DistribucionMapaV2Page = lazy(() => import('./onboarding/DistribucionMapaV2Page'))
@@ -2288,6 +2290,12 @@ export function HomePage() {
                   <LazyPage>
                     <FacturacionPage />
                   </LazyPage>
+                </ProtectedRoute>
+              } />
+              {/* Consumo herramientas: suscripciones pagas de IT (sql/consumo_herramientas.sql) */}
+              <Route path="/administracion/consumo-herramientas" element={
+                <ProtectedRoute submenuName="consumo-herramientas" action="view">
+                  <LazyPage><ConsumoHerramientasPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
