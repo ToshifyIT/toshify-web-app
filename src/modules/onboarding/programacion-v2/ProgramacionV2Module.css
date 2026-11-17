@@ -1522,3 +1522,87 @@
 }
 .prog-modalidad-badge.cargo { color: #b45309; }
 [data-theme="dark"] .prog-modalidad-badge.cargo { color: #fbbf24; }
+
+/* =====================================================
+   HOMOLOGACIÓN CON ASIGNACIONES (2026-11-17)
+   Etiquetas como dt-badge: sin fondo, punto + texto del color, 10 px.
+   Nombres a 12 px, sin fondo de turno (el ícono sol/luna ya lo indica).
+   ===================================================== */
+
+/* Nombres de los turnos sin el fondo amarillo/azul */
+.prog-turno-diurno,
+.prog-turno-nocturno {
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+.prog-conductor-turno,
+.prog-turno-vacante {
+  font-size: 12px;
+}
+
+/* Etiqueta base (Tip. persona y etiquetas de solo lectura) */
+.prog-etiqueta,
+span.prog-inline-select,
+span.prog-inline-select-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 !important;
+  min-width: 0;
+  max-width: none;
+  border: none !important;
+  background: transparent !important;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.prog-etiqueta::before,
+span.prog-inline-select::before,
+span.prog-inline-select-mini::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+/* "-" sin punto */
+span.prog-inline-select.documento.sin_definir::before,
+span.prog-inline-select-mini.documento.sin_definir::before,
+span.prog-inline-select.tipo-asignacion:not([class*='_'])::before,
+span.prog-inline-select-mini.tipo-asignacion:not([class*='_'])::before {
+  display: none;
+}
+
+.prog-tipo-persona.conductor { color: #047857; }
+.prog-tipo-persona.lead { color: #7C3AED; }
+[data-theme="dark"] .prog-tipo-persona.conductor { color: #34D399; }
+[data-theme="dark"] .prog-tipo-persona.lead { color: #A78BFA; }
+
+/* Selects editables (Pendientes): sin fondo de color, con borde fino para que se
+   note que se pueden cambiar; mismo tamaño de letra que las etiquetas. */
+select.prog-inline-select,
+select.prog-inline-select-mini {
+  background-color: transparent !important;
+  border: 1px solid var(--border-primary) !important;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+select.prog-inline-select:hover,
+select.prog-inline-select-mini:hover {
+  border-color: var(--text-tertiary) !important;
+}
+
+/* Nombres completos, como en Asignaciones (antes se cortaban a 120 px) */
+.prog-conductores-compact {
+  max-width: none;
+}
+.prog-conductores-compact .prog-conductor-turno {
+  overflow: visible;
+  text-overflow: clip;
+}

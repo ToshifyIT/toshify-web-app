@@ -38,6 +38,10 @@ import './AsignacionesModule.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
 import { TurnoBadge } from '../../components/ui/TurnoBadge'
+import { LogoCabify, LogoDidi } from '../../components/ui/LogosApp'
+import { codigoCuentaApp, type EstadoCuentaApp } from '../leads/cuentasApps'
+import { cargarAppsPagoSemana, type AppsPago } from '../../services/appsPagoService'
+import { hoyART, sumarDiasISO } from '../../utils/fechaArgentina'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
 interface Asignacion {
@@ -87,6 +91,45 @@ interface Asignacion {
       categoria_licencia_otra?: string | null
     }
   }>
+}
+
+/**
+ * Conductor nuevo en esta asignación: entró con Carta Oferta (mismo criterio que la
+ * tarjeta "Cond. Nuevos"; Anexo / N/A = conductor que ya estaba).
+ */
+function esConductorNuevo(a: any, conductorId: string | null | undefined): boolean {
+  if (!conductorId) return false
+  return (a?.asignaciones_conductores || []).some(
+    (c: any) => String(c.conductor_id) === String(conductorId) && c.documento === 'CARTA_OFERTA',
+  )
+}
+
+function PuntoNuevo() {
+  return <span className="asig-punto-nuevo" title="Conductor nuevo (Carta Oferta)" aria-label="Conductor nuevo" />
+}
+
+/**
+ * Apps (Cabify / DiDi) de un conductor en la tabla:
+ * - Antiguo: la de Facturación de la semana (appsPagoService, misma regla que Facturación
+ *   y el Panel de conductores).
+ * - Nuevo (todavía sin pagos): la que marcaron en la programación, cualquiera sea el estado
+ *   de la cuenta.
+ */
+function appsDelTurno(appsPago: AppsPago | undefined, cuentas: CuentasTurno | undefined): AppsPago | null {
+  if (appsPago && (appsPago.cabify || appsPago.didi)) return appsPago
+  if (cuentas && (cuentas.cabify || cuentas.didi)) return { cabify: !!cuentas.cabify, didi: !!cuentas.didi }
+  return null
+}
+
+/** Estado de las cuentas Cabify / DiDi de un turno (null = sin dato) */
+interface CuentasTurno {
+  cabify: EstadoCuentaApp | null
+  didi: EstadoCuentaApp | null
+}
+/** Cuentas por turno de una asignación; A CARGO usa 'diurno' (igual que Programaciones) */
+interface CuentasAsignacion {
+  diurno: CuentasTurno
+  nocturno: CuentasTurno
 }
 
 interface ConductorTurno {
@@ -350,6 +393,22 @@ export function AsignacionesModule() {
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Capitán del vehículo (vehiculos.guia_responsable: Ali, Carla, Eunice), por vehiculo_id
+  const [capitanPorVehiculo, setCapitanPorVehiculo] = useState<Map<string, string>>(new Map())
+  // Cuentas Cabify / DiDi de cada turno, por asignacion_id (mismo dato que Programaciones)
+  const [cuentasPorAsignacion, setCuentasPorAsignacion] = useState<Map<string, CuentasAsignacion>>(new Map())
+  // App con la que pagó cada conductor esta semana (Facturación), por conductor_id
+  const [appsPagoPorConductor, setAppsPagoPorConductor] = useState<Map<string, AppsPago>>(new Map())
+  useEffect(() => {
+    let activo = true
+    const hoy = hoyART()
+    const dia = new Date(`${hoy}T12:00:00Z`).getUTCDay()
+    const lunes = sumarDiasISO(hoy, -((dia + 6) % 7))
+    cargarAppsPagoSemana(lunes)
+      .then(r => { if (activo) setAppsPagoPorConductor(r) })
+      .catch(err => console.error('Error cargando la app de los conductores:', err))
+    return () => { activo = false }
+  }, [])
   const [showWizard, setShowWizard] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -1272,6 +1331,95 @@ export function AsignacionesModule() {
   useEffect(() => {
     loadAllData()
   }, [sedeActualId])
+
+  // Capitán (guía responsable) de cada vehículo de las asignaciones cargadas.
+  // Consulta aparte: si la columna guia_responsable no existe en la base, la tabla sigue andando.
+  useEffect(() => {
+    const idsVehiculos = [...new Set(asignaciones.map(a => a.vehiculo_id).filter(Boolean))] as string[]
+    if (idsVehiculos.length === 0) {
+      setCapitanPorVehiculo(new Map())
+      return
+    }
+    let cancelado = false
+    const cargarCapitanes = async () => {
+      try {
+        const resultado = new Map<string, string>()
+        for (let i = 0; i < idsVehiculos.length; i += 300) {
+          const { data, error } = await (supabase.from('vehiculos') as any)
+            .select('id, guia_responsable')
+            .in('id', idsVehiculos.slice(i, i + 300))
+          if (error) throw error
+          for (const v of (data || []) as { id: string; guia_responsable: string | null }[]) {
+            if (v.guia_responsable) resultado.set(v.id, v.guia_responsable)
+          }
+        }
+        if (!cancelado) setCapitanPorVehiculo(resultado)
+      } catch (err) {
+        console.error('No se pudo cargar el capitán de los vehículos:', err)
+      }
+    }
+    cargarCapitanes()
+    return () => {
+      cancelado = true
+    }
+  }, [asignaciones])
+
+  // Cuentas Cabify / DiDi: de la programación que originó cada asignación. Si el turno
+  // lo ocupa un lead, el dato vive en el lead (leads.cuenta_cabify / cuenta_didi).
+  // Consulta aparte: si faltan columnas en la base, la tabla sigue andando sin el dato.
+  useEffect(() => {
+    const ids = [...new Set(asignaciones.filter(a => !(a as any).esDevolucion).map(a => a.id).filter(Boolean))]
+    if (ids.length === 0) {
+      setCuentasPorAsignacion(new Map())
+      return
+    }
+    let cancelado = false
+    const cargarCuentas = async () => {
+      try {
+        const progs: any[] = []
+        for (let i = 0; i < ids.length; i += LOTE_PROGRAMACIONES) {
+          const { data, error } = await (supabase as any)
+            .from('programaciones_onboarding')
+            .select('asignacion_id, modalidad, estado_cabify_diurno, estado_cabify_nocturno, estado_didi_diurno, estado_didi_nocturno, lead_diurno_id, lead_nocturno_id, lead_cargo_id')
+            .in('asignacion_id', ids.slice(i, i + LOTE_PROGRAMACIONES))
+          if (error) throw error
+          progs.push(...(data || []))
+        }
+        const idsLeads = [...new Set(progs.flatMap(p => [p.lead_diurno_id, p.lead_nocturno_id, p.lead_cargo_id]).filter(Boolean))] as string[]
+        const cuentasLead = new Map<string, { cuenta_cabify: string | null; cuenta_didi: string | null }>()
+        for (let i = 0; i < idsLeads.length; i += LOTE_PROGRAMACIONES) {
+          const { data, error } = await (supabase as any)
+            .from('leads')
+            .select('id, cuenta_cabify, cuenta_didi')
+            .in('id', idsLeads.slice(i, i + LOTE_PROGRAMACIONES))
+          if (error) throw error
+          for (const l of data || []) cuentasLead.set(l.id, { cuenta_cabify: l.cuenta_cabify, cuenta_didi: l.cuenta_didi })
+        }
+        const resolver = (leadId: string | null, cabify: string | null, didi: string | null): CuentasTurno => {
+          const lead = leadId ? cuentasLead.get(leadId) : undefined
+          return lead
+            ? { cabify: codigoCuentaApp(lead.cuenta_cabify), didi: codigoCuentaApp(lead.cuenta_didi) }
+            : { cabify: codigoCuentaApp(cabify), didi: codigoCuentaApp(didi) }
+        }
+        const resultado = new Map<string, CuentasAsignacion>()
+        for (const p of progs) {
+          if (!p.asignacion_id) continue
+          const esTurno = p.modalidad === 'turno'
+          resultado.set(p.asignacion_id, {
+            diurno: resolver(esTurno ? p.lead_diurno_id : p.lead_cargo_id, p.estado_cabify_diurno, p.estado_didi_diurno),
+            nocturno: resolver(p.lead_nocturno_id, p.estado_cabify_nocturno, p.estado_didi_nocturno),
+          })
+        }
+        if (!cancelado) setCuentasPorAsignacion(resultado)
+      } catch (err) {
+        console.error('No se pudieron cargar las cuentas Cabify / DiDi:', err)
+      }
+    }
+    cargarCuentas()
+    return () => {
+      cancelado = true
+    }
+  }, [asignaciones])
 
   // Escape cierra el modal que esta al frente, uno por vez (LIFO).
   //
@@ -3448,9 +3596,9 @@ export function AsignacionesModule() {
 
   const getStatusBadgeClass = (status: string) => {
     const classes: Record<string, string> = {
-      programado: 'dt-badge dt-badge-yellow',
+      programado: 'dt-badge dt-badge-yellow asig-badge-programado',
       activa: 'dt-badge dt-badge-green',
-      finalizada: 'dt-badge dt-badge-blue',
+      finalizada: 'dt-badge dt-badge-gray',
       cancelada: 'dt-badge dt-badge-red'
     }
     return classes[status] || 'dt-badge dt-badge-gray'
@@ -3512,7 +3660,8 @@ export function AsignacionesModule() {
           entrega_auto_cargo: 'Entrega a cargo',
           cambio_turno: 'Cambio de turno',
           devolucion_vehiculo: 'Devolución',
-          actualizacion_carta_oferta: 'Actualización carta oferta',
+          // Corto en la tabla para no ensanchar la columna (el detalle muestra el nombre completo)
+          actualizacion_carta_oferta: 'Act. carta oferta',
         }
         const detalle = row.original.motivoDetalle
         const tieneDetalle = detalle && (detalle.observaciones || detalle.programadoPor)
@@ -3564,20 +3713,17 @@ export function AsignacionesModule() {
             // Si está cancelado, mostrar con estilo tachado
             if (conductorCargo.cancelado) {
               return (
-                <span className="asig-conductor-compacto" style={{ textDecoration: 'line-through', color: 'var(--color-error)', opacity: 0.7 }} title="Conductor cancelado">
+                <span className="asig-conductor-compacto asig-conductor-turno" style={{ textDecoration: 'line-through', color: 'var(--color-error)', opacity: 0.7 }} title="Conductor cancelado">
+                  <TurnoBadge turno="a_cargo" size={12} />
                   {conductorCargo.nombre}
                 </span>
               )
             }
-            const tipoFueraCargo = tipoAsignacionFueraDelCambio(row.original, conductorCargo.id)
             return (
-              <span className="asig-conductor-compacto">
+              <span className="asig-conductor-compacto asig-conductor-turno">
+                <TurnoBadge turno="a_cargo" size={12} />
                 {conductorCargo.nombre}
-                {tipoFueraCargo && (
-                  <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
-                    · {tipoFueraCargo}
-                  </span>
-                )}
+                {esConductorNuevo(row.original, conductorCargo.id) && <PuntoNuevo />}
               </span>
             )
           }
@@ -3597,11 +3743,7 @@ export function AsignacionesModule() {
             >
               <TurnoBadge turno="diurno" size={12} />
               {diurno ? diurno.nombre : 'Vacante'}
-              {diurno && tipoAsignacionFueraDelCambio(row.original, diurno.id) && (
-                <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
-                  · {tipoAsignacionFueraDelCambio(row.original, diurno.id)}
-                </span>
-              )}
+              {diurno && esConductorNuevo(row.original, diurno.id) && <PuntoNuevo />}
             </span>
             <span 
               className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}
@@ -3610,14 +3752,58 @@ export function AsignacionesModule() {
             >
               <TurnoBadge turno="nocturno" size={12} />
               {nocturno ? nocturno.nombre : 'Vacante'}
-              {nocturno && tipoAsignacionFueraDelCambio(row.original, nocturno.id) && (
-                <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
-                  · {tipoAsignacionFueraDelCambio(row.original, nocturno.id)}
-                </span>
-              )}
+              {nocturno && esConductorNuevo(row.original, nocturno.id) && <PuntoNuevo />}
             </span>
           </div>
         )
+      }
+    },
+    {
+      id: 'cuentas_apps',
+      header: 'Cabify / DiDi',
+      enableSorting: false,
+      // Texto para la búsqueda / filtro: "Cabify", "DiDi" o "Cabify DiDi" por turno
+      accessorFn: (row) => {
+        const c = cuentasPorAsignacion.get(row.id)
+        const texto = (conductorId: string | undefined, cuentas: CuentasTurno | undefined) => {
+          const apps = appsDelTurno(conductorId ? appsPagoPorConductor.get(conductorId) : undefined, cuentas)
+          return [apps?.cabify && 'Cabify', apps?.didi && 'DiDi'].filter(Boolean).join(' ')
+        }
+        const partes = row.horario === 'turno'
+          ? [texto(row.conductoresTurno?.diurno?.id, c?.diurno), texto(row.conductoresTurno?.nocturno?.id, c?.nocturno)]
+          : [texto(row.conductorCargo?.id, c?.diurno)]
+        return partes.filter(Boolean).join(' ') || '-'
+      },
+      cell: ({ row }) => {
+        const a = row.original
+        if (a.esDevolucion) return <span className="text-muted">-</span>
+        const cuentas = cuentasPorAsignacion.get(a.id)
+        const filaApps = (conductorId: string | undefined, turno: CuentasTurno | undefined, key: string) => {
+          const apps = conductorId
+            ? appsDelTurno(appsPagoPorConductor.get(conductorId), turno)
+            : null
+          return (
+            <span key={key} className="asig-cuentas-fila">
+              {apps ? (
+                <>
+                  {apps.cabify && <LogoCabify alto={10} />}
+                  {apps.didi && <LogoDidi alto={10} />}
+                </>
+              ) : (
+                <span className="text-muted">-</span>
+              )}
+            </span>
+          )
+        }
+        if (a.horario === 'turno') {
+          return (
+            <div className="asig-conductores-compact">
+              {filaApps(a.conductoresTurno?.diurno?.id, cuentas?.diurno, 'd')}
+              {filaApps(a.conductoresTurno?.nocturno?.id, cuentas?.nocturno, 'n')}
+            </div>
+          )
+        }
+        return filaApps(a.conductorCargo?.id || undefined, cuentas?.diurno, 'c')
       }
     },
     {
@@ -3658,16 +3844,18 @@ export function AsignacionesModule() {
       },
       cell: ({ row }) => {
         const fechaInicio = row.original.fecha_inicio
-        // Si no tiene fecha_inicio (aún no activada), mostrar fecha_programada como referencia
-        const fechaRef = fechaInicio || row.original.fecha_programada
-        if (!fechaRef) return <span className="text-muted">-</span>
-        const esFechaProgramada = !fechaInicio
-        const fechaStr = formatFecha(fechaRef)
-        const horaStr = formatHora(fechaRef)
+        // Sin fecha_inicio la asignación aún no se activó: la entrega real todavía no ocurrió
+        if (!fechaInicio) {
+          // Cancelada antes de entregar: nunca va a tener entrega
+          const textoSinEntrega = row.original.estado === 'cancelada' ? 'N/A' : 'Pendiente'
+          return (
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{textoSinEntrega}</span>
+          )
+        }
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
-            <div style={{ color: esFechaProgramada ? 'var(--text-tertiary)' : 'var(--color-success)' }}>{fechaStr}</div>
-            <div style={{ color: 'var(--text-secondary)' }}>{horaStr}</div>
+            <div style={{ color: 'var(--color-success)' }}>{formatFecha(fechaInicio)}</div>
+            <div style={{ color: 'var(--text-secondary)' }}>{formatHora(fechaInicio)}</div>
           </div>
         )
       }
@@ -3750,6 +3938,18 @@ export function AsignacionesModule() {
             </span>
           </span>
         )
+      }
+    },
+    {
+      id: 'capitan',
+      header: 'Capitán',
+      // Guía responsable del vehículo (vehiculos.guia_responsable)
+      accessorFn: (row) => capitanPorVehiculo.get(row.vehiculo_id) || '-',
+      cell: ({ getValue }) => {
+        const capitan = getValue() as string
+        if (capitan === '-') return <span className="text-muted">-</span>
+        // Solo el nombre (Ali, Carla, Eunice) para que la columna ocupe poco; completo en el tooltip
+        return <span style={{ fontSize: '12px' }} title={capitan}>{capitan.trim().split(/\s+/)[0]}</span>
       }
     },
     {
@@ -3898,7 +4098,7 @@ export function AsignacionesModule() {
         return <ActionsMenu actions={actions} />
       }
     }
-  ], [canEdit, canDelete, canCreateManualAssignment])
+  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, cuentasPorAsignacion, appsPagoPorConductor])
 
   return (
     <div className="asig-module">
@@ -4021,6 +4221,8 @@ export function AsignacionesModule() {
         data={expandedAsignaciones}
         getRowClassName={(a: any) => (asignacionSinCarpeta(a) ? 'asig-row-sin-carpeta' : undefined)}
         columns={columns}
+        // Vehículo, Motivo, Asignados, Cabify / DiDi y Cita quedan fijas al desplazar horizontalmente
+        stickyLeftColumns={5}
         loading={loading}
         error={error}
         searchPlaceholder="Buscar por patente, conductor o código..."
@@ -4402,7 +4604,7 @@ export function AsignacionesModule() {
                       <span className="asig-det-codigo">
                         {viewAsignacion.codigo}
                         {viewAsignacion.motivo && (
-                          <> · {etiquetaMotivoProgramacion(viewAsignacion.motivo)}{viewAsignacion.motivoDetalle?.programadoPor ? ` · por ${viewAsignacion.motivoDetalle.programadoPor}` : ''}</>
+                          <> · {etiquetaMotivoProgramacion(viewAsignacion.motivo)}</>
                         )}
                       </span>
                     </div>
@@ -4451,7 +4653,12 @@ export function AsignacionesModule() {
                     </div>
                     <div className="asig-det-fecha">
                       <span className="asig-det-lbl">Creada</span>
-                      <span className="asig-det-val">{formatFecha(viewAsignacion.created_at)}</span>
+                      <span className="asig-det-val">{formatFechaHora(viewAsignacion.created_at)}</span>
+                      {(viewAsignacion.motivoDetalle?.programadoPor || (viewAsignacion as any)._programadoPor) && (
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          por {viewAsignacion.motivoDetalle?.programadoPor || (viewAsignacion as any)._programadoPor}
+                        </span>
+                      )}
                     </div>
                   </div>
 

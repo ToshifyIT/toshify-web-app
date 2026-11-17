@@ -63,9 +63,10 @@ export function LogoGeotab({ alto = 10 }: LogoProps) {
 export function LogoDidi({ alto = 12 }: LogoProps) {
   return (
     <svg
-      viewBox="0 0 108 38"
+      // 112 de ancho (antes 108): con algunas fuentes la última "i" de "DiDi" quedaba cortada
+      viewBox="0 0 112 38"
       height={alto}
-      width={(alto * 108 / 38).toFixed(1)}
+      width={(alto * 112 / 38).toFixed(1)}
       role="img"
       aria-label="DiDi"
       style={{ display: 'block', flexShrink: 0 }}

@@ -1391,6 +1391,11 @@ export function ConductoresModule() {
         ])
         .select();
 
+      // La base rechaza un DNI repetido (sql/conductores_dni_unico.sql), aunque venga
+      // con otro formato (puntos, espacios) que la validación de arriba no detecta.
+      if (insertError?.code === '23505' && String(insertError.message).includes('conductores_dni_unico')) {
+        throw new Error(`Ya existe un conductor con DNI ${formData.numero_dni}. Buscalo en el listado en vez de crear otro.`);
+      }
       if (insertError) throw insertError;
 
       const createdConductor = newConductor?.[0];

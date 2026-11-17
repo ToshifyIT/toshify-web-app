@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { ReactNode, CSSProperties } from 'react';
 import {
   ChevronDown, ChevronRight, Clock, Shield, Globe,
   Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff, Receipt, Landmark, Phone,
   AlertCircle,
   Bot, Key, Plus, Trash2, Copy, Check, Power,
-  CalendarClock,
+  CalendarClock, Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -13,6 +14,7 @@ import { formatFecha, formatFechaHora } from '../../utils/format';
 import { Spinner } from '../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import { TabsBar } from '../../components/ui/TabsBar'
+import { AccesosHerramientas } from './consumo-herramientas/AccesosHerramientas'
 
 // =============================================
 // Tipos
@@ -1939,11 +1941,12 @@ function ProcesosAutomaticos({ jobs, cargando }: { jobs: CronJobRecord[]; cargan
 // Tab types & config
 // =============================================
 
-type TabId = 'integraciones' | 'credenciales' | 'mcp';
+type TabId = 'integraciones' | 'credenciales' | 'accesos' | 'mcp';
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'integraciones', label: 'Integraciones y procesos', icon: Globe },
   { id: 'credenciales', label: 'Credenciales', icon: Eye },
+  { id: 'accesos', label: 'Accesos herramientas', icon: Wrench },
   { id: 'mcp', label: 'MCP', icon: Bot },
 ];
 
@@ -1952,7 +1955,16 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
 // =============================================
 
 export function IntegracionesTokensModule() {
-  const [activeTab, setActiveTab] = useState<TabId>('integraciones');
+  // ?tab=accesos abre directo «Accesos herramientas» (botón Herramientas de Consumo herramientas)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabUrl = searchParams.get('tab');
+  const [activeTab, setActiveTabState] = useState<TabId>(
+    TABS.some(t => t.id === tabUrl) ? (tabUrl as TabId) : 'integraciones',
+  );
+  const setActiveTab = (t: TabId) => {
+    setActiveTabState(t);
+    setSearchParams(t === 'integraciones' ? {} : { tab: t }, { replace: true });
+  };
   const [serverTokens, setServerTokens] = useState<Record<string, Record<string, string | null>> | null>(null);
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensError, setTokensError] = useState<string | null>(null);
@@ -2107,6 +2119,10 @@ export function IntegracionesTokensModule() {
           tokensLoading={tokensLoading}
           tokensError={tokensError}
         />
+      )}
+
+      {activeTab === 'accesos' && (
+        <AccesosHerramientas />
       )}
 
       {activeTab === 'mcp' && (

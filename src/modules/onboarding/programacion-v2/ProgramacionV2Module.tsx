@@ -924,15 +924,7 @@ export function ProgramacionV2Module() {
   /** Chip de la columna "Tip. Persona". */
   const ChipTipoPersona = ({ tipo }: { tipo: 'lead' | 'conductor' }) => (
     <span
-      style={{
-        fontSize: '10px',
-        fontWeight: 700,
-        padding: '2px 7px',
-        borderRadius: 'var(--radius-xs)',
-        whiteSpace: 'nowrap',
-        background: tipo === 'lead' ? 'rgba(139, 92, 246, 0.18)' : 'rgba(16, 185, 129, 0.15)',
-        color: tipo === 'lead' ? '#7C3AED' : '#047857',
-      }}
+      className={`prog-etiqueta prog-tipo-persona ${tipo}`}
     >
       {tipo === 'lead' ? 'Lead' : 'Conductor'}
     </span>
@@ -2859,14 +2851,14 @@ export function ProgramacionV2Module() {
         if (modalidad === 'a_cargo' || !modalidad) {
           const nombre = conductor_display || conductor_nombre || conductor_diurno_nombre
           if (nombre) {
-            return <span className="prog-conductor-cell" style={{ fontSize: '13px' }}>{nombre}</span>
+            return <span className="prog-conductor-cell" style={{ fontSize: '12px' }}>{nombre}</span>
           }
           return <span className="prog-sin-conductor">Sin asignar</span>
         }
 
         if (conductor_diurno_nombre || conductor_nocturno_nombre) {
           return (
-            <div className="prog-conductores-compact" style={{ fontSize: '13px' }}>
+            <div className="prog-conductores-compact" style={{ fontSize: '12px' }}>
               <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <TurnoBadge turno="diurno" size={12} />
                 {conductor_diurno_nombre || 'Vacante'}
@@ -2883,7 +2875,7 @@ export function ProgramacionV2Module() {
         if (nombre && turno) {
           const isDiurno = turno === 'diurno'
           return (
-            <div className="prog-conductores-compact" style={{ fontSize: '13px' }}>
+            <div className="prog-conductores-compact" style={{ fontSize: '12px' }}>
               <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <TurnoBadge turno="diurno" size={12} />
                 {isDiurno ? nombre : 'Vacante'}
@@ -2997,7 +2989,7 @@ export function ProgramacionV2Module() {
       accessorKey: 'modalidad',
       header: 'Modalidad',
       cell: ({ row }) => (
-        <span className={`prog-modalidad-badge ${row.original.modalidad?.toLowerCase()}`} style={{ fontSize: '12px' }}>
+        <span className={`prog-modalidad-badge ${row.original.modalidad?.toLowerCase()}`}>
           {row.original.modalidad === 'turno' ? 'Turno' : 'A Cargo'}
         </span>
       )
@@ -3011,7 +3003,7 @@ export function ProgramacionV2Module() {
         if (!fecha) return <span className="prog-hora">-</span>
         const fechaCorta = formatFecha(fecha)
         return (
-          <div className="prog-fecha-hora" style={{ fontSize: '13px' }}>
+          <div className="prog-fecha-hora" style={{ fontSize: '11px' }}>
             <span className="prog-fecha">{fechaCorta}</span>
             {hora && <span className="prog-hora">{hora}</span>}
           </div>

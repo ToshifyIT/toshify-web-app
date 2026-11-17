@@ -242,7 +242,27 @@ function camposLicenciaParaConductor(lead: Lead): Record<string, string | null> 
   }
 }
 
+// Conversiones en curso en este navegador (por lead y por DNI): evita que un doble
+// clic, o el mismo lead abierto en Leads y en Programación, cree el conductor dos veces.
+const conversionesEnCurso = new Set<string>()
+
 export async function convertirLeadAConductor(
+  params: ParametrosConversion
+): Promise<ResultadoConversion> {
+  const dni = (params.lead.dni || '').replace(/\D/g, '')
+  const claves = [`lead:${params.lead.id}`, ...(dni ? [`dni:${dni}`] : [])]
+  if (claves.some(c => conversionesEnCurso.has(c))) {
+    throw new Error('Este lead ya se está convirtiendo. Esperá a que termine.')
+  }
+  claves.forEach(c => conversionesEnCurso.add(c))
+  try {
+    return await convertirLeadAConductorSinFreno(params)
+  } finally {
+    claves.forEach(c => conversionesEnCurso.delete(c))
+  }
+}
+
+async function convertirLeadAConductorSinFreno(
   params: ParametrosConversion
 ): Promise<ResultadoConversion> {
   const { lead, catalogos, usuario, sedeFallbackId } = params
@@ -483,6 +503,13 @@ export async function convertirLeadAConductor(
         }
       })
 
+      // Última verificación justo antes de crear: si entre que se abrió el modal y
+      // ahora alguien ya creó el conductor (otra pestaña u otra persona), no duplicar.
+      const yaCreado = await buscarConductorExistente(lead)
+      if (yaCreado) {
+        throw new Error('Ya existe un conductor con este DNI/CUIT (se acaba de crear). Recargá la página y volvé a intentar: se van a completar sus datos en vez de crear otro.')
+      }
+
       let { data: createdConductor, error: errCond } = await supabase
         .from('conductores')
         .insert(conductorData)
@@ -499,6 +526,9 @@ export async function convertirLeadAConductor(
           .single())
       }
 
+      if (errCond?.code === '23505' && String(errCond.message).includes('conductores_dni_unico')) {
+        throw new Error('Ya existe un conductor con este DNI. Recargá la página y volvé a convertir: se van a completar sus datos en vez de crear otro.')
+      }
       if (errCond || !createdConductor) throw errCond ?? new Error('No se pudo crear el conductor.')
       conductorId = createdConductor.id
     }

@@ -3114,3 +3114,35 @@ input[type="date"].asig-status-select {
   font-weight: 600;
 }
 .asig-doc-na { color: var(--text-tertiary); }
+
+/* Programado: amarillo más puro (el ámbar global #92400E se veía rojo/naranja junto a Cancelada) */
+.asig-module .dt-badge.asig-badge-programado,
+.asig-badge-programado.dt-badge {
+  color: #A16207;
+  background: #FEF9C3;
+}
+[data-theme="dark"] .asig-badge-programado.dt-badge {
+  color: #FACC15;
+  background: rgba(250, 204, 21, 0.15);
+}
+
+/* Apps Cabify / DiDi por turno: logos pegados, alineados con Asignados */
+.asig-cuentas-fila {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 18px;
+  font-size: 12px;
+}
+
+/* Punto azul: conductor nuevo (entró con Carta Oferta) */
+.asig-punto-nuevo {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: #2563EB;
+  flex-shrink: 0;
+}
+[data-theme="dark"] .asig-punto-nuevo { background: #60A5FA; }
