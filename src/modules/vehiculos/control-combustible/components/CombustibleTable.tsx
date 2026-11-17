@@ -7,6 +7,7 @@ import type { FuelRow } from '../types/combustible.types'
 import { formatNumero, formatFecha, formatFechaHora } from '../../../../utils/format'
 import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
 import { ActionsMenu } from '../../../../components/ui/ActionsMenu'
+import { TurnoBadge } from '../../../../components/ui/TurnoBadge'
 
 interface Props {
   rows: FuelRow[]
@@ -78,15 +79,22 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
             {estado_vehiculo
               ? <span className={`dt-badge ${claseEstadoVehiculo(estado_vehiculo_codigo)}`} style={{ alignSelf: 'flex-start' }}>{estado_vehiculo}</span>
               : guion}
-            {a_cargo.map(nombre => (
-              <span
-                key={nombre}
-                title={nombre}
-                style={{ fontSize: 10, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              >
-                {nombre}
-              </span>
-            ))}
+            {a_cargo.map(texto => {
+              // "D: NOMBRE" / "N: NOMBRE" / "A cargo: NOMBRE" -> ícono del turno + nombre
+              const m = texto.match(/^(D|N|A cargo): (.*)$/)
+              const turno = m ? (m[1] === 'D' ? 'diurno' : m[1] === 'N' ? 'nocturno' : 'todo_dia') : null
+              const nombre = m ? m[2] : texto
+              return (
+                <span
+                  key={texto}
+                  title={nombre}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text-secondary)', minWidth: 0 }}
+                >
+                  {turno && <TurnoBadge turno={turno} size={11} />}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
+                </span>
+              )
+            })}
           </div>
         )
       },

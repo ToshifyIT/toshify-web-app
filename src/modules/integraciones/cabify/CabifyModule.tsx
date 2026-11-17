@@ -31,6 +31,7 @@ import type { AsignacionActiva } from '../../../services/asignacionesService'
 import { normalizeDni, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 // Helper: busca la asignación de un driver de Cabify por DNI, licencia o nombre.
@@ -686,18 +687,13 @@ function createConductorCompactColumn(
 
       // Turno del conductor (no la modalidad del auto): Diurno, Nocturno o A cargo
       const turnoConductor = (asig?.turnoEspecifico || '').toLowerCase()
-      const modalidadClass = !asig
-        ? 'dt-badge-gray'
-        : asig.horario === 'todo_dia' || turnoConductor.includes('cargo') || turnoConductor === 'todo_dia' ? 'dt-badge-purple'
-        : turnoConductor.includes('noct') ? 'dt-badge-blue'
-        : turnoConductor.includes('diur') ? 'dt-badge-yellow'
-        : 'dt-badge-gray'
-      const modalidadLabel = !asig
-        ? 'S/A'
-        : asig.horario === 'todo_dia' || turnoConductor.includes('cargo') || turnoConductor === 'todo_dia' ? 'A CARGO'
-        : turnoConductor.includes('noct') ? 'NOCTURNO'
-        : turnoConductor.includes('diur') ? 'DIURNO'
-        : 'TURNO'
+      // Turno conocido -> TurnoBadge sobrio; sin asignación o turno sin dato -> etiqueta gris
+      const turnoBadge = !asig ? null
+        : asig.horario === 'todo_dia' || turnoConductor.includes('cargo') || turnoConductor === 'todo_dia' ? 'a_cargo'
+        : turnoConductor.includes('noct') ? 'nocturno'
+        : turnoConductor.includes('diur') ? 'diurno'
+        : null
+      const modalidadLabel = !asig ? 'S/A' : 'TURNO'
 
       const isActive = !driver.disabled
       const estadoClass = isActive ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'
@@ -727,9 +723,13 @@ function createConductorCompactColumn(
             >
               {sourceBadgeLabel}
             </span>
-            <span className={`dt-badge ${modalidadClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
-              {modalidadLabel}
-            </span>
+            {turnoBadge ? (
+              <span style={{ fontSize: '11px' }}><TurnoBadge turno={turnoBadge} /></span>
+            ) : (
+              <span className="dt-badge dt-badge-gray" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                {modalidadLabel}
+              </span>
+            )}
             {/* Todos los de la lista están activos: solo se marca el que no lo está */}
             {!isActive && (
               <span className={`dt-badge ${estadoClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>

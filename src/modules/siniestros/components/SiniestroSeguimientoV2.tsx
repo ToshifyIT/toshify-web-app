@@ -736,7 +736,7 @@ export function SiniestroSeguimientoV2({ siniestro, onReload, readonly = false }
             return (
               <div key={seg.id} className="seguimiento-item ss-item" style={{ borderLeftColor: tipoConfig.color }}>
                 <div className="ss-item-head">
-                  <span className="ss-tipo" style={{ background: `${tipoConfig.color}1f`, color: tipoConfig.color }}>
+                  <span className="ss-tipo" style={{ color: tipoConfig.color }}>
                     {tipoConfig.icon}
                     {tipoConfig.label}
                   </span>

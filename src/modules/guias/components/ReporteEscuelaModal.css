@@ -326,3 +326,28 @@
     font-size: 12px;
   }
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17) · porcentajes
+   Sin fondo: texto del color, como dt-badge.
+   ===================================================== */
+.badge.badge-baja,
+.badge.badge-media,
+.badge.badge-alta,
+.badge.badge-muy-alta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.badge.badge-baja { color: #b91c1c; }
+.badge.badge-media { color: #b45309; }
+.badge.badge-alta { color: #15803d; }
+.badge.badge-muy-alta { color: #15803d; }
+[data-theme="dark"] .badge.badge-baja { color: #f87171; }
+[data-theme="dark"] .badge.badge-media { color: #fbbf24; }
+[data-theme="dark"] .badge.badge-alta { color: #4ade80; }
+[data-theme="dark"] .badge.badge-muy-alta { color: #4ade80; }

@@ -61,9 +61,88 @@ import { StatsGrid } from '../../components/ui/StatsGrid'
 import { hoyART } from '../../utils/fechaArgentina'
 import { semanaISO, numeroSemana, sumarSemanasISO } from '../../utils/semanaISO'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
 import { formatFecha, formatPlata, formatFechaHora, formatHora } from '../../utils/format'
 type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas' | 'rechazados'
+
+// =====================================================
+// CELDAS COMPARTIDAS (2026-11-17): el mismo dato se ve igual en los 5 tabs y en
+// los detalles. Etiquetas sobrias: sin fondo, punto de color + texto.
+// =====================================================
+
+/** Color del punto por código de incidencia (igual que los puntos del "Filtro rápido") */
+const COD_INC_COLORES: Record<string, string> = {
+  P004: '#10b981',
+  P006: '#3b82f6',
+  P007: '#ef4444',
+  TELEPASE: '#d97706',
+}
+
+/** Colores válidos de dt-badge; cualquier otro valor (hex, vacío) cae en gris */
+const DT_BADGE_COLORES = new Set(['green', 'blue', 'yellow', 'red', 'gray', 'orange', 'purple'])
+
+/** A favor del conductor (descuento) = verde; cobro = rojo */
+function esMontoAFavor(tipo: { categoria?: string; es_a_favor?: boolean } | null | undefined): boolean {
+  return !!tipo && (tipo.categoria === 'P004' || tipo.es_a_favor === true)
+}
+
+/** Fecha arriba y hora en gris abajo (la hora se omite si no hay) */
+function CeldaFecha({ fecha, hora }: { fecha: string; hora?: string }) {
+  return (
+    <div style={{ lineHeight: 1.25, whiteSpace: 'nowrap' }}>
+      <div>{fecha}</div>
+      {hora && <div style={{ color: 'var(--text-tertiary)' }}>{hora}</div>}
+    </div>
+  )
+}
+
+/** Nombre del conductor con el ícono del turno en línea, a la derecha */
+function CeldaConductor({ nombre, turno }: { nombre?: string | null; turno?: string | null }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+      <span>{nombre || '-'}</span>
+      {turno && <TurnoBadge turno={turno.toLowerCase().replace(' ', '_')} size={12} />}
+    </span>
+  )
+}
+
+/** Cod Inc.: punto del color del código + texto oscuro */
+function CodIncLabel({ texto, categoria }: { texto: string; categoria?: string | null }) {
+  if (!texto || texto === '-') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+  const color = (categoria && COD_INC_COLORES[categoria]) || 'var(--text-tertiary)'
+  return (
+    <span
+      title={texto}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--text-primary)' }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      {texto}
+    </span>
+  )
+}
+
+/** Tipo Inc.: texto plano secundario */
+function TipoIncTexto({ texto }: { texto?: string | null }) {
+  return <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{texto || '-'}</span>
+}
+
+/** Monto: negrita, verde si es a favor / descuento, rojo si es cobro; sin fondo */
+function MontoTexto({ texto, aFavor }: { texto: string; aFavor: boolean }) {
+  if (!texto || texto === '-') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+  return (
+    <span style={{ fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: aFavor ? 'var(--color-success, #16a34a)' : 'var(--color-danger, #dc2626)' }}>
+      {texto}
+    </span>
+  )
+}
+
+/** Estado: etiqueta sobria (dt-badge), con tooltip y texto siempre visible */
+function EstadoLabel({ nombre, color }: { nombre?: string | null; color?: string | null }) {
+  const c = color && DT_BADGE_COLORES.has(color) ? color : 'gray'
+  const texto = nombre || 'Sin estado'
+  return <span className={`dt-badge dt-badge-${c}`} title={texto}>{texto}</span>
+}
 
 // Helper para mapear rol de usuario a área (para incidencias)
 function getAreaPorRol(roleName: string | undefined | null): string {
@@ -1272,7 +1351,7 @@ export function IncidenciasModule() {
     {
       accessorKey: 'fecha',
       header: 'Fecha',
-      cell: ({ row }) => formatDate(row.original.fecha)
+      cell: ({ row }) => <CeldaFecha fecha={formatDate(row.original.fecha)} />
     },
     {
       accessorKey: 'semana',
@@ -1320,16 +1399,7 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => {
-        const turno = row.original.turno
-        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : (turno || '').toLowerCase() === 'a cargo' ? 'purple' : 'gray'
-        return (
-          <div>
-            <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
-            {turno && <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 5px' }}>{turno}</span>}
-          </div>
-        )
-      }
+      cell: ({ row }) => <CeldaConductor nombre={row.original.conductor_display} turno={row.original.turno} />
     },
     {
       accessorKey: 'tipo_cobro_descuento_id',
@@ -1340,11 +1410,10 @@ export function IncidenciasModule() {
           // Fallback: parsear código de concepto nómina desde el detalle de la penalidad asociada
           const pen = penalidadesPorIncidencia.get(row.original.id)
           const match = pen?.detalle?.match(/^\[([A-Z0-9]+)\]/)
-          if (match) return match[1]
-          return '-'
+          return <TipoIncTexto texto={match ? match[1] : null} />
         }
         const tipo = tiposCobroDescuento.find(t => t.id === tipoId)
-        return tipo?.nombre || '-'
+        return <TipoIncTexto texto={tipo?.nombre} />
       }
     },
     {
@@ -1375,10 +1444,7 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => {
-        const color = row.original.estado_color || 'gray'
-        return <span className={`dt-badge dt-badge-${color}`}>{row.original.estado_nombre}</span>
-      }
+      cell: ({ row }) => <EstadoLabel nombre={row.original.estado_nombre} color={row.original.estado_color} />
     },
     {
       id: 'fecha_creado',
@@ -1390,12 +1456,7 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
         const creado = row.original.created_at
-        return (
-          <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
-            <div>{formatFecha(creado)}</div>
-            <div style={{ color: 'var(--text-tertiary)' }}>{formatHora(creado)}</div>
-          </div>
-        )
+        return <CeldaFecha fecha={formatFecha(creado)} hora={formatHora(creado)} />
       }
     },
     {
@@ -1461,12 +1522,7 @@ export function IncidenciasModule() {
       header: 'Fecha',
       cell: ({ row }) => {
         const { date, time } = formatCreatedAt((row.original as any).created_at)
-        return (
-          <div style={{ fontSize: '12px', lineHeight: '1.2', whiteSpace: 'nowrap' }}>
-            <div>{date}</div>
-            {time && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{time}</div>}
-          </div>
-        )
+        return <CeldaFecha fecha={date} hora={time} />
       }
     },
     {
@@ -1515,16 +1571,7 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => {
-        const turno = row.original.turno
-        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : (turno || '').toLowerCase() === 'a cargo' ? 'purple' : 'gray'
-        return (
-          <div>
-            <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
-            {turno && <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 5px' }}>{turno}</span>}
-          </div>
-        )
-      }
+      cell: ({ row }) => <CeldaConductor nombre={row.original.conductor_display} turno={row.original.turno} />
     },
     {
       id: 'cod_incidencia_cobro',
@@ -1548,13 +1595,11 @@ export function IncidenciasModule() {
         const tipo = tiposCobroDescuentoMap.get(tipoId)
         // Telepase: Cod Inc = nombre del tipo (ej. "P005 - Peaje")
         if ((row.original as any).telepase_id) {
-          const nombre = tipo?.nombre || '-'
-          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
+          return <CodIncLabel texto={tipo?.nombre || '-'} categoria="TELEPASE" />
         }
         if (!tipo?.categoria) return '-'
         const label = codIncLabels[tipo.categoria] || tipo.nombre || tipo.categoria
-        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{label}</span>
+        return <CodIncLabel texto={label} categoria={tipo.categoria} />
       }
     },
     {
@@ -1573,15 +1618,11 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         // Telepase: Tipo Inc = "Telepase" (el origen), no el nombre del tipo de cobro
         if ((row.original as any).telepase_id) {
-          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>Telepase</span>
+          return <TipoIncTexto texto="Telepase" />
         }
         const tipoId = row.original.tipo_cobro_descuento_id
         if (!tipoId) return '-'
-        const tipo = tiposCobroDescuentoMap.get(tipoId)
-        const nombre = tipo?.nombre || '-'
-        if (!tipo?.categoria) return nombre
-        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
+        return <TipoIncTexto texto={tiposCobroDescuentoMap.get(tipoId)?.nombre} />
       }
     },
     {
@@ -1594,8 +1635,7 @@ export function IncidenciasModule() {
         if (!monto) return '-'
         const tipoId = row.original.tipo_cobro_descuento_id
         const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
-        const bg = tipo?.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{formatMoney(monto)}</span>
+        return <MontoTexto texto={formatMoney(monto)} aFavor={esMontoAFavor(tipo)} />
       }
     },
     {
@@ -1628,18 +1668,18 @@ export function IncidenciasModule() {
         const penalidad = penalidades.find(p => p.incidencia_id === row.original.id)
 
         if (!penalidad) {
-          return <span className="dt-badge dt-badge-gray">Sin Aplicar</span>
+          return <EstadoLabel nombre="Sin Aplicar" color="gray" />
         }
 
         if (penalidad.rechazado) {
-          return <span className="dt-badge dt-badge-red"><XCircle size={12} /> Rechazado</span>
+          return <EstadoLabel nombre="Rechazado" color="red" />
         }
 
         if (penalidad.aplicado) {
-          return <span className="dt-badge dt-badge-green"><CheckCircle size={12} /> Aplicado</span>
+          return <EstadoLabel nombre="Aplicado" color="green" />
         }
 
-        return <span className="dt-badge dt-badge-yellow"><Clock size={12} /> Por Aplicar</span>
+        return <EstadoLabel nombre="Por Aplicar" color="yellow" />
       }
     },
     {
@@ -1735,12 +1775,7 @@ export function IncidenciasModule() {
       header: 'Fecha',
       cell: ({ row }) => {
         const { date, time } = formatCreatedAt((row.original as any).created_at)
-        return (
-          <div style={{ fontSize: '12px', lineHeight: '1.2', whiteSpace: 'nowrap' }}>
-            <div>{date}</div>
-            {time && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{time}</div>}
-          </div>
-        )
+        return <CeldaFecha fecha={date} hora={time} />
       }
     },
     {
@@ -1775,8 +1810,8 @@ export function IncidenciasModule() {
       accessorFn: (row) => row.semana_aplicacion || '',
       cell: ({ row }) => {
         const sem = row.original.semana_aplicacion
-        if (!sem) return <span style={{ color: '#9ca3af', fontSize: '11px' }}>-</span>
-        return <span style={{ fontSize: '12px', fontWeight: 600 }}>S{sem}</span>
+        if (!sem) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+        return <span>S{sem}</span>
       },
       enableSorting: true,
     },
@@ -1808,7 +1843,7 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.conductor_display || '-'
+      cell: ({ row }) => <CeldaConductor nombre={row.original.conductor_display} turno={row.original.turno} />
     },
     {
       id: 'cod_incidencia',
@@ -1842,13 +1877,11 @@ export function IncidenciasModule() {
         const tipo = tiposCobroDescuentoMap.get(tipoId)
         // Telepase: Cod Inc = nombre del tipo (ej. "P005 - Peaje")
         if ((row.original as any).telepase_id) {
-          const nombre = tipo?.nombre || '-'
-          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
+          return <CodIncLabel texto={tipo?.nombre || '-'} categoria="TELEPASE" />
         }
         if (!tipo?.categoria) return '-'
         const label = codIncLabels[tipo.categoria] || tipo.categoria
-        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{label}</span>
+        return <CodIncLabel texto={label} categoria={tipo.categoria} />
       }
     },
     {
@@ -1878,14 +1911,11 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         // Telepase: Tipo Inc = "Telepase" (el origen), no el nombre del tipo de cobro
         if ((row.original as any).telepase_id) {
-          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>Telepase</span>
+          return <TipoIncTexto texto="Telepase" />
         }
         const tipoId = row.original.tipo_cobro_descuento_id
         const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
-        const nombre = row.original.tipo_nombre || tipo?.nombre || '-'
-        if (!tipo?.categoria) return nombre
-        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{nombre}</span>
+        return <TipoIncTexto texto={row.original.tipo_nombre || tipo?.nombre} />
       }
     },
     {
@@ -1894,8 +1924,7 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         const tipoId = row.original.tipo_cobro_descuento_id
         const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
-        const bg = tipo?.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
-        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)' }}>{formatMoney(row.original.monto)}</span>
+        return <MontoTexto texto={formatMoney(row.original.monto)} aFavor={esMontoAFavor(tipo)} />
       }
     },
     {
@@ -1914,15 +1943,11 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         const esVirtual = (row.original as any)._origen === 'incidencia'
         if (esVirtual) {
-          return <span className="dt-badge dt-badge-gray"><Clock size={12} /> Sin Aplicar</span>
+          return <EstadoLabel nombre="Sin Aplicar" color="gray" />
         }
         // Si está rechazado, siempre mostrar "No" (rechazado = no aplicado)
         const estaAplicado = row.original.rechazado ? false : row.original.aplicado
-        return (
-          <span className={`dt-badge ${estaAplicado ? 'dt-badge-green' : 'dt-badge-red'}`}>
-            {estaAplicado ? <><CheckCircle size={12} /> Sí</> : <><XCircle size={12} /> No</>}
-          </span>
-        )
+        return <EstadoLabel nombre={estaAplicado ? 'Sí' : 'No'} color={estaAplicado ? 'green' : 'red'} />
       }
     },
     {
@@ -1952,13 +1977,8 @@ export function IncidenciasModule() {
         const pendientes = fracInfo.cuotas_pendientes
         const total = fracInfo.total_cuotas
         return (
-          <span 
-            className="dt-badge" 
-            style={{ 
-              backgroundColor: pendientes > 0 ? '#FEF3C7' : '#DCFCE7', 
-              color: pendientes > 0 ? '#92400E' : '#166534',
-              fontSize: '11px'
-            }}
+          <span
+            className={`dt-badge ${pendientes > 0 ? 'dt-badge-yellow' : 'dt-badge-green'}`}
             title={pendientes > 0 ? `${pendientes} cuotas pendientes de ${total}` : 'Todas las cuotas aplicadas'}
           >
             {pendientes > 0 ? `${pendientes}/${total} pend.` : `${total} cuotas`}
@@ -3309,6 +3329,8 @@ export function IncidenciasModule() {
           <DataTable
             data={incidenciasLogisticas}
             columns={incidenciasColumns}
+            // Fecha, Sem, Patente y Conductor quedan fijas al scrollear a la derecha
+            stickyLeftColumns={4}
             globalFilterFn={customGlobalFilter}
             initialSearch={busquedaIncidencia}
             loading={loading}
@@ -3390,21 +3412,13 @@ export function IncidenciasModule() {
               return key === 'sin' ? !cat : cat === key
             }).length
             return (
-              <div className="filtro-rapido" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '0 0 12px 0', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '4px' }}>
-                  Filtro rápido:
-                </span>
+              <div className="filtro-rapido inc-filtro-rapido">
+                <span className="inc-filtro-rapido-titulo">Filtro rápido:</span>
                 <button
+                  className={`inc-chip ${quickCategoriaFilter === null ? 'activo' : ''}`}
                   onClick={() => setQuickCategoriaFilter(null)}
-                  style={{
-                    padding: '6px 12px', borderRadius: 'var(--radius-full)', fontSize: '12px', fontWeight: 600,
-                    border: `1px solid ${quickCategoriaFilter === null ? 'var(--color-primary)' : 'var(--border-primary)'}`,
-                    background: quickCategoriaFilter === null ? 'var(--color-primary)' : 'transparent',
-                    color: quickCategoriaFilter === null ? '#fff' : 'var(--text-secondary)',
-                    cursor: 'pointer', whiteSpace: 'nowrap'
-                  }}
                 >
-                  Todos ({baseCobro.length})
+                  Todos <span className="inc-chip-count">({baseCobro.length})</span>
                 </button>
                 {categorias.map(c => {
                   const active = quickCategoriaFilter === c.key
@@ -3413,21 +3427,12 @@ export function IncidenciasModule() {
                   return (
                     <button
                       key={c.key}
+                      className={`inc-chip ${active ? 'activo' : ''}`}
                       onClick={() => setQuickCategoriaFilter(active ? null : c.key)}
-                      style={{
-                        padding: '6px 12px', borderRadius: 'var(--radius-full)', fontSize: '12px', fontWeight: 600,
-                        border: `1px solid ${active ? c.color : 'var(--border-primary)'}`,
-                        background: active ? c.color : 'transparent',
-                        color: active ? '#fff' : 'var(--text-secondary)',
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                        display: 'inline-flex', alignItems: 'center', gap: '6px'
-                      }}
                     >
-                      {!active && (
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: c.color, display: 'inline-block' }} />
-                      )}
+                      <span className="inc-chip-dot" style={{ background: c.color }} />
                       {c.label}
-                      <span style={{ opacity: 0.85, fontWeight: 500 }}>({count})</span>
+                      <span className="inc-chip-count">({count})</span>
                     </button>
                   )
                 })}
@@ -3571,6 +3576,8 @@ export function IncidenciasModule() {
           <DataTable
             data={soloPendientesEnviar ? incidenciasEnviables : incidenciasCobro}
             columns={incidenciasCobroColumns}
+            // Hasta Conductor fijas (+1 si está la columna de selección masiva)
+            stickyLeftColumns={modoSeleccionMasiva ? 5 : 4}
             globalFilterFn={customGlobalFilter}
             initialSearch={busquedaIncidencia}
             loading={loading}
@@ -3750,6 +3757,8 @@ export function IncidenciasModule() {
           <DataTable
             data={penalidadesFiltradas}
             columns={penalidadesColumns}
+            // Hasta Conductor fijas (Fecha, Sem, Sem Apl., Patente, Conductor; +1 con selección)
+            stickyLeftColumns={activeTab === 'por_aplicar' && canEdit ? 6 : 5}
             loading={loading}
             onFilteredDataChange={(rows) => { penalidadesVisiblesRef.current = rows }}
             searchPlaceholder="Buscar por patente, conductor..."
@@ -3871,6 +3880,8 @@ export function IncidenciasModule() {
           <DataTable
             data={penalidadesFiltradas}
             columns={penalidadesColumns}
+            // Hasta Conductor fijas (Fecha, Sem, Sem Apl., Patente, Conductor; +1 con selección)
+            stickyLeftColumns={5}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<CheckCircle size={48}
@@ -3909,6 +3920,8 @@ export function IncidenciasModule() {
           <DataTable
             data={penalidadesFiltradas}
             columns={penalidadesColumns}
+            // Hasta Conductor fijas (Fecha, Sem, Sem Apl., Patente, Conductor; +1 con selección)
+            stickyLeftColumns={5}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<XCircle size={48}
@@ -3927,12 +3940,28 @@ export function IncidenciasModule() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>
-                {modalMode === 'create' ? (modalType === 'incidencia' ? 'Nueva Incidencia' : 'Nueva Penalidad') :
-                 modalMode === 'edit' ? (modalType === 'incidencia' ? 'Editar Incidencia' : 'Editar Penalidad') :
-                 (modalType === 'incidencia' ? 'Detalle de Incidencia' : 
-                   (selectedPenalidad?.rechazado ? 'Cobro Rechazado' : 'Detalle de Penalidad'))}
-              </h2>
+              {modalMode === 'view' && modalType === 'incidencia' && selectedIncidencia ? (
+                <DetalleHeader
+                  titulo="Detalle de Incidencia"
+                  conductor={selectedIncidencia.conductor_display}
+                  turno={selectedIncidencia.turno}
+                  patente={selectedIncidencia.patente_display}
+                  estado={estadoDeIncidencia(selectedIncidencia, penalidades.find(p => p.incidencia_id === selectedIncidencia.id) ?? null)}
+                />
+              ) : modalMode === 'view' && modalType === 'penalidad' && selectedPenalidad ? (
+                <DetalleHeader
+                  titulo={selectedPenalidad.rechazado ? 'Cobro Rechazado' : 'Detalle de Penalidad'}
+                  conductor={selectedPenalidad.conductor_display}
+                  turno={selectedPenalidad.turno}
+                  patente={selectedPenalidad.patente_display}
+                  estado={estadoDePenalidad(selectedPenalidad)}
+                />
+              ) : (
+                <h2>
+                  {modalMode === 'create' ? (modalType === 'incidencia' ? 'Nueva Incidencia' : 'Nueva Penalidad') :
+                   (modalType === 'incidencia' ? 'Editar Incidencia' : 'Editar Penalidad')}
+                </h2>
+              )}
               <button className="modal-close" onClick={() => setShowModal(false)}>
                 <X size={18} />
               </button>
@@ -3943,14 +3972,11 @@ export function IncidenciasModule() {
                 modalType === 'incidencia' && selectedIncidencia ? (
                   <IncidenciaDetailView
                     incidencia={selectedIncidencia}
-                    onEdit={() => handleEditarIncidencia(selectedIncidencia)}
                     tiposCobroDescuento={tiposCobroDescuento}
-                    penalidadVinculada={penalidades.find(p => p.incidencia_id === selectedIncidencia.id) ?? null}
                   />
                 ) : modalType === 'penalidad' && selectedPenalidad ? (
                   <PenalidadDetailView
                     penalidad={selectedPenalidad}
-                    onEdit={selectedPenalidad.rechazado ? undefined : () => handleEditarPenalidad(selectedPenalidad)}
                     historialRechazos={historialRechazos}
                     loadingHistorial={loadingHistorial}
                     tiposCobroDescuentoMap={tiposCobroDescuentoMap}
@@ -3982,6 +4008,27 @@ export function IncidenciasModule() {
                 />
               )}
             </div>
+
+            {/* Detalle: pie fijo con Cerrar y Editar (antes Editar iba dentro del cuerpo) */}
+            {modalMode === 'view' && (
+              <div className="modal-footer">
+                <button className="btn-secondary" onClick={() => setShowModal(false)}>
+                  Cerrar
+                </button>
+                {modalType === 'incidencia' && selectedIncidencia && (
+                  <button className="btn-primary" onClick={() => handleEditarIncidencia(selectedIncidencia)}>
+                    <Edit2 size={14} />
+                    Editar
+                  </button>
+                )}
+                {modalType === 'penalidad' && selectedPenalidad && !selectedPenalidad.rechazado && (
+                  <button className="btn-primary" onClick={() => handleEditarPenalidad(selectedPenalidad)}>
+                    <Edit2 size={14} />
+                    Editar
+                  </button>
+                )}
+              </div>
+            )}
 
             {modalMode !== 'view' && (
               <div className="modal-footer">
@@ -5144,7 +5191,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                         {c.estado_codigo === 'ASIGNADO' ? 'Asignado' : c.estado_codigo === 'BAJA' ? 'Baja' : c.estado_codigo === 'ACTIVO' ? 'Activo' : c.estado_codigo}
                       </span>
                     )}
-                    <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
+                    <span style={{ fontSize: '11px', flexShrink: 0 }}><TurnoBadge turno={c.turno.toLowerCase().replace(' ', '_')} /></span>
                   </div>
                 </button>
               ))}
@@ -5199,323 +5246,259 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 
 // =====================================================
 // DETAIL VIEW COMPONENTS
+// Misma estructura para el detalle de los 5 tabs (2026-11-17): cabecera fija con
+// conductor + patente + estado (DetalleHeader, la arma el modal), secciones con
+// filas etiqueta/valor, etiquetas sobrias iguales a la tabla y el ID sólo como
+// referencia chica al pie. Los botones (Cerrar / Editar) van en el pie fijo.
 // =====================================================
+
+const COD_INC_NOMBRES: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
+
+type EstadoDetalle = { nombre: string; color: string }
+
+/** Estado que se muestra para una incidencia: el de facturación si tiene penalidad vinculada (igual que la tabla) */
+function estadoDeIncidencia(incidencia: IncidenciaCompleta, penalidadVinculada?: PenalidadCompleta | null): EstadoDetalle {
+  if (penalidadVinculada) return estadoDePenalidad(penalidadVinculada)
+  return { nombre: incidencia.estado_nombre || 'Sin estado', color: incidencia.estado_color || 'gray' }
+}
+
+function estadoDePenalidad(penalidad: PenalidadCompleta): EstadoDetalle {
+  if (penalidad.rechazado) return { nombre: 'Rechazado', color: 'red' }
+  if (penalidad.aplicado) return { nombre: 'Aplicado', color: 'green' }
+  return { nombre: 'Por Aplicar', color: 'yellow' }
+}
+
+/** Cabecera del modal de detalle: título + conductor (con turno), patente y estado */
+function DetalleHeader({ titulo, conductor, turno, patente, estado }: {
+  titulo: string
+  conductor?: string | null
+  turno?: string | null
+  patente?: string | null
+  estado: EstadoDetalle
+}) {
+  return (
+    <div className="inc-detalle-head">
+      <h2>{titulo}</h2>
+      <div className="inc-detalle-head-sub">
+        <span className="inc-detalle-head-conductor">
+          <span>{conductor || 'Sin conductor'}</span>
+          {turno && <TurnoBadge turno={turno.toLowerCase().replace(' ', '_')} size={12} />}
+        </span>
+        {patente && <PatenteBadge patente={patente} size="sm" />}
+        <EstadoLabel nombre={estado.nombre} color={estado.color} />
+      </div>
+    </div>
+  )
+}
+
+function DetalleSeccion({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <section className="inc-detalle-seccion">
+      <h4 className="inc-detalle-titulo">{titulo}</h4>
+      {children}
+    </section>
+  )
+}
+
+function DetalleFila({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="inc-detalle-fila">
+      <span className="inc-detalle-fila-label">{label}</span>
+      <span className="inc-detalle-fila-valor">{children}</span>
+    </div>
+  )
+}
+
+function DetalleTexto({ texto, vacio }: { texto?: string | null; vacio: string }) {
+  return texto
+    ? <p className="inc-detalle-texto">{texto}</p>
+    : <p className="inc-detalle-texto inc-detalle-texto-vacio">{vacio}</p>
+}
+
+/** ID sólo como referencia: corto y gris, el completo al pasar el mouse */
+function DetalleRef({ ids }: { ids: Array<{ label: string; id?: string | null }> }) {
+  const visibles = ids.filter(i => !!i.id)
+  if (visibles.length === 0) return null
+  return (
+    <p className="inc-detalle-ref">
+      {visibles.map((i, idx) => (
+        <span key={i.label} title={i.id || ''}>
+          {idx > 0 && ' · '}
+          {i.label} {i.id?.slice(0, 8)}
+        </span>
+      ))}
+    </p>
+  )
+}
 
 interface IncidenciaDetailViewProps {
   incidencia: IncidenciaCompleta
-  onEdit: () => void
   tiposCobroDescuento: TipoCobroDescuento[]
-  penalidadVinculada?: PenalidadCompleta | null
 }
 
-function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalidadVinculada }: IncidenciaDetailViewProps) {
-  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
-
-  function formatMoney(amount: number | undefined | null) {
-    return formatPlata(amount, { ceroComoGuion: true })
-  }
-
+function IncidenciaDetailView({ incidencia, tiposCobroDescuento }: IncidenciaDetailViewProps) {
   // Resolver tipo de incidencia
   const tipoObj = incidencia.tipo_cobro_descuento_id
     ? tiposCobroDescuento.find(t => t.id === incidencia.tipo_cobro_descuento_id)
     : null
   const esTelepaseInc = !!(incidencia as any).telepase_id
-  const codIncLabels: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
   // Telepase: Cod Inc = nombre del tipo (ej "P005 - Peaje"), Tipo Inc = "Telepase"
   const tipoIncidenciaNombre = esTelepaseInc ? 'Telepase' : (tipoObj?.nombre || '-')
   const codInc = esTelepaseInc
     ? (tipoObj?.nombre || '-')
-    : (tipoObj?.categoria ? (codIncLabels[tipoObj.categoria] || tipoObj?.nombre || tipoObj.categoria) : '-')
+    : (tipoObj?.categoria ? (COD_INC_NOMBRES[tipoObj.categoria] || tipoObj?.nombre || tipoObj.categoria) : '-')
+  const codIncCategoria = esTelepaseInc ? 'TELEPASE' : tipoObj?.categoria
   const esCobro = incidencia.tipo === 'cobro'
-  const esAFavor = tipoObj?.es_a_favor || false
-
-  // Estado que se muestra: para incidencias de facturación (con penalidad vinculada) es el
-  // de facturación (Por Aplicar/Aplicado/Rechazado), igual que en la tabla; si no, el genérico.
-  const estadoEfectivo = penalidadVinculada
-    ? (penalidadVinculada.rechazado
-        ? { nombre: 'Rechazado', color: 'red' }
-        : penalidadVinculada.aplicado
-        ? { nombre: 'Aplicado', color: 'green' }
-        : { nombre: 'Por Aplicar', color: 'yellow' })
-    : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
   const vehiculoTexto = [incidencia.vehiculo_marca, incidencia.vehiculo_modelo].filter(Boolean).join(' ')
 
-  // Estilos (compactos: etiqueta chica arriba, valor abajo, en grilla)
-  const seccion = { border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: '10px' }
-  const tituloSeccion = { fontSize: '10.5px', fontWeight: 700 as const, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: 'var(--text-tertiary)', marginBottom: '8px' }
-  const grilla = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 14px' }
-  const etiqueta = { display: 'block', fontSize: '10px', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.03em', color: 'var(--text-tertiary)', marginBottom: '2px' }
-  const valor = { display: 'block', fontSize: '12.5px', color: 'var(--text-primary)', fontWeight: 500 as const, overflowWrap: 'anywhere' as const }
-  const texto = { fontSize: '12.5px', lineHeight: 1.45, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' as const, margin: 0 }
-
-  const Dato = ({ label, children }: { label: string; children: ReactNode }) => (
-    <div style={{ minWidth: 0 }}>
-      <span style={etiqueta}>{label}</span>
-      <span style={valor}>{children}</span>
-    </div>
-  )
-
   return (
-    <div className="incidencia-detail">
-      {/* Encabezado: patente, estado, código y monto */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {incidencia.patente_display
-              ? <PatenteBadge patente={incidencia.patente_display} />
-              : <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Sin patente</span>}
-            <span className={`estado-badge estado-${estadoEfectivo.color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{estadoEfectivo.nombre}</span>
-            {codInc !== '-' && (
-              <span style={{ background: tipoObj?.categoria === 'P004' ? '#dcfce7' : '#fee2e2', color: tipoObj?.categoria === 'P004' ? '#166534' : '#991b1b', padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '11px' }}>{codInc}</span>
-            )}
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {[incidencia.conductor_display, vehiculoTexto].filter(Boolean).join(' · ') || 'Sin conductor ni vehículo'}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+    <div className="inc-detalle">
+      <DetalleSeccion titulo="Clasificación">
+        <div className="inc-detalle-grilla">
+          {esCobro && <DetalleFila label="Cod Inc."><CodIncLabel texto={codInc} categoria={codIncCategoria} /></DetalleFila>}
+          <DetalleFila label="Tipo Inc."><TipoIncTexto texto={tipoIncidenciaNombre} /></DetalleFila>
           {esCobro && (
-            <div style={{ textAlign: 'right' }}>
-              <span style={etiqueta}>Monto</span>
-              <span style={{ fontSize: '16px', fontWeight: 700, color: esAFavor ? '#16a34a' : '#dc2626' }}>{formatMoney(incidencia.monto)}</span>
-            </div>
+            <DetalleFila label="Monto">
+              <MontoTexto texto={formatPlata(incidencia.monto, { ceroComoGuion: true })} aFavor={esMontoAFavor(tipoObj)} />
+            </DetalleFila>
           )}
-          <button className="btn-secondary" onClick={onEdit} style={{ padding: '6px 12px', fontSize: '12.5px' }}>
-            <Edit2 size={13} />
-            Editar
-          </button>
+          <DetalleFila label="Área">{incidencia.area || '-'}</DetalleFila>
+          {!esCobro && <DetalleFila label="Penalidades">{incidencia.total_penalidades ?? '-'}</DetalleFila>}
         </div>
-      </div>
+      </DetalleSeccion>
 
-      {/* Clasificación */}
-      <div style={seccion}>
-        <div style={tituloSeccion}>Clasificación</div>
-        <div style={grilla}>
-          <Dato label="Tipo de incidencia">{tipoIncidenciaNombre}</Dato>
-          <Dato label="Área">{incidencia.area || '-'}</Dato>
-          <Dato label="Penalidades">{incidencia.total_penalidades ?? '-'}</Dato>
+      <DetalleSeccion titulo="Fecha y registro">
+        <div className="inc-detalle-grilla">
+          <DetalleFila label="Fecha">{formatFecha(incidencia.fecha)}</DetalleFila>
+          <DetalleFila label="Semana">{incidencia.semana || '-'}</DetalleFila>
+          <DetalleFila label="Creado">{incidencia.created_at ? formatFechaHora(incidencia.created_at) : '-'}</DetalleFila>
+          <DetalleFila label="Registrado por">{incidencia.registrado_por || '-'}</DetalleFila>
         </div>
-      </div>
+      </DetalleSeccion>
 
-      {/* Fecha y registro */}
-      <div style={seccion}>
-        <div style={tituloSeccion}>Fecha y registro</div>
-        <div style={grilla}>
-          <Dato label="Fecha">{formatDate(incidencia.fecha)}</Dato>
-          <Dato label="Semana">{incidencia.semana || '-'}</Dato>
-          <Dato label="Modalidad">{incidencia.turno || '-'}</Dato>
-          <Dato label="Registrado por">{incidencia.registrado_por || '-'}</Dato>
-          {incidencia.estado_vehiculo && <Dato label="Estado vehículo">{incidencia.estado_vehiculo}</Dato>}
+      <DetalleSeccion titulo="Conductor y vehículo">
+        <div className="inc-detalle-grilla">
+          <DetalleFila label="Conductor">{incidencia.conductor_display || '-'}</DetalleFila>
+          <DetalleFila label="Turno">{incidencia.turno ? <TurnoBadge turno={incidencia.turno.toLowerCase().replace(' ', '_')} conTexto size={12} /> : '-'}</DetalleFila>
+          <DetalleFila label="Patente">{incidencia.patente_display ? <PatenteBadge patente={incidencia.patente_display} size="sm" /> : '-'}</DetalleFila>
+          <DetalleFila label="Vehículo">{vehiculoTexto || '-'}</DetalleFila>
+          {incidencia.estado_vehiculo && <DetalleFila label="Estado vehículo">{incidencia.estado_vehiculo}</DetalleFila>}
         </div>
-      </div>
+      </DetalleSeccion>
 
-      {/* Vehículo y conductor */}
-      <div style={seccion}>
-        <div style={tituloSeccion}>Vehículo y conductor</div>
-        <div style={grilla}>
-          <Dato label="Patente">{incidencia.patente_display || '-'}</Dato>
-          <Dato label="Vehículo">{vehiculoTexto || '-'}</Dato>
-          <Dato label="Conductor">{incidencia.conductor_display || '-'}</Dato>
-        </div>
-      </div>
+      <DetalleSeccion titulo="Descripción">
+        <DetalleTexto texto={incidencia.descripcion} vacio="Sin descripción" />
+      </DetalleSeccion>
 
-      {/* Descripción y acción */}
-      <div style={seccion}>
-        <div style={{ ...tituloSeccion, marginBottom: '4px' }}>Descripción</div>
-        <p style={texto}>{incidencia.descripcion || <span style={{ color: 'var(--text-tertiary)' }}>Sin descripción</span>}</p>
-        <div style={{ ...tituloSeccion, marginTop: '10px', marginBottom: '4px' }}>Acción ejecutada</div>
-        <p style={texto}>{incidencia.accion_ejecutada || <span style={{ color: 'var(--text-tertiary)' }}>Sin acción ejecutada</span>}</p>
-      </div>
+      <DetalleSeccion titulo="Acción ejecutada">
+        <DetalleTexto texto={incidencia.accion_ejecutada} vacio="Sin acción ejecutada" />
+      </DetalleSeccion>
 
-      {/* FIX 2026-05-20: ID completo visible en el detalle */}
-      <p style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', margin: '4px 0 0' }}>ID: {incidencia.id}</p>
+      <DetalleRef ids={[{ label: 'Ref.', id: incidencia.id }]} />
     </div>
   )
 }
 
 interface PenalidadDetailViewProps {
   penalidad: PenalidadCompleta
-  onEdit?: () => void
   historialRechazos?: Array<{id: string; motivo: string; rechazado_por_nombre: string; created_at: string}>
   loadingHistorial?: boolean
   tiposCobroDescuentoMap?: Map<string, TipoCobroDescuento>
 }
 
-function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadingHistorial = false, tiposCobroDescuentoMap }: PenalidadDetailViewProps) {
-  function formatDate(dateStr: string | undefined | null) { return formatFecha(dateStr) }
-  
-  function formatDateTime(dateStr: string | undefined | null) {
-    return formatFechaHora(dateStr)
-  }
-
-  function formatMoney(value: number | undefined | null) { return formatPlata(value, { ceroComoGuion: true }) }
-  
-  const esRechazado = penalidad.rechazado
+function PenalidadDetailView({ penalidad, historialRechazos = [], loadingHistorial = false, tiposCobroDescuentoMap }: PenalidadDetailViewProps) {
   const tipoObj = penalidad.tipo_cobro_descuento_id && tiposCobroDescuentoMap ? tiposCobroDescuentoMap.get(penalidad.tipo_cobro_descuento_id) : null
   const esTelepasePen = !!(penalidad as any).telepase_id
-  const codIncLabelsLocal: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
   // Telepase: Cod Inc = nombre del tipo (ej "P005 - Peaje"), Tipo Inc = "Telepase"
   const codInc = esTelepasePen
     ? (tipoObj?.nombre || '-')
-    : (tipoObj?.categoria ? (codIncLabelsLocal[tipoObj.categoria] || tipoObj.categoria) : '-')
+    : (tipoObj?.categoria ? (COD_INC_NOMBRES[tipoObj.categoria] || tipoObj.categoria) : '-')
+  const codIncCategoria = esTelepasePen ? 'TELEPASE' : tipoObj?.categoria
   const tipoNombreResuelto = esTelepasePen ? 'Telepase' : (penalidad.tipo_nombre || tipoObj?.nombre || '-')
-  const colorBg = tipoObj?.categoria === 'P004' ? '#dcfce7' : tipoObj?.categoria ? '#fee2e2' : undefined
   const vehiculoDesc = [penalidad.vehiculo_marca, penalidad.vehiculo_modelo].filter(Boolean).join(' ') || '-'
+  const aFavor = esMontoAFavor(tipoObj) || penalidad.tipo_es_a_favor === true
 
   return (
-    <div className="incidencia-detail">
-      <div className="detail-header">
-        <div>
-          {/* FIX 2026-05-20: mostrar ID completo en el modal de detalle */}
-          <p className="detail-id" style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>ID: {penalidad.id}</p>
-          <h3 className="detail-title">{penalidad.conductor_display || 'Sin conductor'}</h3>
-          <span className={`aplicado-badge ${esRechazado ? 'aplicado-rechazado' : penalidad.aplicado ? 'aplicado-si' : 'aplicado-no'}`}>
-            {esRechazado ? 'Rechazado' : penalidad.aplicado ? 'Aplicado' : 'Pendiente'}
-          </span>
-        </div>
-        {!esRechazado && onEdit && (
-          <button className="btn-secondary" onClick={onEdit}>
-            <Edit2 size={14} />
-            Editar
-          </button>
-        )}
-      </div>
-
-      <div className="detail-cards">
-        <div className="detail-card">
-          <div className="detail-card-title">Información General</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Fecha</span>
-            <span className="detail-item-value">{formatDate(penalidad.fecha)}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Semana</span>
-            <span className="detail-item-value">{penalidad.semana || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Cod Inc.</span>
-            <span className="detail-item-value">
-              {codInc !== '-' ? (
-                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '12px', color: '#1a1a1a' }}>{codInc}</span>
-              ) : '-'}
-            </span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Tipo Inc.</span>
-            <span className="detail-item-value">
-              {tipoNombreResuelto !== '-' && colorBg ? (
-                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontWeight: 500, color: '#1a1a1a' }}>{tipoNombreResuelto}</span>
-              ) : tipoNombreResuelto}
-            </span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Detalle</span>
-            <span className="detail-item-value">{penalidad.detalle || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Monto</span>
-            <span className="detail-item-value">
-              {penalidad.monto ? (
-                <span style={{ fontWeight: 600, color: '#1a1a1a', background: colorBg || undefined, padding: colorBg ? '2px 8px' : undefined, borderRadius: colorBg ? '4px' : undefined }}>{formatMoney(penalidad.monto)}</span>
-              ) : '-'}
-            </span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Área responsable</span>
-            <span className="detail-item-value">{penalidad.area_responsable || '-'}</span>
-          </div>
+    <div className="inc-detalle">
+      <DetalleSeccion titulo="Clasificación">
+        <div className="inc-detalle-grilla">
+          <DetalleFila label="Cod Inc."><CodIncLabel texto={codInc} categoria={codIncCategoria} /></DetalleFila>
+          <DetalleFila label="Tipo Inc."><TipoIncTexto texto={tipoNombreResuelto} /></DetalleFila>
+          <DetalleFila label="Monto">
+            <MontoTexto texto={penalidad.monto ? formatPlata(penalidad.monto, { ceroComoGuion: true }) : '-'} aFavor={aFavor} />
+          </DetalleFila>
+          <DetalleFila label="Área">{penalidad.area_responsable || '-'}</DetalleFila>
           {penalidad.fraccionado && (
-            <div className="detail-item">
-              <span className="detail-item-label">Fraccionamiento</span>
-              <span className="detail-item-value" style={{ fontWeight: 600, color: '#7c3aed' }}>{penalidad.cantidad_cuotas || '-'} cuotas</span>
-            </div>
+            <DetalleFila label="Fracc.">{penalidad.cantidad_cuotas || '-'} cuotas</DetalleFila>
           )}
         </div>
+        {penalidad.detalle && (
+          <div style={{ marginTop: '6px' }}>
+            <DetalleFila label="Detalle">{penalidad.detalle}</DetalleFila>
+          </div>
+        )}
+      </DetalleSeccion>
 
-        <div className="detail-card">
-          <div className="detail-card-title">Conductor y Vehículo</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Conductor</span>
-            <span className="detail-item-value">{penalidad.conductor_display || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Patente</span>
-            <span className="detail-item-value"><PatenteBadge patente={penalidad.patente_display} size="sm" /></span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Vehículo</span>
-            <span className="detail-item-value">{vehiculoDesc}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Turno</span>
-            <span className="detail-item-value">{penalidad.turno || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Fecha aplicación</span>
-            <span className="detail-item-value">{formatDate(penalidad.fecha_aplicacion)}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Creado por</span>
-            <span className="detail-item-value">{penalidad.created_by_name || '-'}</span>
-          </div>
+      <DetalleSeccion titulo="Fechas y registro">
+        <div className="inc-detalle-grilla">
+          <DetalleFila label="Fecha">{formatFecha(penalidad.fecha)}</DetalleFila>
+          <DetalleFila label="Semana">{penalidad.semana || '-'}</DetalleFila>
+          <DetalleFila label="Creado">{penalidad.created_at ? formatFechaHora(penalidad.created_at) : '-'}</DetalleFila>
+          <DetalleFila label="Creado por">{penalidad.created_by_name || '-'}</DetalleFila>
+          {penalidad.semana_aplicacion ? <DetalleFila label="Sem. aplicación">S{penalidad.semana_aplicacion}</DetalleFila> : null}
+          {penalidad.fecha_aplicacion && <DetalleFila label="Fecha aplicación">{formatFecha(penalidad.fecha_aplicacion)}</DetalleFila>}
+          {penalidad.rechazado && penalidad.fecha_rechazo && <DetalleFila label="Fecha rechazo">{formatFechaHora(penalidad.fecha_rechazo)}</DetalleFila>}
         </div>
-      </div>
+      </DetalleSeccion>
 
-      {/* Incidencia Enlazada */}
+      <DetalleSeccion titulo="Conductor y vehículo">
+        <div className="inc-detalle-grilla">
+          <DetalleFila label="Conductor">{penalidad.conductor_display || '-'}</DetalleFila>
+          <DetalleFila label="Turno">{penalidad.turno ? <TurnoBadge turno={penalidad.turno.toLowerCase().replace(' ', '_')} conTexto size={12} /> : '-'}</DetalleFila>
+          <DetalleFila label="Patente">{penalidad.patente_display ? <PatenteBadge patente={penalidad.patente_display} size="sm" /> : '-'}</DetalleFila>
+          <DetalleFila label="Vehículo">{vehiculoDesc}</DetalleFila>
+        </div>
+      </DetalleSeccion>
+
       {penalidad.incidencia_id && (
-        <div className="detail-card" style={{ marginTop: '16px' }}>
-          <div className="detail-card-title">Incidencia Enlazada</div>
-          <div className="detail-item">
-            <span className="detail-item-label">ID Incidencia</span>
-            {/* FIX 2026-05-20: mostrar ID completo */}
-            <span className="detail-item-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', wordBreak: 'break-all' }}>{penalidad.incidencia_id}</span>
-          </div>
-          {penalidad.incidencia_descripcion && (
-            <div className="detail-item">
-              <span className="detail-item-label">Descripción</span>
-              <span className="detail-item-value">{penalidad.incidencia_descripcion}</span>
-            </div>
-          )}
-        </div>
+        <DetalleSeccion titulo="Incidencia enlazada">
+          <DetalleTexto texto={penalidad.incidencia_descripcion} vacio="Sin descripción" />
+        </DetalleSeccion>
       )}
 
       {penalidad.observaciones && (
-        <div className="detail-description">
-          <div className="detail-description-title">Observaciones</div>
-          <p>{penalidad.observaciones}</p>
-        </div>
+        <DetalleSeccion titulo="Observaciones">
+          <DetalleTexto texto={penalidad.observaciones} vacio="" />
+        </DetalleSeccion>
       )}
 
       {penalidad.nota_administrativa && (
-        <div className="detail-description">
-          <div className="detail-description-title">Nota Administrativa</div>
-          <p>{penalidad.nota_administrativa}</p>
-        </div>
+        <DetalleSeccion titulo="Nota administrativa">
+          <DetalleTexto texto={penalidad.nota_administrativa} vacio="" />
+        </DetalleSeccion>
       )}
-      
-      {/* Historial de rechazos */}
-      {(loadingHistorial || historialRechazos.length > 0) && (
-        <div className="detail-description" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-          <div className="detail-description-title" style={{ color: '#dc2626' }}>Historial de Rechazos</div>
+
+      {/* Historial de rechazos (o el motivo guardado en la penalidad si no hay historial) */}
+      {(loadingHistorial || historialRechazos.length > 0 || (penalidad.rechazado && penalidad.motivo_rechazo)) && (
+        <DetalleSeccion titulo="Historial de rechazos">
           {loadingHistorial ? (
             <Spinner size="sm" message="Cargando historial..." />
-          ) : historialRechazos.map((rechazo, idx) => (
-            <div key={rechazo.id} style={{ 
-              padding: '12px', 
-              background: 'white', 
-              borderRadius: 'var(--radius-sm)', 
-              marginBottom: idx < historialRechazos.length - 1 ? '8px' : 0 
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontWeight: 600, color: '#dc2626' }}>Rechazo #{historialRechazos.length - idx}</span>
-                <span style={{ fontSize: '12px', color: '#666' }}>{formatDateTime(rechazo.created_at)}</span>
+          ) : historialRechazos.length > 0 ? historialRechazos.map((rechazo, idx) => (
+            <div key={rechazo.id} className="inc-detalle-rechazo">
+              <div className="inc-detalle-rechazo-meta">
+                Rechazo #{historialRechazos.length - idx} · {formatFechaHora(rechazo.created_at)} · Por: {rechazo.rechazado_por_nombre || 'Sistema'}
               </div>
-              <p style={{ margin: '0 0 4px 0', color: '#333' }}>{rechazo.motivo}</p>
-              <span style={{ fontSize: '12px', color: '#888' }}>Por: {rechazo.rechazado_por_nombre || 'Sistema'}</span>
+              <p className="inc-detalle-texto">{rechazo.motivo}</p>
             </div>
-          ))}
-        </div>
+          )) : (
+            <div className="inc-detalle-rechazo">
+              <p className="inc-detalle-texto">{penalidad.motivo_rechazo}</p>
+            </div>
+          )}
+        </DetalleSeccion>
       )}
+
+      <DetalleRef ids={[{ label: 'Ref.', id: penalidad.id }, { label: 'Incidencia', id: penalidad.incidencia_id }]} />
     </div>
   )
 }

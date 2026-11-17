@@ -8,22 +8,34 @@
 .cpanel-num.cpanel-nulo { color: var(--text-tertiary, #9ca3af); }
 .cpanel-num small { font-size: 10px; font-weight: 500; color: var(--text-tertiary, #9ca3af); margin-left: 4px; }
 
+/* Etiqueta sobria: punto de color + texto del color, sin fondo */
 .cpanel-badge {
-  display: inline-block;
-  padding: 3px 9px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  font-size: 10px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
   white-space: nowrap;
+  background: transparent;
 }
-.cpanel-badge.ok { background: #dcfce7; color: #15803d; }
-.cpanel-badge.off { background: var(--bg-tertiary, #f3f4f6); color: var(--text-secondary, #6b7280); text-transform: capitalize; }
-.cpanel-badge.asig { background: #dbeafe; color: #1d4ed8; letter-spacing: .03em; }
-.cpanel-badge.noasig { background: #fef3c7; color: #b45309; }
-.cpanel-badge.turno { text-transform: none; }
-.cpanel-badge.turno.diurno { background: #fef9c3; color: #a16207; }
-.cpanel-badge.turno.nocturno { background: #e0e7ff; color: #4338ca; }
-.cpanel-badge.turno.a_cargo { background: #f3e8ff; color: #7e22ce; }
+.cpanel-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.cpanel-badge.ok { color: #15803d; }
+.cpanel-badge.off { color: var(--text-secondary, #6b7280); }
+.cpanel-badge.asig { color: #1d4ed8; }
+.cpanel-badge.noasig { color: #b45309; }
+[data-theme="dark"] .cpanel-badge.ok { color: #4ade80; }
+[data-theme="dark"] .cpanel-badge.asig { color: #60a5fa; }
+[data-theme="dark"] .cpanel-badge.noasig { color: #fbbf24; }
 
 .cpanel-ver {
   display: inline-flex;
@@ -136,14 +148,16 @@
 .inc-cond-tipo:disabled { opacity: 0.4; cursor: not-allowed; }
 .inc-cond-n { font-size: 11px; padding: 0 6px; border-radius: var(--radius-full); background: rgba(0,0,0,0.08); }
 .inc-cond-tipo.is-activo .inc-cond-n { background: rgba(255,255,255,0.25); }
-.inc-cond-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: var(--radius-xs); white-space: nowrap; }
-.inc-cond-badge--siniestro { background: #fee2e2; color: #991b1b; }
-.inc-cond-badge--cobro { background: #fef3c7; color: #92400e; }
-.inc-cond-badge--logistica { background: #dbeafe; color: #1e40af; }
+.inc-cond-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; background: transparent; }
+.inc-cond-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.inc-cond-badge--siniestro { color: #b91c1c; }
+.inc-cond-badge--cobro { color: #b45309; }
+.inc-cond-badge--logistica { color: #1d4ed8; }
+[data-theme="dark"] .inc-cond-badge--siniestro { color: #f87171; }
+[data-theme="dark"] .inc-cond-badge--cobro { color: #fbbf24; }
+[data-theme="dark"] .inc-cond-badge--logistica { color: #60a5fa; }
 .inc-cond-sub { font-size: 11px; color: var(--text-tertiary, #9ca3af); margin-top: 2px; max-width: 420px; }
-.inc-cond-estado { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full); background: var(--bg-secondary, #f3f4f6); white-space: nowrap; }
+.inc-cond-estado { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; white-space: nowrap; background: transparent; }
+.inc-cond-estado::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 /* Etiqueta de app (semana cerrada) */
-.cpanel-app { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); white-space: nowrap; }
-.cpanel-app--cabify { background: #ede9fe; color: #5b21b6; }
-.cpanel-app--didi { background: #ffedd5; color: #9a3412; }

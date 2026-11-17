@@ -1153,3 +1153,45 @@
   font-size: 11px;
   line-height: 18px;
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.assignment-group-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.assignment-group-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.assignment-group-badge.cargo { color: #b45309; }
+[data-theme="dark"] .assignment-group-badge.cargo { color: #fbbf24; }
+/* Historial de vehículos del conductor: turno y estado sin fondo (color inline) */
+.vehiculo-asignacion-info .turno-badge,
+.vehiculo-asignacion-info .estado-asig-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0;
+  padding-right: 0;
+  background: transparent;
+}
+.vehiculo-asignacion-info .estado-asig-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}

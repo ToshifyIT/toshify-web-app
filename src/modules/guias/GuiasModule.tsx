@@ -51,6 +51,7 @@ import { Spinner } from '../../components/ui/LoadingOverlay'
 import { fechaLocalISO } from '../../utils/fechaArgentina'
 import { formatPlata, formatNumero } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatFecha } from '../../utils/format'
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
@@ -2196,55 +2197,31 @@ export function GuiasModule() {
           if (isBaja) {
             return <span className="vehiculo-cell-na">N/A</span>;
           }
-          const chip = (bg: string, color: string, txt: string) => (
-            <span
-              style={{
-                fontSize: '12px',
-                lineHeight: 1,
-                padding: '2px 6px',
-                borderRadius: 'var(--radius-full)',
-                backgroundColor: bg,
-                color,
-                display: 'inline-block',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {txt}
-            </span>
+          const otro = (txt: string) => (
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{txt}</span>
           );
           const asignacionInfo = (row.original as any).asignacion_info;
           if (asignacionInfo) {
             if (asignacionInfo.modalidad === 'todo_dia') {
-              return chip('#EDE9FE', '#6D28D9', 'A Cargo');
+              return <TurnoBadge turno="a_cargo" />;
             }
             const turno = asignacionInfo.turno_conductor?.toLowerCase();
-            if (turno === 'diurno') {
-              return chip('#FEF3C7', '#9A3412', 'Diurno');
-            }
-            if (turno === 'nocturno') {
-              return chip('#DBEAFE', '#1D4ED8', 'Nocturno');
+            if (turno === 'diurno' || turno === 'nocturno') {
+              return <TurnoBadge turno={turno} />;
             }
             if (turno) {
-              return chip('#E5E7EB', '#374151', turno.charAt(0).toUpperCase());
+              return otro(turno.charAt(0).toUpperCase());
             }
           }
           const preferenciaRaw = (row.original as any).preferencia_turno;
           const preferencia = preferenciaRaw ? preferenciaRaw.toString().toLowerCase() : '';
-          let label = 'Sin preferencia';
-          let bg = '#E5E7EB';
-          let color = '#374151';
-          if (preferencia === 'diurno' || preferencia === 'mañana') {
-            label = 'Diurno';
-            bg = '#FEF3C7';
-            color = '#9A3412';
-          } else if (preferencia === 'nocturno' || preferencia === 'noche') {
-            label = 'Nocturno';
-            bg = '#DBEAFE';
-            color = '#1D4ED8';
-          } else if (preferencia && preferencia !== 'sin preferencia') {
-            label = preferencia.charAt(0).toUpperCase();
+          if (preferencia === 'diurno' || preferencia === 'mañana') return <TurnoBadge turno="diurno" />;
+          if (preferencia === 'nocturno' || preferencia === 'noche') return <TurnoBadge turno="nocturno" />;
+          if (preferencia === 'a_cargo') return <TurnoBadge turno="a_cargo" />;
+          if (!preferencia || preferencia === 'sin preferencia' || preferencia === 'sin_preferencia') {
+            return <TurnoBadge turno={null} />;
           }
-          return chip(bg, color, label);
+          return otro(preferencia.charAt(0).toUpperCase());
         },
         filterFn: (row: any, id: string, filterValue: any) => {
           if (!filterValue.length) return true

@@ -370,3 +370,31 @@
 @media (max-width: 640px) {
   .cdet-kpis, .cdet-fac-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.cdet-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.cdet-tag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.cdet-tag.ok { color: #15803d; }
+.cdet-tag.impaga { color: #b91c1c; }
+.cdet-tag.pend { color: var(--text-secondary); }
+[data-theme="dark"] .cdet-tag.ok { color: #4ade80; }
+[data-theme="dark"] .cdet-tag.impaga { color: #f87171; }
+[data-theme="dark"] .cdet-tag.pend { color: var(--text-secondary); }

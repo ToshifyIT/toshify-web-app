@@ -3151,7 +3151,7 @@ export function GarantiasTab() {
                                 </td>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
                                   {esDevolucionCambioTarifa(d.referencia) && (
-                                    <span style={{ display: 'inline-block', marginRight: '6px', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '10px', fontWeight: 600, background: 'rgba(16,185,129,0.12)', color: '#059669' }}
+                                    <span style={{ display: 'inline-block', marginRight: '6px', fontSize: '10px', fontWeight: 600, color: '#059669' }}
                                       title="Se descuenta del total a pagar en la facturación de esa semana (P028)">
                                       Descontada en facturación
                                     </span>

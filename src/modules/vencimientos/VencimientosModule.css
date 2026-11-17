@@ -786,3 +786,45 @@ input:checked + .slider .off-text {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17): prioridad y solicitado sin fondo,
+   punto + texto del color (como las etiquetas de estado de toda la app).
+   Solicitado sigue siendo clickeable: muestra un borde fino al pasar el mouse.
+   ===================================================== */
+.prioridad-badge,
+.solicitado-badge {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  padding: 2px 0;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  min-width: 0;
+  justify-content: flex-start;
+}
+.prioridad-badge::before,
+.solicitado-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.prioridad-alta { color: #b91c1c; }
+.prioridad-media { color: #b45309; }
+.prioridad-baja { color: #15803d; }
+.prioridad-vencido { color: #b91c1c; font-weight: 800; }
+.prioridad-na { color: var(--text-tertiary); }
+.solicitado-si { color: #15803d; }
+.solicitado-no { color: #b91c1c; }
+.solicitado-badge { padding: 2px 6px; margin-left: -6px; }
+.solicitado-badge:hover { border-color: var(--border-primary) !important; }
+[data-theme="dark"] .prioridad-alta,
+[data-theme="dark"] .prioridad-vencido,
+[data-theme="dark"] .solicitado-no { color: #f87171; }
+[data-theme="dark"] .prioridad-media { color: #fbbf24; }
+[data-theme="dark"] .prioridad-baja,
+[data-theme="dark"] .solicitado-si { color: #34d399; }

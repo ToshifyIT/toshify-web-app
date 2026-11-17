@@ -10,6 +10,7 @@ import { clasificarMotivoDesinteres } from '../leadMotivos'
 import { estadoMonotributo } from '../monotributo'
 import { alertasLicencia, clasesDeLicencia } from '../licenciaLead'
 import { AlertasLicencia } from './AlertasLicencia'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 import '../LeadsModule.css'
 
 const detailMapStyle = {
@@ -161,6 +162,16 @@ function Item({ label, valor, largo, mono }: {
       </span>
     </div>
   )
+}
+
+/** Turno del resumen: los valores normalizados de Leads van con el TurnoBadge sobrio. */
+function turnoResumen(turno: string | null | undefined): ReactNode {
+  const t = (turno || '').trim().toLowerCase()
+  if (!t) return '-'
+  if (t === 'diurno' || t === 'nocturno') return <TurnoBadge turno={t} conTexto />
+  if (t.includes('cargo')) return <TurnoBadge turno="a_cargo" conTexto />
+  if (t.startsWith('sin pref')) return <TurnoBadge turno={null} />
+  return turno
 }
 
 /** Dato del resumen de arriba. */
@@ -324,7 +335,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             : (lead.zona || '-')}
           tono={lead.latitud != null && lead.longitud != null ? (enZonaRestringida ? 'mal' : 'bien') : undefined}
         />
-        <Dato label="Turno" valor={lead.turno || '-'} />
+        <Dato label="Turno" valor={turnoResumen(lead.turno)} />
         <Dato label="Licencia" valor={lead.licencia || '-'} />
         <Dato label="Teléfono" valor={lead.phone || lead.whatsapp_number || '-'} />
         <Dato label="Capitán" valor={lead.entrevistador_asignado || '-'} />
@@ -525,6 +536,9 @@ function LeadDetailMap({ lat, lng, zonasRestringidas, enZonaRestringida, nombreZ
             zoomControl: true,
             mapTypeControl: false,
             streetViewControl: false,
+            // Sin los lugares de Google (plazas, comercios): al tocarlos abrían un
+            // cartel "No se ha podido cargar la información del sitio"
+            clickableIcons: false,
             fullscreenControl: false,
           }}
         >

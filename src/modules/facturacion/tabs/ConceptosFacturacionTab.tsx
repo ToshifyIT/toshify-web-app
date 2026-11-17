@@ -740,14 +740,10 @@ export function ConceptosFacturacionTab() {
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px' }}>
           {row.original.aplica_turno && (
-            <span style={{ padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontSize: '11px', background: '#DBEAFE', color: '#1D4ED8' }}>
-              TURNO
-            </span>
+            <span className="dt-badge dt-badge-blue">TURNO</span>
           )}
           {row.original.aplica_cargo && (
-            <span style={{ padding: '2px 6px', borderRadius: 'var(--radius-xs)', fontSize: '11px', background: '#F3E8FF', color: '#7C3AED' }}>
-              CARGO
-            </span>
+            <span className="dt-badge dt-badge-purple">CARGO</span>
           )}
         </div>
       )

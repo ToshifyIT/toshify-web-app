@@ -86,7 +86,7 @@ export function MenuFiltro({
           borderRadius: 'var(--radius-md)',
           background: activo ? '#fff5f7' : 'var(--bg-primary)',
           color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)',
-          fontSize: 11.5,
+          fontSize: 10.5,
           fontWeight: 700,
           cursor: 'pointer',
           whiteSpace: 'nowrap',
@@ -141,7 +141,7 @@ export function MenuFiltro({
                   padding: '6px 8px 6px 24px',
                   border: '1px solid var(--border-primary)',
                   borderRadius: 'var(--radius-md)',
-                  fontSize: 12,
+                  fontSize: 11,
                   outline: 'none',
                   boxSizing: 'border-box',
                   background: 'var(--bg-secondary)',
@@ -165,7 +165,7 @@ export function MenuFiltro({
                 borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-secondary)',
                 color: 'var(--text-secondary)',
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: 700,
                 cursor: 'pointer',
               }}
@@ -175,7 +175,7 @@ export function MenuFiltro({
           )}
 
           {filtradas.length === 0 && (
-            <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', padding: '6px 2px' }}>
+            <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '6px 2px' }}>
               Sin resultados.
             </div>
           )}
@@ -197,7 +197,7 @@ export function MenuFiltro({
                   borderRadius: 'var(--radius-sm)',
                   background: tildado ? '#fff5f7' : 'transparent',
                   color: 'var(--text-primary)',
-                  fontSize: 12.5,
+                  fontSize: 11.5,
                   textAlign: 'left',
                   cursor: 'pointer',
                 }}
@@ -221,7 +221,7 @@ export function MenuFiltro({
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {valor}
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{cantidad}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{cantidad}</span>
               </button>
             )
           })}

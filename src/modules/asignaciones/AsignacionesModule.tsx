@@ -37,6 +37,7 @@ import { TIPO_ASIGNACION_LABELS as ETIQUETAS_TIPO_ASIGNACION } from '../../types
 import './AsignacionesModule.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
+import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
 interface Asignacion {
@@ -3548,7 +3549,7 @@ export function AsignacionesModule() {
             return (
               <div className="asig-conductores-compact">
                 <span className={`asig-conductor-turno asig-turno-${turnoCond}`}>
-                  <span className={`asig-turno-label asig-label-${turnoCond}`}>{turnoCond === 'diurno' ? 'D' : 'N'}</span>
+                  <TurnoBadge turno={turnoCond} size={12} />
                   {nombre}
                 </span>
               </div>
@@ -3594,7 +3595,7 @@ export function AsignacionesModule() {
               style={diurno?.cancelado ? { textDecoration: 'line-through', color: 'var(--color-error)', opacity: 0.7 } : undefined}
               title={diurno?.cancelado ? 'Conductor cancelado' : undefined}
             >
-              <span className="asig-turno-label asig-label-diurno">D</span>
+              <TurnoBadge turno="diurno" size={12} />
               {diurno ? diurno.nombre : 'Vacante'}
               {diurno && tipoAsignacionFueraDelCambio(row.original, diurno.id) && (
                 <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
@@ -3607,7 +3608,7 @@ export function AsignacionesModule() {
               style={nocturno?.cancelado ? { textDecoration: 'line-through', color: 'var(--color-error)', opacity: 0.7 } : undefined}
               title={nocturno?.cancelado ? 'Conductor cancelado' : undefined}
             >
-              <span className="asig-turno-label asig-label-nocturno">N</span>
+              <TurnoBadge turno="nocturno" size={12} />
               {nocturno ? nocturno.nombre : 'Vacante'}
               {nocturno && tipoAsignacionFueraDelCambio(row.original, nocturno.id) && (
                 <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
@@ -3957,16 +3958,16 @@ export function AsignacionesModule() {
             </div>
             <div className="asig-turnos-desglose">
               <span className="asig-turnos-desglose-item">
-                <span className="asig-turno-label asig-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {calculatedStats.cartaOfertaD}
               </span>
               <span className="asig-turnos-desglose-item">
-                <span className="asig-turno-label asig-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {calculatedStats.cartaOfertaN}
               </span>
               {calculatedStats.cartaOfertaCargo > 0 && (
                 <span className="asig-turnos-desglose-item" title="A cargo">
-                  <span className="asig-turno-label asig-label-cargo">C</span>
+                  <TurnoBadge turno="a_cargo" size={12} />
                   {calculatedStats.cartaOfertaCargo}
                 </span>
               )}
@@ -3985,16 +3986,16 @@ export function AsignacionesModule() {
             </div>
             <div className="asig-turnos-desglose">
               <span className="asig-turnos-desglose-item">
-                <span className="asig-turno-label asig-label-diurno">D</span>
+                <TurnoBadge turno="diurno" size={12} />
                 {calculatedStats.anexoD}
               </span>
               <span className="asig-turnos-desglose-item">
-                <span className="asig-turno-label asig-label-nocturno">N</span>
+                <TurnoBadge turno="nocturno" size={12} />
                 {calculatedStats.anexoN}
               </span>
               {calculatedStats.anexoCargo > 0 && (
                 <span className="asig-turnos-desglose-item" title="A cargo">
-                  <span className="asig-turno-label asig-label-cargo">C</span>
+                  <TurnoBadge turno="a_cargo" size={12} />
                   {calculatedStats.anexoCargo}
                 </span>
               )}
@@ -4524,7 +4525,7 @@ export function AsignacionesModule() {
                             {/* Turno, nombre y si confirmó */}
                             <div className="asig-det-conductor-cab">
                               {ac.horario !== 'todo_dia' && (
-                                <span className={`asig-det-turno asig-det-turno--${ac.horario}`}>{ac.horario === 'diurno' ? 'Diurno' : ac.horario === 'nocturno' ? 'Nocturno' : ac.horario}</span>
+                                <span style={{ fontSize: '12px' }}><TurnoBadge turno={ac.horario} conTexto /></span>
                               )}
                               <span className="asig-det-nombre">
                                 {cd?.nombres || '-'} {cd?.apellidos || ''}

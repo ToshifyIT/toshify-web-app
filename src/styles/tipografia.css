@@ -64,24 +64,29 @@
 
 /* =====================================================
    VENTANAS (crear / editar / detalle) EN LA MISMA ESCALA
-   Todo el texto de la ventana a 12 px (como el resto del sistema), salvo:
-   título 16 · subtítulo del encabezado 13 · etiquetas 10 (mayúsculas).
+   Contenido a 11 px (un punto arriba de las tablas, que van a 10), así los
+   pop-ups no se ven más grandes que el resto del sistema (2026-11-17):
+   título 15 · subtítulo del encabezado 12 · etiquetas 9 (mayúsculas) · badges 10.
+   Vale para .modal-content y para los modales propios de cada módulo
+   (*-modal-content, ej. asig-modal-content).
    ===================================================== */
-#root .modal-content,
-#root .modal-content :where(*:not(svg):not(svg *)) {
-  font-size: 12px !important;
+#root :is(.modal-content, [class*="-modal-content"]),
+#root :is(.modal-content, [class*="-modal-content"]) :where(*:not(svg):not(svg *)) {
+  font-size: 11px !important;
 }
-#root .modal-content .modal-header :is(h2, h3) { font-size: 16px !important; }
-#root .modal-content .modal-header :is(p, span, div):not(:has(*)) { font-size: 13px !important; }
-#root .modal-content :is(.form-label, .form-group > label, [class*="detail-label"], [class*="-label"]) {
-  font-size: 10px !important;
+#root :is(.modal-content, [class*="-modal-content"]) :is(.modal-header, [class*="modal-header"]) :is(h2, h3),
+#root :is(.modal-content, [class*="-modal-content"]) > :is(h2, h3),
+#root :is(.modal-content, [class*="-modal-content"]) [class*="modal-title"] { font-size: 15px !important; }
+#root :is(.modal-content, [class*="-modal-content"]) .modal-header :is(p, span, div):not(:has(*)) { font-size: 12px !important; }
+#root :is(.modal-content, [class*="-modal-content"]) :is(.form-label, .form-group > label, [class*="detail-label"], [class*="-label"]) {
+  font-size: 9px !important;
   letter-spacing: 0.4px;
 }
-#root .modal-content :is(.cond-edit-tab, .edit-tab, .detail-tab, .sd-tab) {
+#root :is(.modal-content, [class*="-modal-content"]) :is(.cond-edit-tab, .edit-tab, .detail-tab, .sd-tab) {
   padding-top: 7px !important;
   padding-bottom: 7px !important;
 }
-#root .modal-content :is(
+#root :is(.modal-content, [class*="-modal-content"]) :is(
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   select,
   textarea,
@@ -90,10 +95,11 @@
   padding-top: 7px !important;
   padding-bottom: 7px !important;
 }
-#root .modal-content .modal-footer :is(button, .btn-primary, .btn-secondary) {
-  padding: 8px 16px !important;
+#root :is(.modal-content, [class*="-modal-content"]) :is(.modal-footer, [class*="modal-footer"], [class*="modal-actions"]) :is(button, .btn-primary, .btn-secondary) {
+  padding: 7px 14px !important;
+  font-size: 12px !important;
 }
-#root .modal-content :is([class*="badge"], [class*="chip"], [class*="tag"]) { font-size: 11px !important; }
+#root :is(.modal-content, [class*="-modal-content"]) :is([class*="badge"], [class*="chip"], [class*="tag"]) { font-size: 10px !important; }
 
 /* =====================================================
    TARJETAS DE INDICADORES MÁS COMPACTAS (todas las grillas de indicadores)

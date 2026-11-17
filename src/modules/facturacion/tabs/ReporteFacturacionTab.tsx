@@ -49,6 +49,7 @@ import {
   Zap,
   ZapOff,
   Ticket,
+  Tag,
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -78,6 +79,8 @@ import { DiscrepancyBadge } from '../../../components/ui/DiscrepancyBadge'
 import logoToshifyUrl from '../../../assets/logo-toshify.png'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 import { LicenciaBadge } from '../../../components/ui/LicenciaBadge'
+import { AppBadges } from '../../../components/ui/AppBadges'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
 
 
@@ -620,19 +623,38 @@ export function ReporteFacturacionTab() {
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
   // Filtros rápidos de alertas (toggle)
-  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'telepase' | 'pausa' | 'efectivo_on' | 'efectivo_off' | 'toshipass_cubrio' | 'toshipass_no_cubrio' | null>(null)
+  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'sin_gnc' | 'toshipass_cubrio' | 'toshipass_no_cubrio' | null>(null)
 
-  // Filtro por grupo de flota (null = todos)
-  const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>(null)
-  // Chips Cabify / DiDi: conductores con esa etiqueta (appsPorConductor). Se pueden
-  // marcar los dos: muestra los que tienen cualquiera de las dos.
+  // Filtros de la tabla (2026-11-17): empresa y app van en el filtro de la columna
+  // Conductor, efectivo en el de Acciones. Arriba quedan solo los avisos.
+  // Dentro de cada grupo se suman (OR); entre grupos se combinan (AND).
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string[]>([])
   const [filtroApp, setFiltroApp] = useState<Array<'cabify' | 'didi'>>([])
-  const toggleFiltroApp = (app: 'cabify' | 'didi') =>
-    setFiltroApp(prev => prev.includes(app) ? prev.filter(a => a !== app) : [...prev, app])
-  const pasaFiltroApp = (conductorId: string) => {
-    if (filtroApp.length === 0) return true
-    const apps = appsPorConductor.get(conductorId)
-    return !!apps && filtroApp.some(a => apps[a])
+  const [filtroEfectivo, setFiltroEfectivo] = useState<string[]>([])
+  // Tarifa (ENE-26 / OCT-26) y promo van en el filtro de la columna Alq.
+  // Promo: 'con' / 'sin' o un código puntual (PRM01).
+  const [filtroTarifa, setFiltroTarifa] = useState<string[]>([])
+  const [filtroPromo, setFiltroPromo] = useState<string[]>([])
+  const tarifasDe = (f: object): string[] => {
+    const codigos: string[] = (f as { _codigosAlquiler?: string[] })._codigosAlquiler || []
+    return [...new Set(codigos.map(c => periodoPorCodigo.get(c)).filter(Boolean) as string[])]
+  }
+  const promosDe = (f: object): string[] => (f as { _codigosPromocion?: string[] })._codigosPromocion || []
+  const pasaFiltrosTabla = (f: { conductor_id: string; grupo_flota?: string | null; permiso_efectivo?: string | null }) => {
+    if (filtroTarifa.length > 0 && !tarifasDe(f).some(t => filtroTarifa.includes(t))) return false
+    if (filtroPromo.length > 0) {
+      const promos = promosDe(f)
+      const pasa = filtroPromo.some(v =>
+        v === 'con' ? promos.length > 0 : v === 'sin' ? promos.length === 0 : promos.includes(v))
+      if (!pasa) return false
+    }
+    if (filtroEmpresa.length > 0 && !filtroEmpresa.includes(f.grupo_flota || '')) return false
+    if (filtroApp.length > 0) {
+      const apps = appsPorConductor.get(f.conductor_id)
+      if (!apps || !filtroApp.some(a => apps[a])) return false
+    }
+    if (filtroEfectivo.length > 0 && !filtroEfectivo.includes(f.permiso_efectivo || '')) return false
+    return true
   }
   // Mapa de grupo ganador por DNI (vista previa) - ref para compartir entre funciones
   const grupoFlotaGanadorVPRef = useRef<Map<string, string | null>>(new Map())
@@ -1113,6 +1135,32 @@ export function ReporteFacturacionTab() {
   const conductoresUnicos = useMemo(() =>
     [...new Set(datosParaFiltros.map(f => f.conductor_nombre).filter(Boolean))].sort() as string[]
   , [datosParaFiltros])
+  const empresasUnicas = useMemo(() =>
+    [...new Set(datosParaFiltros.map(f => f.grupo_flota || '').filter(Boolean))].sort() as string[]
+  , [datosParaFiltros])
+  const opcionesFiltroAlquiler = useMemo(() => {
+    const tarifas = new Set<string>()
+    const promos = new Set<string>()
+    datosParaFiltros.forEach(f => {
+      tarifasDe(f).forEach(t => tarifas.add(t))
+      promosDe(f).forEach(c => promos.add(c))
+    })
+    return [
+      ...[...tarifas].sort().map(t => ({ value: `tarifa:${t}`, label: `Tarifa · ${t}` })),
+      { value: 'promo:con', label: 'Promo · Con promo' },
+      { value: 'promo:sin', label: 'Promo · Sin promo' },
+      ...[...promos].sort().map(c => ({ value: `promo:${c}`, label: `Promo · ${c}` })),
+    ]
+    // tarifasDe depende de periodoPorCodigo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datosParaFiltros, periodoPorCodigo])
+  // Valores con prefijo para distinguir empresa / app / nombre dentro del mismo filtro
+  const opcionesFiltroConductor = useMemo(() => [
+    ...empresasUnicas.map(e => ({ value: `empresa:${e}`, label: `Empresa · ${e}` })),
+    { value: 'app:cabify', label: 'App · Cabify' },
+    { value: 'app:didi', label: 'App · DiDi' },
+    ...conductoresUnicos,
+  ], [empresasUnicas, conductoresUnicos])
 
   // Cargar desglose de días para un conductor específico
   async function cargarDesgloseDias(conductorId: string, conductorNombre: string, conductorDni: string, _turnosCobrados: number) {
@@ -11114,21 +11162,11 @@ export function ReporteFacturacionTab() {
         result = result.filter(f => {
           if (incluirToshipass && !pasaFiltroToshipass(f, filtroAlerta)) return false
           if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
-          if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
-          if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
           if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
-          if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
-          if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
-          if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
           return true
         })
       }
-      if (filtroGrupoFlota) {
-        result = result.filter(f => (f.grupo_flota || '') === filtroGrupoFlota)
-      }
-      if (!modoVistaPrevia) {
-        result = result.filter(f => pasaFiltroApp(f.conductor_id))
-      }
+      result = result.filter(pasaFiltrosTabla)
       return result
     }
 
@@ -11170,7 +11208,7 @@ export function ReporteFacturacionTab() {
       conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
       ...contarCoberturaToshipass(srcToshipass),
     }
-  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroGrupoFlota, filtroApp, appsPorConductor, pagosCabifyMap])
+  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroEmpresa, filtroApp, filtroEfectivo, filtroTarifa, filtroPromo, periodoPorCodigo, appsPorConductor, pagosCabifyMap])
 
   // Detalle por conductor del Total Proyectado (se abre desde "Ver detalle").
   // Usa exactamente los mismos campos que el total: proyectado_alquiler +
@@ -11823,9 +11861,17 @@ export function ReporteFacturacionTab() {
       header: () => (
         <ExcelColumnFilter
           label="Conductor"
-          options={conductoresUnicos}
-          selectedValues={conductorFilter}
-          onSelectionChange={setConductorFilter}
+          options={opcionesFiltroConductor}
+          selectedValues={[
+            ...filtroEmpresa.map(e => `empresa:${e}`),
+            ...filtroApp.map(a => `app:${a}`),
+            ...conductorFilter,
+          ]}
+          onSelectionChange={(valores) => {
+            setFiltroEmpresa(valores.filter(v => v.startsWith('empresa:')).map(v => v.slice(8)))
+            setFiltroApp(valores.filter(v => v.startsWith('app:')).map(v => v.slice(4) as 'cabify' | 'didi'))
+            setConductorFilter(valores.filter(v => !v.startsWith('empresa:') && !v.startsWith('app:')))
+          }}
           filterId="conductor"
           openFilterId={openColumnFilter}
           onOpenChange={setOpenColumnFilter}
@@ -11856,69 +11902,58 @@ export function ReporteFacturacionTab() {
               />
             )}
           </div>
+          {/* Etiquetas reducidas (2026-11-17): patente, turno y licencia; abajo sólo lo
+              que explica el monto (tarifa no vigente o con cambio, promo). La app va con
+              su logo; empresa se filtra desde el encabezado; Sin GNC queda como aviso arriba. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
             </span>
             {(() => {
               const o = row.original
-              const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600 } as const
-              if (o.tipo_alquiler === 'CARGO') {
-                return <span style={{ ...bs, background: '#d1fae5', color: '#065f46' }}>CARGO</span>
-              }
+              // Turno con el mismo ícono que en el resto del sistema (sol / luna / 24 h)
+              if (o.tipo_alquiler === 'CARGO') return <TurnoBadge turno="todo_dia" size={11} />
               const diurno = o.prorrateo_diurno_dias || 0
               const nocturno = o.prorrateo_nocturno_dias || 0
-              const label = diurno > 0 && nocturno === 0 ? 'D' : nocturno > 0 && diurno === 0 ? 'N' : diurno > 0 && nocturno > 0 ? 'D+N' : 'T'
-              const bg = label === 'D' ? '#fef3c7' : label === 'N' ? '#e0e7ff' : '#f3f4f6'
-              const fg = label === 'D' ? '#92400e' : label === 'N' ? '#3730a3' : '#374151'
-              return <span style={{ ...bs, background: bg, color: fg }}>{label}</span>
+              if (diurno > 0 || nocturno > 0) {
+                return (
+                  <span style={{ display: 'inline-flex', gap: 2 }}>
+                    {diurno > 0 && <TurnoBadge turno="diurno" size={11} />}
+                    {nocturno > 0 && <TurnoBadge turno="nocturno" size={11} />}
+                  </span>
+                )
+              }
+              return <span style={{ fontSize: '8px', fontWeight: 700, color: 'var(--text-secondary)' }}>T</span>
             })()}
-            {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Sin GNC</span>
-            )}
-            {row.original.tiene_telepase === true && row.original.vehiculo_patente && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Telepase</span>
-            )}
-            {row.original.grupo_flota && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>{row.original.grupo_flota}</span>
-            )}
-            {/* Tarifa con la que se le cobro el alquiler esta semana (ENE-26 / OCT-26).
-                Sale de los codigos de alquiler de su propia factura, asi que no puede
-                contradecir al detalle. Si en la semana hubo cambio de tarifa aparecen
-                las dos, en el mismo orden en que salen las lineas de la factura. */}
-            {(() => {
-              const codigos: string[] = (row.original as any)._codigosAlquiler || []
-              const periodos = [...new Set(
-                codigos.map(c => periodoPorCodigo.get(c)).filter(Boolean) as string[]
-              )]
-              return periodos.map(p => (
-                <span key={p} style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>{p}</span>
-              ))
-            })()}
-            {/* Pagó con Cabify y/o DiDi en la semana (ver appsPorConductor) */}
-            {appsPorConductor.get(row.original.conductor_id)?.cabify && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(124, 58, 237, 0.12)', color: '#7c3aed' }}>Cabify</span>
-            )}
-            {appsPorConductor.get(row.original.conductor_id)?.didi && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: 'rgba(249, 115, 22, 0.14)', color: '#c2410c' }}>DiDi</span>
-            )}
             {/* Licencia actual del conductor (B1 / D1 / Otros) */}
             {(() => {
               const lic = licenciaPorConductor.get(row.original.conductor_id)
               return lic ? <LicenciaBadge categoria={lic.categoria} otra={lic.otra} size="xs" /> : null
             })()}
-            {/* Promociones aplicadas en la semana (Parámetros > Promociones). Salen de las
-                líneas de su factura, así que coinciden con el detalle. */}
-            {(row.original._codigosPromocion || []).map(codigo => (
-              <span
-                key={`promo-${codigo}`}
-                title="Promoción aplicada esta semana (ver detalle)"
-                style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: 'var(--radius-xs)', fontWeight: 700, background: 'rgba(220, 38, 38, 0.12)', color: '#b91c1c' }}
-              >
-                {codigo}
-              </span>
-            ))}
+            {/* App con la que pagó en la semana: logo en vez de etiqueta */}
+            <AppBadges apps={appsPorConductor.get(row.original.conductor_id)} size="xs" />
           </div>
+          {(() => {
+            // Tarifa con la que se le cobró el alquiler (sale de los códigos de su propia
+            // factura; si cambió en la semana aparecen las dos) y promos aplicadas.
+            // Tono neutro para que la fila no se vea cargada; la promo lleva un ícono.
+            const tarifas = tarifasDe(row.original)
+            const promos = promosDe(row.original)
+            if (tarifas.length === 0 && promos.length === 0) return null
+            const neutro = { fontSize: '8px', padding: '1px 0', lineHeight: '12px', fontWeight: 600, background: 'transparent', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '2px' } as const
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexWrap: 'wrap' }}>
+                {tarifas.map(t => (
+                  <span key={t} title="Tarifa de alquiler de esta semana" style={neutro}>{t}</span>
+                ))}
+                {promos.map(codigo => (
+                  <span key={`promo-${codigo}`} title="Promoción aplicada esta semana (ver detalle)" style={neutro}>
+                    <Tag size={8} /> {codigo}
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       ),
       enableSorting: true,
@@ -11998,7 +12033,23 @@ export function ReporteFacturacionTab() {
     {
       id: 'alquiler_desglose',
       accessorFn: (row) => row.subtotal_alquiler,
-      header: 'Alq.',
+      header: () => (
+        <ExcelColumnFilter
+          label="Alq."
+          options={opcionesFiltroAlquiler}
+          selectedValues={[
+            ...filtroTarifa.map(t => `tarifa:${t}`),
+            ...filtroPromo.map(v => `promo:${v}`),
+          ]}
+          onSelectionChange={(valores) => {
+            setFiltroTarifa(valores.filter(v => v.startsWith('tarifa:')).map(v => v.slice(7)))
+            setFiltroPromo(valores.filter(v => v.startsWith('promo:')).map(v => v.slice(6)))
+          }}
+          filterId="alquiler"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
+      ),
       enableSorting: true,
       cell: ({ row }) => {
         const alquiler = row.original.subtotal_alquiler
@@ -12074,16 +12125,7 @@ export function ReporteFacturacionTab() {
         if (isCompletada) {
           return (
             <div style={{ fontSize: '12px' }}>
-              <span style={{
-                padding: '2px 6px',
-                borderRadius: 'var(--radius-xs)',
-                background: 'var(--badge-green-bg)',
-                color: 'var(--badge-green-text)',
-                fontSize: '10px',
-                fontWeight: 600
-              }}>
-                COMPLETADA
-              </span>
+              <span className="dt-badge dt-badge-green">COMPLETADA</span>
             </div>
           )
         }
@@ -12187,13 +12229,13 @@ export function ReporteFacturacionTab() {
               flexDirection: 'column',
               alignItems: 'center',
               gap: '1px',
-              padding: '3px 6px',
-              borderRadius: 'var(--radius-sm)',
+              padding: '2px 0',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
               fontWeight: 600,
-              background: 'var(--color-danger-light)',
+              // Sobrio: sin fondo, texto rojo (sigue siendo clickeable)
+              background: 'transparent',
               color: 'var(--color-danger)',
               width: '100%',
               maxWidth: '70px',
@@ -12331,12 +12373,10 @@ export function ReporteFacturacionTab() {
       cell: ({ row }) => {
         const total = row.original.total_a_pagar
         return (
+          // Sobrio: monto en negrita del color (rojo debe / verde a favor), sin fondo
           <span style={{
             fontSize: '11px',
             fontWeight: 700,
-            padding: '3px 6px',
-            borderRadius: 'var(--radius-xs)',
-            background: total > 0 ? 'var(--badge-red-bg)' : 'var(--badge-green-bg)',
             color: total > 0 ? 'var(--badge-red-text)' : 'var(--badge-green-text)'
           }}>
             {formatCurrency(total)}
@@ -12352,25 +12392,12 @@ export function ReporteFacturacionTab() {
       cell: ({ row }) => {
         const estado = row.original.estado_billing
         if (!estado) return '-'
-        const estilos: Record<string, { bg: string; text: string }> = {
-          'Activo': { bg: 'var(--badge-green-bg)', text: 'var(--badge-green-text)' },
-          'Pausa': { bg: 'var(--badge-yellow-bg, #fef3c7)', text: 'var(--badge-yellow-text, #92400e)' },
-          'De baja': { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)' },
-        }
-        const estilo = estilos[estado] || { bg: '#f3f4f6', text: '#6b7280' }
+        // Mismo estilo que las etiquetas de estado del sistema (punto + texto)
+        const colores: Record<string, string> = { 'Activo': 'green', 'Pausa': 'yellow', 'De baja': 'red' }
         const noCoincide = row.original.fecha_baja_no_coincide
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: 'var(--radius-lg)',
-              background: noCoincide ? '#fef3c7' : estilo.bg,
-              color: noCoincide ? '#92400e' : estilo.text,
-              whiteSpace: 'nowrap',
-              border: noCoincide ? '1px solid #f59e0b' : 'none',
-            }}>
+            <span className={`dt-badge dt-badge-${noCoincide ? 'orange' : colores[estado] || 'gray'}`}>
               {estado}
             </span>
             {noCoincide && (
@@ -12387,7 +12414,20 @@ export function ReporteFacturacionTab() {
     },
     {
       id: 'acciones',
-      header: 'Acciones',
+      header: () => (
+        <ExcelColumnFilter
+          label="Acciones"
+          options={[
+            { value: 'Activado', label: 'Efectivo activado' },
+            { value: 'Desactivado', label: 'Efectivo desactivado' },
+          ]}
+          selectedValues={filtroEfectivo}
+          onSelectionChange={setFiltroEfectivo}
+          filterId="efectivo"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
+      ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
           <button
@@ -12414,7 +12454,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, conductoresUnicos, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados, appsPorConductor, licenciaPorConductor])
+  ], [excesos, modoVistaPrevia, conductorFilter, opcionesFiltroConductor, filtroEmpresa, filtroApp, filtroEfectivo, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados, appsPorConductor, licenciaPorConductor, periodoPorCodigo, filtroTarifa, filtroPromo, opcionesFiltroAlquiler])
 
   // Info de la semana
   const infoSemana = useMemo(() => {
@@ -13175,22 +13215,7 @@ export function ReporteFacturacionTab() {
           {/* Filtros rápidos de alertas */}
           {(() => {
             const countIngreso = vistaPreviaData.filter(f => f.alerta_prorrateo_ingreso).length
-            const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
-            const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
             const countSinGnc = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
-            const telepaseList = vistaPreviaData.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
-            const countTelepase = telepaseList.length
-            const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
-            const countEfectivoOn = vistaPreviaData.filter(f => f.permiso_efectivo === 'Activado').length
-            const countEfectivoOff = vistaPreviaData.filter(f => f.permiso_efectivo === 'Desactivado').length
-            // Conteo por grupo de flota
-            const gruposFlotaMap = new Map<string, number>()
-            vistaPreviaData.forEach(f => {
-              const g = f.grupo_flota || ''
-              if (!g) return
-              gruposFlotaMap.set(g, (gruposFlotaMap.get(g) || 0) + 1)
-            })
-            const gruposFlotaList = Array.from(gruposFlotaMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
             const btnStyle = (active: boolean, bg: string, color: string) => ({
               display: 'inline-flex', alignItems: 'center', gap: '5px',
               padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600 as const,
@@ -13207,53 +13232,15 @@ export function ReporteFacturacionTab() {
                     <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
                   </button>
                 )}
-                {countTelepase > 0 && (
-                  <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
-                    onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
-                    <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
-                    {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· {formatCurrency(montoTelepase)}</span>}
-                  </button>
-                )}
-                {countEfectivoOn > 0 && (
-                  <button style={btnStyle(filtroAlerta === 'efectivo_on', 'rgba(34,197,94,0.12)', '#16a34a')}
-                    onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_on' ? null : 'efectivo_on')}>
-                    <Zap size={12} /> Efectivo activado <span style={{ opacity: 0.7 }}>{countEfectivoOn}</span>
-                  </button>
-                )}
-                {countEfectivoOff > 0 && (
-                  <button style={btnStyle(filtroAlerta === 'efectivo_off', 'rgba(239,68,68,0.12)', '#dc2626')}
-                    onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_off' ? null : 'efectivo_off')}>
-                    <ZapOff size={12} /> Efectivo desactivado <span style={{ opacity: 0.7 }}>{countEfectivoOff}</span>
-                  </button>
-                )}
                 {countIngreso > 0 && (
                   <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
                     onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
                     <AlertTriangle size={12} /> Alerta Ingreso <span style={{ opacity: 0.7 }}>{countIngreso}</span>
                   </button>
                 )}
-                {countBaja > 0 && (
-                  <button style={btnStyle(filtroAlerta === 'baja', 'rgba(239,68,68,0.12)', '#dc2626')}
-                    onClick={() => setFiltroAlerta(filtroAlerta === 'baja' ? null : 'baja')}>
-                    <AlertCircle size={12} /> De Baja <span style={{ opacity: 0.7 }}>{countBaja}</span>
-                  </button>
-                )}
-                {countPausa > 0 && (
-                  <button style={btnStyle(filtroAlerta === 'pausa', 'rgba(107,114,128,0.12)', '#6b7280')}
-                    onClick={() => setFiltroAlerta(filtroAlerta === 'pausa' ? null : 'pausa')}>
-                    <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
-                  </button>
-                )}
-                {gruposFlotaList.map(([grupo, count]) => (
-                  <button key={grupo}
-                    style={btnStyle(filtroGrupoFlota === grupo, 'rgba(59,130,246,0.12)', '#1e40af')}
-                    onClick={() => setFiltroGrupoFlota(filtroGrupoFlota === grupo ? null : grupo)}>
-                    {grupo} <span style={{ opacity: 0.7 }}>{count}</span>
-                  </button>
-                ))}
-                {(filtroAlerta || filtroGrupoFlota) && (
+                {filtroAlerta && (
                   <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
-                    onClick={() => { setFiltroAlerta(null); setFiltroGrupoFlota(null) }}>
+                    onClick={() => setFiltroAlerta(null)}>
                     <X size={10} /> Limpiar
                   </button>
                 )}
@@ -13275,15 +13262,11 @@ export function ReporteFacturacionTab() {
               }
               // Filtro por alerta
               if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
-              if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
-              if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
               if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
-              if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
-              if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
-              if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
               if (!pasaFiltroToshipass(f, filtroAlerta)) return false
-              // Filtro por grupo de flota
-              if (filtroGrupoFlota && (f.grupo_flota || '') !== filtroGrupoFlota) return false
+              // Filtros de la tabla: nombre, empresa, app y efectivo
+              if (conductorFilter.length > 0 && !conductorFilter.includes(f.conductor_nombre)) return false
+              if (!pasaFiltrosTabla(f)) return false
               return true
             })}
             columns={columns}
@@ -13550,25 +13533,8 @@ export function ReporteFacturacionTab() {
             {(() => {
               const src = facturacionesFiltradas
               const countIngreso = src.filter(f => f.alerta_prorrateo_ingreso).length
-              const countBaja = src.filter(f => f.estado_billing === 'De baja').length
-              const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
               const sinGncList = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente)
               const countSinGnc = sinGncList.length
-                const telepaseList = src.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
-              const countTelepase = telepaseList.length
-              const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
-              const countEfectivoOn = src.filter(f => f.permiso_efectivo === 'Activado').length
-              const countEfectivoOff = src.filter(f => f.permiso_efectivo === 'Desactivado').length
-              // Conteo por grupo de flota
-              const gruposFlotaMap = new Map<string, number>()
-              src.forEach(f => {
-                const g = f.grupo_flota || ''
-                if (!g) return
-                gruposFlotaMap.set(g, (gruposFlotaMap.get(g) || 0) + 1)
-              })
-              const gruposFlotaList = Array.from(gruposFlotaMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-              const countCabify = src.filter(f => appsPorConductor.get(f.conductor_id)?.cabify).length
-              const countDidi = src.filter(f => appsPorConductor.get(f.conductor_id)?.didi).length
               const btnStyle = (active: boolean, bg: string, color: string) => ({
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
                 padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '11px', fontWeight: 600 as const,
@@ -13585,65 +13551,15 @@ export function ReporteFacturacionTab() {
                       <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
                       </button>
                   )}
-                  {countTelepase > 0 && (
-                    <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
-                      onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
-                      <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
-                      {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· {formatCurrency(montoTelepase)}</span>}
-                    </button>
-                  )}
-                  {countEfectivoOn > 0 && (
-                    <button style={btnStyle(filtroAlerta === 'efectivo_on', 'rgba(34,197,94,0.12)', '#16a34a')}
-                      onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_on' ? null : 'efectivo_on')}>
-                      <Zap size={12} /> Efectivo activado <span style={{ opacity: 0.7 }}>{countEfectivoOn}</span>
-                    </button>
-                  )}
-                  {countEfectivoOff > 0 && (
-                    <button style={btnStyle(filtroAlerta === 'efectivo_off', 'rgba(239,68,68,0.12)', '#dc2626')}
-                      onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_off' ? null : 'efectivo_off')}>
-                      <ZapOff size={12} /> Efectivo desactivado <span style={{ opacity: 0.7 }}>{countEfectivoOff}</span>
-                    </button>
-                  )}
                   {countIngreso > 0 && (
                     <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
                       onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
                       <AlertTriangle size={12} /> Alerta Ingreso <span style={{ opacity: 0.7 }}>{countIngreso}</span>
                     </button>
                   )}
-                  {countBaja > 0 && (
-                    <button style={btnStyle(filtroAlerta === 'baja', 'rgba(239,68,68,0.12)', '#dc2626')}
-                      onClick={() => setFiltroAlerta(filtroAlerta === 'baja' ? null : 'baja')}>
-                      <AlertCircle size={12} /> De Baja <span style={{ opacity: 0.7 }}>{countBaja}</span>
-                    </button>
-                  )}
-                  {countPausa > 0 && (
-                    <button style={btnStyle(filtroAlerta === 'pausa', 'rgba(107,114,128,0.12)', '#6b7280')}
-                      onClick={() => setFiltroAlerta(filtroAlerta === 'pausa' ? null : 'pausa')}>
-                      <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
-                    </button>
-                  )}
-                  {gruposFlotaList.map(([grupo, count]) => (
-                    <button key={grupo}
-                      style={btnStyle(filtroGrupoFlota === grupo, 'rgba(59,130,246,0.12)', '#1e40af')}
-                      onClick={() => setFiltroGrupoFlota(filtroGrupoFlota === grupo ? null : grupo)}>
-                      {grupo} <span style={{ opacity: 0.7 }}>{count}</span>
-                    </button>
-                  ))}
-                  {countCabify > 0 && (
-                    <button style={btnStyle(filtroApp.includes('cabify'), 'rgba(124,58,237,0.12)', '#7c3aed')}
-                      onClick={() => toggleFiltroApp('cabify')}>
-                      Cabify <span style={{ opacity: 0.7 }}>{countCabify}</span>
-                    </button>
-                  )}
-                  {countDidi > 0 && (
-                    <button style={btnStyle(filtroApp.includes('didi'), 'rgba(249,115,22,0.14)', '#c2410c')}
-                      onClick={() => toggleFiltroApp('didi')}>
-                      DiDi <span style={{ opacity: 0.7 }}>{countDidi}</span>
-                    </button>
-                  )}
-                  {(filtroAlerta || filtroGrupoFlota || filtroApp.length > 0) && (
+                  {filtroAlerta && (
                     <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
-                      onClick={() => { setFiltroAlerta(null); setFiltroGrupoFlota(null); setFiltroApp([]) }}>
+                      onClick={() => setFiltroAlerta(null)}>
                       <X size={10} /> Limpiar
                     </button>
                   )}
@@ -13656,20 +13572,12 @@ export function ReporteFacturacionTab() {
                 if (filtroAlerta) {
                   result = result.filter(f => {
                     if (filtroAlerta === 'ingreso') return !!f.alerta_prorrateo_ingreso
-                    if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
-                    if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
                     if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && !!f.vehiculo_patente
-                    if (filtroAlerta === 'telepase') return f.tiene_telepase === true && !!f.vehiculo_patente
-                    if (filtroAlerta === 'efectivo_on') return f.permiso_efectivo === 'Activado'
-                    if (filtroAlerta === 'efectivo_off') return f.permiso_efectivo === 'Desactivado'
                     if (filtroAlerta === 'toshipass_cubrio' || filtroAlerta === 'toshipass_no_cubrio') return pasaFiltroToshipass(f, filtroAlerta)
                     return true
                   })
                 }
-                if (filtroGrupoFlota) {
-                  result = result.filter(f => (f.grupo_flota || '') === filtroGrupoFlota)
-                }
-                result = result.filter(f => pasaFiltroApp(f.conductor_id))
+                result = result.filter(pasaFiltrosTabla)
                 return result
               })()}
               columns={columns}
@@ -13719,81 +13627,69 @@ export function ReporteFacturacionTab() {
         const cubierto = cobroAppPopup.cobroApp >= cuotaTotal
         return (
           <div className="fact-modal-overlay" onClick={() => setCobroAppPopup(null)}>
-            <div className="fact-modal-content" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
-              <div className="fact-modal-header">
-                <h2 style={{ fontSize: '14px' }}>Ganancia Cabify</h2>
-                <button className="fact-modal-close" onClick={() => setCobroAppPopup(null)}>
-                  <X size={20} />
+            {/* Ganancia Cabify compacto (2026-11-17): resumen en 3 cifras, barra fina,
+                aviso sin caja de color y desglose como filas etiqueta / monto */}
+            <div className="fact-modal-content" style={{ maxWidth: '380px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="fact-modal-header" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                <h2 style={{ fontSize: '14px', margin: 0 }}>Ganancia Cabify</h2>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>{cobroAppPopup.nombre}</span>
+                <button className="fact-modal-close" onClick={() => setCobroAppPopup(null)} style={{ position: 'absolute', top: 12, right: 12 }}>
+                  <X size={16} />
                 </button>
               </div>
-              <div className="fact-modal-body" style={{ padding: '16px 20px' }}>
-                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '12px' }}>
-                  {cobroAppPopup.nombre}
+              <div className="fact-modal-body" style={{ padding: '12px 20px 14px', fontSize: '11px' }}>
+                {/* Resumen */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                  {[
+                    { label: 'Ganancia', valor: cobroAppPopup.cobroApp, color: '#15803d' },
+                    { label: 'Cuota semanal', valor: cuotaTotal, color: 'var(--text-primary)' },
+                    { label: 'Pendiente', valor: pendiente, color: pendiente > 0 ? '#b91c1c' : 'var(--text-tertiary)' },
+                  ].map(c => (
+                    <div key={c.label}>
+                      <div style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--text-tertiary)', fontWeight: 600 }}>{c.label}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: c.color, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(c.valor)}</div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '13px' }}>
-                  <span style={{ color: '#16a34a', fontWeight: 600 }}>
-                    Ganancia Cabify: {formatCurrency(cobroAppPopup.cobroApp)}
-                  </span>
-                  <span style={{ color: pendiente > 0 ? '#dc2626' : '#6b7280', fontWeight: 600 }}>
-                    Pendiente: {formatCurrency(pendiente)}
-                  </span>
+                {/* Barra de progreso */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <div style={{ flex: 1, height: 6, backgroundColor: 'var(--bg-tertiary, #e5e7eb)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${porcentaje}%`, height: '100%',
+                      backgroundColor: cubierto ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', minWidth: 30, textAlign: 'right' }}>{porcentaje}%</span>
                 </div>
                 {cobroAppPopup.cobroApp === 0 && (
-                  <div style={{
-                    backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 'var(--radius-sm)',
-                    padding: '8px 12px', fontSize: '11px', color: '#92400e', marginBottom: '8px',
-                    lineHeight: '1.4'
-                  }}>
-                    {cobroAppPopup.tieneRegistroCabify
-                      ? 'El conductor está sincronizado con Cabify, pero aún no se registraron cobros para esta semana.'
-                      : 'No se encontraron datos de cobro en Cabify para este conductor. Esto puede deberse a que el DNI no coincide con el registro en Cabify o a que aun no se sincronizaron los datos de esta semana.'}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', color: '#b45309', lineHeight: 1.4, marginBottom: 10 }}>
+                    <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span>
+                      {cobroAppPopup.tieneRegistroCabify
+                        ? 'Sincronizado con Cabify, pero todavía no hay cobros de esta semana.'
+                        : 'Sin datos de cobro en Cabify: puede que el DNI no coincida o que la semana aún no se haya sincronizado.'}
+                    </span>
                   </div>
                 )}
-                {/* Barra de progreso */}
-                <div style={{
-                  width: '100%', height: '14px', backgroundColor: '#e5e7eb',
-                  borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid #d1d5db',
-                  marginBottom: '4px'
-                }}>
-                  <div style={{
-                    width: `${porcentaje}%`, height: '100%',
-                    backgroundColor: cubierto ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
-                    borderRadius: 'var(--radius-sm)', transition: 'width 0.3s ease',
-                    minWidth: porcentaje > 0 ? '6px' : '0'
-                  }} />
+                {/* Desglose de la cuota */}
+                <div style={{ borderTop: '1px solid var(--border-primary)', paddingTop: 6 }}>
+                  {[
+                    ...(cobroAppPopup.alquiler > 0 ? [{ label: 'Alquiler', valor: cobroAppPopup.alquiler }] : []),
+                    ...(cobroAppPopup.garantia > 0 ? [{ label: 'Garantía', valor: cobroAppPopup.garantia }] : []),
+                  ].map(f => (
+                    <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--text-secondary)' }}>
+                      <span>{f.label}</span>
+                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(f.valor)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0 0', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    <span>Cuota semanal</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(cuotaTotal)}</span>
+                  </div>
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '16px' }}>
-                  {porcentaje}%
-                </div>
-                {/* Desglose */}
-                <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Concepto</th>
-                      <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cobroAppPopup.alquiler > 0 && (
-                      <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Alquiler</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.alquiler)}</td>
-                      </tr>
-                    )}
-                    {cobroAppPopup.garantia > 0 && (
-                      <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Garantía</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.garantia)}</td>
-                      </tr>
-                    )}
-                    <tr style={{ fontWeight: 700 }}>
-                      <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Cuota Semanal</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{formatCurrency(cuotaTotal)}</td>
-                    </tr>
-                  </tbody>
-                </table>
               </div>
-              <div className="fact-modal-footer">
+              <div className="fact-modal-footer" style={{ justifyContent: 'flex-end', padding: '10px 20px' }}>
                 <button className="fact-btn-secondary" onClick={() => setCobroAppPopup(null)}>Cerrar</button>
               </div>
             </div>
@@ -14113,12 +14009,12 @@ export function ReporteFacturacionTab() {
                                     <PatenteBadge patente={h.patente} size="sm" />
                                   )}
                                   {h.patente && (
-                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: h.tieneGnc ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: h.tieneGnc ? '#10b981' : '#ef4444' }}>
+                                    <span style={{ fontSize: '8px', padding: '1px 2px', fontWeight: 700, color: h.tieneGnc ? '#10b981' : '#ef4444' }}>
                                       {h.tieneGnc ? 'GNC' : 'Sin GNC'}
                                     </span>
                                   )}
                                   {h.grupoFlota && (
-                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: 'var(--radius-xs)', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>
+                                    <span style={{ fontSize: '8px', padding: '1px 2px', fontWeight: 700, color: 'var(--color-info)' }}>
                                       {h.grupoFlota}
                                     </span>
                                   )}
@@ -14131,13 +14027,13 @@ export function ReporteFacturacionTab() {
                                     {h.dias > 0 ? `${h.dias} día${h.dias > 1 ? 's' : ''} contados` : h.nota}
                                   </span>
                                   {h.horaEntrega && (
-                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 500 }}>
+                                    <span style={{ fontSize: '9px', padding: '1px 2px', color: '#3b82f6', fontWeight: 600 }}>
                                       Entrega: {h.horaEntrega}hs
                                     </span>
                                   )}
                                   <span style={{
-                                    fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-xs)', fontWeight: 500,
-                                    background: `${estadoColor}15`, color: estadoColor,
+                                    fontSize: '9px', padding: '1px 2px', fontWeight: 600,
+                                    color: estadoColor,
                                   }}>
                                     {esCompletada ? 'Finalizado'
                                       : esActiva ? 'Activa'
@@ -14187,7 +14083,7 @@ export function ReporteFacturacionTab() {
                             )}
                             {diasModalData.devolucion.ultimo_dia_cobro && (
                               <div style={{ fontSize: '10px', marginTop: '4px', paddingLeft: '16px' }}>
-                                <span style={{ padding: '1px 6px', borderRadius: 'var(--radius-xs)', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 600 }}>
+                                <span style={{ color: '#8b5cf6', fontWeight: 600 }}>
                                   Último día de cobro: {diasModalData.devolucion.ultimo_dia_cobro === 'dia_entrega' ? 'Día de entrega' : diasModalData.devolucion.ultimo_dia_cobro === 'fecha_baja' ? 'Fecha de baja' : diasModalData.devolucion.ultimo_dia_cobro === 'sin_cobro' ? 'Sin cobro' : diasModalData.devolucion.ultimo_dia_cobro}
                                 </span>
                               </div>
@@ -14283,11 +14179,6 @@ export function ReporteFacturacionTab() {
                             : esProgramada ? '#3b82f6'
                             : '#6b7280'
 
-                          const estadoBg = esActiva ? 'rgba(16,185,129,0.1)'
-                            : esCancelada ? 'rgba(239,68,68,0.1)'
-                            : esProgramada ? 'rgba(59,130,246,0.1)'
-                            : 'rgba(107,114,128,0.1)'
-
                           return (
                             <div key={a.id} style={{
                               display: 'flex', alignItems: 'center', gap: '10px',
@@ -14323,8 +14214,8 @@ export function ReporteFacturacionTab() {
                               {/* Grupo de flota */}
                               {a.grupoFlota && (
                                 <span style={{
-                                  padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 600,
-                                  background: '#dbeafe', color: '#1e40af',
+                                  padding: '1px 2px', fontSize: '9px', fontWeight: 700,
+                                  color: 'var(--color-info)',
                                   whiteSpace: 'nowrap',
                                 }}>
                                   {a.grupoFlota}
@@ -14333,8 +14224,8 @@ export function ReporteFacturacionTab() {
 
                               {/* Estado badge */}
                               <span style={{
-                                padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 500,
-                                background: estadoBg, color: estadoColor,
+                                padding: '1px 2px', fontSize: '9px', fontWeight: 600,
+                                color: estadoColor,
                                 whiteSpace: 'nowrap',
                               }}>
                                 {a.padreEstado}

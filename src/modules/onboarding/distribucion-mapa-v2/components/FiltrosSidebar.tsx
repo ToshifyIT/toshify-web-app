@@ -68,7 +68,7 @@ function CampoFecha({
   onChange: (v: string) => void
 }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
       <span style={{ width: 42, color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</span>
       <input
         type="date"
@@ -82,7 +82,7 @@ function CampoFecha({
           padding: '5px 7px',
           border: '1px solid var(--border-primary)',
           borderRadius: 'var(--radius-md)',
-          fontSize: 12,
+          fontSize: 11,
           background: 'var(--bg-secondary)',
           color: 'var(--text-primary)',
           boxSizing: 'border-box',
@@ -236,7 +236,7 @@ export function FiltrosSidebar({
               padding: '8px 10px 8px 27px',
               border: '1px solid var(--border-primary)',
               borderRadius: 'var(--radius-md)',
-              fontSize: 12.5,
+              fontSize: 11.5,
               outline: 'none',
               boxSizing: 'border-box',
               background: 'var(--bg-secondary)',
@@ -261,7 +261,7 @@ export function FiltrosSidebar({
               borderRadius: 'var(--radius-md)',
               background: 'transparent',
               color: 'var(--color-primary, #ff0033)',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
             }}
@@ -402,7 +402,7 @@ export function FiltrosSidebar({
                       borderRadius: 'var(--radius-md)',
                       background: 'var(--bg-secondary)',
                       color: 'var(--text-secondary)',
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}
@@ -582,7 +582,7 @@ function BloqueFiltros({
           borderRadius: 'var(--radius-md)',
           background: 'var(--bg-secondary)',
           color: 'var(--text-secondary)',
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: 700,
           textAlign: 'left',
           cursor: 'pointer',
@@ -649,13 +649,13 @@ function TarjetaCapa({
     >
       <span style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
         <IconoEntidad tipo={tipo} color={activa ? color : COLOR_CAPA_APAGADA} size={20} />
-        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+        <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)' }}>
           {cantidad}
         </span>
       </span>
       <span
         style={{
-          fontSize: 12.5,
+          fontSize: 11.5,
           fontWeight: activa ? 700 : 500,
           color: activa ? 'var(--text-primary)' : 'var(--text-tertiary)',
           whiteSpace: 'nowrap',

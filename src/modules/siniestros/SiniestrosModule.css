@@ -2592,3 +2592,62 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17) · estado de siniestros/incidencias
+   Sin fondo: punto de color + texto del color, como dt-badge.
+   ===================================================== */
+.estado-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.estado-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.estado-gray { color: var(--text-secondary); }
+.estado-blue { color: #1d4ed8; }
+.estado-orange { color: #c2410c; }
+.estado-green { color: #15803d; }
+.estado-purple { color: #7c3aed; }
+.estado-emerald { color: #047857; }
+.estado-slate { color: #475569; }
+.estado-red { color: #b91c1c; }
+.estado-indigo { color: #4338ca; }
+.estado-yellow { color: #b45309; }
+[data-theme="dark"] .estado-gray { color: var(--text-secondary); }
+[data-theme="dark"] .estado-blue { color: #60a5fa; }
+[data-theme="dark"] .estado-orange { color: #fb923c; }
+[data-theme="dark"] .estado-green { color: #4ade80; }
+[data-theme="dark"] .estado-purple { color: #c4b5fd; }
+[data-theme="dark"] .estado-emerald { color: #34d399; }
+[data-theme="dark"] .estado-slate { color: #94a3b8; }
+[data-theme="dark"] .estado-red { color: #f87171; }
+[data-theme="dark"] .estado-indigo { color: #a5b4fc; }
+[data-theme="dark"] .estado-yellow { color: #fbbf24; }
+
+/* =====================================================
+   ETIQUETAS SOBRIAS (2026-11-17)
+   Sin fondo: texto del color, como dt-badge.
+   ===================================================== */
+.categoria-badge.es-robo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.categoria-badge.es-robo { color: #b91c1c; }
+[data-theme="dark"] .categoria-badge.es-robo { color: #f87171; }
+.ss-tipo { padding-left: 0; padding-right: 0; background: transparent !important; }

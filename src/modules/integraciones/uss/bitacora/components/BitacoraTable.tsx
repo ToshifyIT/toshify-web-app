@@ -17,6 +17,7 @@ import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 import { hoyART } from '../../../../../utils/fechaArgentina'
 import { formatNumero } from '../../../../../utils/format'
 import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { TurnoBadge } from '../../../../../components/ui/TurnoBadge'
 import { formatFechaHora, formatFecha } from '../../../../../utils/format'
 interface BitacoraTableProps {
   registros: BitacoraRegistroTransformado[]
@@ -213,8 +214,7 @@ export function BitacoraTable({
         const tipo = row.original.tipo_turno
         const turno = row.original.turno_indicador
         if (tipo !== 'turno' || !turno) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-        const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-blue'
-        return <span className={`dt-badge ${badgeClass}`}>{turno}</span>
+        return <TurnoBadge turno={turno} />
       },
       enableSorting: false,
     },
@@ -483,14 +483,12 @@ export function BitacoraTable({
           if (row.original.id.startsWith('__resumen__')) {
             const turno = row.original.turno_indicador
             if (!turno || row.original.tipo_turno !== 'turno') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-            const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-blue'
-            return <span className={`dt-badge ${badgeClass}`}>{turno}</span>
+            return <TurnoBadge turno={turno} />
           }
           const tipo = row.original.tipo_turno
           const turno = row.original.turno_indicador
           if (tipo !== 'turno' || !turno) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-          const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-blue'
-          return <span className={`dt-badge ${badgeClass}`}>{turno}</span>
+          return <TurnoBadge turno={turno} />
         }
       }
 

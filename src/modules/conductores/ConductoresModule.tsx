@@ -49,6 +49,7 @@ import { hoyART, sumarDiasISO } from '../../utils/fechaArgentina'
 import { formatPlata } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { AppBadges } from '../../components/ui/AppBadges'
+import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
 import { cargarAppsPagoSemana, etiquetasApps, type AppsPago } from '../../services/appsPagoService'
 import { TabsBar, type TabsBarItem } from "../../components/ui/TabsBar";
@@ -3318,31 +3319,9 @@ export function ConductoresModule() {
           />
         ),
         cell: ({ row, getValue }) => {
-          // Si tiene asignación activa, mostrar el turno real de la asignación
-          const vehiculoAsignado = (row.original as any).vehiculo_asignado;
-          const turnoAsignacion = vehiculoAsignado?.turno_asignacion;
-          if (turnoAsignacion) {
-            const t = turnoAsignacion.toLowerCase();
-            if (t === 'diurno') return <span className="dt-badge dt-badge-yellow">Diurno</span>;
-            if (t === 'nocturno') return <span className="dt-badge dt-badge-blue">Nocturno</span>;
-            if (t === 'todo_dia') return <span className="dt-badge dt-badge-purple">A Cargo</span>;
-            return <span className="dt-badge dt-badge-green">{turnoAsignacion}</span>;
-          }
-          // Sin asignación: mostrar preferencia del conductor
-          const turno = getValue() as string;
-          if (!turno || turno === 'SIN_PREFERENCIA') {
-            return <span className="dt-badge dt-badge-gray">Sin Pref.</span>;
-          }
-          if (turno === 'DIURNO') {
-            return <span className="dt-badge dt-badge-yellow">Diurno</span>;
-          }
-          if (turno === 'NOCTURNO') {
-            return <span className="dt-badge dt-badge-blue">Nocturno</span>;
-          }
-          if (turno === 'A_CARGO') {
-            return <span className="dt-badge dt-badge-purple">A Cargo</span>;
-          }
-          return <span className="dt-badge dt-badge-gray">{turno}</span>;
+          // Turno real de la asignación activa; si no tiene, su preferencia
+          const turnoAsignacion = (row.original as any).vehiculo_asignado?.turno_asignacion;
+          return <TurnoBadge turno={turnoAsignacion || (getValue() as string)} />;
         },
         enableSorting: true,
       },
@@ -6184,19 +6163,13 @@ function ModalDetalles({
                     <div className="vehiculo-asignacion-info">
                       <span
                         className="turno-badge"
-                        style={{
-                          background: turnoBadge.bg,
-                          color: turnoBadge.color
-                        }}
+                        style={{ color: turnoBadge.color }}
                       >
                         {turnoBadge.label}
                       </span>
                       <span
                         className="estado-asig-badge"
-                        style={{
-                          background: estadoBadge.bg,
-                          color: estadoBadge.color
-                        }}
+                        style={{ color: estadoBadge.color }}
                       >
                         {estadoBadge.label}
                       </span>

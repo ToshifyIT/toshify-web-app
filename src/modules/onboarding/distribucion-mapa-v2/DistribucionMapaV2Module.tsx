@@ -1115,6 +1115,9 @@ export function DistribucionMapaV2Module() {
       setBaseSugerencias(base)
       setDrawerAbierto(true)
       setDrawerPlegado(false)
+      // Con las sugerencias abiertas se pliegan los filtros: si no, el mapa queda
+      // de ~150px y "Ver en mapa" no puede encuadrar (2026-11-17)
+      setMostrarFiltros(false)
       // La base queda como persona activa (halo + fila resaltada); sin base
       // (modo global) no hay nadie seleccionado.
       setActivo(base ? base.id : null)
@@ -1395,12 +1398,12 @@ export function DistribucionMapaV2Module() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <MapIcon size={20} style={{ color: 'var(--color-primary, #ff0033)' }} />
           <div>
-            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
               Distribución en mapa
             </h2>
             {/* Sólo lo accionable: los totales ya están en las tarjetas de capa. */}
             {filtros.segmento !== 'leads' && (
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--color-primary, #ff0033)' }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--color-primary, #ff0033)' }}>
                 {conteos.sinCompanero} sin compañero
               </span>
             )}
@@ -1453,7 +1456,7 @@ export function DistribucionMapaV2Module() {
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-secondary)',
                 color: 'var(--text-secondary)',
-                fontSize: 11.5,
+                fontSize: 10.5,
                 fontWeight: 700,
                 cursor: resolviendoCeldas ? 'wait' : 'pointer',
                 whiteSpace: 'nowrap',
@@ -1492,7 +1495,7 @@ export function DistribucionMapaV2Module() {
               borderRadius: 'var(--radius-md)',
               background: 'var(--color-primary, #ff0033)',
               color: '#fff',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
@@ -1650,7 +1653,7 @@ export function DistribucionMapaV2Module() {
                     borderRadius: 'var(--radius-md)',
                     padding: '7px 13px',
                     boxShadow: '0 4px 14px rgba(0,0,0,.16)',
-                    fontSize: 12,
+                    fontSize: 11,
                     color: 'var(--text-secondary)',
                   }}
                 >
@@ -1699,7 +1702,8 @@ export function DistribucionMapaV2Module() {
             parSeleccionado={parSeleccionado}
             onSeleccionarPar={(par) => {
               setMostrarTodosPares(false)
-              setParSeleccionado(par)
+              // Copia: aunque sea el mismo par, cada clic vuelve a encuadrarlo en el mapa
+              setParSeleccionado({ ...par })
             }}
             mostrarTodos={mostrarTodosPares}
             onToggleMostrarTodos={() => {
@@ -1756,7 +1760,7 @@ export function DistribucionMapaV2Module() {
             color: 'var(--bg-primary)',
             padding: '9px 16px',
             borderRadius: 'var(--radius-md)',
-            fontSize: 12.5,
+            fontSize: 11.5,
             fontWeight: 600,
             boxShadow: '0 8px 24px rgba(0,0,0,.25)',
           }}
@@ -1787,7 +1791,7 @@ export function DistribucionMapaV2Module() {
               alignItems: 'center',
               gap: 8,
               color: 'var(--text-secondary)',
-              fontSize: 13,
+              fontSize: 11,
             }}
           >
             <Spinner size="sm" message="Cargando ficha..." />
@@ -1920,7 +1924,7 @@ function ListaResultados({
           background: 'var(--bg-secondary)',
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)' }}>
           {resultados} resultado{resultados === 1 ? '' : 's'}
           {baseFueraDelFiltro && (
             <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}> · + base fijada</span>
@@ -1969,7 +1973,7 @@ function ListaResultados({
                       borderTop: g.tipo === 'lead' ? '1px solid var(--border-primary)' : 'none',
                       background: 'var(--bg-secondary)',
                       color: 'var(--text-secondary)',
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: 700,
                       textAlign: 'left',
                       cursor: 'pointer',
@@ -1984,7 +1988,7 @@ function ListaResultados({
                   </button>
                   {!plegado && g.filas.map(renderFila)}
                   {!plegado && g.filas.length === 0 && (
-                    <div style={{ padding: '10px 12px', color: 'var(--text-tertiary)', fontSize: 11 }}>
+                    <div style={{ padding: '10px 12px', color: 'var(--text-tertiary)', fontSize: 10 }}>
                       Sin {g.titulo.toLowerCase()} con estos filtros
                     </div>
                   )}
@@ -1993,7 +1997,7 @@ function ListaResultados({
             })
           : filas.map(renderFila)}
         {!segmentar && entidades.length === 0 && (
-          <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>
+          <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 11 }}>
             Sin resultados
           </div>
         )}
@@ -2125,7 +2129,7 @@ function FilaLista({
         <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={15} />
         <span
           style={{
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: esActiva ? 800 : 600,
             color: esActiva ? '#ff0033' : 'var(--text-primary)',
             lineHeight: 1.2,
@@ -2223,7 +2227,7 @@ function RetryButton({ onClick, label }: { onClick: () => void; label: string })
         border: 'none',
         borderRadius: 'var(--radius-md)',
         cursor: 'pointer',
-        fontSize: 13,
+        fontSize: 11,
         fontWeight: 600,
       }}
     >

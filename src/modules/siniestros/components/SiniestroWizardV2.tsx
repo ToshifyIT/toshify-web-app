@@ -8,6 +8,7 @@ import type { SiniestroFormData, SiniestroCategoria, SiniestroEstado, VehiculoSi
 import type { VehiculoEstado } from '../../../types/database.types'
 import { formatFecha } from '../../../utils/format'
 import { CompaniaTerceroSelect } from './CompaniaTerceroSelect'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 
 // =====================================================
 // TIPOS
@@ -560,7 +561,7 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
                   onClick={() => handleSelectConductorFromModal(c)}
                 >
                   <span className="conductor-select-name">{c.nombre_completo}</span>
-                  <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
+                  <span style={{ fontSize: '11px', flexShrink: 0 }}><TurnoBadge turno={c.turno.toLowerCase().replace(' ', '_')} /></span>
                 </button>
               ))}
             </div>
