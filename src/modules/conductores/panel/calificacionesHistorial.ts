@@ -11,6 +11,7 @@ import { cargarPanelConductores } from './conductoresPanelService'
 import { calificarConductor, referenciaIngresos, type ExcesosRecientes, type ExtrasCalificacion, type FactorGuardado } from './calificacionConductor'
 
 import { fechaISOART } from '../../../utils/fechaArgentina'
+import { CODIGO_TOSHIPASS } from '../../facturacion/utils/toshipass'
 export interface CalificacionSemana {
   semana_inicio: string
   estrellas: number
@@ -61,35 +62,63 @@ const DIA = 86400000
 
 /**
  * Datos de la calificación que el panel no trae, hasta la fecha `hasta`:
- *  - cargoSemanal: lo que tenía que cubrir en la semana (total a pagar − saldo anterior
- *    de su facturación más reciente: alquiler + garantía o Toshipass + cargos de la semana).
+ *  - cargoSemanal: lo que tenía que cubrir en la semana `semanaInicio`, de la facturación
+ *    de ESA semana (no la más reciente: el lunes ya existe la de la semana nueva, con 1 o 2
+ *    turnos, y hacía ver fácil cubrir la cerrada):
+ *      cuota = alquiler + garantía + Toshipass (el mínimo, lo que Facturación usa para
+ *              «cubre la cuota»);
+ *      total = todo lo cargado en la semana (cuota + peajes, multas, incidencias, excesos,
+ *              menos descuentos). Facturación lo actualiza día a día.
+ *    La deuda de semanas anteriores no entra: la mide el factor Pagos.
  *  - siniestrosCulpa: siniestros con culpa del conductor en las 12 semanas previas.
  *  - antiguedadSemanas: semanas desde su primera asignación.
  * Cada parte es tolerante: si falla queda en null y ese factor no cuenta.
  */
-export async function cargarExtrasCalificacion(conductorIds: string[], hasta: Date = new Date()): Promise<ExtrasCalificacion> {
+export async function cargarExtrasCalificacion(
+  conductorIds: string[],
+  hasta: Date = new Date(),
+  semanaInicio: string = cabifyService.getWeekRange(0).startDate.slice(0, 10),
+): Promise<ExtrasCalificacion> {
   const lotes: string[][] = []
   for (let i = 0; i < conductorIds.length; i += LOTE) lotes.push(conductorIds.slice(i, i + LOTE))
   const hastaIso = hasta.toISOString()
 
   const cargo = (async () => {
-    const desde = fechaISOART(new Date(hasta.getTime() - 21 * DIA).toISOString()) as string
-    const out = new Map<string, { inicio: string; monto: number }>()
+    // Facturación de la semana: cuota (alquiler + garantía) y todo lo cargado
+    const out = new Map<string, { id: string; cuota: number; cargos: number }>()
     for (const lote of lotes) {
       const { data, error } = await (supabase.from('facturacion_conductores') as any)
-        .select('conductor_id, total_a_pagar, saldo_anterior, periodos_facturacion!inner(fecha_inicio)')
+        .select('id, conductor_id, subtotal_alquiler, subtotal_garantia, subtotal_cargos, subtotal_descuentos, periodos_facturacion!inner(fecha_inicio)')
         .in('conductor_id', lote)
-        .gte('periodos_facturacion.fecha_inicio', desde)
-        .lte('periodos_facturacion.fecha_inicio', hastaIso.slice(0, 10))
+        .eq('periodos_facturacion.fecha_inicio', semanaInicio)
       if (error) throw error
       for (const f of (data || []) as any[]) {
-        const inicio = String(f.periodos_facturacion?.fecha_inicio || '')
-        const monto = (Number(f.total_a_pagar) || 0) - (Number(f.saldo_anterior) || 0)
-        const prev = out.get(f.conductor_id)
-        if (monto > 0 && (!prev || inicio > prev.inicio)) out.set(f.conductor_id, { inicio, monto })
+        out.set(f.conductor_id, {
+          id: String(f.id),
+          cuota: (Number(f.subtotal_alquiler) || 0) + (Number(f.subtotal_garantia) || 0),
+          cargos: (Number(f.subtotal_cargos) || 0) - (Number(f.subtotal_descuentos) || 0),
+        })
       }
     }
-    return new Map([...out].map(([k, v]) => [k, v.monto]))
+    // + Toshipass de esa facturación (concepto P027 del detalle; ya está dentro de los cargos)
+    const porFacturacion = new Map([...out.values()].map(v => [v.id, v]))
+    const ids = [...porFacturacion.keys()]
+    for (let i = 0; i < ids.length; i += LOTE) {
+      const { data, error } = await (supabase.from('facturacion_detalle') as any)
+        .select('facturacion_id, total')
+        .in('facturacion_id', ids.slice(i, i + LOTE))
+        .eq('concepto_codigo', CODIGO_TOSHIPASS)
+      if (error) throw error
+      for (const d of (data || []) as any[]) {
+        const fac = porFacturacion.get(String(d.facturacion_id))
+        if (fac) fac.cuota += Number(d.total) || 0
+      }
+    }
+    return new Map(
+      [...out]
+        .filter(([, v]) => v.cuota > 0)
+        .map(([k, v]) => [k, { cuota: v.cuota, total: Math.max(v.cuota, v.cargos) }]),
+    )
   })().catch(err => { console.error('[Calificaciones] cargo semanal', err); return null })
 
   const siniestros = (async () => {
@@ -156,8 +185,8 @@ export async function guardarSemanaCerradaSiFalta(sedeId: string | null, conduct
     const finSemana = new Date(`${rango.endDate.slice(0, 10)}T23:59:59-03:00`)
     const [excesos, extras] = await Promise.all([
       cargarExcesosRecientes(filas.map(f => f.id), new Date(finSemana.getTime() + 2 * 86400000)),
-      // Facturación de la semana cerrada: se genera al cerrar, así que se mira hasta +2 días
-      cargarExtrasCalificacion(filas.map(f => f.id), new Date(finSemana.getTime() + 2 * 86400000)),
+      // Facturación de la semana cerrada (la de su lunes, no la de la semana nueva)
+      cargarExtrasCalificacion(filas.map(f => f.id), new Date(finSemana.getTime() + 2 * 86400000), semana),
     ])
     const payload = filas
       .map(r => ({ r, c: calificarConductor(r, ref, excesos, extras) }))

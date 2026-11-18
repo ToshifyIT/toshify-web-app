@@ -17,16 +17,19 @@ import { SemanaDetalleModal } from './SemanaDetalleModal'
 import { SaldoHistorialTab } from './SaldoHistorialTab'
 import { GarantiaHistorialTab } from './GarantiaHistorialTab'
 import { RendimientoCabifyTab } from './RendimientoCabifyTab'
+import { ToshipassConductorTab } from './ToshipassConductorTab'
 import { ComparacionSemana } from '../../../components/ui/ComparacionSemana'
 import { analizarRegimenToshipass, CODIGO_TOSHIPASS, type RegimenToshipass } from '../../facturacion/utils/toshipass'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import './ConductorDetalleModal.css'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { BitacoraNotasVehiculo } from '../../vehiculos/components/BitacoraNotasVehiculo'
 import { formatFecha } from '../../../utils/format'
+import { hoyART } from '../../../utils/fechaArgentina'
 
 // Orden de las pestañas tal como se muestran en la barra (izq -> der).
-export type Tab = 'facturacion' | 'saldo' | 'garantia' | 'multas' | 'km' | 'cabify' | 'asignaciones' | 'bajas' | 'calificacion' | 'incidencias'
+export type Tab = 'cobranza' | 'facturacion' | 'saldo' | 'garantia' | 'toshipass' | 'multas' | 'km' | 'cabify' | 'asignaciones' | 'bajas' | 'calificacion' | 'incidencias'
 
 // Etiqueta legible de turno/horario y estados para los historiales.
 function horarioLabel(h: string | null): string {
@@ -172,8 +175,11 @@ export function ConductorDetalleModal({
       setMultas(m); setFacturacion(f); setExcesoKm(ex)
       // Resumen extra (Cabify) usa el rango de la última semana facturada. Se dispara
       // en cuanto está la facturación, en paralelo con el cálculo de km.
-      const rango = f.length && f[0].fechaInicio && f[0].fechaFin
-        ? { inicio: f[0].fechaInicio, fin: f[0].fechaFin }
+      // Última semana CERRADA (la en curso es parcial), igual que las tarjetas
+      const hoyCorte = hoyART()
+      const cerrada = f.find(x => !x.fechaFin || x.fechaFin.slice(0, 10) < hoyCorte)
+      const rango = cerrada && cerrada.fechaInicio && cerrada.fechaFin
+        ? { inicio: cerrada.fechaInicio, fin: cerrada.fechaFin }
         : null
       cargarResumenExtra(
         { id: conductor.id, nombres: conductor.nombres, apellidos: conductor.apellidos, dni: conductor.dni },
@@ -228,6 +234,8 @@ export function ConductorDetalleModal({
   // undefined = cargando; null = garantía.
   const [toshipass, setToshipass] = useState<RegimenToshipass | null | undefined>(undefined)
   const [toshipassCobro, setToshipassCobro] = useState<{ facturado: number; cobrado: number } | null>(null)
+  // Toshipass por semana (id de facturación → monto), para la pestaña Toshipass
+  const [toshipassMontos, setToshipassMontos] = useState<Map<string, number> | null>(null)
   useEffect(() => {
     let activo = true
     analizarRegimenToshipass([conductor.id])
@@ -236,7 +244,7 @@ export function ConductorDetalleModal({
     return () => { activo = false }
   }, [conductor.id])
   useEffect(() => {
-    if (!toshipass || !facturacion.length) { setToshipassCobro(null); return }
+    if (!toshipass || !facturacion.length) { setToshipassCobro(null); setToshipassMontos(toshipass ? new Map() : null); return }
     let activo = true
     ;(async () => {
       const { data } = await (supabase.from('facturacion_detalle') as any)
@@ -246,23 +254,32 @@ export function ConductorDetalleModal({
       // Cobrado: proporción pagada de cada semana aplicada al Toshipass de esa semana
       let facturado = 0
       let cobrado = 0
+      const montos = new Map<string, number>()
       for (const d of (data || []) as { facturacion_id: string; total: number }[]) {
         const monto = Number(d.total) || 0
+        montos.set(d.facturacion_id, (montos.get(d.facturacion_id) ?? 0) + monto)
         const sem = facturacion.find(f => f.id === d.facturacion_id)
         facturado += monto
         cobrado += monto * Math.min(1, Math.max(0, (sem?.cobertura ?? 0) / 100))
       }
-      if (activo) setToshipassCobro({ facturado, cobrado })
-    })().catch(() => { if (activo) setToshipassCobro(null) })
+      if (activo) { setToshipassCobro({ facturado, cobrado }); setToshipassMontos(montos) }
+    })().catch(() => { if (activo) { setToshipassCobro(null); setToshipassMontos(new Map()) } })
     return () => { activo = false }
   }, [toshipass, facturacion])
 
   // Cobertura de la facturación: última semana facturada contra la anterior
+  // Semanas cerradas (ya terminó el domingo). La semana en curso es una facturación
+  // parcial: no se usa para «última semana», cobertura, saldo ni deuda (igual que la
+  // tabla del panel, que muestra la última semana cerrada). En la lista se ve como «En curso».
+  const hoy = hoyART()
+  const esSemanaEnCurso = (f: FacturacionSemana) => !!f.fechaFin && f.fechaFin.slice(0, 10) >= hoy
+  const factCerradas = useMemo(() => facturacion.filter(f => !esSemanaEnCurso(f)), [facturacion, hoy]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const cobertura = useMemo(() => {
-    const ult = facturacion[0]
-    const ant = facturacion[1]
+    const ult = factCerradas[0]
+    const ant = factCerradas[1]
     return ult ? { semana: ult.semana, actual: ult.cobertura, anterior: ant ? ant.cobertura : null, cubrio: ult.estado !== 'pendiente' } : null
-  }, [facturacion])
+  }, [factCerradas])
 
   const garantiaResumen = useMemo(
     () => (garantia ? calcularResumenGarantia(garantia, conductor.activo) : null),
@@ -280,7 +297,7 @@ export function ConductorDetalleModal({
   }, [saldoKardex, garantiaResumen])
 
   const factStats = useMemo(() => {
-    const totales = facturacion.map(f => f.proforma)
+    const totales = factCerradas.map(f => f.proforma)
     const sum = totales.reduce((a, b) => a + b, 0)
     const ultima = totales[0] || 0
     const anterior = totales[1] || 0
@@ -288,14 +305,14 @@ export function ConductorDetalleModal({
     // Saldo actual = saldo de la última semana (proforma - aportes). Vía saldo_anterior
     // ya arrastra el acumulado, así que es el saldo vigente. Igual que el portal.
     // Positivo = pendiente (deuda), negativo = a favor.
-    const saldoNet = facturacion.length ? facturacion[0].saldo : 0
+    const saldoNet = factCerradas.length ? factCerradas[0].saldo : 0
     return { ultima, variacion, promedio: totales.length ? sum / totales.length : 0, totalSemanas: totales.length, saldoNet }
-  }, [facturacion])
+  }, [factCerradas])
 
   const kpis = useMemo(() => {
     // km viene ordenado de la semana más reciente a la más antigua: la última semana es km[0].
     const kmUltima = km.length ? km[0].km : 0
-    const factUltima = facturacion.length ? facturacion[0].proforma : 0
+    const factUltima = factCerradas.length ? factCerradas[0].proforma : 0
     // Deuda pendiente = multas pendientes de pago + saldo pendiente (Saldo Actual)
     //   + penalidades de exceso de KM en estado pendiente (aún no aplicadas).
     // Los tres componentes son disjuntos (lo pendiente aún no entró a facturación).
@@ -303,7 +320,7 @@ export function ConductorDetalleModal({
     const saldoPendiente = Math.max(0, factStats.saldoNet)
     // Segmentación del saldo pendiente: cuánto es arrastre de la semana anterior
     // (saldo_anterior de la última semana) y cuánto es lo que se cobra esta semana.
-    const saldoAnterior = saldoPendiente > 0 ? (facturacion[0]?.saldoAnterior ?? 0) : 0
+    const saldoAnterior = saldoPendiente > 0 ? (factCerradas[0]?.saldoAnterior ?? 0) : 0
     const saldoActualSemana = saldoPendiente - saldoAnterior
     const excesoPendiente = excesoKm.pendienteTotal
     const deuda = multasPendientes + saldoPendiente + excesoPendiente
@@ -318,7 +335,7 @@ export function ConductorDetalleModal({
       kmUltima,
       factUltima,
     }
-  }, [km, facturacion, conductor, factStats.saldoNet, excesoKm.pendienteTotal])
+  }, [km, factCerradas, conductor, factStats.saldoNet, excesoKm.pendienteTotal])
 
   return (
     <div className="cdet-overlay" onClick={onClose}>
@@ -364,7 +381,7 @@ export function ConductorDetalleModal({
             </button>
           </div>
           <div className="cdet-kpi"><span className="cdet-kpi-ico"><Gauge size={15} /></span><div><div className="cdet-kpi-val">{kmLoading ? '…' : `${Math.round(kpis.kmUltima).toLocaleString('es-AR')} km`}</div><div className="cdet-kpi-lbl">Km última semana <ComparacionSemana actual={kpis.kmUltima} anterior={km[1]?.km} etiqueta="" /></div></div></div>
-          <div className="cdet-kpi"><span className="cdet-kpi-ico"><Receipt size={15} /></span><div><div className="cdet-kpi-val">{formatPlata(kpis.factUltima, { decimales: 2 })}</div><div className="cdet-kpi-lbl">Facturación última semana <ComparacionSemana actual={kpis.factUltima} anterior={facturacion[1]?.proforma} moneda invertido etiqueta="" /></div></div></div>
+          <div className="cdet-kpi"><span className="cdet-kpi-ico"><Receipt size={15} /></span><div><div className="cdet-kpi-val">{formatPlata(kpis.factUltima, { decimales: 2 })}</div><div className="cdet-kpi-lbl">Facturación última semana <ComparacionSemana actual={kpis.factUltima} anterior={factCerradas[1]?.proforma} moneda invertido etiqueta="" /></div></div></div>
 
           {/* Saldo del último movimiento del kardex (mismo número que el hero de
               la pestaña "Historial de saldo") y su diferencia contra la garantía. */}
@@ -454,7 +471,7 @@ export function ConductorDetalleModal({
                   ? `${garantiaResumen.ultimaSemanaPago.anio} S${String(garantiaResumen.ultimaSemanaPago.semana).padStart(2, '0')}`
                   : '—'}
               </div>
-              <div className="cdet-kpi-lbl">Última semana de pago</div>
+              <div className="cdet-kpi-lbl" title="Semana en la que se facturó la última cuota del fondo de garantía">Última cuota de garantía</div>
             </div>
           </div>
           <div className="cdet-kpi">
@@ -463,7 +480,7 @@ export function ConductorDetalleModal({
               <div className="cdet-kpi-val">
                 {garantiaLoading ? '…' : garantiaResumen?.ultimaCuotaNumero != null ? garantiaResumen.ultimaCuotaNumero : '—'}
               </div>
-              <div className="cdet-kpi-lbl">Último n° de cuota</div>
+              <div className="cdet-kpi-lbl">N° de esa cuota (garantía)</div>
             </div>
           </div>
         </div>
@@ -474,17 +491,36 @@ export function ConductorDetalleModal({
           <button className={tab === 'facturacion' ? 'active' : ''} onClick={() => setTab('facturacion')}>Facturación</button>
           <button className={tab === 'saldo' ? 'active' : ''} onClick={() => setTab('saldo')}>Saldo</button>
           <button className={tab === 'garantia' ? 'active' : ''} onClick={() => setTab('garantia')}>Garantía</button>
+          {/* Solo para conductores en régimen Toshipass (tarifa nueva) */}
+          {toshipass && (
+            <button className={tab === 'toshipass' ? 'active' : ''} onClick={() => setTab('toshipass')}>Toshipass</button>
+          )}
           <button className={tab === 'multas' ? 'active' : ''} onClick={() => setTab('multas')}>Multas</button>
           <button className={tab === 'km' ? 'active' : ''} onClick={() => setTab('km')}>Km recorridos</button>
           <button className={tab === 'cabify' ? 'active' : ''} onClick={() => setTab('cabify')}>Rendimiento Cabify</button>
           <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Asignaciones</button>
           <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Bajas</button>
           <button className={tab === 'incidencias' ? 'active' : ''} onClick={() => setTab('incidencias')}>Incidencias</button>
+          <button className={tab === 'cobranza' ? 'active' : ''} onClick={() => setTab('cobranza')}>Cobranza</button>
         </div>
 
         <div className="cdet-body">
           {/* Historial de saldo: kardex de control_saldos (mismo modal que Facturación > Saldos, solo lectura). */}
-          {tab === 'calificacion' ? (
+          {tab === 'cobranza' ? (
+            // Bitácora de cobranza (sql/conductores_notas_cobranza.sql): notas con fecha
+            // y autor, como la de vehículos. La primera carga viene del Excel de Gandhy.
+            <BitacoraNotasVehiculo
+              vehiculoId={conductor.id}
+              canAdd
+              config={{
+                tabla: 'conductores_notas_cobranza',
+                columnaId: 'conductor_id',
+                titulo: 'Bitácora de cobranza',
+                sqlArchivo: 'sql/conductores_notas_cobranza.sql',
+                etiquetaOrigen: { carga_inicial: 'Observación inicial (cobranzas)' },
+              }}
+            />
+          ) : tab === 'calificacion' ? (
             <CalificacionTab conductorId={conductor.id} enCurso={calificacion} />
           ) : tab === 'incidencias' ? (
             <IncidenciasConductorTab conductorId={conductor.id} />
@@ -496,6 +532,8 @@ export function ConductorDetalleModal({
               dni={conductor.dni}
               cuit={conductor.ruc}
             />
+          ) : tab === 'toshipass' && toshipass ? (
+            <ToshipassConductorTab regimen={toshipass} facturacion={facturacion} montos={toshipassMontos} />
           ) : tab === 'garantia' ? (
             /* Historial de garantía: kardex de control_garantias (mismo modal que Facturación > Garantías, solo lectura). */
             <GarantiaHistorialTab
@@ -624,15 +662,18 @@ export function ConductorDetalleModal({
               {facturacion.length === 0 ? <EmptyState size="sm" title="Sin facturación registrada." /> : (
               <div className="cdet-fac-list">
                 {facturacion.map(f => {
-                  const estadoTexto = f.estado === 'pendiente'
+                  const enCurso = esSemanaEnCurso(f)
+                  const estadoTexto = enCurso
+                    ? `En curso · ${formatPlata(f.proforma, { decimales: 2 })} parcial`
+                    : f.estado === 'pendiente'
                     ? `Pendiente ${formatPlata(f.saldo, { decimales: 2 })}`
                     : f.estado === 'favor'
                       ? `A favor ${formatPlata(Math.abs(f.saldo), { decimales: 2 })}`
                       : 'Cubierto'
                   return (
-                    <div key={f.id} className={`cdet-fac-card clickable ${f.estado === 'pendiente' ? 'pend' : ''}`} onClick={() => setSemanaSel(f)}>
+                    <div key={f.id} className={`cdet-fac-card clickable ${f.estado === 'pendiente' && !enCurso ? 'pend' : ''}`} onClick={() => setSemanaSel(f)}>
                       <div className="cdet-fac-top">
-                        <span className="cdet-fac-sem">Semana {f.semana} / {f.anio}</span>
+                        <span className="cdet-fac-sem">Semana {f.semana} / {f.anio}{enCurso ? <span className="cdet-tag pend" style={{ marginLeft: 8 }}>En curso</span> : null}</span>
                         <span className="cdet-fac-monto">{formatPlata(f.proforma, { decimales: 2 })}</span>
                       </div>
                       <div className="cdet-fac-sub">
@@ -640,7 +681,7 @@ export function ConductorDetalleModal({
                       </div>
                       <div className="cdet-fac-cov">
                         <span className="cdet-fac-cov-lbl">Cobertura {Math.round(f.cobertura)}%</span>
-                        <span className={`cdet-fac-cov-est ${f.estado}`}>{estadoTexto}</span>
+                        <span className={`cdet-fac-cov-est ${enCurso ? '' : f.estado}`}>{estadoTexto}</span>
                       </div>
                       <div className="cdet-fac-bar"><div className={`cdet-fac-bar-fill ${f.estado}`} style={{ width: `${f.cobertura}%` }} /></div>
                     </div>
@@ -786,12 +827,20 @@ export function ConductorDetalleModal({
                   return (
                     <div key={b.id} className={`cdet-baja-item ${esBaja ? 'baja' : 'reac'}`}>
                       <div className="cdet-baja-top">
-                        <span className={`cdet-baja-badge ${esBaja ? 'baja' : 'reac'}`}>{esBaja ? 'Baja' : 'Reactivación'}</span>
+                        <span className={`cdet-baja-badge ${esBaja ? 'baja' : 'reac'}`}>
+                          {b.esAutomatica ? 'Baja automática' : esBaja ? 'Baja' : 'Reactivación'}
+                        </span>
                         <span className="cdet-baja-estado">{(b.estadoAnterior || '—')} → {(b.estadoNuevo || '—')}</span>
-                        <span className="cdet-baja-fecha">{fmtFechaCorta(b.fecha)}</span>
+                        {/* La fecha de la baja manda; el registro puede ser de otro día (la automática se
+                            registra cuando corre la tarea, con la fecha en que se cumplió el mes). */}
+                        <span className="cdet-baja-fecha" title={b.fechaBaja ? `Registrada el ${fmtFechaCorta(b.fecha)}` : undefined}>
+                          {fmtFechaCorta(b.fechaBaja || b.fecha)}
+                        </span>
                       </div>
                       {b.motivo && <div className="cdet-baja-motivo"><b>Motivo:</b> {b.motivo}</div>}
-                      <div className="cdet-baja-usuario">Por {b.usuario || '—'}</div>
+                      <div className="cdet-baja-usuario">
+                        {b.esAutomatica ? 'Por el sistema, sin intervención de una persona' : `Por ${b.usuario || '—'}`}
+                      </div>
                     </div>
                   )
                 })}

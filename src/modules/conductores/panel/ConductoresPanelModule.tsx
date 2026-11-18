@@ -18,7 +18,7 @@ import { cargarPanelConductores, cargarKmGeoPanel, type ConductorPanelRow } from
 import { ConductorDetalleModal } from './ConductorDetalleModal'
 import { calificacionDesdeGuardada, calificarConductor, referenciaIngresos, type Calificacion, type ExtrasCalificacion } from './calificacionConductor'
 import { CalificacionCelda } from './CalificacionEstrellas'
-import { cargarRiesgoDeuda, textoRiesgo, NIVEL_RIESGO_LABEL, type RiesgoDeuda } from './riesgoDeuda'
+import { ajustarConSaldoActual, cargarRiesgoDeuda, textoRiesgo, NIVEL_RIESGO_LABEL, type RiesgoDeuda } from './riesgoDeuda'
 import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes, cargarExtrasCalificacion, cargarSemanaCerradaGuardada, lunesSemanaCerrada, type CalificacionSemana } from './calificacionesHistorial'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { hoyART } from '../../../utils/fechaArgentina'
@@ -224,7 +224,12 @@ export function ConductoresPanelModule() {
   }, [sedeActualId, reloadKey, semanaCabify])
 
   // Riesgo de no poder pagar la deuda (ver riesgoDeuda.ts). Si falla, la columna queda en "—".
-  const [riesgos, setRiesgos] = useState<Map<string, RiesgoDeuda> | null>(null)
+  const [riesgosBase, setRiesgos] = useState<Map<string, RiesgoDeuda> | null>(null)
+  // La deuda se corrige con el saldo actual: incluye pagos posteriores a la facturación
+  const riesgos = useMemo(
+    () => (riesgosBase ? ajustarConSaldoActual(riesgosBase, new Map(rowsBase.map(r => [r.id, r.saldoPendiente]))) : null),
+    [riesgosBase, rowsBase],
+  )
   useEffect(() => {
     let activo = true
     setRiesgos(null)
@@ -383,7 +388,16 @@ export function ConductoresPanelModule() {
       header: 'Conductor',
       cell: ({ row }) => (
         <div>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary, #111827)' }}>{row.original.nombre || '—'}</div>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary, #111827)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {row.original.nuevoEstaSemana && (
+              <span
+                title="Nuevo: su primera asignación arrancó esta semana"
+                aria-label="Nuevo esta semana"
+                style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', flexShrink: 0 }}
+              />
+            )}
+            {row.original.nombre || '—'}
+          </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)' }}>
             DNI: {row.original.dni || '—'}
           </div>
@@ -414,7 +428,7 @@ export function ConductoresPanelModule() {
       // Header de texto (no función): así el DataTable le pone el filtro de columna
       accessorFn: (r) => (r.apps && r.apps.length ? r.apps.join(' + ') : 'Sin cuenta relacionada'),
       header: 'App',
-      meta: { info: 'Apps con las que pagó, igual que en Facturación: carga de Pagos Cabify / Pagos DiDi de la última semana cerrada + pagos manuales de esta semana que nombran la app' },
+      meta: { info: 'Cabify: tiene la cuenta relacionada (figura en el histórico de Cabify de las últimas 9 semanas). DiDi: pagó por DiDi la última semana cerrada (todavía no hay API de DiDi); en gris si es la última vez conocida' },
       cell: ({ row }) => {
         const apps = row.original.apps
         if (apps === undefined) return <span className="cpanel-num cpanel-nulo">…</span>
@@ -422,7 +436,7 @@ export function ConductoresPanelModule() {
           // Sin pagos por Cabify ni DiDi en las últimas semanas: alerta de cuenta no relacionada
           return (
             <span
-              title="Sin cuenta relacionada: no tiene pagos por Cabify ni DiDi en las últimas 9 semanas"
+              title="Sin cuenta relacionada: no figura en el histórico de Cabify ni tiene pagos por DiDi en las últimas 9 semanas"
               style={{ display: 'inline-flex', color: '#D97706' }}
             >
               <AlertTriangle size={15} aria-label="Sin cuenta relacionada" />
@@ -434,6 +448,7 @@ export function ConductoresPanelModule() {
         return (
           <AppBadges
             apps={{ cabify: apps.includes('Cabify'), didi: apps.includes('DiDi'), ultimaSemana: row.original.appsUltimaSemana }}
+            cabifyPorCuenta
             size="xs"
           />
         )
@@ -444,10 +459,18 @@ export function ConductoresPanelModule() {
       id: 'riesgo_deuda',
       accessorFn: (r) => {
         const x = riesgos?.get(r.id)
-        return x ? NIVEL_RIESGO_LABEL[x.nivel] : 'Sin historial'
+        return x ? NIVEL_RIESGO_LABEL[x.nivel] : 'N/A'
       },
       header: 'Riesgo deuda',
-      meta: { info: 'Riesgo de no poder pagar, según cómo pagó las últimas 4 semanas cerradas de facturación' },
+      meta: {
+        info: 'Riesgo de no poder pagar, según cómo pagó las últimas 4 semanas cerradas de facturación. N/A = todavía no tiene 4 semanas seguidas de facturación cerrada',
+        // Filtro como lista (el id tiene «deuda» y la tabla lo tomaba como monto)
+        filterValue: (r: ConductorPanelRow) => {
+          const x = riesgos?.get(r.id)
+          return x ? NIVEL_RIESGO_LABEL[x.nivel] : 'N/A'
+        },
+        filterOrder: ['Alto', 'Medio', 'Bajo', 'N/A'],
+      },
       sortingFn: (a, b) => {
         const orden = { alto: 3, medio: 2, bajo: 1 }
         const va = riesgos?.get(a.original.id), vb = riesgos?.get(b.original.id)
@@ -479,6 +502,12 @@ export function ConductoresPanelModule() {
       // Sin patente -> "Sin asignación", para que aparezca como opción en el filtro.
       accessorFn: (r) => r.vehiculoAsignado || 'Sin asignación',
       header: 'Patente',
+      // El filtro es Con / Sin asignación (antes listaba cada patente más «Sin asignación»
+      // y «Seleccionar todas» traía también a los sin auto). Una patente se busca arriba.
+      meta: {
+        filterValue: (r: ConductorPanelRow) => (r.vehiculoAsignado ? 'Con asignación' : 'Sin asignación'),
+        filterOrder: ['Con asignación', 'Sin asignación'],
+      },
       cell: ({ row }) => row.original.vehiculoAsignado
         ? (
           <div>

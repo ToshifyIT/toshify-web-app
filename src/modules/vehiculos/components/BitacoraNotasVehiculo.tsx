@@ -23,13 +23,33 @@ interface BitacoraNotasVehiculoProps {
   canAdd: boolean;
   /** Nota del campo viejo, para mostrar si la bitácora todavía no existe */
   notaAnterior?: string | null;
+  /**
+   * Otra bitácora con la misma forma (p. ej. la de cobranza de conductores,
+   * sql/conductores_notas_cobranza.sql). Por defecto, la de vehículos.
+   */
+  config?: {
+    tabla: string;
+    columnaId: string;
+    titulo: string;
+    sqlArchivo: string;
+    /** Texto de cada origen distinto de 'app' (p. ej. 'carga_inicial') */
+    etiquetaOrigen?: Record<string, string>;
+  };
 }
+
+const CONFIG_VEHICULO = {
+  tabla: 'vehiculos_notas',
+  columnaId: 'vehiculo_id',
+  titulo: 'Bitácora de notas',
+  sqlArchivo: 'sql/vehiculos_notas.sql',
+  etiquetaOrigen: { nota_anterior: 'Nota anterior a la bitácora' } as Record<string, string>,
+};
 
 /**
  * Bitácora de notas del vehículo (sql/vehiculos_notas.sql): cada nota queda con
  * fecha y autor; solo se agregan, no se editan ni se borran.
  */
-export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior }: BitacoraNotasVehiculoProps) {
+export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior, config = CONFIG_VEHICULO }: BitacoraNotasVehiculoProps) {
   const [notas, setNotas] = useState<NotaVehiculo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -38,9 +58,9 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior }: Bita
   const [verTodas, setVerTodas] = useState(false);
 
   const cargar = async () => {
-    const { data, error } = await (supabase.from('vehiculos_notas') as any)
+    const { data, error } = await (supabase.from(config.tabla) as any)
       .select('id, nota, created_at, usuario_nombre, origen')
-      .eq('vehiculo_id', vehiculoId)
+      .eq(config.columnaId, vehiculoId)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []) as NotaVehiculo[];
@@ -67,8 +87,8 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior }: Bita
     setIsSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await (supabase.from('vehiculos_notas') as any)
-        .insert({ vehiculo_id: vehiculoId, nota: texto, created_by: user?.id });
+      const { error } = await (supabase.from(config.tabla) as any)
+        .insert({ [config.columnaId]: vehiculoId, nota: texto, created_by: user?.id });
       if (error) throw error;
       setNuevaNota('');
       setNotas(await cargar());
@@ -84,7 +104,7 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior }: Bita
   return (
     <div className="bnv">
       <div className="section-title">
-        Bitácora de notas
+        {config.titulo}
         {!isLoading && !hasError && notas.length > 0 && (
           <span className="bnv-contador">({notas.length})</span>
         )}
@@ -121,7 +141,7 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior }: Bita
         <>
           {notaAnterior && <div className="bnv-texto bnv-suelta">{notaAnterior}</div>}
           <p className="bnv-aviso">
-            La bitácora todavía no está activa: falta correr sql/vehiculos_notas.sql.
+            La bitácora todavía no está activa: falta correr {config.sqlArchivo}.
           </p>
         </>
       ) : notas.length === 0 ? (
@@ -134,8 +154,8 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior }: Bita
               <div className="bnv-meta">
                 <span className="bnv-fecha">{formatDateTimeAR(n.created_at)}</span>
                 <span>
-                  {n.origen === 'nota_anterior'
-                    ? 'Nota anterior a la bitácora'
+                  {n.origen !== 'app' && config.etiquetaOrigen?.[n.origen]
+                    ? config.etiquetaOrigen[n.origen]
                     : n.usuario_nombre || 'Sin usuario'}
                 </span>
               </div>

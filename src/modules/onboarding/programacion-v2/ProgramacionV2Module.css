@@ -1606,3 +1606,73 @@ select.prog-inline-select-mini:hover {
   overflow: visible;
   text-overflow: clip;
 }
+
+/* Columna Capitán: quién hizo la programación */
+.prog-capitan {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* Filtro por capitán: misma forma que el de Asignaciones (alto del buscador) */
+.prog-capitan-select {
+  height: 32px;
+  max-width: 180px;
+  padding: 0 28px 0 10px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px 14px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* =====================================================
+   DETALLE / EDITAR: marco estándar (modal-*) + resumen
+   ===================================================== */
+
+.modal-content.prog-modal-detalle { max-width: 640px; }
+.modal-content.prog-modal-editar { max-width: 760px; }
+
+.prog-det-header { flex-direction: column; gap: 12px; padding-bottom: 12px; }
+
+.prog-det-cabecera {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+.prog-det-auto { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.prog-det-modelo { font-size: 13px; color: var(--text-secondary); }
+.prog-det-badges { display: flex; align-items: center; gap: 8px; }
+
+/* Cada turno en su caja, con el color del turno solo en el título */
+.prog-edit-turno {
+  padding: 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+.prog-edit-turno + .prog-edit-turno { margin-top: 12px; }
+.prog-edit-turno.diurno h3 svg { color: #F59E0B; }
+.prog-edit-turno.nocturno h3 svg { color: #3B82F6; }
+
+.prog-modal-editar .prog-modal-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+@media (max-width: 768px) {
+  .prog-modal-editar .prog-modal-grid { grid-template-columns: 1fr; }
+}

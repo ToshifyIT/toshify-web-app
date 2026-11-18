@@ -3,10 +3,14 @@
 // Se calcula con la facturación semanal (facturacion_conductores) de las últimas
 // semanas CERRADAS. Por cada conductor:
 //   - cargo semanal promedio = subtotal_neto de las últimas 4 semanas
-//   - deuda = saldo_anterior con el que arrancó la última semana cerrada
-//   - semanas cortas = semanas en las que pagó menos del 90% de lo que tenía que
-//     pagar (lo pagado sale de cuánto pasó de saldo a la semana siguiente)
+//   - deuda = saldo_anterior con el que arranca la semana siguiente a la última
+//     cerrada (o sea, ya descontado lo que pagó de la última cerrada)
+//   - semanas cortas = de las 3 últimas cerradas, en cuántas pagó menos del 90% de lo
+//     que tenía que pagar (lo pagado sale de cuánto pasó de saldo a la semana siguiente)
 //   - tendencia = cuánto cambió la deuda en esas semanas
+// (2026-11-18: antes se medía hasta el inicio de la última cerrada y no veía su pago:
+// quien saldaba todo esa semana seguía como «Alto». Si el conductor no tiene la semana
+// siguiente facturada, se usa la cuenta anterior.)
 //
 // Niveles (validados contra semanas 1-42 de 2026: a 4 semanas terminaron debiendo
 // 1+ semana de alquiler el 66% de los Alto, 30% de los Medio y 4% de los Bajo):
@@ -31,6 +35,37 @@ export interface RiesgoDeuda {
   tendencia: number
   /** Semana cerrada usada como referencia, ej. "S45/2026" */
   semanaRef: string
+  /** Cargo semanal promedio (para medir la deuda en semanas) */
+  cargo: number
+  /** Deuda al arrancar la ventana (para la tendencia) */
+  deudaInicio: number
+}
+
+function nivelDe(semanasDeuda: number, tendencia: number, semanasCortas: number): NivelRiesgoDeuda {
+  return (semanasDeuda >= 1 && tendencia > 0) || semanasCortas >= 3 ? 'alto'
+    : semanasDeuda >= 0.25 || semanasCortas >= 1 ? 'medio'
+      : 'bajo'
+}
+
+/**
+ * Ajusta la deuda con el saldo actual del conductor (Saldo pendiente del panel). La
+ * facturación guarda el saldo con que arrancó cada semana y no se entera de los pagos
+ * posteriores: quien ya pagó esta semana seguía como deudor.
+ */
+export function ajustarConSaldoActual(
+  riesgos: Map<string, RiesgoDeuda>,
+  saldoActual: Map<string, number>,
+): Map<string, RiesgoDeuda> {
+  const out = new Map<string, RiesgoDeuda>()
+  for (const [id, r] of riesgos) {
+    const saldo = saldoActual.get(id)
+    if (saldo === undefined || saldo >= r.deuda) { out.set(id, r); continue }
+    const deuda = Math.max(saldo, 0)
+    const semanasDeuda = deuda / r.cargo
+    const tendencia = (deuda - r.deudaInicio) / r.cargo
+    out.set(id, { ...r, deuda, semanasDeuda, tendencia, nivel: nivelDe(semanasDeuda, tendencia, r.semanasCortas) })
+  }
+  return out
 }
 
 const SEMANAS = 4
@@ -70,23 +105,31 @@ export function textoRiesgo(r: RiesgoDeuda): string {
 export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<string, RiesgoDeuda>> {
   let q = supabase
     .from('periodos_facturacion')
-    .select('id, semana, anio, sede_id')
-    .eq('estado', 'cerrado')
+    .select('id, semana, anio, sede_id, estado')
     .order('anio', { ascending: false })
     .order('semana', { ascending: false })
   if (sedeId) q = q.eq('sede_id', sedeId)
   const { data: periodos, error } = await q
   if (error) throw error
 
-  // Últimas 4 semanas cerradas de cada sede, de la más vieja a la más nueva
+  // Últimas 4 semanas cerradas de cada sede, de la más vieja a la más nueva, y la
+  // semana que sigue a la última cerrada (su saldo_anterior ya incluye ese pago)
   const porSede = new Map<string, { id: string; semana: number; anio: number }[]>()
-  for (const p of periodos || []) {
+  const siguiente = new Map<string, string>()
+  const ordenados = [...(periodos || [])] // vienen de la más nueva a la más vieja
+  for (const p of ordenados) {
+    if (p.estado !== 'cerrado') continue
     const lista = porSede.get(p.sede_id) || []
     if (lista.length < SEMANAS) lista.push(p)
     porSede.set(p.sede_id, lista)
   }
   const ids: string[] = []
-  for (const lista of porSede.values()) {
+  for (const [sede, lista] of porSede) {
+    const ultima = lista[0]
+    const posteriores = ordenados.filter(p => p.sede_id === sede
+      && (p.anio > ultima.anio || (p.anio === ultima.anio && p.semana > ultima.semana)))
+    const prox = posteriores[posteriores.length - 1]
+    if (prox) { siguiente.set(sede, prox.id); ids.push(prox.id) }
     lista.reverse()
     ids.push(...lista.map(p => p.id))
   }
@@ -105,7 +148,15 @@ export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<stri
   }
 
   const resultado = new Map<string, RiesgoDeuda>()
-  for (const lista of porSede.values()) {
+  // Saldo con el que arranca la semana siguiente, por conductor y sede
+  const saldoSiguiente = new Map<string, number>()
+  for (const f of filas) {
+    for (const [sede, prox] of siguiente) {
+      if (f.periodo_id === prox) saldoSiguiente.set(`${sede}|${f.conductor_id}`, Number(f.saldo_anterior) || 0)
+    }
+  }
+
+  for (const [sede, lista] of porSede) {
     if (lista.length < SEMANAS) continue
     const ultima = lista[lista.length - 1]
     const semanaRef = `S${ultima.semana}/${ultima.anio}`
@@ -124,22 +175,25 @@ export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<stri
       const s = sem as FilaFact[]
       const cargo = s.reduce((a, f) => a + Math.max(Number(f.subtotal_neto) || 0, 0), 0) / SEMANAS
       if (cargo <= 0) continue
-      const deudaDe = (f: FilaFact) => Math.max(Number(f.saldo_anterior) || 0, 0)
+      // Saldos al arrancar cada semana; con la semana siguiente, uno más (ya con el último pago)
+      const saldos = s.map(f => Number(f.saldo_anterior) || 0)
+      const prox = saldoSiguiente.get(`${sede}|${conductorId}`)
+      if (prox !== undefined) saldos.push(prox)
+      // Las 3 últimas semanas con pago conocido
+      const desdeSemana = saldos.length - 1 - (SEMANAS - 1)
       let semanasCortas = 0
-      for (let i = 0; i < SEMANAS - 1; i++) {
+      for (let i = desdeSemana; i < saldos.length - 1; i++) {
         const aPagar = Number(s[i].total_a_pagar) || 0
         if (aPagar <= 0) continue
-        const pagado = aPagar - (Number(s[i + 1].saldo_anterior) || 0)
+        const pagado = aPagar - saldos[i + 1]
         if (pagado / aPagar < PAGO_COMPLETO) semanasCortas++
       }
-      const deuda = deudaDe(s[SEMANAS - 1])
+      const deuda = Math.max(saldos[saldos.length - 1], 0)
       const semanasDeuda = deuda / cargo
-      const tendencia = (deuda - deudaDe(s[0])) / cargo
-      const nivel: NivelRiesgoDeuda =
-        (semanasDeuda >= 1 && tendencia > 0) || semanasCortas >= 3 ? 'alto'
-          : semanasDeuda >= 0.25 || semanasCortas >= 1 ? 'medio'
-            : 'bajo'
-      resultado.set(conductorId, { nivel, semanasDeuda, deuda, semanasCortas, tendencia, semanaRef })
+      const tendencia = (deuda - Math.max(saldos[desdeSemana], 0)) / cargo
+      const nivel = nivelDe(semanasDeuda, tendencia, semanasCortas)
+      const deudaInicio = Math.max(saldos[desdeSemana], 0)
+      resultado.set(conductorId, { nivel, semanasDeuda, deuda, semanasCortas, tendencia, semanaRef, cargo, deudaInicio })
     }
   }
   return resultado

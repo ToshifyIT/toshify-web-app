@@ -637,7 +637,8 @@ REVOKE ALL ON FUNCTION kpi_reconstruir_flota(date, date) FROM PUBLIC, anon, auth
 -- ─────────────────────────────────────────────────────
 -- Tablas de resultados precalculados (la pantalla solo lee estas tablas).
 -- kpi_diario: facturación, cobranza, conductores e ingresos por día y sede.
--- kpi_bajas:  una fila por conductor dado de baja, con su motivo.
+-- kpi_bajas:  una fila por conductor dado de baja, con su motivo (solo bajas reales:
+--             tuvo asignación y se dio de baja a mano; ver kpi_recalcular).
 -- Las llena kpi_recalcular (tarea programada cada hora).
 -- ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS kpi_diario (
@@ -704,6 +705,10 @@ BEGIN
 
   -- Bajas: historial de bajas; si un conductor no tiene historial, su fecha de
   -- terminación. Una por conductor y día.
+  -- Solo cuentan como baja (churn) las de alguien que llegó a tener asignación
+  -- (un turno que arrancó, igual que el alta) y que se dio de baja a mano. La baja
+  -- automática por falta de asignación (sql/conductores_baja_sin_asignacion.sql) es una
+  -- desactivación, no una baja: no entra.
   INSERT INTO kpi_bajas (fecha, sede_id, conductor_id, motivo)
   SELECT DISTINCT ON (b.conductor_id, b.fecha) b.fecha, b.sede_id, b.conductor_id, b.motivo
   FROM (
@@ -724,6 +729,19 @@ BEGIN
                       WHERE hb.conductor_id = c.id AND hb.tipo_evento = 'baja')
   ) b
   WHERE b.fecha BETWEEN v_desde AND v_hasta
+    AND COALESCE(b.motivo, '') NOT ILIKE 'baja automática por falta de asignación%'
+    AND EXISTS (
+      SELECT 1
+      FROM asignaciones_conductores ac
+      JOIN asignaciones a ON a.id = ac.asignacion_id
+      WHERE ac.conductor_id = b.conductor_id
+        AND COALESCE(ac.estado, '') NOT ILIKE 'cancel%'
+        AND COALESCE(a.estado, '') NOT ILIKE 'cancel%'
+        AND COALESCE(a.estado, '') NOT ILIKE 'program%'
+        AND COALESCE(a.estado, '') NOT ILIKE 'pendient%'
+        AND (COALESCE(ac.fecha_inicio, a.fecha_inicio_real, a.fecha_inicio)
+              AT TIME ZONE 'America/Argentina/Buenos_Aires')::date <= b.fecha
+    )
   ORDER BY b.conductor_id, b.fecha, b.orden DESC;
 
   INSERT INTO kpi_diario (fecha, sede_id, vi, fn, ac, co, cc, fa, fg, ft, pe, cd, al, ba, calculado_en)

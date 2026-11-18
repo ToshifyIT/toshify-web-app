@@ -21,7 +21,7 @@ import { cargarAppsPagoSemana, etiquetasApps } from '../../../services/appsPagoS
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { calcularKmSemanaConductores } from '../../portal/kmRecorridos'
 
-import { hoyART } from '../../../utils/fechaArgentina'
+import { fechaISOART, hoyART, lunesSemanaART } from '../../../utils/fechaArgentina'
 // Ingresos de Cabify del periodo consultado. MISMA fuente que el modulo
 // Integraciones > Cabify (cabifyHistoricalService), para que los numeros coincidan.
 // Kilometros de Cabify: null significa "sin dato", que NO es lo mismo que 0 km.
@@ -59,6 +59,8 @@ export interface ConductorPanelRow {
   categoriaLicenciaOtra: string | null   // detalle cuando es Otros (ej. "D2")
   tieneAsignacion: boolean
   vehiculoAsignado: string | null   // patente del auto asignado ahora mismo
+  /** Nuevo: tiene auto y su primera asignación arrancó esta semana (desde el lunes) */
+  nuevoEstaSemana?: boolean
   grupoFlotaAsignado: string | null // grupo de flota (razon social) de ese auto
   turno: string | null              // horario de la asignacion actual (diurno/nocturno/todo_dia)
   cantidadMultas: number
@@ -233,6 +235,23 @@ export async function cargarKmGeoPanel(
  * @param sedeId    si se pasa, filtra conductores por sede.
  * @param opciones  bloques opcionales de datos extra (ver PanelOpciones).
  */
+/**
+ * Apps de la fila (2026-11-18):
+ *  - Cabify: si tiene la cuenta relacionada en Cabify (figura en cabify_historico en las
+ *    últimas 9 semanas). Es más seguro que el pago.
+ *  - DiDi: por los pagos (todavía no hay API de DiDi), misma regla que Facturación. Si
+ *    la semana pasada no pagó por DiDi, es la última conocida y se ve en gris.
+ */
+function appsDelConductor(
+  pago: Parameters<typeof etiquetasApps>[0],
+  hayDatosPago: boolean,
+  tieneCuentaCabify: boolean,
+): { apps?: string[]; appsUltimaSemana?: string } {
+  if (!hayDatosPago) return { apps: undefined, appsUltimaSemana: undefined }
+  const apps = [...(tieneCuentaCabify ? ['Cabify'] : []), ...(pago?.didi ? ['DiDi'] : [])]
+  return { apps, appsUltimaSemana: pago?.didi ? pago?.ultimaSemana : undefined }
+}
+
 export async function cargarPanelConductores(
   sedeId?: string | null,
   opciones?: PanelOpciones,
@@ -345,6 +364,21 @@ export async function cargarPanelConductores(
       ? cargarAppsPagoSemana(opciones.appsPago.inicio, undefined, { ultimaConocida: true }).catch(() => null)
       : Promise.resolve(null),
   ])
+
+  // 12. Cuenta Cabify relacionada: el conductor figura en cabify_historico (los datos de
+  // Cabify que se sincronizan) en las últimas 9 semanas, la misma ventana que DiDi.
+  // Algunos vienen con el DNI como hash (CABIFY_...): se traducen con cabify_dni_mapeo.
+  const desdeCabify = new Date(Date.now() - 63 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const [cuentasCabify, mapeoCabify] = opciones?.appsPago
+    ? await Promise.all([
+        fetchAll<{ dni: string | null; nombre: string | null; apellido: string | null }>((from, to) =>
+          supabase.from('cabify_historico').select('dni, nombre, apellido')
+            .gte('fecha_inicio', desdeCabify).order('fecha_inicio').range(from, to)).catch(() => []),
+        fetchAll<{ cabify_hash: string; dni_real: string | null }>((from, to) =>
+          supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real').range(from, to)).catch(() => []),
+      ])
+    : [[], []]
+  const dniDeHash = new Map(mapeoCabify.map(m => [m.cabify_hash, m.dni_real]))
   const guiaPorConductor = new Map(guias.map(g => [g.id, g.guia]))
 
   // Ultimo saldo por conductor: primera aparicion en el kardex ya ordenado desc.
@@ -390,6 +424,12 @@ export async function cargarPanelConductores(
     porDni.get(normalizeDni(d.nationalIdNumber)) ||
     porLicencia.get(normalizeLicencia(d.driverLicense)) ||
     porNombre.get(normalizeNombre(`${d.name || ''} ${d.surname || ''}`))
+  const conCuentaCabify = new Set<string>()
+  for (const cta of cuentasCabify) {
+    const dni = cta.dni?.startsWith('CABIFY_') ? dniDeHash.get(cta.dni) || null : cta.dni
+    const cid = conductorDeCabify({ nationalIdNumber: dni, name: cta.nombre, surname: cta.apellido })
+    if (cid) conCuentaCabify.add(cid)
+  }
   if (cabifyDrivers) {
     for (const d of cabifyDrivers) {
       const cid = conductorDeCabify(d)
@@ -438,6 +478,37 @@ export async function cargarPanelConductores(
       const turno = (a.modalidad === 'a_cargo' || ac.horario === 'todo_dia') ? 'a_cargo' : ac.horario
       if (turno) turnoPorConductor.set(ac.conductor_id, turno)
     }
+  }
+
+  // Nuevos de la semana: con auto asignado y cuya PRIMERA asignación (de todo su
+  // historial, sin las canceladas) arrancó desde el lunes. Un cambio de auto no cuenta.
+  const nuevosEstaSemana = new Set<string>()
+  try {
+    const conAuto = [...vehiculoPorConductor.keys()]
+    const lunes = lunesSemanaART()
+    const primerInicio = new Map<string, string>()
+    for (let i = 0; i < conAuto.length; i += 200) {
+      const lote = conAuto.slice(i, i + 200)
+      const filas = await fetchAll<{ conductor_id: string; fecha_inicio: string | null; asignaciones: { estado: string | null; fecha_inicio: string | null; fecha_inicio_real: string | null } | null }>((from, to) =>
+        supabase
+          .from('asignaciones_conductores')
+          .select('conductor_id, fecha_inicio, asignaciones(estado, fecha_inicio, fecha_inicio_real)')
+          .in('conductor_id', lote)
+          .range(from, to))
+      for (const f of filas) {
+        const a = f.asignaciones
+        if (!a || /cancel/i.test(a.estado || '')) continue
+        const inicio = f.fecha_inicio || a.fecha_inicio_real || a.fecha_inicio
+        if (!inicio) continue
+        const prev = primerInicio.get(f.conductor_id)
+        if (!prev || inicio < prev) primerInicio.set(f.conductor_id, inicio)
+      }
+    }
+    for (const [cid, inicio] of primerInicio) {
+      if ((fechaISOART(inicio) || '') >= lunes) nuevosEstaSemana.add(cid)
+    }
+  } catch (err) {
+    console.warn('[panel] No se pudo calcular los nuevos de la semana:', err)
   }
 
   const cerradas = new Set<string>(periodos.map(p => `${p.semana}-${p.anio}`))
@@ -566,6 +637,7 @@ export async function cargarPanelConductores(
       categoriaLicenciaOtra: c.categoria_licencia_otra || null,
       tieneAsignacion: !!vehiculoAsignado,
       vehiculoAsignado,
+      nuevoEstaSemana: nuevosEstaSemana.has(c.id),
       grupoFlotaAsignado: grupoFlotaPorConductor.get(c.id) || null,
       turno: turnoPorConductor.get(c.id) || null,
       cantidadMultas: ms.length,
@@ -586,8 +658,10 @@ export async function cargarPanelConductores(
       saldoMenosGarantia: saldoPendiente - garantiaPagada,
       // undefined si no se pidio Cabify; null si se pidio y no hubo cruce.
       cabify: cabifyDrivers ? (cabifyPorConductor.get(c.id) ?? null) : undefined,
-      apps: appsPago ? etiquetasApps(appsPago.get(c.id)) : undefined,
-      appsUltimaSemana: appsPago?.get(c.id)?.ultimaSemana,
+      // Apps: con la que pagó (misma regla que Facturación) y, además, Cabify si en el
+      // período tuvo viajes o ingresos en Cabify aunque el pago no se haya cargado por la
+      // app (p. ej. lo pagó en efectivo): tiene la cuenta relacionada (2026-11-18).
+      ...appsDelConductor(appsPago?.get(c.id), appsPago !== undefined && appsPago !== null, conCuentaCabify.has(c.id)),
       kmGeo: opciones?.cabify && !opciones.sinKmGeo ? (kmGeoPorConductor.get(c.id) ?? null) : undefined,
     }
   })

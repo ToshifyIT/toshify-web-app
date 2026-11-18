@@ -10,7 +10,7 @@ import { AlertTriangle, Clock, Download, ExternalLink, Inbox, MessageCircle, Ref
 import type { ColumnDef } from '@tanstack/react-table'
 import { obtenerMensajesTwoChat } from '../../../services/twoChatService'
 import type { MensajeTwoChat } from '../../../services/twoChatService'
-import { formatFechaHoraART, hoyART } from '../../../utils/fechaArgentina'
+import { formatFechaHoraART, hoyART, lunesSemanaART } from '../../../utils/fechaArgentina'
 import { showError } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
@@ -182,7 +182,7 @@ function resumirPorAgente(convs: Conversacion[], todos: string[]): ResumenAgente
 }
 
 export function TwoChatMensajesModule() {
-  const [desde, setDesde] = useState(hoyART)
+  const [desde, setDesde] = useState(lunesSemanaART)
   const [hasta, setHasta] = useState(hoyART)
   const [mensajes, setMensajes] = useState<MensajeTwoChat[]>([])
   const [todosAgentes, setTodosAgentes] = useState<string[]>([])

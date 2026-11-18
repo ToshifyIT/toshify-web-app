@@ -4,7 +4,7 @@
 -- 1) twochat_usuarios: qué cuenta de 2Chat usa cada usuario de Toshibase para llamar
 --    (y para el chat de Leads). Si un usuario no está acá, se busca solo su cuenta
 --    por email o por nombre (Carla, Eunice y Ali ya se encuentran solas).
---    Admin, Karen y Gandhy usan la cuenta compartida «Info Toshify» (info+2@).
+--    Admin, Karen, Gandhy y Eugenia usan la cuenta compartida «Info Toshify» (info+2@).
 -- 2) twochat_llamadas_toshibase: cada llamada hecha desde el botón de Toshibase, con
 --    el usuario REAL. Con esto Control de llamadas muestra «Gandhy Barcelo (vía Info
 --    Toshify)» en vez de todo junto como «Info Toshify».
@@ -46,11 +46,11 @@ CREATE POLICY twochat_usuarios_select ON twochat_usuarios FOR SELECT TO authenti
 DROP POLICY IF EXISTS twochat_llamadas_toshibase_select ON twochat_llamadas_toshibase;
 CREATE POLICY twochat_llamadas_toshibase_select ON twochat_llamadas_toshibase FOR SELECT TO authenticated USING (true);
 
--- Cuenta compartida «Info Toshify» para admin@, Karen (coord.admin@) y Gandhy (coord.hr@)
+-- Cuenta compartida «Info Toshify» para admin@, Karen (coord.admin@), Gandhy (coord.hr@) y Eugenia (admin.log1@)
 INSERT INTO twochat_usuarios (user_id, twochat_user_uuid, twochat_nombre)
 SELECT id, 'USR309a3b75-f6dc-4c68-888f-6937193f5140', 'Info Toshify'
 FROM user_profiles
-WHERE email IN ('admin@toshify.com.ar', 'coord.admin@toshify.com.ar', 'coord.hr@toshify.com.ar')
+WHERE email IN ('admin@toshify.com.ar', 'coord.admin@toshify.com.ar', 'coord.hr@toshify.com.ar', 'admin.log1@toshify.com.ar')
 ON CONFLICT (user_id) DO UPDATE SET twochat_user_uuid = EXCLUDED.twochat_user_uuid, twochat_nombre = EXCLUDED.twochat_nombre;
 
 COMMIT;
