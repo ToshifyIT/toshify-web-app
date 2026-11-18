@@ -18,7 +18,7 @@ import {
   type MovimientoConductor, type Turno, type TurnoProgramado,
 } from './useMovimientosFlota'
 import { useAuth } from '../../contexts/AuthContext'
-import { GUIAS_ACTIVOS } from '../leads/guias'
+import { GUIAS_ACTIVOS, agenteDelUsuario } from '../leads/guias'
 import { showError } from '../../utils/toast'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
@@ -156,24 +156,6 @@ const ETIQUETA_FILTRO: Record<string, string> = {
   totalFlota: 'Total Flota',
   vehiculosActivos: 'Vehículos Activos',
   disponibles: 'Vehículos Disponibles (PKG ON)',
-}
-
-/** «Eunice D'Urso» -> «eunice.durso»: como el usuario del email de cada agente. */
-const claveEmail = (nombre: string) =>
-  nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    .replace(/[^a-z\s]/g, '').trim().split(/\s+/).join('.')
-
-/**
- * Agente (guía) del usuario logueado, si es uno de los guías activos. Primero por el
- * email (carla.noguera@…, eunice.durso@…, ali.verenzuela@…, el dominio no importa);
- * si no coincide, por el nombre completo del perfil. Cualquier otro usuario: '' (todos).
- */
-function agenteDelUsuario(email: string | null | undefined, nombre: string | null | undefined): string {
-  const usuario = (email || '').split('@')[0].toLowerCase()
-  const porEmail = GUIAS_ACTIVOS.find(g => claveEmail(g) === usuario)
-  if (porEmail) return porEmail
-  const completo = nombre ? claveEmail(nombre) : ''
-  return GUIAS_ACTIVOS.find(g => claveEmail(g) === completo) ?? ''
 }
 
 /** Descripción del estado, o el código legible si no tiene ('TALLER_MJ' -> 'Taller mj') */

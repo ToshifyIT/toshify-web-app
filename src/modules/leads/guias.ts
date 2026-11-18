@@ -30,6 +30,24 @@ const GUIAS_INACTIVOS: ReadonlySet<string> = new Set(['manuel', 'marina'])
 /** Guías activos que se ofrecen para elegir (conductor y lead). */
 export const GUIAS_ACTIVOS: readonly string[] = ['Ali Verenzuela', 'Carla Noguera', "Eunice D'Urso"]
 
+/** «Eunice D'Urso» -> «eunice.durso»: como el usuario del email de cada guía. */
+export const claveEmail = (nombre: string) =>
+  nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z\s]/g, '').trim().split(/\s+/).join('.')
+
+/**
+ * Guía activo del usuario logueado. Primero por el email (carla.noguera@…,
+ * eunice.durso@…, ali.verenzuela@…, el dominio no importa); si no coincide, por el
+ * nombre completo del perfil. Cualquier otro usuario: '' (todos).
+ */
+export function agenteDelUsuario(email: string | null | undefined, nombre: string | null | undefined): string {
+  const usuario = (email || '').split('@')[0].toLowerCase()
+  const porEmail = GUIAS_ACTIVOS.find(x => claveEmail(x) === usuario)
+  if (porEmail) return porEmail
+  const completo = nombre ? claveEmail(nombre) : ''
+  return GUIAS_ACTIVOS.find(x => claveEmail(x) === completo) ?? ''
+}
+
 /** false si el guía está dado de baja (ver GUIAS_INACTIVOS). */
 export function esGuiaActivo(nombre: string | null | undefined): boolean {
   return !GUIAS_INACTIVOS.has(normalizarTexto(nombre))

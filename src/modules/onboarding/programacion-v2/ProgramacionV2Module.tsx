@@ -23,7 +23,7 @@
 // Modulo de programacion de entregas de vehiculos
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Car,
@@ -35,6 +35,7 @@ import {
   Trash2,
   CheckCircle,
   XCircle,
+  X,
   Send,
   MessageSquareText,
   Copy,
@@ -50,6 +51,7 @@ import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { supabase } from '../../../lib/supabase'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useAuth } from '../../../contexts/AuthContext'
+import { GUIAS_ACTIVOS, agenteDelUsuario, claveEmail } from '../../leads/guias'
 import { useSede } from '../../../contexts/SedeContext'
 
 import { ProgramacionAssignmentWizardV2 } from './components/ProgramacionAssignmentWizardV2'
@@ -245,9 +247,22 @@ async function resolverAtendedorActivo(sedeId: string | null): Promise<string | 
   return cualquiera?.[0]?.id ?? null
 }
 
+/** «Ali Verenzuela» -> «Ali»: el capitán con el nombre corto, como en Asignaciones. */
+const primerNombre = (nombre: string | null | undefined) => (nombre || '').trim().split(/\s+/)[0] || ''
+
 export function ProgramacionV2Module() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
   const { user, profile } = useAuth()
+  // Filtro por capitán (quien hizo la programación). '' = todos. Si quien entra es
+  // un capitán, arranca con las suyas; puede elegir «Todos».
+  const [capitanFiltro, setCapitanFiltro] = useState(() => agenteDelUsuario(user?.email, profile?.full_name))
+  const capitanElegidoAMano = useRef(false)
+  // El perfil puede llegar después del primer render
+  useEffect(() => {
+    if (capitanElegidoAMano.current) return
+    const propio = agenteDelUsuario(user?.email, profile?.full_name)
+    if (propio) setCapitanFiltro(propio)
+  }, [user?.email, profile?.full_name])
   const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const canCreate = canCreateInMenu('programacion-entregas')
   const canEdit = canEditInMenu('programacion-entregas')
@@ -1572,6 +1587,12 @@ export function ProgramacionV2Module() {
   }
 
   /** Desplegable de estado de cuenta de un turno ("-" si el turno está vacante). */
+  /** Turno sin conductor ni lead (Vacante): sus columnas van con "-". */
+  const slotVacio = (prog: ProgramacionOnboardingCompleta, slot: 'diurno' | 'nocturno') => {
+    const { leadId, conductorId, nombre } = slotCuentas(prog, slot)
+    return !tipoPersonaSlot(leadId, conductorId, nombre)
+  }
+
   const renderCuentaApp = (
     prog: ProgramacionOnboardingCompleta,
     slot: 'diurno' | 'nocturno',
@@ -2557,7 +2578,8 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-tipo-asig-turno">
               <div className="prog-tipo-asig-row">
-                <select
+                {slotVacio(prog, 'diurno') ? <span className="prog-sin-conductor">-</span> : (
+<select
                   className={`prog-inline-select-mini tipo-asignacion ${tipoD}`}
                   value={tipoD}
                   onChange={(e) => handleTipoAsignacionChange(prog.id, 'tipo_asignacion_diurno', 'documento_diurno', e.target.value)}
@@ -2571,9 +2593,11 @@ export function ProgramacionV2Module() {
                   <option value="actualizacion_carta_oferta">Act. carta oferta</option>
                   <option value="devolucion_vehiculo">Devolución</option>
                 </select>
+)}
               </div>
               <div className="prog-tipo-asig-row">
-                <select
+                {slotVacio(prog, 'nocturno') ? <span className="prog-sin-conductor">-</span> : (
+<select
                   className={`prog-inline-select-mini tipo-asignacion ${tipoN}`}
                   value={tipoN}
                   onChange={(e) => handleTipoAsignacionChange(prog.id, 'tipo_asignacion_nocturno', 'documento_nocturno', e.target.value)}
@@ -2587,6 +2611,7 @@ export function ProgramacionV2Module() {
                   <option value="actualizacion_carta_oferta">Act. carta oferta</option>
                   <option value="devolucion_vehiculo">Devolución</option>
                 </select>
+)}
               </div>
             </div>
           )
@@ -2637,6 +2662,16 @@ export function ProgramacionV2Module() {
       }
     },
     {
+      id: 'capitan',
+      header: 'Capitán',
+      accessorFn: (row) => primerNombre(row.created_by_name) || 'Sin dato',
+      cell: ({ row }) => (
+        <span className="prog-capitan" title={row.original.created_by_name || 'Quién hizo la programación'}>
+          {primerNombre(row.original.created_by_name) || '-'}
+        </span>
+      )
+    },
+    {
       id: 'tipo_documento_display',
       header: 'Documento',
       cell: ({ row }) => {
@@ -2653,7 +2688,8 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-documento-turno">
               <div className="prog-documento-row">
-                <select
+                {slotVacio(prog, 'diurno') ? <span className="prog-sin-conductor">-</span> : (
+<select
                   className={`prog-inline-select-mini documento ${docDiurno || 'sin_definir'}`}
                   value={docDiurno}
                   onChange={(e) => handleUpdateField(prog.id, 'documento_diurno', e.target.value || null)}
@@ -2664,9 +2700,11 @@ export function ProgramacionV2Module() {
                   {permiteAnexo(tarifaDiurno) && <option value="anexo">Anexo</option>}
                   <option value="na">N/A</option>
                 </select>
+)}
               </div>
               <div className="prog-documento-row">
-                <select
+                {slotVacio(prog, 'nocturno') ? <span className="prog-sin-conductor">-</span> : (
+<select
                   className={`prog-inline-select-mini documento ${docNocturno || 'sin_definir'}`}
                   value={docNocturno}
                   onChange={(e) => handleUpdateField(prog.id, 'documento_nocturno', e.target.value || null)}
@@ -2677,6 +2715,7 @@ export function ProgramacionV2Module() {
                   {permiteAnexo(tarifaNocturno) && <option value="anexo">Anexo</option>}
                   <option value="na">N/A</option>
                 </select>
+)}
               </div>
             </div>
           )
@@ -2715,7 +2754,8 @@ export function ProgramacionV2Module() {
           return (
             <div className="prog-confirmacion-turno">
               <div className="prog-confirmacion-row">
-                <select
+                {slotVacio(prog, 'diurno') ? <span className="prog-sin-conductor">-</span> : (
+<select
                   className={`prog-inline-select-mini confirmacion ${confD}`}
                   value={confD}
                   onChange={(e) => handleUpdateField(prog.id, 'confirmacion_diurno', e.target.value)}
@@ -2726,9 +2766,11 @@ export function ProgramacionV2Module() {
                   <option value="no_confirmo">No confirmó</option>
                   <option value="reprogramar">Reprogramar</option>
                 </select>
+)}
               </div>
               <div className="prog-confirmacion-row">
-                <select
+                {slotVacio(prog, 'nocturno') ? <span className="prog-sin-conductor">-</span> : (
+<select
                   className={`prog-inline-select-mini confirmacion ${confN}`}
                   value={confN}
                   onChange={(e) => handleUpdateField(prog.id, 'confirmacion_nocturno', e.target.value)}
@@ -2739,6 +2781,7 @@ export function ProgramacionV2Module() {
                   <option value="no_confirmo">No confirmó</option>
                   <option value="reprogramar">Reprogramar</option>
                 </select>
+)}
               </div>
             </div>
           )
@@ -3011,6 +3054,16 @@ export function ProgramacionV2Module() {
       }
     },
     {
+      id: 'capitan',
+      header: 'Capitán',
+      accessorFn: (row) => primerNombre(row.created_by_name) || 'Sin dato',
+      cell: ({ row }) => (
+        <span className="prog-capitan" title={row.original.created_by_name || 'Quién hizo la programación'}>
+          {primerNombre(row.original.created_by_name) || '-'}
+        </span>
+      )
+    },
+    {
       id: 'tipo_documento_display',
       header: 'Documento',
       cell: ({ row }) => {
@@ -3114,7 +3167,28 @@ export function ProgramacionV2Module() {
   ], [])
 
   // Stats cards ocultas temporalmente - mostrar todas las programaciones
-  const filteredData = programaciones
+  const deCapitan = (lista: ProgramacionOnboardingCompleta[]) =>
+    capitanFiltro
+      ? lista.filter(p => !!p.created_by_name && claveEmail(p.created_by_name) === claveEmail(capitanFiltro))
+      : lista
+  const filteredData = deCapitan(programaciones)
+  const enviadosFiltrados = deCapitan(programacionesHistorico)
+
+  const selectorCapitan = (
+    <select
+      className="prog-capitan-select"
+      value={capitanFiltro}
+      onChange={e => {
+        capitanElegidoAMano.current = true
+        setCapitanFiltro(e.target.value)
+      }}
+      aria-label="Filtrar por capitán"
+      title="Capitán que hizo la programación"
+    >
+      <option value="">Todos los capitanes</option>
+      {GUIAS_ACTIVOS.map(g => <option key={g} value={g}>{primerNombre(g)}</option>)}
+    </select>
+  )
 
   return (
     <div className="prog-module">
@@ -3217,6 +3291,7 @@ export function ProgramacionV2Module() {
           pageSizeOptions={[10, 20, 50, 100]}
           headerAction={(
             <div style={{ display: 'flex', gap: '8px' }}>
+              {selectorCapitan}
               <button
                 className="btn-secondary"
                 onClick={() => loadProgramaciones()}
@@ -3237,10 +3312,11 @@ export function ProgramacionV2Module() {
       {/* DataTable - Enviados */}
       {activeTab === 'historico' && (
         <DataTable
-          data={programacionesHistorico}
+          data={enviadosFiltrados}
           columns={enviadosColumns}
           loading={loadingHistorico}
           searchPlaceholder="Buscar en enviados..."
+          headerAction={selectorCapitan}
           emptyIcon={<Send size={48}
         />}
           emptyTitle="No hay programaciones enviadas"
@@ -3390,15 +3466,31 @@ export function ProgramacionV2Module() {
 
       {/* Modal Edicion Rapida */}
       {showQuickEdit && editingProgramacion && (
-        <div className="prog-modal-overlay" onClick={handleCloseQuickEdit}>
-          <div className="prog-modal prog-modal-wide" onClick={e => e.stopPropagation()}>
-            <div className="prog-modal-header">
-              <h2>Editar Programacion</h2>
-              <button onClick={handleCloseQuickEdit}>
-                <XCircle size={20} />
+        <div className="modal-overlay" onClick={handleCloseQuickEdit}>
+          <div className="modal-content prog-modal-editar" onClick={e => e.stopPropagation()}>
+            {/* Mismo marco que el resto de los modales (modal-*, src/styles/modules.css) */}
+            <div className="modal-header prog-det-header">
+              <h2>Editar programación</h2>
+              <button className="modal-close" onClick={handleCloseQuickEdit} aria-label="Cerrar">
+                <X size={18} />
               </button>
+              <div className="prog-det-cabecera">
+                <div className="prog-det-auto">
+                  <span className="prog-det-modelo">
+                    Capitán: {primerNombre(editingProgramacion.created_by_name) || '-'}
+                  </span>
+                </div>
+                <div className="prog-det-badges">
+                  <span className={`prog-estado-badge ${editingProgramacion.estado}`}>
+                    {PROGRAMACION_ESTADO_LABELS[editingProgramacion.estado] || editingProgramacion.estado}
+                  </span>
+                  <span className={`prog-modalidad-badge ${editingProgramacion.modalidad?.toLowerCase()}`}>
+                    {editingProgramacion.modalidad === 'turno' ? 'Turno' : 'A Cargo'}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="prog-modal-body">
+            <div className="modal-body">
               {/* Vehiculo - Editable con busqueda */}
               <div className="prog-modal-section">
                 <h3><Car size={16} /> Vehiculo</h3>
@@ -3413,7 +3505,7 @@ export function ProgramacionV2Module() {
                     onFocus={() => setShowVehiculoDropdown(true)}
                     onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
                     placeholder={loadingVehiculos ? 'Cargando vehiculos...' : 'Buscar por patente, marca o modelo...'}
-                    className="prog-input"
+                    className="form-input"
                     disabled={loadingVehiculos}
                   />
                   {showVehiculoDropdown && !loadingVehiculos && (
@@ -3442,16 +3534,6 @@ export function ProgramacionV2Module() {
                 </div>
               </div>
 
-              {/* Modalidad (solo lectura) */}
-              <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <div>
-                    <label style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Modalidad</label>
-                    <p style={{ fontWeight: '600', margin: 0 }}>{editingProgramacion.modalidad || '-'}</p>
-                  </div>
-                </div>
-              </div>
-
               {/* Fecha y Hora */}
               <div className="prog-modal-section">
                 <h3><Calendar size={16} /> Cita</h3>
@@ -3462,7 +3544,7 @@ export function ProgramacionV2Module() {
                       type="date"
                       value={quickEditData.fecha_cita || ''}
                       onChange={e => setQuickEditData(prev => ({ ...prev, fecha_cita: e.target.value }))}
-                      className="prog-input"
+                      className="form-input"
                     />
                   </div>
                   <div>
@@ -3471,7 +3553,7 @@ export function ProgramacionV2Module() {
                       type="time"
                       value={quickEditData.hora_cita || ''}
                       onChange={e => setQuickEditData(prev => ({ ...prev, hora_cita: e.target.value }))}
-                      className="prog-input"
+                      className="form-input"
                     />
                   </div>
                 </div>
@@ -3481,8 +3563,8 @@ export function ProgramacionV2Module() {
               {editingProgramacion.modalidad === 'turno' ? (
                 <>
                   {/* Conductor Diurno */}
-                  <div className="prog-modal-section" style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
-                    <h3 style={{ color: '#FBBF24', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Sun size={16} /> Conductor Diurno</h3>
+                  <div className="prog-modal-section prog-edit-turno diurno">
+                    <h3><Sun size={16} /> Conductor diurno</h3>
                     {/* Selector de conductor / lead diurno */}
                     <div style={{ marginBottom: '12px' }}>
                       {renderEncabezadoPersona('diurno')}
@@ -3498,7 +3580,7 @@ export function ProgramacionV2Module() {
                           onFocus={() => setShowConductorDiurnoDropdown(true)}
                           onBlur={() => setTimeout(() => setShowConductorDiurnoDropdown(false), 200)}
                           placeholder={placeholderConductorEdicion('diurno')}
-                          className="prog-input"
+                          className="form-input"
                           disabled={loadingConductores}
                         />
                         {showConductorDiurnoDropdown && !loadingConductores && (
@@ -3543,7 +3625,7 @@ export function ProgramacionV2Module() {
                         <select
                           value={quickEditData.lead_diurno_id ? 'lead' : (quickEditData.tipo_candidato_diurno || '')}
                           onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato_diurno: e.target.value as any }))}
-                          className="prog-input"
+                          className="form-input"
                           disabled={!!quickEditData.lead_diurno_id}
                         >
                           <option value="">Seleccionar...</option>
@@ -3561,7 +3643,7 @@ export function ProgramacionV2Module() {
                             const val = e.target.value as any
                             setQuickEditData(prev => ({ ...prev, tipo_asignacion_diurno: val, ...(val === 'devolucion_vehiculo' ? { documento_diurno: 'na' } : {}) }))
                           }}
-                          className="prog-input"
+                          className="form-input"
                         >
                           <option value="entrega_auto">Entrega de auto</option>
                           <option value="asignacion_companero">Asignación compañero</option>
@@ -3576,7 +3658,7 @@ export function ProgramacionV2Module() {
                         <select
                           value={documentoSegunTarifa(quickEditData.documento_diurno || '', quickEditData.tipo_tarifa_diurno)}
                           onChange={e => setQuickEditData(prev => ({ ...prev, documento_diurno: e.target.value as any }))}
-                          className="prog-input"
+                          className="form-input"
                         >
                           <option value="">Seleccionar...</option>
                           <option value="contrato">Carta Oferta</option>
@@ -3591,7 +3673,7 @@ export function ProgramacionV2Module() {
                           type="text"
                           value={quickEditData.zona_diurno || ''}
                           onChange={e => setQuickEditData(prev => ({ ...prev, zona_diurno: e.target.value }))}
-                          className="prog-input"
+                          className="form-input"
                           placeholder="Ej: Norte, Sur, CABA..."
                         />
                       </div>
@@ -3601,7 +3683,7 @@ export function ProgramacionV2Module() {
                           type="number"
                           value={quickEditData.distancia_diurno || ''}
                           onChange={e => setQuickEditData(prev => ({ ...prev, distancia_diurno: e.target.value ? parseInt(e.target.value) : undefined }))}
-                          className="prog-input"
+                          className="form-input"
                           placeholder="Minutos"
                         />
                       </div>
@@ -3610,7 +3692,7 @@ export function ProgramacionV2Module() {
                         <select
                           value={quickEditData.tipo_tarifa_diurno || 'antigua'}
                           onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_diurno: e.target.value as TipoTarifa, documento_diurno: documentoSegunTarifa(prev.documento_diurno, e.target.value) }))}
-                          className="prog-input"
+                          className="form-input"
                           title="Esquema de precios del alquiler para este conductor"
                         >
                           <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'diurno', gncVehiculoEdicion, 'antigua')}</option>
@@ -3621,8 +3703,8 @@ export function ProgramacionV2Module() {
                   </div>
 
                   {/* Conductor Nocturno */}
-                  <div className="prog-modal-section" style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: 'var(--radius-md)', marginTop: '12px' }}>
-                    <h3 style={{ color: '#60A5FA', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Moon size={16} /> Conductor Nocturno</h3>
+                  <div className="prog-modal-section prog-edit-turno nocturno">
+                    <h3><Moon size={16} /> Conductor nocturno</h3>
                     {/* Selector de conductor / lead nocturno */}
                     <div style={{ marginBottom: '12px' }}>
                       {renderEncabezadoPersona('nocturno')}
@@ -3638,7 +3720,7 @@ export function ProgramacionV2Module() {
                           onFocus={() => setShowConductorNocturnoDropdown(true)}
                           onBlur={() => setTimeout(() => setShowConductorNocturnoDropdown(false), 200)}
                           placeholder={placeholderConductorEdicion('nocturno')}
-                          className="prog-input"
+                          className="form-input"
                           disabled={loadingConductores}
                         />
                         {showConductorNocturnoDropdown && !loadingConductores && (
@@ -3681,7 +3763,7 @@ export function ProgramacionV2Module() {
                         <select
                           value={quickEditData.lead_nocturno_id ? 'lead' : (quickEditData.tipo_candidato_nocturno || '')}
                           onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato_nocturno: e.target.value as any }))}
-                          className="prog-input"
+                          className="form-input"
                           disabled={!!quickEditData.lead_nocturno_id}
                         >
                           <option value="">Seleccionar...</option>
@@ -3699,7 +3781,7 @@ export function ProgramacionV2Module() {
                             const val = e.target.value as any
                             setQuickEditData(prev => ({ ...prev, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' } : {}) }))
                           }}
-                          className="prog-input"
+                          className="form-input"
                         >
                           <option value="entrega_auto">Entrega de auto</option>
                           <option value="asignacion_companero">Asignación compañero</option>
@@ -3714,7 +3796,7 @@ export function ProgramacionV2Module() {
                         <select
                           value={documentoSegunTarifa(quickEditData.documento_nocturno || '', quickEditData.tipo_tarifa_nocturno)}
                           onChange={e => setQuickEditData(prev => ({ ...prev, documento_nocturno: e.target.value as any }))}
-                          className="prog-input"
+                          className="form-input"
                         >
                           <option value="">Seleccionar...</option>
                           <option value="contrato">Carta Oferta</option>
@@ -3729,7 +3811,7 @@ export function ProgramacionV2Module() {
                           type="text"
                           value={quickEditData.zona_nocturno || ''}
                           onChange={e => setQuickEditData(prev => ({ ...prev, zona_nocturno: e.target.value }))}
-                          className="prog-input"
+                          className="form-input"
                           placeholder="Ej: Norte, Sur, CABA..."
                         />
                       </div>
@@ -3739,7 +3821,7 @@ export function ProgramacionV2Module() {
                           type="number"
                           value={quickEditData.distancia_nocturno || ''}
                           onChange={e => setQuickEditData(prev => ({ ...prev, distancia_nocturno: e.target.value ? parseInt(e.target.value) : undefined }))}
-                          className="prog-input"
+                          className="form-input"
                           placeholder="Minutos"
                           />
                         </div>
@@ -3748,7 +3830,7 @@ export function ProgramacionV2Module() {
                         <select
                           value={quickEditData.tipo_tarifa_nocturno || 'antigua'}
                           onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_nocturno: e.target.value as TipoTarifa, documento_nocturno: documentoSegunTarifa(prev.documento_nocturno, e.target.value) }))}
-                          className="prog-input"
+                          className="form-input"
                           title="Esquema de precios del alquiler para este conductor"
                         >
                           <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'nocturno', gncVehiculoEdicion, 'antigua')}</option>
@@ -3760,8 +3842,8 @@ export function ProgramacionV2Module() {
                 </>
               ) : (
                 /* A Cargo - campos legacy */
-                <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
-                  <h3 style={{ margin: '0 0 12px 0', fontSize: '14px' }}><User size={16} /> Conductor</h3>
+                <div className="prog-modal-section prog-edit-turno">
+                  <h3><User size={16} /> Conductor</h3>
                   {/* Selector de conductor / lead */}
                   <div style={{ marginBottom: '12px' }}>
                     {renderEncabezadoPersona('cargo')}
@@ -3777,7 +3859,7 @@ export function ProgramacionV2Module() {
                         onFocus={() => setShowConductorDropdown(true)}
                         onBlur={() => setTimeout(() => setShowConductorDropdown(false), 200)}
                         placeholder={placeholderConductorEdicion('cargo')}
-                        className="prog-input"
+                        className="form-input"
                         disabled={loadingConductores}
                       />
                       {showConductorDropdown && !loadingConductores && (
@@ -3819,7 +3901,7 @@ export function ProgramacionV2Module() {
                       <select
                         value={quickEditData.lead_cargo_id ? 'lead' : (quickEditData.tipo_candidato || '')}
                         onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato: e.target.value as any }))}
-                        className="prog-input"
+                        className="form-input"
                         disabled={!!quickEditData.lead_cargo_id}
                       >
                         <option value="">Seleccionar...</option>
@@ -3834,7 +3916,7 @@ export function ProgramacionV2Module() {
                       <select
                         value={documentoSegunTarifa(quickEditData.tipo_documento || '', quickEditData.tipo_tarifa)}
                         onChange={e => setQuickEditData(prev => ({ ...prev, tipo_documento: e.target.value as any }))}
-                        className="prog-input"
+                        className="form-input"
                       >
                         <option value="">Seleccionar...</option>
                         <option value="contrato">Carta Oferta</option>
@@ -3849,7 +3931,7 @@ export function ProgramacionV2Module() {
                         type="text"
                         value={quickEditData.zona || ''}
                         onChange={e => setQuickEditData(prev => ({ ...prev, zona: e.target.value as any }))}
-                        className="prog-input"
+                        className="form-input"
                         placeholder="Ej: Norte, Sur, CABA..."
                       />
                     </div>
@@ -3859,7 +3941,7 @@ export function ProgramacionV2Module() {
                         type="number"
                         value={quickEditData.distancia_minutos || ''}
                         onChange={e => setQuickEditData(prev => ({ ...prev, distancia_minutos: e.target.value ? parseInt(e.target.value) : undefined }))}
-                        className="prog-input"
+                        className="form-input"
                         placeholder="Minutos"
                       />
                     </div>
@@ -3868,7 +3950,7 @@ export function ProgramacionV2Module() {
                       <select
                         value={quickEditData.tipo_tarifa || 'antigua'}
                         onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa: e.target.value as TipoTarifa, tipo_documento: documentoSegunTarifa(prev.tipo_documento, e.target.value) }))}
-                        className="prog-input"
+                        className="form-input"
                         title="Esquema de precios del alquiler para este conductor"
                       >
                         <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'cargo', gncVehiculoEdicion, 'antigua')}</option>
@@ -3885,26 +3967,26 @@ export function ProgramacionV2Module() {
                 <textarea
                   value={quickEditData.observaciones || ''}
                   onChange={e => setQuickEditData(prev => ({ ...prev, observaciones: e.target.value }))}
-                  className="prog-input"
+                  className="form-input"
                   rows={3}
                   placeholder="Notas adicionales..."
                   style={{ width: '100%', resize: 'vertical' }}
                 />
               </div>
             </div>
-            <div className="prog-modal-footer">
+            <div className="modal-footer">
               <button
-                className="prog-btn prog-btn-secondary"
+                className="btn-secondary"
                 onClick={handleCloseQuickEdit}
               >
                 Cancelar
               </button>
               <button
-                className="prog-btn prog-btn-primary"
+                className="btn-primary"
                 onClick={handleSaveQuickEdit}
                 disabled={savingQuickEdit}
               >
-                {savingQuickEdit ? 'Guardando...' : 'Guardar Cambios'}
+                {savingQuickEdit ? 'Guardando...' : 'Guardar cambios'}
               </button>
             </div>
           </div>
@@ -3913,18 +3995,38 @@ export function ProgramacionV2Module() {
 
       {/* Preview Modal */}
       {previewProgramacion && (
-        <div className="prog-modal-overlay" onClick={handleClosePreview}>
-          <div className="prog-modal" onClick={e => e.stopPropagation()}>
-            <div className="prog-modal-header">
-              <h2>Detalle de Programacion</h2>
-              <button onClick={handleClosePreview}>
-                <XCircle size={20} />
+        <div className="modal-overlay" onClick={handleClosePreview}>
+          <div className="modal-content prog-modal-detalle" onClick={e => e.stopPropagation()}>
+            {/* Mismo marco que el resto de los modales (modal-*, src/styles/modules.css):
+                título centrado, cerrar arriba a la derecha y un resumen con auto, estado,
+                modalidad y quién la programó. */}
+            <div className="modal-header prog-det-header">
+              <h2>Detalle de programación</h2>
+              <button className="modal-close" onClick={handleClosePreview} aria-label="Cerrar">
+                <X size={18} />
               </button>
+              <div className="prog-det-cabecera">
+                <div className="prog-det-auto">
+                  <PatenteBadge patente={previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema} />
+                  <span className="prog-det-modelo">
+                    {previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || ''}
+                  </span>
+                </div>
+                <div className="prog-det-badges">
+                  <span className={`prog-estado-badge ${previewProgramacion.estado}`}>
+                    {PROGRAMACION_ESTADO_LABELS[previewProgramacion.estado] || previewProgramacion.estado}
+                  </span>
+                  <span className={`prog-modalidad-badge ${previewProgramacion.modalidad?.toLowerCase()}`}>
+                    {previewProgramacion.modalidad === 'turno' ? 'Turno' : 'A Cargo'}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="prog-modal-body">
-              {/* Vehiculo */}
+            <div className="modal-body">
+              {/* Vehiculo: el auto ya va en la cabecera; acá solo el cambio de vehículo */}
+              {(previewProgramacion as any).cambio_vehiculo && (previewProgramacion as any).vehiculo_cambio_patente && (
               <div className="prog-modal-section">
-                <h3><Car size={16} /> Vehiculo</h3>
+                <h3><Car size={16} /> Cambio de vehículo</h3>
                 {(previewProgramacion as any).cambio_vehiculo && (previewProgramacion as any).vehiculo_cambio_patente ? (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0' }}>
@@ -3954,6 +4056,7 @@ export function ProgramacionV2Module() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Conductores */}
               <div className="prog-modal-section">
@@ -4055,15 +4158,17 @@ export function ProgramacionV2Module() {
                       <p>{previewProgramacion.zona}</p>
                     </div>
                   )}
+                  <div>
+                    <label>Capitán</label>
+                    <p title={previewProgramacion.created_by_name || undefined}>
+                      {primerNombre(previewProgramacion.created_by_name) || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <label>Programada el</label>
+                    <p>{previewProgramacion.created_at ? formatFecha(previewProgramacion.created_at) : '-'}</p>
+                  </div>
                 </div>
-              </div>
-
-              {/* Estado */}
-              <div className="prog-modal-section">
-                <h3>Estado</h3>
-                <span className={`prog-estado-badge ${previewProgramacion.estado}`}>
-                  {PROGRAMACION_ESTADO_LABELS[previewProgramacion.estado] || previewProgramacion.estado}
-                </span>
                 {previewProgramacion.asignacion_id && (
                   <p className="prog-asignacion-info">
                     <CheckCircle size={14} />
