@@ -362,7 +362,8 @@ export function ConductoresModule() {
     const hoy = hoyART();
     const dia = new Date(`${hoy}T12:00:00Z`).getUTCDay();
     const lunes = sumarDiasISO(hoy, -((dia + 6) % 7));
-    cargarAppsPagoSemana(lunes)
+    // Si la semana pasada no pagó por ninguna app, la última conocida (en gris)
+    cargarAppsPagoSemana(lunes, undefined, { ultimaConocida: true })
       .then(r => { if (activo) setAppsPorConductor(r); })
       .catch(err => console.error('Error cargando app de los conductores:', err));
     return () => { activo = false; };

@@ -13,6 +13,7 @@ import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Clipboa
 import type { USSHistoricoRegistro } from '../../../../../services/ussHistoricoService';
 import { formatNumero } from '../../../../../utils/format'
 import { PatenteBadge } from '../../../../../components/ui/PatenteBadge';
+import { GpsOrigen } from '../../../../../components/ui/EtiquetaPunto'
 import { formatFechaHora } from '../../../../../utils/format'
 
 interface HistoricoTableProps {
@@ -135,21 +136,8 @@ export function HistoricoTable({
       header: 'GPS',
       cell: ({ row }) => {
         const origen = (row.original as any).gps_origen || 'USS'
-        const isGeotab = origen === 'GEOTAB'
-        return (
-          <span style={{
-            fontSize: '10px',
-            fontWeight: 600,
-            color: '#fff',
-            background: isGeotab ? '#3b82f6' : '#10b981',
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-xs)',
-            whiteSpace: 'nowrap',
-            letterSpacing: '0.5px'
-          }}>
-            {origen}
-          </span>
-        )
+        // Estilo sobrio: logo de Geotab o «USS» con punto
+        return <GpsOrigen origen={origen} />
       },
       enableSorting: false,
       size: 70,

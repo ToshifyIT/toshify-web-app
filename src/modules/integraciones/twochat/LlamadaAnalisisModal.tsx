@@ -119,7 +119,7 @@ export function LlamadaAnalisisModal({ llamada, onClose }: Props) {
                 })}
               </div>
             ) : (
-              <p className="tc-analisis-vacio">Sin voz en la grabación.</p>
+              <p className="tc-analisis-vacio">No se identificaron palabras en la grabación.</p>
             )}
           </section>
 

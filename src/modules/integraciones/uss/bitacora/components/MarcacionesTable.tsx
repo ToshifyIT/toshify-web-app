@@ -20,6 +20,7 @@ import { RangoFilter } from './RangoFilter';
 import { parseDecimal } from '../utils/parseDecimal';
 import { showError } from '../../../../../utils/toast'
 import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { EtiquetaPunto } from '../../../../../components/ui/EtiquetaPunto'
 
 // Conductor malformado de Wialon: iButton sin nombre (ej: "81-", "142-").
 // Lo mostramos como "Sin conductor" para que no aparezca como basura en el filtro.
@@ -578,14 +579,12 @@ export function MarcacionesTable({
                 );
               })()}
               {m.conductorEstado && (() => {
+                // Estilo sobrio: el color del estado va en el punto y el texto, sin fondo
                 const estilo = getEstadoConductorBadgeStyle({ codigo: m.conductorEstado });
                 return (
-                  <span style={{
-                    background: estilo.bg, color: estilo.color, fontSize: '9px', fontWeight: 600,
-                    padding: '1px 6px', borderRadius: 'var(--radius-md)', whiteSpace: 'nowrap', lineHeight: 1.4,
-                  }}>
+                  <EtiquetaPunto color={estilo.bg}>
                     {getEstadoConductorDisplay({ codigo: m.conductorEstado })}
-                  </span>
+                  </EtiquetaPunto>
                 );
               })()}
             </div>
@@ -708,14 +707,10 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const mod = row.original.vehiculoModalidad;
         if (!mod) return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
-        const color = mod === 'turno' ? '#7c3aed' : '#0891b2';
         return (
-          <span style={{
-            fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-            borderRadius: 'var(--radius-lg)', color: '#fff', background: color,
-          }}>
-            {mod === 'a_cargo' ? 'A Cargo' : 'Turno'}
-          </span>
+          <EtiquetaPunto color={mod === 'turno' ? '#7c3aed' : '#0891b2'}>
+            {mod === 'a_cargo' ? 'A cargo' : 'Turno'}
+          </EtiquetaPunto>
         );
       },
       enableSorting: false,
@@ -759,11 +754,11 @@ export function MarcacionesTable({
           return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }} title="Sin conductor o sin asignación en esta patente para la fecha">-</span>;
         }
         if (!m.tieneCompanero) {
-          return <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: 'var(--text-secondary)', background: 'var(--bg-secondary)' }}>No</span>;
+          return <EtiquetaPunto color="var(--text-secondary)">No</EtiquetaPunto>;
         }
         return (
           <span title={m.companero || undefined} style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px', lineHeight: 1.2, maxWidth: '160px' }}>
-            <span style={{ alignSelf: 'flex-start', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: '#16a34a' }}>Sí</span>
+            <span style={{ alignSelf: 'flex-start' }}><EtiquetaPunto color="#16a34a">Sí</EtiquetaPunto></span>
             {m.companero && (
               <span style={{ fontSize: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.companero}</span>
             )}
@@ -781,59 +776,32 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const m = row.original;
         if (m.estado === 'Sin Actividad') {
-          return (
-            <span style={{
-              fontSize: '11px', fontWeight: 600, padding: '2px 8px', whiteSpace: 'nowrap',
-              borderRadius: 'var(--radius-lg)', color: '#fff', background: getEstadoColor('Sin Actividad'),
-            }}>
-              Sin actividad
-            </span>
-          );
+          return <EtiquetaPunto color="#6b7280">Sin actividad</EtiquetaPunto>;
         }
         // Sin match de turno/modalidad → badge clickeable que indica el TIPO de alerta
         // (Sin conductor / Sin asignación / No identificado), con su color. Abre el modal.
         if (sinMatchTurno(m)) {
           const a = clasificarAlerta(m);
           return (
-            <button
-              type="button"
+            <EtiquetaPunto
               // "badge" la saca de la regla global de acciones-ícono de DataTable.css
               // (el ícono es su único elemento hijo y la achicaba a 26px)
               className="bitacora-alerta-badge"
+              color={a.color}
               onClick={() => setAlertaMarcacion(m)}
               title={a.titulo}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-                borderRadius: 'var(--radius-lg)', color: '#fff', background: a.color,
-                border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
+              icono={<AlertTriangle size={12} />}
             >
-              <AlertTriangle size={12} />
               {a.etiqueta}
-            </button>
+            </EtiquetaPunto>
           );
         }
         // Caso especial visible (no es error): turno aún en curso.
         if (m.estado === 'En Curso') {
-          return (
-            <span style={{
-              fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-              borderRadius: 'var(--radius-lg)', color: '#fff', background: getEstadoColor('En Curso'),
-            }}>
-              En Curso
-            </span>
-          );
+          return <EtiquetaPunto color={getEstadoColor('En Curso')}>En curso</EtiquetaPunto>;
         }
         // Resto: turno resuelto correctamente → OK.
-        return (
-          <span style={{
-            fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-            borderRadius: 'var(--radius-lg)', color: '#fff', background: '#16a34a',
-          }}>
-            OK
-          </span>
-        );
+        return <EtiquetaPunto color="#16a34a">OK</EtiquetaPunto>;
       },
       enableSorting: false,
     },
@@ -1138,12 +1106,7 @@ export function MarcacionesTable({
                 <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
                   Sin turno asignado
                 </h3>
-                <span style={{
-                  fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-                  borderRadius: 'var(--radius-full)', color: '#fff', background: a.color,
-                }}>
-                  {a.etiqueta}
-                </span>
+                <EtiquetaPunto color={a.color}>{a.etiqueta}</EtiquetaPunto>
               </div>
               <button
                 type="button"

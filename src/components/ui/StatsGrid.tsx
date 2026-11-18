@@ -22,22 +22,35 @@ interface StatsGridProps {
 
 const GAP_PX = 8
 
+/**
+ * Mide con la grilla en modo "midiendo" (una fila sin estirar) y la vuelve a su
+ * estado. Las tarjetas tienen "transition: all" en varios módulos: al sacar la
+ * clase, flex-grow pasaba de 0 a 1 con animación y las tarjetas se achicaban y
+ * estiraban en cada clic (parpadeo, 2026-11-18). Por eso la transición queda
+ * apagada hasta que el navegador recalcula el estilo final.
+ */
+function medirEnUnaFila<T>(el: HTMLDivElement, medir: () => T): T {
+  el.classList.add('stats-grid-sin-transicion', 'stats-grid-midiendo')
+  const valor = medir()
+  el.classList.remove('stats-grid-midiendo')
+  void el.getBoundingClientRect() // fuerza el recálculo con la transición apagada
+  el.classList.remove('stats-grid-sin-transicion')
+  return valor
+}
+
 /** Columnas iguales para `n` tarjetas, o null si entran todas en una línea. */
 function columnasParejas(el: HTMLDivElement): number | null {
   const tarjetas = Array.from(el.children) as HTMLElement[]
   const n = tarjetas.length
   if (n === 0) return null
   // Ancho natural de cada tarjeta: se mide en una fila sin cortes ni estiramiento.
-  el.classList.add('stats-grid-midiendo')
-  const anchoMax = Math.max(...tarjetas.map(t => t.getBoundingClientRect().width))
-  el.classList.remove('stats-grid-midiendo')
+  const anchos = medirEnUnaFila(el, () => tarjetas.map(t => t.getBoundingClientRect().width))
+  const anchoMax = Math.max(...anchos)
   const disponible = el.clientWidth
   const entran = Math.max(1, Math.floor((disponible + GAP_PX) / (anchoMax + GAP_PX)))
   if (entran >= n) {
     // ¿Entran todas en una línea con su ancho natural? Entonces no hace falta grilla.
-    el.classList.add('stats-grid-midiendo')
-    const total = tarjetas.reduce((s, t) => s + t.getBoundingClientRect().width, 0) + GAP_PX * (n - 1)
-    el.classList.remove('stats-grid-midiendo')
+    const total = anchos.reduce((s, w) => s + w, 0) + GAP_PX * (n - 1)
     if (total <= disponible) return null
   }
   const filas = Math.ceil(n / Math.min(entran, n))

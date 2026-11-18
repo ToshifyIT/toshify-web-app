@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown } from 'lucide-react'
+import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -31,6 +31,7 @@ import { AppBadges } from '../../../components/ui/AppBadges'
 import { etiquetaLicencia } from '../../../utils/etiquetaLicencia'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { LlamadaConductor } from '../../integraciones/twochat/LlamadaConductor'
+import { useLineaVoz } from '../../integraciones/twochat/useLineaVoz'
 
 // Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
 // anteriores al 16/09/2026 no tienen kilometros sincronizados, y eso no es 0 km.
@@ -38,14 +39,13 @@ function fmtKm(v: number): string {
   return `${v.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`
 }
 
-type CardKey = 'conAuto' | 'sinAuto' | 'conMultas' | 'pendientes' | 'alertaKm' | 'riesgoAlto'
+type CardKey = 'conAuto' | 'conMultas' | 'pendientes' | 'alertaKm' | 'riesgoAlto'
 
 const CARD_LABELS: Record<CardKey, string> = {
   conAuto: 'Con Auto Asignado',
-  sinAuto: 'Sin Auto',
   conMultas: 'Con Multas',
   pendientes: 'Con Multas Pendientes',
-  alertaKm: 'Alerta KM',
+  alertaKm: 'Alerta de Aprovechamiento',
   riesgoAlto: 'Riesgo de deuda alto',
 }
 
@@ -126,6 +126,8 @@ export function ConductoresPanelModule() {
   const [detalle, setDetalle] = useState<{ fila: ConductorPanelRow; tab: 'facturacion' | 'calificacion' } | null>(null)
   // Llamada en curso desde Toshibase (2Chat): una a la vez
   const [llamada, setLlamada] = useState<{ id: string; nombre: string } | null>(null)
+  // Línea de 2Chat ocupada por otra persona con la misma cuenta (p. ej. Info Toshify)
+  const { motivo: sinLinea, actualizar: actualizarLinea } = useLineaVoz()
   // Calificación 1-5 de cada conductor (ver calificacionConductor.ts)
   // Excesos de km de las últimas 4 semanas (Facturación), para el factor "Límite de km"
   const [excesosKm, setExcesosKm] = useState<Awaited<ReturnType<typeof cargarExcesosRecientes>>>(null)
@@ -233,7 +235,6 @@ export function ConductoresPanelModule() {
 
   const stats = useMemo(() => ({
     conAuto: rows.filter(c => c.tieneAsignacion).length,
-    sinAuto: rows.filter(c => !c.tieneAsignacion).length,
     conMultas: rows.filter(c => c.cantidadMultas > 0).length,
     pendientes: rows.filter(c => c.pendientes + c.enProceso > 0).length,
     alertaKm: rows.filter(tieneAlertaKm).length,
@@ -243,7 +244,6 @@ export function ConductoresPanelModule() {
   const filteredRows = useMemo(() => {
     switch (activeCard) {
       case 'conAuto': return rows.filter(c => c.tieneAsignacion)
-      case 'sinAuto': return rows.filter(c => !c.tieneAsignacion)
       case 'conMultas': return rows.filter(c => c.cantidadMultas > 0)
       case 'pendientes': return rows.filter(c => c.pendientes + c.enProceso > 0)
       case 'alertaKm': return rows.filter(tieneAlertaKm)
@@ -306,7 +306,7 @@ export function ConductoresPanelModule() {
       [`KM-viaje sin asig Cabify (${rangoCabifyLabel})`]: c.cabify && c.cabify.kmSinAsignar !== null ? c.cabify.kmSinAsignar : '',
       [`KM Geo (${rangoCabifyLabel})`]: c.kmGeo ?? '',
       '% Aprovechamiento': aprovechamientoKm(c) !== null ? Number(aprovechamientoKm(c)!.toFixed(1)) : '',
-      'Alerta KM': tieneAlertaKm(c) ? 'Sí' : 'No',
+      'Alerta de Aprovechamiento': tieneAlertaKm(c) ? 'Sí' : 'No',
     }))
 
     const ws = XLSX.utils.json_to_sheet(dataExport)
@@ -349,7 +349,7 @@ export function ConductoresPanelModule() {
       { wch: 26 }, // KM-viaje sin asig Cabify
       { wch: 20 }, // KM Geo
       { wch: 18 }, // % Aprovechamiento
-      { wch: 11 }, // Alerta KM
+      { wch: 24 }, // Alerta de Aprovechamiento
     ]
 
     const wb = XLSX.utils.book_new()
@@ -407,16 +407,18 @@ export function ConductoresPanelModule() {
     {
       // App con la que pagó (Cabify, DiDi o ambas): misma regla que Facturación
       id: 'apps',
-      accessorFn: (r) => (r.apps && r.apps.length ? r.apps.join(' + ') : 'Sin app'),
-      header: () => <span title="Apps con las que pagó, igual que en Facturación: carga de Pagos Cabify / Pagos DiDi de la última semana cerrada + pagos manuales de esta semana que nombran la app">App</span>,
+      // Header de texto (no función): así el DataTable le pone el filtro de columna
+      accessorFn: (r) => (r.apps && r.apps.length ? r.apps.join(' + ') : 'Sin cuenta relacionada'),
+      header: 'App',
+      meta: { info: 'Apps con las que pagó, igual que en Facturación: carga de Pagos Cabify / Pagos DiDi de la última semana cerrada + pagos manuales de esta semana que nombran la app' },
       cell: ({ row }) => {
         const apps = row.original.apps
         if (apps === undefined) return <span className="cpanel-num cpanel-nulo">…</span>
         if (!apps.length) {
-          // Sin pagos por Cabify ni DiDi: alerta de cuenta no relacionada
+          // Sin pagos por Cabify ni DiDi en las últimas semanas: alerta de cuenta no relacionada
           return (
             <span
-              title="Sin cuenta relacionada: no tiene pagos por Cabify ni DiDi en la última semana cerrada"
+              title="Sin cuenta relacionada: no tiene pagos por Cabify ni DiDi en las últimas 9 semanas"
               style={{ display: 'inline-flex', color: '#D97706' }}
             >
               <AlertTriangle size={15} aria-label="Sin cuenta relacionada" />
@@ -424,7 +426,13 @@ export function ConductoresPanelModule() {
           )
         }
         // Logos en vez de etiquetas de texto (las etiquetas vienen de etiquetasApps)
-        return <AppBadges apps={{ cabify: apps.includes('Cabify'), didi: apps.includes('DiDi') }} size="xs" />
+        // Si la semana pasada no pagó por app, es la última conocida: AppBadges la pone en gris
+        return (
+          <AppBadges
+            apps={{ cabify: apps.includes('Cabify'), didi: apps.includes('DiDi'), ultimaSemana: row.original.appsUltimaSemana }}
+            size="xs"
+          />
+        )
       },
     },
     {
@@ -434,7 +442,8 @@ export function ConductoresPanelModule() {
         const x = riesgos?.get(r.id)
         return x ? NIVEL_RIESGO_LABEL[x.nivel] : 'Sin historial'
       },
-      header: () => <span title="Riesgo de no poder pagar, según cómo pagó las últimas 4 semanas cerradas de facturación">Riesgo deuda</span>,
+      header: 'Riesgo deuda',
+      meta: { info: 'Riesgo de no poder pagar, según cómo pagó las últimas 4 semanas cerradas de facturación' },
       sortingFn: (a, b) => {
         const orden = { alto: 3, medio: 2, bajo: 1 }
         const va = riesgos?.get(a.original.id), vb = riesgos?.get(b.original.id)
@@ -792,16 +801,16 @@ export function ConductoresPanelModule() {
             { icon: <Eye size={15} />, label: 'Ver detalle', onClick: () => setDetalle({ fila: row.original, tab: 'calificacion' }) },
             {
               icon: <Phone size={15} />,
-              label: llamada ? 'Ya hay una llamada en curso' : 'Llamar (2Chat)',
+              label: llamada ? 'Ya hay una llamada en curso' : sinLinea ?? 'Llamar (2Chat)',
               variant: 'success',
-              disabled: !!llamada,
+              disabled: !!llamada || !!sinLinea,
               onClick: () => setLlamada({ id: row.original.id, nombre: row.original.nombre }),
             },
           ]}
         />
       ),
     },
-  ], [rangoCabifyLabel, calificaciones, kmGeoCargando, llamada, riesgos])
+  ], [rangoCabifyLabel, calificaciones, kmGeoCargando, llamada, riesgos, sinLinea])
 
   return (
     <div className="cond-module">
@@ -814,14 +823,6 @@ export function ConductoresPanelModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.conAuto}</span>
               <span className="stat-label">Con Auto Asignado</span>
-            </div>
-          </div>
-          <div className={`stat-card stat-card-clickable ${activeCard === 'sinAuto' ? 'stat-card-active' : ''}`}
-            onClick={() => handleCard('sinAuto')} title="Conductores sin auto asignado">
-            <UserX size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.sinAuto}</span>
-              <span className="stat-label">Sin Auto</span>
             </div>
           </div>
           <div className={`stat-card stat-card-clickable ${activeCard === 'conMultas' ? 'stat-card-active' : ''}`}
@@ -846,7 +847,7 @@ export function ConductoresPanelModule() {
             <Gauge size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.alertaKm}</span>
-              <span className="stat-label">Alerta KM</span>
+              <span className="stat-label">Alerta de Aprovechamiento</span>
             </div>
           </div>
           <div className={`stat-card stat-card-clickable ${activeCard === 'riesgoAlto' ? 'stat-card-active' : ''}`}
@@ -910,7 +911,7 @@ export function ConductoresPanelModule() {
         />
       )}
       {llamada && (
-        <LlamadaConductor conductorId={llamada.id} nombre={llamada.nombre} onClose={() => setLlamada(null)} />
+        <LlamadaConductor conductorId={llamada.id} nombre={llamada.nombre} onClose={() => { setLlamada(null); actualizarLinea() }} />
       )}
     </div>
   )

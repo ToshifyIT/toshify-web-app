@@ -187,6 +187,34 @@ export function prepararLlamadaConductor(conductorId: string): Promise<{ numero:
   return pedir('/voz/llamada', { method: 'POST', body: JSON.stringify({ conductor_id: conductorId }) })
 }
 
+export interface EstadoLineaVoz {
+  disponible: boolean
+  motivo: 'sin_cuenta' | 'ocupada' | null
+  /** Cuenta de 2Chat con la que llama (p. ej. «Info Toshify») */
+  cuenta: string | null
+  /** Quién está en la llamada que ocupa la línea */
+  ocupada_por: string | null
+  /** La llamada abierta es del mismo usuario (otra pestaña) */
+  propia: boolean
+}
+
+/** Si el usuario puede llamar ahora o la línea (cuenta de 2Chat) está ocupada */
+export function estadoLineaVoz(): Promise<EstadoLineaVoz> {
+  return pedir<EstadoLineaVoz>('/voz/linea')
+}
+
+/** Texto para el botón cuando no se puede llamar */
+export function motivoSinLinea(e: EstadoLineaVoz): string {
+  if (e.motivo === 'sin_cuenta') return 'No se puede realizar la llamada: tu usuario no tiene cuenta de 2Chat'
+  if (e.propia) return 'No se puede realizar la llamada en este momento: ya tenés una llamada en curso en otra pestaña'
+  return `No se puede realizar la llamada en este momento: ${e.ocupada_por || 'otra persona'} está usando la línea ${e.cuenta || ''}`.trim()
+}
+
+/** La llamada sigue abierta: mantiene la línea ocupada para los demás (ver server-2chat lineaOcupada) */
+export function senalLlamada(registroId: number): Promise<{ ok: boolean }> {
+  return pedir(`/voz/llamada/${registroId}/senal`, { method: 'POST', body: JSON.stringify({}) })
+}
+
 export function cerrarRegistroLlamada(registroId: number, estado: 'atendida' | 'no_atendida' | 'fallida', duracion: number): Promise<{ ok: boolean }> {
   return pedir(`/voz/llamada/${registroId}/fin`, { method: 'POST', body: JSON.stringify({ estado, duracion }) })
 }

@@ -35,6 +35,16 @@
   --color-info-dark: #1E40AF;
   --color-info-hover: #2563EB;
 
+  /* Paleta de gráficos (barras, líneas, series). Tonos medios que combinan con
+     el rojo de Toshify; usar estas variables en vez de colores sueltos. */
+  --chart-primary: #3a5bb0;   /* azul medio: serie principal, totales */
+  --chart-positive: #22a06b;  /* verde esmeralda: altas, ingresos, retenidos */
+  --chart-negative: #e23a55;  /* rojo Toshify suavizado: bajas, pérdidas */
+  --chart-teal: #1a8fa3;      /* verde azulado: serie secundaria */
+  --chart-amber: #e8a33d;     /* ámbar: tercera serie, espera */
+  --chart-violet: #7c66d1;    /* violeta: cuarta serie */
+  --chart-neutral: #a3aab5;   /* gris: sin dato, resto */
+
   --color-purple: #8B5CF6;
   --color-purple-light: #F5F3FF;
   --color-purple-dark: #6B21A8;
@@ -198,6 +208,15 @@
 
   --color-info: #60A5FA;
   --color-info-light: rgba(96, 165, 250, 0.15);
+
+  /* Paleta de gráficos: misma familia, más clara para fondo oscuro */
+  --chart-primary: #7d9be6;
+  --chart-positive: #4cc38a;
+  --chart-negative: #ff5c76;
+  --chart-teal: #45b8cc;
+  --chart-amber: #f2b95c;
+  --chart-violet: #a493ea;
+  --chart-neutral: #6b7280;
   --color-info-dark: #93C5FD;
   --color-info-hover: #93C5FD;
 

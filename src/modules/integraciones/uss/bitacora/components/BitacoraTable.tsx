@@ -19,6 +19,7 @@ import { formatNumero } from '../../../../../utils/format'
 import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
 import { TurnoBadge } from '../../../../../components/ui/TurnoBadge'
 import { formatFechaHora, formatFecha } from '../../../../../utils/format'
+import { EtiquetaPunto } from '../../../../../components/ui/EtiquetaPunto'
 interface BitacoraTableProps {
   registros: BitacoraRegistroTransformado[]
   totalCount: number
@@ -429,8 +430,8 @@ export function BitacoraTable({
             return (
               <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)' }}>
                 RESUMEN {row.original.conductor_wialon}
-                <span style={{ marginLeft: '6px', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '10px', fontWeight: 600, background: tipoTurno ? 'var(--color-primary)' : 'var(--color-warning, #f59e0b)', color: '#fff' }}>
-                  {asignacionLabel}
+                <span style={{ marginLeft: '8px' }}>
+                  <EtiquetaPunto color={tipoTurno ? 'var(--color-primary)' : '#d97706'}>{asignacionLabel}</EtiquetaPunto>
                 </span>
                 <span style={{ marginLeft: '6px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
                   {count} sub-viajes

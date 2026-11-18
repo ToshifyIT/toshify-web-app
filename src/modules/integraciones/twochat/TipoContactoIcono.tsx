@@ -5,7 +5,7 @@
 import { UserRound } from 'lucide-react'
 
 /** Volante de auto con el mismo trazo que los íconos de lucide (lucide no trae uno) */
-function Volante({ size = 13 }: { size?: number }) {
+function Volante({ size = 15 }: { size?: number }) {
   return (
     <svg
       width={size}
@@ -31,7 +31,7 @@ export function TipoContactoIcono({ tipo }: { tipo: 'conductor' | 'lead' }) {
   const etiqueta = tipo === 'conductor' ? 'Conductor' : 'Lead'
   return (
     <span className={`tc-tipo tc-tipo--${tipo}`} title={etiqueta} aria-label={etiqueta} role="img">
-      {tipo === 'conductor' ? <Volante /> : <UserRound size={13} strokeWidth={2.2} aria-hidden="true" />}
+      {tipo === 'conductor' ? <Volante /> : <UserRound size={15} strokeWidth={2.2} aria-hidden="true" />}
     </span>
   )
 }

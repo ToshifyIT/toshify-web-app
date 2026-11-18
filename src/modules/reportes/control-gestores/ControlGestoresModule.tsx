@@ -33,6 +33,9 @@ import { etiquetaMes, fechaCorta, fmtInt, fmtMonedaCorta, fmtPct, hoyArgentina, 
 import {
   cargarControlGestores, EX_GESTORES, finDe, HORIZONTES_RETENCION, META_OCUPACION, mesesElegibles, ocupacion, semanasElegibles, SIN_GESTOR, TOTAL,
 } from './controlGestoresService'
+import {
+  cargarContactoCapitanes, TOTAL_CONTACTO, type CanalConversion, type ContactoCapitan, type ContactoCapitanes,
+} from './contactoCapitanesService'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import '../kpis-v2/DashboardKpisV2Module.css'
 import './ControlGestoresModule.css'
@@ -176,6 +179,23 @@ export function ControlGestoresModule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [granularidad, lunes, sedeActualId, hoy])
 
+  // Contacto con conductores (2Chat): se carga aparte, cuando ya está el período
+  const [contacto, setContacto] = useState<ContactoCapitanes | null>(null)
+  useEffect(() => {
+    if (!datos) return
+    let activo = true
+    setContacto(null)
+    cargarContactoCapitanes(
+      datos.periodo.granularidad,
+      datos.historia.map((h) => h.inicio),
+      datos.periodo,
+      datos.activosInicio,
+    )
+      .then((c) => { if (activo) setContacto(c) })
+      .catch((err) => console.error('[ControlGestores] Error cargando contacto 2Chat', err))
+    return () => { activo = false }
+  }, [datos])
+
   const colorDe = useMemo(() => {
     const m = new Map<string, string>([[TOTAL, COLOR_TOTAL], [SIN_GESTOR, COLOR_SIN_GESTOR]])
     let i = 0
@@ -246,6 +266,7 @@ export function ControlGestoresModule() {
         <div className={cargando ? 'cg-cargando' : undefined}>
           <Ocupacion datos={datos} colorDe={colorDe} />
           <Churn datos={datos} colorDe={colorDe} />
+          <Contacto datos={datos} contacto={contacto} colorDe={colorDe} />
           <MotivosDeChurn datos={datos} />
           <Detalle datos={datos} />
         </div>
@@ -741,6 +762,217 @@ function MotivosDeChurn({ datos }: { datos: ControlGestores }) {
         {' '}A cada baja se la cuenta en el capitán que onboardeó al conductor.
       </p>
     </section>
+  )
+}
+
+// ───────────── Contacto con conductores (2Chat) ─────────────
+
+/** Desde cuándo hay datos de cada capitán en 2Chat (antes, la evolución queda sin dato) */
+const DESDE_2CHAT: Record<string, string> = { todos: '2026-10-14', 'Ali Verenzuela': '2026-11-18' }
+
+function Contacto({ datos, contacto, colorDe }: {
+  datos: ControlGestores; contacto: ContactoCapitanes | null; colorDe: Map<string, string>
+}) {
+  const g0 = datos.periodo.granularidad
+  const tx = textosDe(g0, datos.historia.length)
+  if (!contacto) {
+    return (
+      <section className="dkv2-card">
+        <h2 className="dkv2-card-title">Contacto con conductores y leads (2Chat)</h2>
+        <p className="dkv2-card-subtitle">Cargando llamadas y mensajes…</p>
+      </section>
+    )
+  }
+  const { total, porCapitan, compartida } = contacto
+  const ratio = (a: number, b: number) => (b > 0 ? a / b : null)
+  const nombre = (c: string) => corto(c === TOTAL_CONTACTO ? TOTAL : c)
+  const filas = [...porCapitan, total]
+  const llamadas = (c: ContactoCapitan) => c.llamadasConductores + c.llamadasLeads + c.llamadasOtros
+  const efectivas = (c: ContactoCapitan) => c.efectivasConductores + c.efectivasLeads
+  const conversiones = (c: ContactoCapitan) => c.conversiones.llamada + c.conversiones.whatsapp + c.conversiones.ambos
+  const fmtNota = (n: number | null) => (n == null ? '—' : n.toLocaleString('es-AR', { maximumFractionDigits: 1 }))
+
+  const porCanal = filas.map((c) => ({
+    nombre: nombre(c.capitan),
+    llamadaConductor: c.efectivasConductores,
+    whatsappConductor: c.mensajesConductores,
+    llamadaLead: c.efectivasLeads,
+    whatsappLead: c.mensajesLeads,
+  }))
+  const cobertura = filas.map((c) => ({
+    nombre: nombre(c.capitan),
+    valor: pct100(ratio(c.contactados, c.conductores)),
+    detalle: `${c.contactados} de ${c.conductores}`,
+  }))
+  const conversionesBarras = filas.map((c) => ({ nombre: nombre(c.capitan), ...c.conversiones }))
+  const lineas = porCapitan.map((c) => c.capitan)
+  const evolucion = contacto.historia.map((h) => {
+    const fila: Record<string, number | string | null> = { semana: ejePeriodo(g0, h.inicio, datos.hoy), rango: rangoPeriodo(g0, h.inicio, datos.hoy) }
+    // Sin dato (no 0) antes de que cada uno tuviera usuario en 2Chat
+    const fin = finDe(g0, h.inicio)
+    for (const g of lineas) fila[g] = fin < (DESDE_2CHAT[g] ?? DESDE_2CHAT.todos) ? null : (h.contactos.get(g) ?? 0)
+    return fila
+  })
+  const ETIQUETA_CANAL: Record<CanalConversion, string> = { llamada: 'Llamada', whatsapp: 'WhatsApp', ambos: 'Llamada y WhatsApp' }
+
+  return (
+    <>
+      <section className="dkv2-card">
+        <header className="dkv2-card-header">
+          <div>
+            <h2 className="dkv2-card-title">Contacto con conductores y leads (2Chat)</h2>
+            <p className="dkv2-card-subtitle">
+              Cómo viene cada capitán con las llamadas y los WhatsApp desde 2Chat: a sus conductores, para que no se vayan, y a los leads, para que se sumen.
+            </p>
+          </div>
+        </header>
+        <div className="cg-kpis cg-kpis--4">
+          <Kpi label={`Llamadas ${tx.del}`} value={fmtInt(llamadas(total))}
+            detalle={`Efectivas: ${fmtInt(efectivas(total))} (${fmtPct(ratio(efectivas(total), llamadas(total)))}) · calidad ${fmtNota(total.calidad)}`} />
+          <Kpi label={`WhatsApp ${tx.del}`} value={fmtInt(total.mensajesConductores + total.mensajesLeads)}
+            detalle={`A conductores: ${fmtInt(total.mensajesConductores)} · a leads: ${fmtInt(total.mensajesLeads)}`} />
+          <Kpi label="Conductores contactados" value={fmtPct(ratio(total.contactados, total.conductores))}
+            detalle={`${fmtInt(total.contactados)} de ${fmtInt(total.conductores)} conductores activos`} />
+          <Kpi label="Leads que pasaron a conductor" value={fmtInt(conversiones(total))}
+            detalle={`Con contacto por 2Chat · de ${fmtInt(contacto.convertidosPeriodo)} conversiones ${tx.del}`} />
+        </div>
+      </section>
+
+      <div className="cg-grid">
+        <Panel titulo="Contactos por canal y destino" subtitulo={`Llamadas en las que se habló con la persona y WhatsApp enviados ${tx.enEl}, a conductores y a leads.`}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={porCanal} margin={{ top: 16, right: 8, bottom: 0, left: -12 }}>
+              <CartesianGrid vertical={false} stroke="var(--dkv2-grid)" />
+              <XAxis dataKey="nombre" tick={tick} tickLine={false} />
+              <YAxis tick={tick} tickLine={false} axisLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--dkv2-cursor)' }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="llamadaConductor" name="Llamada a conductor" fill={COLOR_MANANA} isAnimationActive={false} maxBarSize={18} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="whatsappConductor" name="WhatsApp a conductor" fill="#7fb2ec" isAnimationActive={false} maxBarSize={18} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="llamadaLead" name="Llamada a lead" fill={COLOR_NOCHE} isAnimationActive={false} maxBarSize={18} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="whatsappLead" name="WhatsApp a lead" fill="#f3bf91" isAnimationActive={false} maxBarSize={18} radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+
+        <Panel titulo="Conductores contactados por capitán" subtitulo={`Qué parte de los conductores de cada capitán recibió una llamada atendida o un WhatsApp ${tx.enEl}. Cuanto más alto, mejor.`}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={cobertura} layout="vertical" margin={{ top: 4, right: 70, bottom: 0, left: 0 }}>
+              <CartesianGrid horizontal={false} stroke="var(--dkv2-grid)" />
+              <XAxis type="number" domain={[0, 100]} tick={tick} tickFormatter={fmtPctEje} />
+              <YAxis type="category" dataKey="nombre" tick={tick} width={110} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--dkv2-cursor)' }}
+                formatter={(v: unknown, _n: unknown, item: { payload?: { detalle?: string } }) => [v === null ? '—' : `${v}% (${item.payload?.detalle ?? ''})`, 'Contactados']} />
+              <Bar dataKey="valor" fill={COLOR_BIEN} isAnimationActive={false} maxBarSize={18} radius={[0, 3, 3, 0]}>
+                <LabelList dataKey="detalle" position="right" style={{ fontSize: 11, fill: 'var(--text-primary)' }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+
+        <Panel titulo="Leads que pasaron a conductor, por canal" subtitulo={`Leads que se convirtieron ${tx.enEl} y que antes tuvieron contacto por 2Chat, según el canal: llamada, WhatsApp o los dos. Cuentan para el capitán del último contacto.`}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={conversionesBarras} margin={{ top: 16, right: 8, bottom: 0, left: -12 }}>
+              <CartesianGrid vertical={false} stroke="var(--dkv2-grid)" />
+              <XAxis dataKey="nombre" tick={tick} tickLine={false} />
+              <YAxis tick={tick} tickLine={false} axisLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--dkv2-cursor)' }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="llamada" name="Llamada" stackId="c" fill={COLOR_NOCHE} isAnimationActive={false} maxBarSize={32} />
+              <Bar dataKey="whatsapp" name="WhatsApp" stackId="c" fill="#16a34a" isAnimationActive={false} maxBarSize={32} />
+              <Bar dataKey="ambos" name="Llamada y WhatsApp" stackId="c" fill={COLOR_MANANA} isAnimationActive={false} maxBarSize={32} radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+
+        <section className="dkv2-card cg-panel">
+          <h3 className="cg-panel-titulo">Últimas conversiones con contacto por 2Chat</h3>
+          <p className="cg-panel-sub">Quién era el lead, qué capitán lo contactó por última vez y por qué canal.</p>
+          {contacto.conversiones.length ? (
+            <div className="dkv2-table-wrap">
+              <table className="dkv2-table cg-tabla">
+                <thead><tr><th>Lead</th><th>Capitán</th><th>Canal</th><th>Pasó a conductor</th></tr></thead>
+                <tbody>
+                  {contacto.conversiones.slice(0, 15).map((c) => (
+                    <tr key={`${c.lead}-${c.dia}`}>
+                      <td>{c.lead}</td>
+                      <td>{c.capitan}</td>
+                      <td>{ETIQUETA_CANAL[c.canal]}</td>
+                      <td>{fechaCorta(c.dia)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="dkv2-muted">Todavía no hay leads convertidos {tx.enEl} con contacto previo por 2Chat.</p>
+          )}
+        </section>
+      </div>
+
+      <Panel titulo={`Contactos, ${tx.evolucion}`} subtitulo={`Llamadas efectivas más WhatsApp enviados por cada capitán, ${tx.aA}.`}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={evolucion} margin={{ top: 4, right: 28, bottom: 0, left: -8 }}>
+            <CartesianGrid vertical={false} stroke="var(--dkv2-grid)" />
+            <XAxis dataKey="semana" tick={tick} tickLine={false} />
+            <YAxis tick={tick} tickLine={false} axisLine={false} allowDecimals={false} />
+            <Tooltip contentStyle={tooltipStyle} labelFormatter={etiquetaTooltip} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {lineas.map((g) => (
+              <Line key={g} type="linear" dataKey={g} name={corto(g)} stroke={colorDe.get(g) ?? COLOR_SIN_GESTOR} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      <section className="dkv2-card">
+        <header className="dkv2-card-header">
+          <div>
+            <h2 className="dkv2-card-title">Detalle de contacto por capitán</h2>
+          </div>
+        </header>
+        <div className="dkv2-table-wrap">
+          <table className="dkv2-table cg-tabla">
+            <thead>
+              <tr>
+                <th rowSpan={2}>Capitán</th>
+                <th colSpan={4}>Conductores</th>
+                <th colSpan={5}>Leads</th>
+                <th rowSpan={2}>Calidad llamadas</th>
+              </tr>
+              <tr>
+                <th>Llamadas</th><th>Efectivas</th><th>WhatsApp</th><th>Contactados</th>
+                <th>Llamadas</th><th>Efectivas</th><th>WhatsApp</th><th>Contactados → ya conductores</th><th>Conversiones {tx.del}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((c) => (
+                <tr key={c.capitan} className={c.capitan === TOTAL_CONTACTO ? 'cg-fila-total' : undefined}>
+                  <td>{c.capitan}</td>
+                  <td>{fmtInt(c.llamadasConductores)}</td>
+                  <td>{fmtInt(c.efectivasConductores)}</td>
+                  <td>{fmtInt(c.mensajesConductores)}</td>
+                  <td>{c.conductores ? `${fmtPct(ratio(c.contactados, c.conductores))} (${c.contactados}/${c.conductores})` : '—'}</td>
+                  <td>{fmtInt(c.llamadasLeads)}</td>
+                  <td>{fmtInt(c.efectivasLeads)}</td>
+                  <td>{fmtInt(c.mensajesLeads)}</td>
+                  <td>{fmtInt(c.leadsContactados)} → {fmtInt(c.leadsConvertidos)}</td>
+                  <td>{fmtInt(conversiones(c))}</td>
+                  <td>{fmtNota(c.calidad)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="cg-nota">
+          Llamadas y WhatsApp de cada capitán con su usuario de 2Chat (desde el 14/10/2026; Ali, desde el 18/11/2026).
+          {' '}Las llamadas por la cuenta compartida «Info Toshify» no se pueden asignar a nadie: {tx.enEl} fueron {fmtInt(compartida.llamadas)} ({fmtInt(compartida.efectivos)} efectivas) y no entran en los números de arriba.
+          {' '}Efectiva = llamada atendida en la que se habló con la persona (lo confirma Gemini con la grabación; sin analizar, 30 segundos o más).
+          {' '}Conductores contactados = conductores de cada capitán que manejaban {tx.inicio} con al menos una llamada efectiva o un WhatsApp {tx.enEl}, lo haya hecho quien lo haya hecho.
+          {' '}Conversiones = leads que pasaron a conductor {tx.enEl} con contacto previo por 2Chat; cuentan para el capitán del último contacto.
+        </p>
+      </section>
+    </>
   )
 }
 

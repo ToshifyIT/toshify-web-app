@@ -135,6 +135,8 @@ export interface ControlGestores {
   /** Motivos del período elegido y de toda la ventana de la evolución */
   motivos: { elegido: MotivosChurn; historia: MotivosChurn }
   gestores: string[]
+  /** Conductores manejando al empezar el período elegido → su capitán (conductores.guia) */
+  activosInicio: Map<string, string>
   precios: { diurno: number; nocturno: number; aCargo: number; conPrecio: boolean }
   hoy: string
 }
@@ -434,7 +436,7 @@ export async function cargarControlGestores(
   }
 
   // ── Churn de un período: bajas del período / activos el primer día a las 00:00 ──
-  const churnDe = (lunes: string, dom: string): { porGestor: Map<string, ChurnGestor>; total: ChurnGestor } => {
+  const churnDe = (lunes: string, dom: string): { porGestor: Map<string, ChurnGestor>; total: ChurnGestor; activos: Map<string, string> } => {
     const tLunes = inicioDiaMs(lunes)
     const porGestor = new Map<string, ChurnGestor>()
     const total: ChurnGestor = { gestor: TOTAL, activos: 0, altas: 0, bajas: 0, churn: null }
@@ -468,7 +470,7 @@ export async function cargarControlGestores(
       const base = granularidad === 'semana' ? f.activos : f.activos + f.altas
       f.churn = base > 0 ? f.bajas / base : null
     }
-    return { porGestor, total }
+    return { porGestor, total, activos: activosLunes }
   }
 
   // ── Período elegido: foto al cierre (o de hoy, si está en curso) ──
@@ -589,6 +591,7 @@ export async function cargarControlGestores(
     retencion,
     motivos,
     gestores,
+    activosInicio: churnSemana.activos,
     precios,
     hoy,
   }
