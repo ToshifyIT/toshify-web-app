@@ -33,6 +33,12 @@ export const DIAS_LEAD_NUEVO = 7
 const RADIO_KM = (MINUTOS_MAX_CALLE / 60) * VELOCIDAD_ESTIMADA_KMH
 /** Leads que procesa como mucho cada apertura de pantalla. */
 const MAX_LEADS_POR_CORRIDA = 40
+/**
+ * Candidatos que se miden por calle para cada lead (2026-11-18). Antes eran todos los
+ * del radio (~50 por lead) y el cupo gratis de Google (10.000/mes) se gastaba en días.
+ * Con 8 por lead (~32 leads/día) son ~7.700 mediciones al mes.
+ */
+const MAX_CANDIDATOS_POR_LEAD = 8
 const PAGINA = 1000
 const LOTE_IDS = 100
 
@@ -42,6 +48,18 @@ interface Punto {
   id: string
   lat: number
   lng: number
+}
+
+/** «Si» / «Sí» / «SI», o un texto que describe la experiencia («Uber, Didi»). «No» o vacío = no. */
+function dijoQueSi(valor: unknown, aceptaTexto = false): boolean {
+  const v = String(valor ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+  if (!v || v === 'no') return false
+  return v === 'si' || aceptaTexto
+}
+
+/** Lead que conviene como pareja: licencia «Sí» y experiencia previa (se priorizan al medir). */
+function leadApto(l: { licencia?: unknown; experiencia_previa?: unknown }): boolean {
+  return dijoQueSi(l.licencia) && dijoQueSi(l.experiencia_previa, true)
 }
 
 export type MotivoCorte = 'tope' | 'google' | null
@@ -134,7 +152,7 @@ async function corrida(): Promise<ResultadoCorrida> {
   const desde = haceDias(DIAS_LEAD_NUEVO)
   const recientes = (await leerTodo<any>((a, b) => supabase
     .from('leads')
-    .select('id, latitud, longitud, estado_de_lead, created_at')
+    .select('id, latitud, longitud, estado_de_lead, created_at, licencia, experiencia_previa')
     .gte('created_at', desde)
     // Los más nuevos primero: el que acaba de entrar se mide enseguida
     .order('created_at', { ascending: false })
@@ -152,9 +170,9 @@ async function corrida(): Promise<ResultadoCorrida> {
   const conductores = await cargarConductoresActivos()
   // Leads con los que se compara: los recientes ya procesados. Así cada par
   // lead↔lead se mide una sola vez, cuando entra el más nuevo de los dos.
-  const leadsListos: Punto[] = recientes
+  const leadsListos: Array<Punto & { apto: boolean }> = recientes
     .filter((l) => estados.get(l.id) === 'listo')
-    .map((l) => ({ id: l.id, lat: Number(l.latitud), lng: Number(l.longitud) }))
+    .map((l) => ({ id: l.id, lat: Number(l.latitud), lng: Number(l.longitud), apto: leadApto(l) }))
 
   let procesados = 0
   for (const l of pendientes) {
@@ -163,10 +181,18 @@ async function corrida(): Promise<ResultadoCorrida> {
     if (!((tomados || []) as unknown[]).length) continue // otro navegador lo está procesando
 
     const origen = { lat: Number(l.latitud), lng: Number(l.longitud) }
+    // Solo se miden por calle los 8 mejores del radio: primero los que tienen licencia y
+    // experiencia (los conductores ya trabajan, cuentan como aptos) y, entre ellos, los
+    // más cercanos en línea recta. Así entra en el cupo gratis de Google.
     const candidatos: Array<Punto & { tipo: 'conductor' | 'lead' }> = [
-      ...conductores.map((c) => ({ ...c, tipo: 'conductor' as const })),
+      ...conductores.map((c) => ({ ...c, tipo: 'conductor' as const, apto: true })),
       ...leadsListos.filter((x) => x.id !== l.id).map((x) => ({ ...x, tipo: 'lead' as const })),
-    ].filter((c) => haversineKm(origen.lat, origen.lng, c.lat, c.lng) <= RADIO_KM)
+    ]
+      .map((c) => ({ ...c, km: haversineKm(origen.lat, origen.lng, c.lat, c.lng) }))
+      .filter((c) => c.km <= RADIO_KM)
+      .sort((a, b) => Number(b.apto) - Number(a.apto) || a.km - b.km)
+      .slice(0, MAX_CANDIDATOS_POR_LEAD)
+      .map(({ id, lat, lng, tipo }) => ({ id, lat, lng, tipo }))
 
     const destinos = candidatos.map((c) => ({ lat: c.lat, lng: c.lng }))
     const nuevos = await tramosSinMedir(origen, destinos)
@@ -213,7 +239,7 @@ async function corrida(): Promise<ResultadoCorrida> {
       .eq('lead_id', l.id)
     if (errListo) throw errListo
 
-    leadsListos.push({ id: l.id, lat: origen.lat, lng: origen.lng })
+    leadsListos.push({ id: l.id, lat: origen.lat, lng: origen.lng, apto: leadApto(l) })
     procesados++
   }
   return { procesados, motivoCorte: null }

@@ -32,6 +32,8 @@ import { etiquetaLicencia } from '../../../utils/etiquetaLicencia'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { LlamadaConductor } from '../../integraciones/twochat/LlamadaConductor'
 import { useLineaVoz } from '../../integraciones/twochat/useLineaVoz'
+import { ElegirNumeroLlamada } from '../../integraciones/twochat/ElegirNumeroLlamada'
+import { telefonosParaLlamar, type TelefonoLlamada, type TipoTelefono } from '../../integraciones/twochat/telefonosConductor'
 
 // Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
 // anteriores al 16/09/2026 no tienen kilometros sincronizados, y eso no es 0 km.
@@ -125,7 +127,9 @@ export function ConductoresPanelModule() {
   const [reloadKey, setReloadKey] = useState(0)
   const [detalle, setDetalle] = useState<{ fila: ConductorPanelRow; tab: 'facturacion' | 'calificacion' } | null>(null)
   // Llamada en curso desde Toshibase (2Chat): una a la vez
-  const [llamada, setLlamada] = useState<{ id: string; nombre: string } | null>(null)
+  const [llamada, setLlamada] = useState<{ id: string; nombre: string; telefono: TipoTelefono } | null>(null)
+  // Conductor con más de un número (WhatsApp y secundario): primero se elige a cuál llamar
+  const [eligiendo, setEligiendo] = useState<{ id: string; nombre: string; telefonos: TelefonoLlamada[] } | null>(null)
   // Línea de 2Chat ocupada por otra persona con la misma cuenta (p. ej. Info Toshify)
   const { motivo: sinLinea, actualizar: actualizarLinea } = useLineaVoz()
   // Calificación 1-5 de cada conductor (ver calificacionConductor.ts)
@@ -804,7 +808,12 @@ export function ConductoresPanelModule() {
               label: llamada ? 'Ya hay una llamada en curso' : sinLinea ?? 'Llamar (2Chat)',
               variant: 'success',
               disabled: !!llamada || !!sinLinea,
-              onClick: () => setLlamada({ id: row.original.id, nombre: row.original.nombre }),
+              onClick: () => {
+                const { id, nombre, telefono, telefonoSecundario } = row.original
+                const telefonos = telefonosParaLlamar(telefono, telefonoSecundario)
+                if (telefonos.length > 1) setEligiendo({ id, nombre, telefonos })
+                else setLlamada({ id, nombre, telefono: 'principal' })
+              },
             },
           ]}
         />
@@ -910,8 +919,21 @@ export function ConductoresPanelModule() {
           calificacion={calificacionesEnCurso.get(detalle.fila.id) ?? null}
         />
       )}
+      {eligiendo && (
+        <ElegirNumeroLlamada
+          nombre={eligiendo.nombre}
+          telefonos={eligiendo.telefonos}
+          onElegir={(tipo) => { setLlamada({ id: eligiendo.id, nombre: eligiendo.nombre, telefono: tipo }); setEligiendo(null) }}
+          onClose={() => setEligiendo(null)}
+        />
+      )}
       {llamada && (
-        <LlamadaConductor conductorId={llamada.id} nombre={llamada.nombre} onClose={() => { setLlamada(null); actualizarLinea() }} />
+        <LlamadaConductor
+          conductorId={llamada.id}
+          nombre={llamada.nombre}
+          telefono={llamada.telefono}
+          onClose={() => { setLlamada(null); actualizarLinea() }}
+        />
       )}
     </div>
   )
