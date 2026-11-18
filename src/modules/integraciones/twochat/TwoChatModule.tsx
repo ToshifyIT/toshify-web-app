@@ -29,7 +29,7 @@ import type {
   ResultadoLlamada,
 } from '../../../services/twoChatService'
 import { useSede } from '../../../contexts/SedeContext'
-import { formatFechaHoraART, fechaISOART, hoyART } from '../../../utils/fechaArgentina'
+import { formatFechaHoraART, fechaISOART, hoyART, lunesSemanaART } from '../../../utils/fechaArgentina'
 import { showError, showSuccess } from '../../../utils/toast'
 import { DataTable } from '../../../components/ui/DataTable'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
@@ -87,6 +87,8 @@ function nombreCompleto(c: { nombres: string; apellidos: string }): string {
 
 interface ResumenAgente {
   agente: string
+  /** Cuenta(s) de 2Chat por la que salieron sus llamadas, si no es la suya (p. ej. «Info Toshify») */
+  via: string
   llamadas: number
   atendidas: number
   noAtendidas: number
@@ -131,8 +133,10 @@ function resumirPorAgente(llamadas: LlamadaTwoChat[]): ResumenAgente[] {
       const atendidas = lista.filter((l) => l.resultado === 'atendida')
       const segundos = lista.reduce((acc, l) => acc + l.duracion, 0)
       const conDuracion = lista.filter((l) => l.duracion > 0)
+      const cuentas = new Set(lista.map((l) => l.cuenta_2chat).filter((c): c is string => !!c && c !== agente))
       return {
         agente,
+        via: Array.from(cuentas).join(', '),
         llamadas: lista.length,
         atendidas: atendidas.length,
         noAtendidas: lista.length - atendidas.length,
@@ -408,7 +412,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
 // =====================================================
 
 function LlamadasTab() {
-  const [desde, setDesde] = useState(hoyART)
+  const [desde, setDesde] = useState(lunesSemanaART)
   const [hasta, setHasta] = useState(hoyART)
   const [direccion, setDireccion] = useState<Direccion>('todas')
   const [llamadas, setLlamadas] = useState<LlamadaTwoChat[]>([])
@@ -501,6 +505,7 @@ function LlamadasTab() {
       const wb = XLSX.utils.book_new()
       const hojaResumen = resumen.map((r) => ({
         Agente: r.agente,
+        'Cuenta 2Chat': r.via,
         Llamadas: r.llamadas,
         Atendidas: r.atendidas,
         'No atendidas': r.noAtendidas,
@@ -528,6 +533,7 @@ function LlamadasTab() {
       const hojaDetalle = porTipo.map((l) => ({
         Fecha: formatFechaHoraART(l.fecha),
         Agente: l.agente,
+        'Cuenta 2Chat': l.cuenta_2chat && l.cuenta_2chat !== l.agente ? l.cuenta_2chat : '',
         Dirección: l.direccion === 'saliente' ? 'Saliente' : 'Entrante',
         Número: l.numero ?? '',
         Tipo: l.tipo_contacto === 'conductor' ? 'Conductor' : l.tipo_contacto === 'lead' ? 'Lead' : 'Sin coincidencia',
@@ -550,7 +556,17 @@ function LlamadasTab() {
   }
 
   const columnasResumen = useMemo<ColumnDef<ResumenAgente, unknown>[]>(() => [
-    { accessorKey: 'agente', header: 'Agente', cell: ({ getValue }) => <span className="tc-nombre">{getValue() as string}</span> },
+    {
+      accessorKey: 'agente',
+      header: 'Agente',
+      // Igual que en el detalle: la persona de Toshibase y, abajo, la cuenta compartida de 2Chat
+      cell: ({ row }) => (row.original.via ? (
+        <div className="tc-contacto">
+          <span className="tc-nombre">{row.original.agente}</span>
+          <span className="tc-muted">vía {row.original.via}</span>
+        </div>
+      ) : <span className="tc-nombre">{row.original.agente}</span>),
+    },
     { accessorKey: 'llamadas', header: 'Llamadas' },
     { accessorKey: 'atendidas', header: 'Atendidas' },
     { accessorKey: 'noAtendidas', header: 'No atendidas' },

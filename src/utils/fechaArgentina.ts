@@ -160,6 +160,14 @@ export function hoyART(): string {
   return fechaISOART(new Date().toISOString()) as string
 }
 
+/** "YYYY-MM-DD" del lunes de la semana actual en Argentina. */
+export function lunesSemanaART(): string {
+  const [y, m, d] = hoyART().split('-').map(Number)
+  const fecha = new Date(Date.UTC(y, m - 1, d))
+  fecha.setUTCDate(fecha.getUTCDate() - ((fecha.getUTCDay() + 6) % 7))
+  return fecha.toISOString().slice(0, 10)
+}
+
 /** "YYYY-MM" del mes actual en Argentina. */
 export function mesActualART(): string {
   return hoyART().slice(0, 7)

@@ -63,6 +63,8 @@ type DataTableColumnMeta = {
    * El orden y la celda siguen usando el accessorFn.
    */
   filterValue?: (row: never) => unknown;
+  /** Orden fijo de las opciones del filtro (p. ej. Alto, Medio, Bajo, N/A). Las que no están van al final. */
+  filterOrder?: string[];
 };
 
 function getJustifyContent(align?: ColumnAlignment): CSSProperties['justifyContent'] | undefined {
@@ -1099,11 +1101,16 @@ export function DataTable<T>({
         }
       }
     });
-    // Return original values sorted
+    // Return original values sorted (con meta.filterOrder, en ese orden)
+    const orden = (columns.find(c => ((c as { accessorKey?: string; id?: string }).accessorKey || c.id) === colId)?.meta as DataTableColumnMeta | undefined)?.filterOrder;
+    const pos = (v: string) => {
+      const i = orden ? orden.findIndex(o => o.toUpperCase() === v.toUpperCase()) : -1;
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
     return Array.from(uniqueMap.values()).sort((a, b) =>
-      a.toUpperCase().localeCompare(b.toUpperCase())
+      pos(a) - pos(b) || a.toUpperCase().localeCompare(b.toUpperCase())
     );
-  }, [getDataFilteredExcluding, getNestedValueForFilter]);
+  }, [getDataFilteredExcluding, getNestedValueForFilter, columns]);
 
   // Ref a getUniqueValues para que el header lo llame SIN que sea dependencia del memo de
   // columnas. Si estuviera en las deps, al tipear en un filtro numérico (que cambia
