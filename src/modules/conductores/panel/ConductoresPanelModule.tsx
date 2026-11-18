@@ -18,7 +18,7 @@ import { cargarPanelConductores, cargarKmGeoPanel, type ConductorPanelRow } from
 import { ConductorDetalleModal } from './ConductorDetalleModal'
 import { calificacionDesdeGuardada, calificarConductor, referenciaIngresos, type Calificacion, type ExtrasCalificacion } from './calificacionConductor'
 import { CalificacionCelda } from './CalificacionEstrellas'
-import { cargarRiesgoDeuda, textoRiesgo, NIVEL_RIESGO_LABEL, type RiesgoDeuda } from './riesgoDeuda'
+import { ajustarConSaldoActual, cargarRiesgoDeuda, textoRiesgo, NIVEL_RIESGO_LABEL, type RiesgoDeuda } from './riesgoDeuda'
 import { guardarSemanaCerradaSiFalta, cargarExcesosRecientes, cargarExtrasCalificacion, cargarSemanaCerradaGuardada, lunesSemanaCerrada, type CalificacionSemana } from './calificacionesHistorial'
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { hoyART } from '../../../utils/fechaArgentina'
@@ -224,7 +224,12 @@ export function ConductoresPanelModule() {
   }, [sedeActualId, reloadKey, semanaCabify])
 
   // Riesgo de no poder pagar la deuda (ver riesgoDeuda.ts). Si falla, la columna queda en "—".
-  const [riesgos, setRiesgos] = useState<Map<string, RiesgoDeuda> | null>(null)
+  const [riesgosBase, setRiesgos] = useState<Map<string, RiesgoDeuda> | null>(null)
+  // La deuda se corrige con el saldo actual: incluye pagos posteriores a la facturación
+  const riesgos = useMemo(
+    () => (riesgosBase ? ajustarConSaldoActual(riesgosBase, new Map(rowsBase.map(r => [r.id, r.saldoPendiente]))) : null),
+    [riesgosBase, rowsBase],
+  )
   useEffect(() => {
     let activo = true
     setRiesgos(null)

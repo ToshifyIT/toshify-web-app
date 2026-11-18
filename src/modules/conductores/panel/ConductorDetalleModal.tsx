@@ -17,6 +17,7 @@ import { SemanaDetalleModal } from './SemanaDetalleModal'
 import { SaldoHistorialTab } from './SaldoHistorialTab'
 import { GarantiaHistorialTab } from './GarantiaHistorialTab'
 import { RendimientoCabifyTab } from './RendimientoCabifyTab'
+import { ToshipassConductorTab } from './ToshipassConductorTab'
 import { ComparacionSemana } from '../../../components/ui/ComparacionSemana'
 import { analizarRegimenToshipass, CODIGO_TOSHIPASS, type RegimenToshipass } from '../../facturacion/utils/toshipass'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
@@ -26,7 +27,7 @@ import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 import { formatFecha } from '../../../utils/format'
 
 // Orden de las pestañas tal como se muestran en la barra (izq -> der).
-export type Tab = 'facturacion' | 'saldo' | 'garantia' | 'multas' | 'km' | 'cabify' | 'asignaciones' | 'bajas' | 'calificacion' | 'incidencias'
+export type Tab = 'facturacion' | 'saldo' | 'garantia' | 'toshipass' | 'multas' | 'km' | 'cabify' | 'asignaciones' | 'bajas' | 'calificacion' | 'incidencias'
 
 // Etiqueta legible de turno/horario y estados para los historiales.
 function horarioLabel(h: string | null): string {
@@ -228,6 +229,8 @@ export function ConductorDetalleModal({
   // undefined = cargando; null = garantía.
   const [toshipass, setToshipass] = useState<RegimenToshipass | null | undefined>(undefined)
   const [toshipassCobro, setToshipassCobro] = useState<{ facturado: number; cobrado: number } | null>(null)
+  // Toshipass por semana (id de facturación → monto), para la pestaña Toshipass
+  const [toshipassMontos, setToshipassMontos] = useState<Map<string, number> | null>(null)
   useEffect(() => {
     let activo = true
     analizarRegimenToshipass([conductor.id])
@@ -236,7 +239,7 @@ export function ConductorDetalleModal({
     return () => { activo = false }
   }, [conductor.id])
   useEffect(() => {
-    if (!toshipass || !facturacion.length) { setToshipassCobro(null); return }
+    if (!toshipass || !facturacion.length) { setToshipassCobro(null); setToshipassMontos(toshipass ? new Map() : null); return }
     let activo = true
     ;(async () => {
       const { data } = await (supabase.from('facturacion_detalle') as any)
@@ -246,14 +249,16 @@ export function ConductorDetalleModal({
       // Cobrado: proporción pagada de cada semana aplicada al Toshipass de esa semana
       let facturado = 0
       let cobrado = 0
+      const montos = new Map<string, number>()
       for (const d of (data || []) as { facturacion_id: string; total: number }[]) {
         const monto = Number(d.total) || 0
+        montos.set(d.facturacion_id, (montos.get(d.facturacion_id) ?? 0) + monto)
         const sem = facturacion.find(f => f.id === d.facturacion_id)
         facturado += monto
         cobrado += monto * Math.min(1, Math.max(0, (sem?.cobertura ?? 0) / 100))
       }
-      if (activo) setToshipassCobro({ facturado, cobrado })
-    })().catch(() => { if (activo) setToshipassCobro(null) })
+      if (activo) { setToshipassCobro({ facturado, cobrado }); setToshipassMontos(montos) }
+    })().catch(() => { if (activo) { setToshipassCobro(null); setToshipassMontos(new Map()) } })
     return () => { activo = false }
   }, [toshipass, facturacion])
 
@@ -474,6 +479,10 @@ export function ConductorDetalleModal({
           <button className={tab === 'facturacion' ? 'active' : ''} onClick={() => setTab('facturacion')}>Facturación</button>
           <button className={tab === 'saldo' ? 'active' : ''} onClick={() => setTab('saldo')}>Saldo</button>
           <button className={tab === 'garantia' ? 'active' : ''} onClick={() => setTab('garantia')}>Garantía</button>
+          {/* Solo para conductores en régimen Toshipass (tarifa nueva) */}
+          {toshipass && (
+            <button className={tab === 'toshipass' ? 'active' : ''} onClick={() => setTab('toshipass')}>Toshipass</button>
+          )}
           <button className={tab === 'multas' ? 'active' : ''} onClick={() => setTab('multas')}>Multas</button>
           <button className={tab === 'km' ? 'active' : ''} onClick={() => setTab('km')}>Km recorridos</button>
           <button className={tab === 'cabify' ? 'active' : ''} onClick={() => setTab('cabify')}>Rendimiento Cabify</button>
@@ -496,6 +505,8 @@ export function ConductorDetalleModal({
               dni={conductor.dni}
               cuit={conductor.ruc}
             />
+          ) : tab === 'toshipass' && toshipass ? (
+            <ToshipassConductorTab regimen={toshipass} facturacion={facturacion} montos={toshipassMontos} />
           ) : tab === 'garantia' ? (
             /* Historial de garantía: kardex de control_garantias (mismo modal que Facturación > Garantías, solo lectura). */
             <GarantiaHistorialTab
@@ -786,12 +797,20 @@ export function ConductorDetalleModal({
                   return (
                     <div key={b.id} className={`cdet-baja-item ${esBaja ? 'baja' : 'reac'}`}>
                       <div className="cdet-baja-top">
-                        <span className={`cdet-baja-badge ${esBaja ? 'baja' : 'reac'}`}>{esBaja ? 'Baja' : 'Reactivación'}</span>
+                        <span className={`cdet-baja-badge ${esBaja ? 'baja' : 'reac'}`}>
+                          {b.esAutomatica ? 'Baja automática' : esBaja ? 'Baja' : 'Reactivación'}
+                        </span>
                         <span className="cdet-baja-estado">{(b.estadoAnterior || '—')} → {(b.estadoNuevo || '—')}</span>
-                        <span className="cdet-baja-fecha">{fmtFechaCorta(b.fecha)}</span>
+                        {/* La fecha de la baja manda; el registro puede ser de otro día (la automática se
+                            registra cuando corre la tarea, con la fecha en que se cumplió el mes). */}
+                        <span className="cdet-baja-fecha" title={b.fechaBaja ? `Registrada el ${fmtFechaCorta(b.fecha)}` : undefined}>
+                          {fmtFechaCorta(b.fechaBaja || b.fecha)}
+                        </span>
                       </div>
                       {b.motivo && <div className="cdet-baja-motivo"><b>Motivo:</b> {b.motivo}</div>}
-                      <div className="cdet-baja-usuario">Por {b.usuario || '—'}</div>
+                      <div className="cdet-baja-usuario">
+                        {b.esAutomatica ? 'Por el sistema, sin intervención de una persona' : `Por ${b.usuario || '—'}`}
+                      </div>
                     </div>
                   )
                 })}

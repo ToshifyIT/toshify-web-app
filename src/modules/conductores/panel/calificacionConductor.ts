@@ -54,10 +54,18 @@ function pesoDe(clave: FactorCalificacion['clave'], claves: string[]): number {
   return (esNueva ? PESOS[clave] : PESOS_ANTERIORES[clave]) ?? PESOS[clave] ?? PESOS_ANTERIORES[clave] ?? 0
 }
 
+export interface CargoSemanal {
+  cuota: number
+  total: number
+}
+
 /** Datos extra que el panel no trae (ver cargarExtrasCalificacion). */
 export interface ExtrasCalificacion {
-  /** Lo que tenía que cubrir en la semana: alquiler + garantía o Toshipass. */
-  cargoSemanal: Map<string, number> | null
+  /**
+   * Lo que tenía que cubrir en la semana. cuota: alquiler + garantía o Toshipass (el
+   * mínimo); total: todo lo cargado en la semana (cuota + peajes, multas, incidencias…).
+   */
+  cargoSemanal: Map<string, CargoSemanal> | null
   /** Siniestros con culpa del conductor en las últimas 12 semanas. */
   siniestrosCulpa: Map<string, number> | null
   /** Semanas desde su primera asignación. */
@@ -241,7 +249,7 @@ function factorAntiguedad(r: ConductorPanelRow, antiguedad: Map<string, number> 
   return { ...base, puntaje, valor, explicacion: sem >= 26 ? 'Lleva más de 6 meses con nosotros.' : 'Suma a medida que se queda (6 meses = puntaje completo).' }
 }
 
-function factorIngresos(r: ConductorPanelRow, referencia: Map<string, number[]>, cargo: number | undefined): FactorCalificacion {
+function factorIngresos(r: ConductorPanelRow, referencia: Map<string, number[]>, cargo: CargoSemanal | undefined): FactorCalificacion {
   const base = { clave: 'ingresos' as const, nombre: NOMBRES_FACTOR.ingresos, peso: PESOS.ingresos ?? 0 }
   const g = r.cabify?.gananciaTotal
   // Con auto asignado y cruzado con Cabify, no facturar nada en la semana es un dato
@@ -257,17 +265,24 @@ function factorIngresos(r: ConductorPanelRow, referencia: Map<string, number[]>,
   if (!r.cabify || g === null || g === undefined || g <= 0) {
     return { ...base, puntaje: null, valor: 'Sin dato', explicacion: 'No tiene ingresos de Cabify en la semana (o no cruzó con Cabify).' }
   }
-  // Contra lo que tenía que cubrir esa semana (alquiler + garantía o Toshipass)
-  if (cargo && cargo > 0) {
-    const veces = g / cargo
+  // Contra todo lo que tenía que cubrir esa semana: la cuota (alquiler + garantía o
+  // Toshipass) más los otros cargos de la semana (peajes, multas, incidencias…)
+  if (cargo && cargo.total > 0) {
+    const veces = g / cargo.total
     const puntaje = tramos(veces, [[0, 0], [0.5, 0.3], [1, 0.8], [1.5, 1]])
     const pct = Math.round(veces * 100)
+    const otros = cargo.total - cargo.cuota
+    const detalle = otros >= 1
+      ? ` (cuota ${pesos(cargo.cuota)} + ${pesos(otros)} de otros cargos)`
+      : ' (cuota)'
     const explicacion = veces >= 1.5
-      ? 'Factura holgadamente más de lo que tiene que pagar.'
+      ? 'Factura holgadamente más de lo que tiene que pagar en la semana.'
       : veces >= 1
         ? 'Cubre lo que tiene que pagar en la semana.'
-        : 'No le alcanza lo que factura para cubrir lo de la semana.'
-    return { ...base, puntaje, valor: `${pesos(g)} · ${pct}% de los ${pesos(cargo)} a cubrir`, explicacion }
+        : g >= cargo.cuota
+          ? 'Cubre la cuota, pero no los otros cargos de la semana.'
+          : 'No le alcanza lo que factura ni para la cuota de la semana.'
+    return { ...base, puntaje, valor: `${pesos(g)} · ${pct}% de los ${pesos(cargo.total)} a cubrir${detalle}`, explicacion }
   }
   // Sin facturación de la semana: se compara con los de su turno (como antes)
   const grupo = referencia.get(r.turno || 'todos') ?? referencia.get('todos') ?? []

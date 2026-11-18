@@ -628,10 +628,20 @@ export interface BajaHist {
   motivo: string | null
   usuario: string | null
   fecha: string | null
+  fechaBaja: string | null       // fecha_terminacion_nueva: el día de la baja (puede ser anterior al registro)
+  esAutomatica: boolean          // baja automática por falta de asignación (sql/conductores_baja_sin_asignacion.sql)
 }
+
+/** Comienzo del motivo de la baja automática (mismo texto que sql/conductores_baja_sin_asignacion.sql). */
+export const BAJA_AUTOMATICA_PREFIJO = 'Baja automática por falta de asignación'
+
+export function esBajaAutomatica(motivo: string | null | undefined): boolean {
+  return !!motivo && motivo.trim().startsWith(BAJA_AUTOMATICA_PREFIJO)
+}
+
 export async function cargarHistorialBajasConductor(conductorId: string): Promise<BajaHist[]> {
   const { data } = await (supabase.from('conductores_historial_bajas' as any) as any)
-    .select('id, tipo_evento, estado_anterior, estado_nuevo, motivo_baja, usuario_nombre, created_at')
+    .select('id, tipo_evento, estado_anterior, estado_nuevo, motivo_baja, usuario_nombre, created_at, fecha_terminacion_nueva')
     .eq('conductor_id', conductorId)
     .order('created_at', { ascending: false })
   return ((data || []) as Array<any>).map((r) => ({
@@ -642,6 +652,8 @@ export async function cargarHistorialBajasConductor(conductorId: string): Promis
     motivo: r.motivo_baja ?? null,
     usuario: r.usuario_nombre ?? null,
     fecha: r.created_at ?? null,
+    fechaBaja: r.tipo_evento === 'baja' ? (r.fecha_terminacion_nueva ?? null) : null,
+    esAutomatica: r.tipo_evento === 'baja' && esBajaAutomatica(r.motivo_baja),
   }))
 }
 

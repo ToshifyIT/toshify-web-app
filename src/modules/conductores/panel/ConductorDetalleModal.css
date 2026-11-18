@@ -215,6 +215,23 @@
   background: var(--card-bg, #fff);
 }
 .cdet-table th.r, .cdet-table td.r { text-align: right; }
+/* Fila de total fija abajo (como el encabezado fijo arriba), con la misma letra que las
+   filas: 10 px como la regla global «#root table tbody td», que no alcanza al tfoot.
+   bottom: -22px = el padding inferior de .cdet-body, para que no se vea nada debajo. */
+.cdet-table > tfoot td {
+  position: sticky;
+  bottom: -22px;
+  z-index: 2;
+  padding: 8px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+  /* Fondo opaco: las filas que pasan por detrás no se tienen que ver */
+  background: var(--card-bg, #fff);
+  box-shadow: inset 0 1px 0 var(--border-primary, #e5e7eb), 0 -6px 10px -8px rgba(0, 0, 0, 0.12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .cdet-table th.c, .cdet-table td.c { text-align: center; }
 
 /* --- Km recorridos: desglose diario desplegable --- */
@@ -299,17 +316,19 @@
 
 /* Historial de bajas / reactivaciones */
 .cdet-bajas-list { display: flex; flex-direction: column; gap: 8px; }
-.cdet-baja-item { border-left: 3px solid #9ca3af; border-radius: var(--radius-md); padding: 10px 12px; }
+.cdet-baja-item { border-left: 3px solid #9ca3af; border-radius: var(--radius-md); padding: 8px 12px; }
 .cdet-baja-item.baja { border-left-color: #dc2626; background: rgba(220,38,38,0.06); }
 .cdet-baja-item.reac { border-left-color: #059669; background: rgba(5,150,105,0.06); }
 .cdet-baja-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cdet-baja-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); color: #fff; }
-.cdet-baja-badge.baja { background: #dc2626; }
-.cdet-baja-badge.reac { background: #059669; }
-.cdet-baja-estado { font-size: 12px; color: var(--text-secondary, #6b7280); }
-.cdet-baja-fecha { margin-left: auto; font-size: 12px; color: var(--text-tertiary, #9ca3af); }
-.cdet-baja-motivo { margin-top: 4px; font-size: 13px; color: var(--text-primary, #374151); }
-.cdet-baja-usuario { margin-top: 4px; font-size: 12px; color: var(--text-tertiary, #9ca3af); }
+/* Etiqueta sobria (punto + texto del color) y letra pareja con las demás pestañas */
+.cdet-baja-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; }
+.cdet-baja-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.cdet-baja-badge.baja { color: #b91c1c; }
+.cdet-baja-badge.reac { color: #047857; }
+.cdet-baja-estado { font-size: 11px; color: var(--text-secondary, #6b7280); }
+.cdet-baja-fecha { margin-left: auto; font-size: 11px; color: var(--text-tertiary, #9ca3af); }
+.cdet-baja-motivo { margin-top: 3px; font-size: 12px; color: var(--text-primary, #374151); }
+.cdet-baja-usuario { margin-top: 2px; font-size: 11px; color: var(--text-tertiary, #9ca3af); }
 
 .cdet-empty {
   text-align: center;
@@ -322,43 +341,44 @@
 .cdet-fac-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  padding: 8px 0 14px;
+  gap: 8px;
+  padding: 6px 0 10px;
 }
+/* Escala de letra pareja con las demás pestañas (tablas a 12 px, títulos a 10 px) */
 .cdet-fac-stat {
   border: 1px solid var(--border-primary, #e5e7eb);
   border-radius: var(--radius-lg);
-  padding: 12px 14px;
+  padding: 8px 12px;
 }
-.cdet-fac-stat-lbl { font-size: 11px; color: var(--text-tertiary, #9ca3af); text-transform: uppercase; letter-spacing: .3px; font-weight: 600; }
-.cdet-fac-stat-val { font-size: 18px; font-weight: 800; color: var(--text-primary, #111827); margin-top: 4px; }
+.cdet-fac-stat-lbl { font-size: 10px; color: var(--text-tertiary, #9ca3af); text-transform: uppercase; letter-spacing: .3px; font-weight: 600; }
+.cdet-fac-stat-val { font-size: 14px; font-weight: 700; color: var(--text-primary, #111827); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .cdet-fac-stat-val.danger { color: #dc2626; }
 .cdet-fac-stat-val.ok { color: #059669; }
-.cdet-fac-stat-sub { font-size: 11px; margin-top: 2px; font-weight: 600; }
+.cdet-fac-stat-sub { font-size: 10px; margin-top: 1px; font-weight: 600; }
 .cdet-fac-stat-sub.muted { color: var(--text-tertiary, #9ca3af); font-weight: 400; }
 .cdet-fac-stat-sub.up { color: #059669; }
 .cdet-fac-stat-sub.down { color: #dc2626; }
 
 /* Tarjetas de facturación (misma estructura que el Historial del portal) */
-.cdet-fac-list { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+.cdet-fac-list { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
 .cdet-fac-card {
   border: 1px solid var(--border-primary, #e5e7eb);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 10px 12px;
 }
 .cdet-fac-card.pend { border-color: #fca5a5; }
 .cdet-fac-card.clickable { cursor: pointer; transition: border-color .12s, background .12s; }
 .cdet-fac-card.clickable:hover { border-color: #dc2626; background: #fef9f9; }
 .cdet-fac-top { display: flex; justify-content: space-between; align-items: baseline; }
-.cdet-fac-sem { font-size: 15px; font-weight: 700; color: var(--text-primary, #111827); }
-.cdet-fac-monto { font-size: 15px; font-weight: 800; color: var(--text-primary, #111827); }
-.cdet-fac-sub { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin: 4px 0 10px; }
+.cdet-fac-sem { font-size: 12px; font-weight: 700; color: var(--text-primary, #111827); }
+.cdet-fac-monto { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary, #111827); }
+.cdet-fac-sub { font-size: 11px; color: var(--text-tertiary, #9ca3af); margin: 2px 0 8px; }
 .cdet-fac-cov { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
 .cdet-fac-cov-lbl { font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
-.cdet-fac-cov-est { font-size: 12px; font-weight: 700; font-family: var(--font-mono); }
+.cdet-fac-cov-est { font-size: 11px; font-weight: 600; font-family: var(--font-mono); }
 .cdet-fac-cov-est.pendiente { color: #dc2626; }
 .cdet-fac-cov-est.cubierto, .cdet-fac-cov-est.favor { color: #059669; }
-.cdet-fac-bar { height: 6px; background: var(--bg-tertiary, #f3f4f6); border-radius: var(--radius-xs); overflow: hidden; }
+.cdet-fac-bar { height: 4px; background: var(--bg-tertiary, #f3f4f6); border-radius: var(--radius-xs); overflow: hidden; }
 .cdet-fac-bar-fill { height: 100%; border-radius: var(--radius-xs); }
 .cdet-fac-bar-fill.pendiente { background: linear-gradient(90deg, #f59e0b, #dc2626); }
 .cdet-fac-bar-fill.cubierto { background: #059669; }
