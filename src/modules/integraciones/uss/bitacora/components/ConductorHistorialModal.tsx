@@ -15,6 +15,7 @@ import { EmptyState } from '../../../../../components/ui/EstadosVista'
 import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
 import { TurnoBadge } from '../../../../../components/ui/TurnoBadge'
 import { formatFecha } from '../../../../../utils/format'
+import { EtiquetaPunto } from '../../../../../components/ui/EtiquetaPunto'
 
 interface ConductorHistorialModalProps {
   conductorId: string;
@@ -210,9 +211,7 @@ export function ConductorHistorialModal({ conductorId, conductorNombre, onClose 
                 return (
                   <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ background: color, color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-                        {esBaja ? 'Baja' : 'Reactivación'}
-                      </span>
+                      <EtiquetaPunto color={color}>{esBaja ? 'Baja' : 'Reactivación'}</EtiquetaPunto>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                         {(b.estado_anterior || '—')} → {(b.estado_nuevo || '—')}
                       </span>

@@ -12,6 +12,7 @@ import type { ExcesoVelocidad } from '../types/uss.types'
 import { normalizePatente } from '../../../../utils/normalizeDocuments'
 import { formatHora, formatNumero } from '../../../../utils/format'
 import { PatenteBadge } from '../../../../components/ui/PatenteBadge'
+import { GpsOrigen } from '../../../../components/ui/EtiquetaPunto'
 import {
   formatDate,
   formatDuration,
@@ -198,21 +199,8 @@ export function ExcesosTable({
       header: 'GPS',
       cell: ({ row }) => {
         const origen = row.original.gps_origen || 'USS'
-        const isGeotab = origen === 'GEOTAB'
-        return (
-          <span style={{
-            fontSize: '10px',
-            fontWeight: 600,
-            color: '#fff',
-            background: isGeotab ? '#3b82f6' : '#10b981',
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-xs)',
-            whiteSpace: 'nowrap',
-            letterSpacing: '0.5px'
-          }}>
-            {origen}
-          </span>
-        )
+        // Estilo sobrio: logo de Geotab o «USS» con punto
+        return <GpsOrigen origen={origen} />
       },
       size: 70,
       enableSorting: false,

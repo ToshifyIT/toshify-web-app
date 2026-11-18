@@ -20,13 +20,15 @@
  *    vez cada 10 minutos por sede y período.
  *  - Al modelo solo le llega un resumen agregado (sin nombres, DNI ni datos
  *    personales) con los porcentajes ya calculados.
- *  - gemini-2.5-flash, razonamiento desactivado y tope de salida.
+ *  - gemini-3.8-flash (o GEMINI_MODEL), razonamiento desactivado y tope de salida.
+ *    gemini-2.5-flash dejó de estar disponible (404) en nov-2026.
  *
  * Veracidad: si la respuesta menciona un número que no está en el resumen
  * enviado, se descarta y la pantalla muestra las lecturas por reglas.
  *
  * Variables de entorno:
  *  - GEMINI_API_KEY             (obligatoria para la IA)
+ *  - GEMINI_MODEL               (opcional; por defecto gemini-3.8-flash)
  *  - VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (ya existen)
  *  - SUPABASE_SERVICE_ROLE_KEY  (ya la usa server.js; para la caché)
  */
@@ -40,8 +42,6 @@ import { dirname, join } from 'node:path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const GEMINI_MODEL = 'gemini-2.5-flash'
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const MAX_OUTPUT_TOKENS = 900
 const REQUEST_TIMEOUT_MS = 20000
 const REINTENTO_FALLO_MS = 6 * 60 * 60 * 1000 // tras un fallo, reintentar recién a las 6 h
@@ -61,7 +61,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Para desarrollo local leemos el .env y tomamos SOLO las claves que usa este
  * módulo. Nunca pisamos una variable ya definida.
  */
-const CLAVES_ENV = ['GEMINI_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']
+const CLAVES_ENV = ['GEMINI_API_KEY', 'GEMINI_MODEL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']
 
 function resolveEnvPath() {
   const candidatos = []
@@ -104,6 +104,10 @@ function loadEnv() {
 
 loadEnv()
 
+// Después de loadEnv() para que GEMINI_MODEL del .env se tome en desarrollo.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
+
 /* -------------------------------------------------------------------------- */
 /* Prompt                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -127,7 +131,8 @@ Reglas obligatorias:
 - Si nombrás semanas, usá el formato "Semana N-AA" tal como figura en el JSON.
 - No menciones personas, nacionalidad ni estado civil.
 - Vocabulario de Toshify: decí "vehículos" (no "autos") y "Logística" para el equipo que entrega y mantiene los vehículos.
-- Español rioplatense, directo, sin exageraciones ni emojis.`
+- Escribí los porcentajes con el símbolo % (por ejemplo "14,3%"), nunca "pct", y no copies los nombres de las claves del JSON (como "ocupacion_pct" o "conversion_real_pct"): decilos en palabras.
+- Español rioplatense con tildes y ñ, directo, sin exageraciones ni emojis.`
 
 /* -------------------------------------------------------------------------- */
 /* Resumen para el modelo                                                     */
@@ -367,7 +372,11 @@ async function pedirAGemini(resumen, apiKey) {
         },
       }),
     })
-    if (!response.ok) throw new Error(`Gemini respondió ${response.status}`)
+    if (!response.ok) {
+      const cuerpo = await response.json().catch(() => null)
+      const detalle = cuerpo?.error?.message ? `: ${String(cuerpo.error.message).slice(0, 200)}` : ''
+      throw new Error(`Gemini respondió ${response.status}${detalle}`)
+    }
     const data = await response.json()
     const texto = data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim()
     if (!texto) throw new Error('Gemini no devolvió texto')

@@ -333,10 +333,10 @@ function Crecimiento({ d }: { d: DirectivoRaw }) {
             <YAxis yAxisId="act" orientation="right" axisLine={false} tickLine={false} allowDecimals={false} tick={tick} />
             <Tooltip cursor={{ fill: 'rgba(0,0,0,0.04)' }} labelFormatter={(_l, payload) => payload?.[0]?.payload?.etiqueta ?? ''} />
             <Legend verticalAlign="top" height={32} iconType="square" wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="mov" dataKey="altas" name="New" stackId="ingresos" fill="#16a34a" maxBarSize={18} isAnimationActive={false} />
-            <Bar yAxisId="mov" dataKey="reactivaciones" name="Reactivated" stackId="ingresos" fill="#86efac" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
-            <Bar yAxisId="mov" dataKey="bajas" name="Churned" fill="#dc2626" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
-            <Line yAxisId="act" dataKey="activos_fin" name="Activos al cierre" type="monotone" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={false} />
+            <Bar yAxisId="mov" dataKey="altas" name="New" stackId="ingresos" fill="var(--ddir-serie-new)" maxBarSize={18} isAnimationActive={false} />
+            <Bar yAxisId="mov" dataKey="reactivaciones" name="Reactivated" stackId="ingresos" fill="var(--ddir-serie-reactivated)" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
+            <Bar yAxisId="mov" dataKey="bajas" name="Churned" fill="var(--ddir-serie-churned)" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
+            <Line yAxisId="act" dataKey="activos_fin" name="Activos al cierre" type="monotone" stroke="var(--ddir-serie-activos)" strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

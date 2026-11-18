@@ -292,6 +292,10 @@ const esTelefono = (v) => typeof v === 'string' && /^\+?[\d\s()-]{8,}$/.test(v.t
 
 const ultimos10 = (tel) => String(tel || '').replace(/\D/g, '').slice(-10)
 
+// Números de prueba (María Flores, 2026-11-18): sus llamadas y mensajes no se guardan
+const NUMEROS_PRUEBA = new Set(['3686251232', '1999950133'])
+const esNumeroPrueba = (tel) => NUMEROS_PRUEBA.has(ultimos10(tel))
+
 /**
  * Conductores (sin los comodín INTERNO) con su estado de sincronización.
  * estado_sync: 'sincronizado' | 'pendiente' | 'sin_telefono' | 'error' | 'telefono_duplicado'
@@ -630,7 +634,7 @@ export async function sincronizarLlamadas(cfg, { forzar = false } = {}) {
         lead_id: !conductorId && clave ? cruce.leads.get(clave) || null : null,
         sincronizado_en: new Date().toISOString(),
       }
-    })
+    }).filter((f) => !esNumeroPrueba(f.numero))
 
     for (let i = 0; i < filas.length; i += 500) {
       const res = await fetchConTimeout(`${cfg.url}/rest/v1/twochat_llamadas?on_conflict=uuid`, {
@@ -787,7 +791,13 @@ const nota15 = (v) => {
 const textoONull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
 function normalizarAnalisis(r) {
-  const tipo = TIPOS_ATENCION.includes(r?.tipo_atencion) ? r.tipo_atencion : 'sin_conversacion'
+  // Sin un tipo válido no se adivina: queda como error de análisis (se reintenta) y la
+  // llamada sigue como «Atendida». Antes caía en 'sin_conversacion' y una conversación
+  // real podía quedar como «Sin contacto».
+  if (!TIPOS_ATENCION.includes(r?.tipo_atencion)) {
+    throw new Error(`Gemini devolvió un tipo_atencion no válido: ${String(r?.tipo_atencion).slice(0, 40)}`)
+  }
+  const tipo = r.tipo_atencion
   const esConversacion = tipo === 'conversacion'
   const criterios = esConversacion && r?.criterios && typeof r.criterios === 'object' ? r.criterios : null
   const detalle = criterios
@@ -1380,6 +1390,19 @@ twoChatRouter.post('/voz/llamada', async (req, res) => {
     const numero = normalizarCelularAR(c.telefono_contacto)
     if (!numero) return res.status(400).json({ error: 'El conductor no tiene un celular válido cargado' })
     if (!cuenta.agente) return res.status(403).json({ error: 'Tu usuario no tiene una cuenta de 2Chat para llamar' })
+    // Una llamada a la vez por cuenta de 2Chat (2026-11-18): el SDK de 2Chat espera un
+    // usuario por persona, y con la cuenta compartida (Info Toshify) dos personas podían
+    // llamar a la vez. Ver lineaOcupada.
+    const ocupada = await lineaOcupada(ctx.cfg, cuenta.agente.uuid)
+    if (ocupada) {
+      const nombreCuenta = `${cuenta.agente.first_name || ''} ${cuenta.agente.last_name || ''}`.trim() || 'de 2Chat'
+      return res.status(409).json({
+        error: ocupada.user_id === ctx.userId
+          ? 'Ya tenés una llamada en curso (en otra pestaña o ventana). Cortala antes de hacer otra.'
+          : `La línea ${nombreCuenta} está ocupada: ${ocupada.usuario || 'otra persona'} está en una llamada. Probá de nuevo cuando corte.`,
+        ocupada_por: ocupada.usuario || null,
+      })
+    }
     const nombre = `${nombrePropio(c.nombres)} ${nombrePropio(c.apellidos)}`.trim()
     let registroId = null
     try {
@@ -1404,6 +1427,76 @@ twoChatRouter.post('/voz/llamada', async (req, res) => {
     res.json({ numero, nombre, registro_id: registroId })
   } catch (error) {
     console.error('[2chat/voz/llamada]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * Mientras la llamada está abierta, el navegador avisa cada SENAL_LLAMADA_MS que sigue
+ * (POST /voz/llamada/:id/senal): se guarda en `duracion` los segundos desde que empezó.
+ * La línea está ocupada si hay un registro «iniciada» de esa cuenta con señal reciente.
+ * Si alguien cierra el navegador sin cortar, la señal deja de llegar y la línea se
+ * libera sola en LINEA_LIBRE_MS. Solo cubre las llamadas que salen desde Toshibase.
+ */
+const LINEA_LIBRE_MS = 60 * 1000
+async function lineaOcupada(cfg, twochatUserUuid) {
+  const desde = new Date(Date.now() - 6 * 3600 * 1000).toISOString()
+  const abiertas = await selectTodo(cfg,
+    'twochat_llamadas_toshibase?select=id,user_id,usuario,iniciada_en,duracion' +
+    `&twochat_user_uuid=eq.${encodeURIComponent(twochatUserUuid)}&estado=eq.iniciada` +
+    `&iniciada_en=gte.${encodeURIComponent(desde)}&order=iniciada_en.desc`)
+  const ahora = Date.now()
+  return abiertas.find((r) => {
+    const ultimaSenal = new Date(r.iniciada_en).getTime() + (Number(r.duracion) || 0) * 1000
+    return ahora - ultimaSenal < LINEA_LIBRE_MS
+  }) || null
+}
+
+/**
+ * GET /api/2chat/voz/linea -> si el usuario puede llamar ahora. La pantalla lo consulta
+ * cada tanto para mostrar el botón «Llamar» desactivado mientras la línea está ocupada.
+ */
+twoChatRouter.get('/voz/linea', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    const cuenta = await usuario2ChatDe(ctx.cfg, ctx.userId)
+    if (!cuenta.agente) return res.json({ disponible: false, motivo: 'sin_cuenta', cuenta: null, ocupada_por: null, propia: false })
+    const nombreCuenta = `${cuenta.agente.first_name || ''} ${cuenta.agente.last_name || ''}`.trim()
+    const ocupada = await lineaOcupada(ctx.cfg, cuenta.agente.uuid)
+    res.json({
+      disponible: !ocupada,
+      motivo: ocupada ? 'ocupada' : null,
+      cuenta: nombreCuenta,
+      ocupada_por: ocupada?.usuario || null,
+      // La llamada abierta es del mismo usuario (otra pestaña o ventana)
+      propia: !!ocupada && ocupada.user_id === ctx.userId,
+    })
+  } catch (error) {
+    console.error('[2chat/voz/linea]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/** POST /api/2chat/voz/llamada/:id/senal -> la llamada sigue abierta (ver lineaOcupada) */
+twoChatRouter.post('/voz/llamada/:id/senal', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'registro inválido' })
+    const filas = await selectTodo(ctx.cfg,
+      `twochat_llamadas_toshibase?select=iniciada_en&id=eq.${id}&user_id=eq.${ctx.userId}&estado=eq.iniciada`)
+    if (!filas[0]) return res.json({ ok: false })
+    const segundos = Math.max(0, Math.round((Date.now() - new Date(filas[0].iniciada_en).getTime()) / 1000))
+    await fetchConTimeout(`${ctx.cfg.url}/rest/v1/twochat_llamadas_toshibase?id=eq.${id}&user_id=eq.${ctx.userId}&estado=eq.iniciada`, {
+      method: 'PATCH',
+      headers: { ...headersServicio(ctx.cfg), Prefer: 'return=minimal' },
+      body: JSON.stringify({ duracion: segundos }),
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[2chat/voz/senal]', error.message)
     res.status(500).json({ error: error.message })
   }
 })
@@ -1497,7 +1590,7 @@ export async function sincronizarMensajes(cfg, { forzar = false } = {}) {
         lead_id: conductor ? null : cruce.leads.get(clave) || null,
         sincronizado_en: new Date().toISOString(),
       }
-    }).filter((f) => f.session_key && f.fecha)
+    }).filter((f) => f.session_key && f.fecha && !esNumeroPrueba(f.numero))
     await upsert(cfg, 'twochat_mensajes', filas, 'uuid')
 
     // Asignación de cada conversación tocada (1 crédito por conversación)

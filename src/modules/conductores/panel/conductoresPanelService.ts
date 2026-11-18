@@ -93,6 +93,8 @@ export interface ConductorPanelRow {
   cabify?: CabifyIngresos | null
   /** Apps con las que trabajó la última semana cerrada (hoy solo 'Cabify'; DiDi más adelante). */
   apps?: string[]
+  /** Si `apps` es la última app conocida (sin pagos por app la semana pasada): su semana, «S45/2026» */
+  appsUltimaSemana?: string
   // Km de GPS de la semana de Cabify. undefined si no se pidio Cabify;
   // null si se pidio y ese conductor no tuvo viajes con GPS esa semana.
   kmGeo?: number | null
@@ -336,7 +338,7 @@ export async function cargarPanelConductores(
     // 11. Apps con las que pagó (solo para la etiqueta de app). Tolerante: si falla,
     // la columna queda en "…" y el panel carga igual.
     opciones?.appsPago
-      ? cargarAppsPagoSemana(opciones.appsPago.inicio).catch(() => null)
+      ? cargarAppsPagoSemana(opciones.appsPago.inicio, undefined, { ultimaConocida: true }).catch(() => null)
       : Promise.resolve(null),
   ])
   const guiaPorConductor = new Map(guias.map(g => [g.id, g.guia]))
@@ -579,6 +581,7 @@ export async function cargarPanelConductores(
       // undefined si no se pidio Cabify; null si se pidio y no hubo cruce.
       cabify: cabifyDrivers ? (cabifyPorConductor.get(c.id) ?? null) : undefined,
       apps: appsPago ? etiquetasApps(appsPago.get(c.id)) : undefined,
+      appsUltimaSemana: appsPago?.get(c.id)?.ultimaSemana,
       kmGeo: opciones?.cabify && !opciones.sinKmGeo ? (kmGeoPorConductor.get(c.id) ?? null) : undefined,
     }
   })

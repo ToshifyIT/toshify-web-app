@@ -5,7 +5,7 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable'
-import { Search, ClipboardList, Download, ChevronDown, X, Plus, CheckCircle, Eye, Sun, Moon, Clock, AlertTriangle } from 'lucide-react'
+import { Search, ClipboardList, Download, ChevronDown, X, Plus, CheckCircle, Eye, AlertTriangle } from 'lucide-react'
 import type { Marcacion } from '../../bitacora/hooks/useUSSHistoricoData'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 import { cargarConceptosTarifa } from '../../../../onboarding/tarifaConceptos'
@@ -13,6 +13,8 @@ import { cargarConceptosTarifa } from '../../../../onboarding/tarifaConceptos'
 import { hoyART } from '../../../../../utils/fechaArgentina'
 import { formatPlata, formatNumero } from '../../../../../utils/format'
 import { PatenteBadge } from '../../../../../components/ui/PatenteBadge'
+import { TurnoBadge } from '../../../../../components/ui/TurnoBadge'
+import { GpsOrigen } from '../../../../../components/ui/EtiquetaPunto'
 import { ActionsMenu } from '../../../../../components/ui/ActionsMenu'
 // Defaults (override desde parametros_sistema en el módulo, pasados via props si hace falta)
 const ALQUILER_TURNO_DEFAULT = 245000
@@ -303,14 +305,8 @@ export function ExcesoKmTable({
       header: 'GPS',
       size: 70,
       cell: ({ row }) => {
-        const o = row.original.gpsOrigen
-        const bg = o === 'GEOTAB' ? '#3b82f6' : '#10b981'
-        return (
-          <span style={{
-            fontSize: 10, fontWeight: 600, color: '#fff',
-            background: bg, padding: '2px 8px', borderRadius: 'var(--radius-xs)', whiteSpace: 'nowrap', letterSpacing: '0.5px',
-          }}>{o}</span>
-        )
+        // Estilo sobrio de la app: logo de Geotab o «USS» con punto
+        return <GpsOrigen origen={row.original.gpsOrigen} />
       },
       enableSorting: false,
     },
@@ -451,53 +447,22 @@ export function ExcesoKmTable({
       },
     },
     {
-      id: 'modalidad',
-      accessorFn: (r) => r.modalidad,
-      header: 'Modalidad',
-      size: 90,
-      cell: ({ row }) => {
-        const mod = row.original.modalidad
-        // Sin asignación válida esa semana => sin badge.
-        if (!mod) {
-          return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
-        }
-        const color = mod === 'a_cargo' ? '#0891b2' : '#7c3aed'
-        return (
-          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-lg)', color: '#fff', background: color, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-            {mod === 'a_cargo' ? 'A Cargo' : 'Turno'}
-          </span>
-        )
-      },
-      enableSorting: false,
-    },
-    {
+      // Turno y modalidad en un solo ícono, como en Conductores: sol = diurno,
+      // luna = nocturno, reloj 24 h = a cargo (el límite de km depende de esto)
       id: 'turno',
-      accessorFn: (r) => r.horario || '',
+      accessorFn: (r) => (r.modalidad === 'a_cargo' ? 'A cargo' : r.horario === 'diurno' ? 'Diurno'
+        : r.horario === 'nocturno' ? 'Nocturno' : r.horario === 'mixto' ? 'Mixto' : 'Sin asignación'),
       header: 'Turno',
-      size: 95,
+      size: 70,
       cell: ({ row }) => {
         const r = row.original
-        if (r.modalidad === 'a_cargo') {
-          return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
-        }
-        if (r.horario === 'diurno') {
-          return (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#d97706' }}>
-              <Sun size={12} /> Diurno
-            </span>
-          )
-        }
-        if (r.horario === 'nocturno') {
-          return (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#4f46e5' }}>
-              <Moon size={12} /> Nocturno
-            </span>
-          )
-        }
+        if (r.modalidad === 'a_cargo') return <TurnoBadge turno="a_cargo" />
+        if (r.horario === 'diurno' || r.horario === 'nocturno') return <TurnoBadge turno={r.horario} />
         if (r.horario === 'mixto') {
           return (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#6b7280' }}>
-              <Clock size={12} /> Mixto
+            <span title="Mixto: diurno y nocturno en la semana" style={{ display: 'inline-flex', gap: 2 }}>
+              <TurnoBadge turno="diurno" size={12} />
+              <TurnoBadge turno="nocturno" size={12} />
             </span>
           )
         }

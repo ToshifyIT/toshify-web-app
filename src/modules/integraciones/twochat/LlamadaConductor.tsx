@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Phone, PhoneOff, X } from 'lucide-react'
 import type { Call, Device } from '@2chat/voice-sdk'
-import { cerrarRegistroLlamada, obtenerTokenVoz, prepararLlamadaConductor } from '../../../services/twoChatService'
+import { cerrarRegistroLlamada, obtenerTokenVoz, prepararLlamadaConductor, senalLlamada } from '../../../services/twoChatService'
 
 interface Telefono { device: Device; desde: string; cuenta: string; compartida: boolean }
 let telefono: Telefono | null = null
@@ -43,6 +43,11 @@ async function obtenerTelefono(): Promise<Telefono> {
     activando = null
   }
 }
+
+// Cada cuánto se avisa que la llamada sigue: con una cuenta compartida (Info Toshify),
+// mientras llega esta señal la línea figura ocupada para los demás. El servidor la
+// libera si pasa 1 minuto sin señal (p. ej. si se cerró el navegador sin cortar).
+const SENAL_LLAMADA_MS = 20000
 
 type Estado = 'preparando' | 'llamando' | 'sonando' | 'en_curso' | 'terminada' | 'error'
 
@@ -81,7 +86,10 @@ export function LlamadaConductor({ conductorId, nombre, onClose }: LlamadaConduc
     let cancelado = false
     let registroId: number | null = null
     let cerrado = false
+    let senal: ReturnType<typeof setInterval> | null = null
     const cerrarRegistro = (fin: 'atendida' | 'no_atendida' | 'fallida') => {
+      if (senal) clearInterval(senal)
+      senal = null
       if (cerrado || registroId == null) return
       cerrado = true
       const dur = atendidaEn.current ? Math.round((Date.now() - atendidaEn.current) / 1000) : 0
@@ -98,6 +106,10 @@ export function LlamadaConductor({ conductorId, nombre, onClose }: LlamadaConduc
         const [info, tel] = await Promise.all([prepararLlamadaConductor(conductorId), obtenerTelefono()])
         if (cancelado) return
         registroId = info.registro_id
+        if (registroId != null) {
+          const id = registroId
+          senal = setInterval(() => { void senalLlamada(id).catch(() => undefined) }, SENAL_LLAMADA_MS)
+        }
         setNumero(info.numero)
         setCuenta(tel.compartida ? tel.cuenta : null)
         setEstado('llamando')
@@ -137,6 +149,7 @@ export function LlamadaConductor({ conductorId, nombre, onClose }: LlamadaConduc
     return () => {
       cancelado = true
       clearTimeout(arranque)
+      if (senal) clearInterval(senal)
       const c = callRef.current
       if (c && c.getStatus() !== 'disconnected' && c.getStatus() !== 'failed') void c.disconnect()
     }

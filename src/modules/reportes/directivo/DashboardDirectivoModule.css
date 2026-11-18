@@ -1,6 +1,11 @@
 /* src/modules/reportes/directivo/DashboardDirectivoModule.css */
 
 .ddir-module {
+  /* Net Driver Growth: paleta de gráficos de theme.css */
+  --ddir-serie-new: var(--chart-positive);
+  --ddir-serie-reactivated: var(--chart-teal);
+  --ddir-serie-churned: var(--chart-negative);
+  --ddir-serie-activos: var(--chart-primary);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -172,7 +177,7 @@
 .ddir-funnel-fill {
   height: 100%;
   border-radius: var(--radius-xs);
-  background: #2563eb;
+  background: var(--chart-primary);
 }
 
 .ddir-funnel-value {
@@ -344,7 +349,7 @@
 .ddir-ret-fill {
   height: 100%;
   border-radius: var(--radius-xs);
-  background: #16a34a;
+  background: var(--chart-positive);
 }
 
 /* Camino a la calle */
@@ -380,11 +385,11 @@
 }
 
 .ddir-camino-seg--cap {
-  background: #2563eb;
+  background: var(--chart-primary);
 }
 
 .ddir-camino-seg--ent {
-  background: #f59e0b;
+  background: var(--chart-amber);
 }
 
 .ddir-camino-etapas {
@@ -567,7 +572,7 @@
   display: block;
   height: 3px;
   border-radius: var(--radius-xs);
-  background: #2563eb;
+  background: var(--chart-primary);
   opacity: 0.6;
 }
 
