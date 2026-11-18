@@ -488,7 +488,6 @@ export function ConductorDetalleModal({
         {/* Tabs */}
         <div className="cdet-tabs">
           <button className={tab === 'calificacion' ? 'active' : ''} onClick={() => setTab('calificacion')}>Calificación</button>
-          <button className={tab === 'cobranza' ? 'active' : ''} onClick={() => setTab('cobranza')}>Cobranza</button>
           <button className={tab === 'facturacion' ? 'active' : ''} onClick={() => setTab('facturacion')}>Facturación</button>
           <button className={tab === 'saldo' ? 'active' : ''} onClick={() => setTab('saldo')}>Saldo</button>
           <button className={tab === 'garantia' ? 'active' : ''} onClick={() => setTab('garantia')}>Garantía</button>
@@ -502,6 +501,7 @@ export function ConductorDetalleModal({
           <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Asignaciones</button>
           <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Bajas</button>
           <button className={tab === 'incidencias' ? 'active' : ''} onClick={() => setTab('incidencias')}>Incidencias</button>
+          <button className={tab === 'cobranza' ? 'active' : ''} onClick={() => setTab('cobranza')}>Cobranza</button>
         </div>
 
         <div className="cdet-body">
