@@ -1371,7 +1371,8 @@ twoChatRouter.post('/voz/token', async (req, res) => {
 })
 
 /**
- * POST /api/2chat/voz/llamada { conductor_id } -> número a llamar y registro de quién llama.
+ * POST /api/2chat/voz/llamada { conductor_id, telefono? } -> número a llamar y registro de quién llama.
+ * telefono: 'principal' (el de WhatsApp, telefono_contacto; por defecto) o 'secundario'.
  * El registro (twochat_llamadas_toshibase) es lo que permite saber en Control de llamadas
  * qué persona hizo una llamada que salió por una cuenta compartida.
  */
@@ -1382,13 +1383,18 @@ twoChatRouter.post('/voz/llamada', async (req, res) => {
     const conductorId = String(req.body?.conductor_id || '')
     if (!UUID_RE.test(conductorId)) return res.status(400).json({ error: 'conductor inválido' })
     const [conductores, cuenta] = await Promise.all([
-      selectTodo(ctx.cfg, `conductores?select=id,nombres,apellidos,telefono_contacto&id=eq.${conductorId}`),
+      selectTodo(ctx.cfg, `conductores?select=id,nombres,apellidos,telefono_contacto,telefono_secundario&id=eq.${conductorId}`),
       usuario2ChatDe(ctx.cfg, ctx.userId),
     ])
     const c = conductores[0]
     if (!c) return res.status(404).json({ error: 'No se encontró el conductor' })
-    const numero = normalizarCelularAR(c.telefono_contacto)
-    if (!numero) return res.status(400).json({ error: 'El conductor no tiene un celular válido cargado' })
+    const secundario = req.body?.telefono === 'secundario'
+    const numero = normalizarCelularAR(secundario ? c.telefono_secundario : c.telefono_contacto)
+    if (!numero) {
+      return res.status(400).json({
+        error: secundario ? 'El teléfono secundario del conductor no es un celular válido' : 'El conductor no tiene un celular válido cargado',
+      })
+    }
     if (!cuenta.agente) return res.status(403).json({ error: 'Tu usuario no tiene una cuenta de 2Chat para llamar' })
     // Una llamada a la vez por cuenta de 2Chat (2026-11-18): el SDK de 2Chat espera un
     // usuario por persona, y con la cuenta compartida (Info Toshify) dos personas podían

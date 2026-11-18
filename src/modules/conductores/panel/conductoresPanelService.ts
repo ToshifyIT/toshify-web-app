@@ -50,6 +50,8 @@ export interface ConductorPanelRow {
   apellidos: string | null
   dni: string | null
   ruc: string | null                // CUIT (RUC)
+  telefono: string | null           // el de WhatsApp (conductores.telefono_contacto)
+  telefonoSecundario: string | null // conductores.telefono_secundario
   guia: string | null               // guía del lead de origen o quien lo convirtió (conductores.guia)
   estadoCodigo: string | null
   activo: boolean
@@ -159,6 +161,8 @@ interface RawConductor {
   apellidos: string | null
   numero_dni: string | null
   numero_cuit: string | null
+  telefono_contacto?: string | null
+  telefono_secundario?: string | null
   numero_licencia: string | null
   categoria_licencia?: string | null
   categoria_licencia_otra?: string | null
@@ -241,7 +245,7 @@ export async function cargarPanelConductores(
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia, categoria_licencia, categoria_licencia_otra, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, telefono_contacto, telefono_secundario, numero_licencia, categoria_licencia, categoria_licencia_otra, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
         .range(from, to)
       if (sedeId) q = q.eq('sede_id', sedeId)
       return q
@@ -553,6 +557,8 @@ export async function cargarPanelConductores(
       apellidos: c.apellidos,
       dni: c.numero_dni,
       ruc: c.numero_cuit,
+      telefono: c.telefono_contacto ?? null,
+      telefonoSecundario: c.telefono_secundario ?? null,
       guia: guiaPorConductor.get(c.id) || null,
       estadoCodigo,
       activo: estadoCodigo === 'activo',

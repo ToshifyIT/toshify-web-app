@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Phone, PhoneOff, X } from 'lucide-react'
 import type { Call, Device } from '@2chat/voice-sdk'
 import { cerrarRegistroLlamada, obtenerTokenVoz, prepararLlamadaConductor, senalLlamada } from '../../../services/twoChatService'
+import type { TipoTelefono } from './telefonosConductor'
 
 interface Telefono { device: Device; desde: string; cuenta: string; compartida: boolean }
 let telefono: Telefono | null = null
@@ -67,10 +68,12 @@ function reloj(seg: number) {
 interface LlamadaConductorProps {
   conductorId: string
   nombre: string
+  /** A qué número: el de WhatsApp (principal, por defecto) o el secundario */
+  telefono?: TipoTelefono
   onClose: () => void
 }
 
-export function LlamadaConductor({ conductorId, nombre, onClose }: LlamadaConductorProps) {
+export function LlamadaConductor({ conductorId, nombre, telefono: tipoTelefono = 'principal', onClose }: LlamadaConductorProps) {
   const [estado, setEstado] = useState<Estado>('preparando')
   const [error, setError] = useState<string | null>(null)
   const [numero, setNumero] = useState<string | null>(null)
@@ -103,7 +106,7 @@ export function LlamadaConductor({ conductorId, nombre, onClose }: LlamadaConduc
         // Pedir el micrófono primero: si se niega, no se gasta nada
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         stream.getTracks().forEach(t => t.stop())
-        const [info, tel] = await Promise.all([prepararLlamadaConductor(conductorId), obtenerTelefono()])
+        const [info, tel] = await Promise.all([prepararLlamadaConductor(conductorId, tipoTelefono), obtenerTelefono()])
         if (cancelado) return
         registroId = info.registro_id
         if (registroId != null) {
@@ -153,7 +156,7 @@ export function LlamadaConductor({ conductorId, nombre, onClose }: LlamadaConduc
       const c = callRef.current
       if (c && c.getStatus() !== 'disconnected' && c.getStatus() !== 'failed') void c.disconnect()
     }
-  }, [conductorId])
+  }, [conductorId, tipoTelefono])
 
   useEffect(() => {
     if (estado !== 'en_curso') return

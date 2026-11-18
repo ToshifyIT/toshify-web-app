@@ -183,8 +183,12 @@ export function obtenerTokenVoz(): Promise<TokenVoz> {
 }
 
 /** Número a llamar y registro de quién llama (para Control de llamadas) */
-export function prepararLlamadaConductor(conductorId: string): Promise<{ numero: string; nombre: string; registro_id: number | null }> {
-  return pedir('/voz/llamada', { method: 'POST', body: JSON.stringify({ conductor_id: conductorId }) })
+/** telefono: 'principal' = el de WhatsApp (telefono_contacto); 'secundario' = telefono_secundario */
+export function prepararLlamadaConductor(
+  conductorId: string,
+  telefono: 'principal' | 'secundario' = 'principal',
+): Promise<{ numero: string; nombre: string; registro_id: number | null }> {
+  return pedir('/voz/llamada', { method: 'POST', body: JSON.stringify({ conductor_id: conductorId, telefono }) })
 }
 
 export interface EstadoLineaVoz {
