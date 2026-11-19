@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown } from 'lucide-react'
+import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown, Wallet, Banknote } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -41,13 +41,17 @@ function fmtKm(v: number): string {
   return `${v.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`
 }
 
-type CardKey = 'conAuto' | 'conMultas' | 'pendientes' | 'alertaKm' | 'riesgoAlto'
+/** Tarjeta «Deuda mayor a $ 100.000»: Saldo pendiente por encima de esto */
+const DEUDA_ALTA = 100000
+
+type CardKey = 'conAuto' | 'sinCubrir' | 'deuda100' | 'pendientes' | 'alertaKm' | 'riesgoAlto'
 
 const CARD_LABELS: Record<CardKey, string> = {
   conAuto: 'Con Auto Asignado',
-  conMultas: 'Con Multas',
+  sinCubrir: 'No cubrió 2 semanas',
+  deuda100: 'Deuda mayor a $ 100.000',
   pendientes: 'Con Multas Pendientes',
-  alertaKm: 'Alerta de Aprovechamiento',
+  alertaKm: 'Bajo Aprovechamiento',
   riesgoAlto: 'Riesgo de deuda alto',
 }
 
@@ -123,7 +127,11 @@ export function ConductoresPanelModule() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   // Por defecto: solo conductores con auto asignado ahora mismo.
-  const [activeCard, setActiveCard] = useState<CardKey | null>('conAuto')
+  // «Con Auto Asignado» va aparte: queda prendido por defecto y se combina con las otras
+  // tarjetas (p. ej. Bajo Aprovechamiento solo de los que tienen auto), hasta que
+  // se apaga a mano. Las demás tarjetas son de a una.
+  const [soloConAuto, setSoloConAuto] = useState(true)
+  const [activeCard, setActiveCard] = useState<Exclude<CardKey, 'conAuto'> | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [detalle, setDetalle] = useState<{ fila: ConductorPanelRow; tab: 'facturacion' | 'calificacion' } | null>(null)
   // Llamada en curso desde Toshibase (2Chat): una a la vez
@@ -225,6 +233,8 @@ export function ConductoresPanelModule() {
 
   // Riesgo de no poder pagar la deuda (ver riesgoDeuda.ts). Si falla, la columna queda en "—".
   const [riesgosBase, setRiesgos] = useState<Map<string, RiesgoDeuda> | null>(null)
+  // No cubrió lo facturado las 2 últimas semanas (sale de la misma consulta)
+  const [sinCubrir, setSinCubrir] = useState<Set<string> | null>(null)
   // La deuda se corrige con el saldo actual: incluye pagos posteriores a la facturación
   const riesgos = useMemo(
     () => (riesgosBase ? ajustarConSaldoActual(riesgosBase, new Map(rowsBase.map(r => [r.id, r.saldoPendiente]))) : null),
@@ -233,35 +243,43 @@ export function ConductoresPanelModule() {
   useEffect(() => {
     let activo = true
     setRiesgos(null)
+    setSinCubrir(null)
     cargarRiesgoDeuda(sedeActualId ?? null)
-      .then(m => { if (activo) setRiesgos(m) })
+      .then(m => { if (activo) { setRiesgos(m.riesgos); setSinCubrir(m.sinCubrir2Semanas) } })
       .catch(e => {
         console.error('Riesgo de deuda:', e)
-        if (activo) setRiesgos(new Map())
+        if (activo) { setRiesgos(new Map()); setSinCubrir(new Set()) }
       })
     return () => { activo = false }
   }, [sedeActualId, reloadKey])
 
+  // Base de las demás tarjetas: con «Con Auto Asignado» prendido, solo los que tienen auto
+  const base = useMemo(() => (soloConAuto ? rows.filter(c => c.tieneAsignacion) : rows), [rows, soloConAuto])
+
   const stats = useMemo(() => ({
     conAuto: rows.filter(c => c.tieneAsignacion).length,
-    conMultas: rows.filter(c => c.cantidadMultas > 0).length,
-    pendientes: rows.filter(c => c.pendientes + c.enProceso > 0).length,
-    alertaKm: rows.filter(tieneAlertaKm).length,
-    riesgoAlto: rows.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto').length,
-  }), [rows, riesgos])
+    sinCubrir: base.filter(c => !!sinCubrir?.has(c.id)).length,
+    deuda100: base.filter(c => c.saldoPendiente > DEUDA_ALTA).length,
+    pendientes: base.filter(c => c.montoPendiente > 0).length,
+    alertaKm: base.filter(tieneAlertaKm).length,
+    riesgoAlto: base.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto').length,
+  }), [rows, base, riesgos, sinCubrir])
 
   const filteredRows = useMemo(() => {
     switch (activeCard) {
-      case 'conAuto': return rows.filter(c => c.tieneAsignacion)
-      case 'conMultas': return rows.filter(c => c.cantidadMultas > 0)
-      case 'pendientes': return rows.filter(c => c.pendientes + c.enProceso > 0)
-      case 'alertaKm': return rows.filter(tieneAlertaKm)
-      case 'riesgoAlto': return rows.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto')
-      default: return rows
+      case 'sinCubrir': return base.filter(c => !!sinCubrir?.has(c.id))
+      case 'deuda100': return base.filter(c => c.saldoPendiente > DEUDA_ALTA)
+      case 'pendientes': return base.filter(c => c.montoPendiente > 0)
+      case 'alertaKm': return base.filter(tieneAlertaKm)
+      case 'riesgoAlto': return base.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto')
+      default: return base
     }
-  }, [rows, activeCard, riesgos])
+  }, [base, activeCard, riesgos, sinCubrir])
 
-  const handleCard = (card: CardKey) => setActiveCard(prev => prev === card ? null : card)
+  const handleCard = (card: CardKey) => {
+    if (card === 'conAuto') setSoloConAuto(v => !v)
+    else setActiveCard(prev => prev === card ? null : card)
+  }
 
   // Lo que se exporta = exactamente lo que el usuario está viendo: el filtro de
   // stat-card (filteredRows) más los filtros internos del DataTable (que llegan
@@ -315,7 +333,7 @@ export function ConductoresPanelModule() {
       [`KM-viaje sin asig Cabify (${rangoCabifyLabel})`]: c.cabify && c.cabify.kmSinAsignar !== null ? c.cabify.kmSinAsignar : '',
       [`KM Geo (${rangoCabifyLabel})`]: c.kmGeo ?? '',
       '% Aprovechamiento': aprovechamientoKm(c) !== null ? Number(aprovechamientoKm(c)!.toFixed(1)) : '',
-      'Alerta de Aprovechamiento': tieneAlertaKm(c) ? 'Sí' : 'No',
+      'Bajo Aprovechamiento': tieneAlertaKm(c) ? 'Sí' : 'No',
     }))
 
     const ws = XLSX.utils.json_to_sheet(dataExport)
@@ -358,26 +376,25 @@ export function ConductoresPanelModule() {
       { wch: 26 }, // KM-viaje sin asig Cabify
       { wch: 20 }, // KM Geo
       { wch: 18 }, // % Aprovechamiento
-      { wch: 24 }, // Alerta de Aprovechamiento
+      { wch: 24 }, // Bajo Aprovechamiento
     ]
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Conductores')
 
     // El nombre del archivo deja constancia del filtro de stat-card usado.
-    const sufijoFiltro = activeCard ? `_${CARD_LABELS[activeCard].replace(/\s+/g, '')}` : ''
+    const sufijoFiltro = [soloConAuto ? 'conAuto' as const : null, activeCard]
+      .filter((k): k is CardKey => !!k)
+      .map(k => `_${CARD_LABELS[k].replace(/\s+/g, '')}`)
+      .join('')
     const fecha = hoyART()
     XLSX.writeFile(wb, `Panel_Conductores${sufijoFiltro}_${fecha}.xlsx`)
   }
 
-  const externalFilters = useMemo(() => {
-    if (!activeCard) return []
-    return [{
-      id: 'statCard',
-      label: CARD_LABELS[activeCard],
-      onClear: () => setActiveCard(null),
-    }]
-  }, [activeCard])
+  const externalFilters = useMemo(() => [
+    ...(soloConAuto ? [{ id: 'conAuto', label: CARD_LABELS.conAuto, onClear: () => setSoloConAuto(false) }] : []),
+    ...(activeCard ? [{ id: 'statCard', label: CARD_LABELS[activeCard], onClear: () => setActiveCard(null) }] : []),
+  ], [soloConAuto, activeCard])
 
   const columns = useMemo<ColumnDef<ConductorPanelRow, unknown>[]>(() => [
     {
@@ -389,14 +406,14 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => (
         <div>
           <div style={{ fontWeight: 600, color: 'var(--text-primary, #111827)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {row.original.nombre || '—'}
             {row.original.nuevoEstaSemana && (
               <span
-                title="Nuevo: su primera asignación arrancó esta semana"
-                aria-label="Nuevo esta semana"
+                title="Conductor nuevo: arrancó esta semana (primera asignación o entró con Carta Oferta)"
+                aria-label="Conductor nuevo esta semana"
                 style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', flexShrink: 0 }}
               />
             )}
-            {row.original.nombre || '—'}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)' }}>
             DNI: {row.original.dni || '—'}
@@ -463,7 +480,7 @@ export function ConductoresPanelModule() {
       },
       header: 'Riesgo deuda',
       meta: {
-        info: 'Riesgo de no poder pagar, según cómo pagó las últimas 4 semanas cerradas de facturación. N/A = todavía no tiene 4 semanas seguidas de facturación cerrada',
+        info: 'Riesgo de no poder pagar, según cómo pagó las últimas semanas cerradas de facturación (hasta 4; los nuevos, con las que tengan). N/A = todavía sin una semana cerrada con pago para evaluar (p. ej. conductor nuevo, con punto azul en el nombre)',
         // Filtro como lista (el id tiene «deuda» y la tabla lo tomaba como monto)
         filterValue: (r: ConductorPanelRow) => {
           const x = riesgos?.get(r.id)
@@ -480,7 +497,7 @@ export function ConductoresPanelModule() {
         if (riesgos === null) return <span className="cpanel-num cpanel-nulo">…</span>
         const x = riesgos.get(row.original.id)
         if (!x) {
-          return <span className="cpanel-num cpanel-nulo" title="Necesita 4 semanas seguidas de facturación cerrada">—</span>
+          return <span className="cpanel-num cpanel-nulo" title="Todavía sin una semana de facturación cerrada con pago para evaluar">—</span>
         }
         return (
           <span className={`cpanel-badge riesgo-${x.nivel}`} title={textoRiesgo(x)}>
@@ -855,7 +872,7 @@ export function ConductoresPanelModule() {
       {/* Stats Cards */}
       <div className="cond-stats">
         <StatsGrid className="cond-stats-grid" storageKey="ConductoresPanelModule">
-          <div className={`stat-card stat-card-clickable ${activeCard === 'conAuto' ? 'stat-card-active' : ''}`}
+          <div className={`stat-card stat-card-clickable ${soloConAuto ? 'stat-card-active' : ''}`}
             onClick={() => handleCard('conAuto')} title="Conductores con auto asignado ahora mismo">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
@@ -863,16 +880,8 @@ export function ConductoresPanelModule() {
               <span className="stat-label">Con Auto Asignado</span>
             </div>
           </div>
-          <div className={`stat-card stat-card-clickable ${activeCard === 'conMultas' ? 'stat-card-active' : ''}`}
-            onClick={() => handleCard('conMultas')} title="Conductores con al menos una multa atribuida">
-            <AlertTriangle size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.conMultas}</span>
-              <span className="stat-label">Con Multas</span>
-            </div>
-          </div>
           <div className={`stat-card stat-card-clickable ${activeCard === 'pendientes' ? 'stat-card-active' : ''}`}
-            onClick={() => handleCard('pendientes')} title="Conductores con multas pendientes de pago">
+            onClick={() => handleCard('pendientes')} title="Conductores con multas pendientes de pago (sin contar las que están en cuotas)">
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.pendientes}</span>
@@ -885,7 +894,7 @@ export function ConductoresPanelModule() {
             <Gauge size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.alertaKm}</span>
-              <span className="stat-label">Alerta de Aprovechamiento</span>
+              <span className="stat-label">Bajo Aprovechamiento</span>
             </div>
           </div>
           <div className={`stat-card stat-card-clickable ${activeCard === 'riesgoAlto' ? 'stat-card-active' : ''}`}
@@ -895,6 +904,24 @@ export function ConductoresPanelModule() {
             <div className="stat-content">
               <span className="stat-value">{riesgos === null ? '…' : stats.riesgoAlto}</span>
               <span className="stat-label">Riesgo de Deuda Alto</span>
+            </div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeCard === 'sinCubrir' ? 'stat-card-active' : ''}`}
+            onClick={() => handleCard('sinCubrir')}
+            title="Conductores que en las 2 últimas semanas cerradas pagaron menos de lo que se les facturó esa semana">
+            <Wallet size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{sinCubrir === null ? '…' : stats.sinCubrir}</span>
+              <span className="stat-label">No cubrió 2 semanas</span>
+            </div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeCard === 'deuda100' ? 'stat-card-active' : ''}`}
+            onClick={() => handleCard('deuda100')}
+            title="Conductores con Saldo pendiente mayor a $ 100.000">
+            <Banknote size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.deuda100}</span>
+              <span className="stat-label">Deuda mayor a $ 100.000</span>
             </div>
           </div>
         </StatsGrid>
@@ -911,7 +938,8 @@ export function ConductoresPanelModule() {
         emptyTitle="No hay conductores para mostrar"
         emptyDescription="Probá quitar el filtro activo o cambiar la sede."
         externalFilters={externalFilters}
-        onClearAllFilters={() => setActiveCard(null)}
+        // «Limpiar todos» no apaga «Con Auto Asignado»: eso se hace desde su tarjeta (o su ×)
+        onClearAllFilters={() => { setActiveCard(null); setSoloConAuto(true) }}
         onFilteredDataChange={setVisibles}
         headerAction={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

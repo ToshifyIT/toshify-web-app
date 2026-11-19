@@ -24,7 +24,7 @@ import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import './ConductorDetalleModal.css'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
-import { BitacoraNotasVehiculo } from '../../vehiculos/components/BitacoraNotasVehiculo'
+import { BitacoraSeguimiento } from './BitacoraSeguimiento'
 import { formatFecha } from '../../../utils/format'
 import { hoyART } from '../../../utils/fechaArgentina'
 
@@ -444,12 +444,12 @@ export function ConductorDetalleModal({
             <div>
               <div className="cdet-kpi-val">
                 {toshipass === undefined || (!toshipass && garantiaLoading) ? '…' : toshipass ? (
-                  <span className="cdet-kpi-badge" style={{ background: '#ede9fe', color: '#5b21b6' }}>
+                  <span className="cdet-kpi-badge" style={{ color: '#5b21b6' }}>
                     Toshipass · desde {toshipass.desde.slice(8, 10)}/{toshipass.desde.slice(5, 7)}
                   </span>
                 ) : garantiaResumen ? (() => {
                   const ui = ESTADO_GARANTIA_UI[garantiaResumen.estado] || { label: garantiaResumen.estado, color: '#6b7280', bg: '#f3f4f6' }
-                  return <span className="cdet-kpi-badge" style={{ background: ui.bg, color: ui.color }}>Garantía · {ui.label}</span>
+                  return <span className="cdet-kpi-badge" style={{ color: ui.color }}>Garantía · {ui.label}</span>
                 })() : <span className="cdet-kpi-badge">Sin garantía</span>}
               </div>
               <div className="cdet-kpi-lbl">{toshipass ? 'Régimen: Toshipass (tarifa nueva)' : 'Régimen: garantía'}</div>
@@ -501,25 +501,14 @@ export function ConductorDetalleModal({
           <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Asignaciones</button>
           <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Bajas</button>
           <button className={tab === 'incidencias' ? 'active' : ''} onClick={() => setTab('incidencias')}>Incidencias</button>
-          <button className={tab === 'cobranza' ? 'active' : ''} onClick={() => setTab('cobranza')}>Cobranza</button>
+          <button className={tab === 'cobranza' ? 'active' : ''} onClick={() => setTab('cobranza')}>Seguimiento</button>
         </div>
 
         <div className="cdet-body">
           {/* Historial de saldo: kardex de control_saldos (mismo modal que Facturación > Saldos, solo lectura). */}
           {tab === 'cobranza' ? (
-            // Bitácora de cobranza (sql/conductores_notas_cobranza.sql): notas con fecha
-            // y autor, como la de vehículos. La primera carga viene del Excel de Gandhy.
-            <BitacoraNotasVehiculo
-              vehiculoId={conductor.id}
-              canAdd
-              config={{
-                tabla: 'conductores_notas_cobranza',
-                columnaId: 'conductor_id',
-                titulo: 'Bitácora de cobranza',
-                sqlArchivo: 'sql/conductores_notas_cobranza.sql',
-                etiquetaOrigen: { carga_inicial: 'Observación inicial (cobranzas)' },
-              }}
-            />
+            // Bitácora de seguimiento: notas de cobranza + llamadas de 2Chat desde que tiene asignación
+            <BitacoraSeguimiento conductorId={conductor.id} />
           ) : tab === 'calificacion' ? (
             <CalificacionTab conductorId={conductor.id} enCurso={calificacion} />
           ) : tab === 'incidencias' ? (

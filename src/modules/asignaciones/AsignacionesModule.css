@@ -3183,3 +3183,16 @@ input[type="date"].asig-status-select {
   line-height: 1.2;
   padding: 0 4px;
 }
+
+/* Detalle: seguro del vehículo debajo del modelo (RC con el escudo azul) */
+.asig-det-seguro {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.asig-det-seguro.rc { color: var(--color-info); font-weight: 600; }
+
+/* Devolución: solo dos fechas (Devolución y Creada) */
+.asig-det-fechas.asig-det-fechas--dos { grid-template-columns: 1.3fr 1fr; }

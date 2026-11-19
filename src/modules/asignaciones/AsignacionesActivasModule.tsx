@@ -23,6 +23,8 @@ import { showError } from '../../utils/toast'
 import { EmptyState } from '../../components/ui/EstadosVista'
 import './AsignacionesModule.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { RcBadge } from '../../components/ui/RcBadge'
+import { useVehiculosRC } from '../../hooks/useVehiculosRC'
 import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatFecha, formatFechaHora } from '../../utils/format'
 import { fechaISOART, hoyART } from '../../utils/fechaArgentina'
@@ -888,6 +890,9 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
     })
   }, [filteredAsignaciones])
 
+  // Vehículos con seguro RC: escudito antes del modelo, como en Programaciones
+  const vehiculosRC = useVehiculosRC()
+
   const columns = useMemo<ColumnDef<AsignacionActiva>[]>(
     () => [
       // Solo en Agentes: guía responsable de llenar los turnos del auto (primera columna)
@@ -935,6 +940,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
                 }}
                 title={`${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.anio})`}
               >
+                {vehiculosRC.has(row.original.vehiculo_id) && <RcBadge style={{ marginRight: 6 }} />}
                 {vehiculo.marca} {vehiculo.modelo} ({vehiculo.anio})
               </div>
             </div>
@@ -1139,7 +1145,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [esAgentes, ultimaSalida, disponibleDesde, programados, conAsignacionDesde]
+    [esAgentes, ultimaSalida, disponibleDesde, programados, conAsignacionDesde, vehiculosRC]
   )
 
   // Mensaje cuando la tabla queda vacía, según la tarjeta elegida

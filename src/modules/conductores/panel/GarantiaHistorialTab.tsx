@@ -126,7 +126,8 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
         <EmptyState size="sm" title="Sin movimientos en el kardex de garantía." />
       ) : (
         <>
-          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)' }}>
+          {/* Sin scroll propio: scrollea la pestaña, con el encabezado y el pie fijos (un solo scroll) */}
+          <div style={{ border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)' }}>
             <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--bg-secondary, #f9fafb)', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -219,10 +220,16 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
             </table>
           </div>
 
-          {/* Footer: Pagadas / Restantes */}
+          {/* Footer: Pagadas / Restantes. Queda fijo abajo mientras se scrollea la tabla
+              (bottom: -22px = padding inferior de .cdet-body, como el tfoot de .cdet-table). */}
+          <div style={{
+            position: 'sticky', bottom: '-22px', zIndex: 3,
+            background: 'var(--card-bg, #fff)', paddingTop: '8px', paddingBottom: '22px', marginBottom: '-22px',
+            boxShadow: '0 -6px 10px -8px rgba(0,0,0,0.18)',
+          }}>
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-            marginTop: '8px', background: 'var(--bg-secondary, #f9fafb)',
+            background: 'var(--bg-secondary, #f9fafb)',
             border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
           }}>
             <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary, #e5e7eb)', textAlign: 'center' }}>
@@ -255,6 +262,7 @@ export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
                 Limpiar filtros
               </button>
             )}
+          </div>
           </div>
         </>
       )}

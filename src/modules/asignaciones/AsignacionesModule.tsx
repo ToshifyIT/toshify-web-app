@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, ArrowLeftRight, FolderOpen, ClipboardCheck, Car, History, X, Edit2 } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, ArrowLeftRight, FolderOpen, ClipboardCheck, Car, History, X, Edit2, Shield } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
@@ -10,7 +10,7 @@ import { actualizarEstadoVehiculo } from '../../services/vehiculoEstadoService'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
-import { useVehiculosRC } from '../../hooks/useVehiculosRC'
+import { useVehiculosRC, etiquetaCobertura, esResponsabilidadCivil } from '../../hooks/useVehiculosRC'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion-v2
 import { Alerta } from '../../components/ui/alertas'
@@ -70,6 +70,8 @@ interface Asignacion {
     modelo: string
     /** Flag actual del vehiculo. Para fechas pasadas se corrige con vehiculos_gnc_historial. */
     gnc?: boolean | null
+    /** Seguro del vehículo (texto libre). Ver etiquetaCobertura. */
+    cobertura?: string | null
   }
   conductores?: {
     nombres: string
@@ -374,6 +376,17 @@ function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) 
       motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor, cambioVehiculo: prog.cambioVehiculo, vehiculoCambioPatente: prog.vehiculoCambioPatente, vehiculoCambioModelo: prog.vehiculoCambioModelo, vehiculoCambioId: prog.vehiculoCambioId } : null,
     }
   })
+}
+
+/** Seguro del vehículo en el detalle: con RC va el escudo, como en la tabla. */
+function SeguroVehiculo({ cobertura }: { cobertura?: string | null }) {
+  const esRc = esResponsabilidadCivil(cobertura)
+  return (
+    <span className={`asig-det-seguro${esRc ? ' rc' : ''}`} title={cobertura || 'Sin cobertura cargada'}>
+      {esRc ? <RcBadge /> : <Shield size={13} aria-hidden="true" />}
+      Seguro: {etiquetaCobertura(cobertura)}
+    </span>
+  )
 }
 
 export function AsignacionesModule() {
@@ -1063,7 +1076,7 @@ export function AsignacionesModule() {
           .from('asignaciones')
           .select(`
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas, tipo_tarifa,
-            vehiculos (patente, marca, modelo, gnc),
+            vehiculos (patente, marca, modelo, gnc, cobertura),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
               conductores (nombres, apellidos, numero_licencia, categoria_licencia, categoria_licencia_otra, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
@@ -1085,7 +1098,7 @@ export function AsignacionesModule() {
         // Devoluciones pendientes y completadas
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_id, conductor_diurno_nombre, conductor_nocturno_id, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento, modalidad)'))
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo, cobertura), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_id, conductor_diurno_nombre, conductor_nocturno_id, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento, modalidad)'))
           .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
@@ -1225,7 +1238,7 @@ export function AsignacionesModule() {
           .from('asignaciones')
           .select(`
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas, tipo_tarifa,
-            vehiculos (patente, marca, modelo, gnc),
+            vehiculos (patente, marca, modelo, gnc, cobertura),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
               conductores (nombres, apellidos, numero_licencia, categoria_licencia, categoria_licencia_otra, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
@@ -1235,7 +1248,7 @@ export function AsignacionesModule() {
           .limit(1000),
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_id, conductor_diurno_nombre, conductor_nocturno_id, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento, modalidad)'))
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo, cobertura), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_id, conductor_diurno_nombre, conductor_nocturno_id, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento, modalidad)'))
           .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
@@ -3646,7 +3659,6 @@ export function AsignacionesModule() {
             <div className="asig-vehiculo-cambio">
               <div>
                 <PatenteBadge patente={row.original.vehiculos?.patente} size="sm" title="Vehículo que se entrega" />
-                {vehiculosRC.has(row.original.vehiculo_id) && <RcBadge style={{ marginLeft: 4 }} />}
               </div>
               <div
                 className="asig-vehiculo-cambio-fila"
@@ -3655,8 +3667,11 @@ export function AsignacionesModule() {
                 <ArrowLeftRight size={10} className="asig-vehiculo-cambio-icono" />
                 <PatenteBadge patente={patenteCambio} size="sm" className="asig-patente-cambio" />
               </div>
-              <span className={`${getHorarioBadgeClass(row.original.horario)} asig-vehiculo-cambio-modalidad`}>
-                {row.original.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
+              <span>
+                <span className={`${getHorarioBadgeClass(row.original.horario)} asig-vehiculo-cambio-modalidad`}>
+                  {row.original.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
+                </span>
+                {vehiculosRC.has(row.original.vehiculo_id) && <RcBadge style={{ marginLeft: 2 }} />}
               </span>
             </div>
           )
@@ -3665,9 +3680,9 @@ export function AsignacionesModule() {
           <div>
             <div>
               <PatenteBadge patente={row.original.vehiculos?.patente} size="sm" />
-              {vehiculosRC.has(row.original.vehiculo_id) && <RcBadge style={{ marginLeft: 4 }} />}
             </div>
             {badgeModalidad}
+            {vehiculosRC.has(row.original.vehiculo_id) && <RcBadge style={{ marginLeft: 2 }} />}
           </div>
         )
       }
@@ -4520,110 +4535,123 @@ export function AsignacionesModule() {
           <div className="asig-modal-content wide">
             {(viewAsignacion as any).esDevolucion ? (
               <>
-                <h2 className="asig-modal-title">Detalle de la Devolución</h2>
-                <div className="asig-detail-grid">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <label className="asig-detail-label">Vehículo</label>
-                      <p className="asig-detail-value">
-                        <PatenteBadge patente={viewAsignacion.vehiculos?.patente} size="sm" /> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Devolución de vehículo</div>
-                      {(viewAsignacion as any)._programadoPor && (
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>por {(viewAsignacion as any)._programadoPor}</div>
-                      )}
-                    </div>
-                  </div>
+                {/* Mismo formato que el detalle de asignación (2026-11-19): cabecera con el
+                    auto, seguro, estado y modalidad; fechas en tarjetas; observaciones a la
+                    vista y el conductor en su tarjeta. */}
+                {(() => {
+                  const acDev = viewAsignacion.asignaciones_conductores?.[0]
+                  const cdDev = acDev?.conductores as any
+                  const nombreDev = (viewAsignacion as any)._conductorNombre
+                    || (cdDev ? `${cdDev.nombres || ''} ${cdDev.apellidos || ''}`.trim() : '')
+                    || '-'
+                  const turnoDev = viewAsignacion.horario === 'todo_dia'
+                    ? null
+                    : (acDev?.horario === 'nocturno' ? 'nocturno' : 'diurno')
+                  const docDev = acDev?.documento
+                  const docTexto = docDev === 'CARTA_OFERTA' ? 'Carta Oferta' : docDev === 'ANEXO' ? 'Anexo' : docDev === 'NA' ? 'N/A' : (docDev || '-')
+                  return (
+                    <>
+                      <div className="asig-det-modal-header">
+                        <h2 className="asig-modal-title">Detalle de la Devolución</h2>
+                        <div className="asig-det-cabecera">
+                          <div className="asig-det-auto">
+                            <PatenteBadge patente={viewAsignacion.vehiculos?.patente} />
+                            <span className="asig-det-modelo">{viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}</span>
+                            <SeguroVehiculo cobertura={viewAsignacion.vehiculos?.cobertura} />
+                            <span className="asig-det-codigo">Devolución de vehículo</span>
+                          </div>
+                          <div className="asig-det-badges">
+                            <span className={getStatusBadgeClass(viewAsignacion.estado)}>{viewAsignacion.estado}</span>
+                            <span className={getHorarioBadgeClass(viewAsignacion.horario)}>
+                              {viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="asig-detail-grid">
+                        <div className="asig-det-fechas asig-det-fechas--dos">
+                          <div className="asig-det-fecha asig-det-fecha--principal">
+                            <span className="asig-det-lbl">Devolución</span>
+                            <span className="asig-det-val">{viewAsignacion.fecha_inicio ? formatFechaHora(viewAsignacion.fecha_inicio) : 'No definida'}</span>
+                          </div>
+                          <div className="asig-det-fecha">
+                            <span className="asig-det-lbl">Creada</span>
+                            <span className="asig-det-val">{formatFechaHora(viewAsignacion.created_at)}</span>
+                            {(viewAsignacion as any)._programadoPor && (
+                              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                por {(viewAsignacion as any)._programadoPor}
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                  <div>
-                    <label className="asig-detail-label">Conductor</label>
-                    <div className="asig-conductor-card">
-                      <p className="asig-conductor-card-name">
-                        {(viewAsignacion as any)._conductorNombre || (viewAsignacion.asignaciones_conductores?.[0]?.conductores ? `${viewAsignacion.asignaciones_conductores[0].conductores?.nombres || ''} ${viewAsignacion.asignaciones_conductores[0].conductores?.apellidos || ''}`.trim() : '-')}
-                        {(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
-                          <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: 'var(--radius-lg)', verticalAlign: 'middle' }}>De baja</span>
+                        {viewAsignacion.notas && (
+                          <div className="asig-det-aviso">
+                            <span className="asig-det-lbl">Observaciones</span>
+                            {viewAsignacion.notas}
+                          </div>
                         )}
-                      </p>
-                      <p className="asig-conductor-card-info">Turno: <strong>{viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : (viewAsignacion.asignaciones_conductores?.[0]?.horario === 'nocturno' ? 'Nocturno' : viewAsignacion.asignaciones_conductores?.[0]?.horario === 'diurno' ? 'Diurno' : viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'Diurno')}</strong></p>
-                      {viewAsignacion.asignaciones_conductores?.[0]?.documento && (
-                        <p className="asig-conductor-card-info">
-                          Documento: <strong style={{ color: viewAsignacion.asignaciones_conductores[0].documento === 'CARTA_OFERTA' ? '#059669' : viewAsignacion.asignaciones_conductores[0].documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
-                            {viewAsignacion.asignaciones_conductores[0].documento === 'CARTA_OFERTA' ? 'Carta Oferta' : viewAsignacion.asignaciones_conductores[0].documento === 'ANEXO' ? 'Anexo' : viewAsignacion.asignaciones_conductores[0].documento === 'NA' ? 'N/A' : viewAsignacion.asignaciones_conductores[0].documento}
-                          </strong>
-                        </p>
-                      )}
-                      {(() => {
-                        const docTipo = viewAsignacion.asignaciones_conductores?.[0]?.documento
-                        if (docTipo === 'NA' || docTipo === 'N/A') return null
-                        const cId = viewAsignacion.asignaciones_conductores?.[0]?.conductor_id
-                        const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_contract_folder_url
-                        if (driveUrl && conductorSinDocumento(viewAsignacion, cId)) return (
-                          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <FolderOpen size={13} style={{ color: '#DC2626' }} />
-                            <span style={{ fontSize: '12px', color: '#B91C1C', fontWeight: 600 }}>No se generó el documento, por favor volver a generar la programación</span>
-                          </div>
-                        )
-                        if (!driveUrl) return (
-                          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
-                            <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Sin Carpeta</span>
-                          </div>
-                        )
-                        return (
-                          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
-                              <FolderOpen size={13} /> Ver Carta Oferta
-                            </a>
-                            <span
-                              onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
-                              style={{ fontSize: '10px', color: '#9CA3AF', cursor: 'pointer', wordBreak: 'break-all' }}
-                              title="Click para copiar"
-                            >{driveUrl}</span>
-                          </div>
-                        )
-                      })()}
-                    </div>
-                  </div>
 
-                  <div className="asig-detail-row">
-                    <div>
-                      <label className="asig-detail-label">Horario</label>
-                      <span className={getHorarioBadgeClass(viewAsignacion.horario)}>
-                        {viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="asig-detail-label">Estado</label>
-                      <span className={getStatusBadgeClass(viewAsignacion.estado)}>
-                        {viewAsignacion.estado}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="asig-detail-row">
-                    <div>
-                      <label className="asig-detail-label">Fecha Creación</label>
-                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {formatFecha(viewAsignacion.created_at)}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="asig-detail-label">Fecha Devolución</label>
-                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_inicio ? formatFechaHora(viewAsignacion.fecha_inicio) : 'No definida'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {viewAsignacion.notas && (
-                    <div>
-                      <label className="asig-detail-label">Observaciones</label>
-                      <p className="asig-notes-box">{viewAsignacion.notas}</p>
-                    </div>
-                  )}
-                </div>
+                        <div>
+                          <div className="asig-det-seccion">
+                            <span className="asig-det-seccion-titulo">Conductor</span>
+                          </div>
+                          <div className="asig-det-conductor">
+                            <div className="asig-det-conductor-cab">
+                              {turnoDev && (
+                                <span style={{ fontSize: '12px' }}><TurnoBadge turno={turnoDev} conTexto /></span>
+                              )}
+                              <span className="asig-det-nombre">
+                                {nombreDev}
+                                {cdDev?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
+                                  <span className="asig-det-baja">De baja</span>
+                                )}
+                              </span>
+                            </div>
+                            <dl className="asig-det-datos">
+                              <div><dt>Turno</dt><dd>{turnoDev === 'nocturno' ? 'Nocturno' : turnoDev === 'diurno' ? 'Diurno' : 'A cargo'}</dd></div>
+                              <div><dt>Documento</dt><dd>{docTexto}</dd></div>
+                            </dl>
+                            {docDev && docDev !== 'NA' && docDev !== 'N/A' && (
+                              <div style={{ padding: '0 12px 10px' }}>
+                                {(() => {
+                                  const docTipo = viewAsignacion.asignaciones_conductores?.[0]?.documento
+                                  if (docTipo === 'NA' || docTipo === 'N/A') return null
+                                  const cId = viewAsignacion.asignaciones_conductores?.[0]?.conductor_id
+                                  const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_contract_folder_url
+                                  if (driveUrl && conductorSinDocumento(viewAsignacion, cId)) return (
+                                    <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <FolderOpen size={13} style={{ color: '#DC2626' }} />
+                                      <span style={{ fontSize: '12px', color: '#B91C1C', fontWeight: 600 }}>No se generó el documento, por favor volver a generar la programación</span>
+                                    </div>
+                                  )
+                                  if (!driveUrl) return (
+                                    <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
+                                      <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Sin Carpeta</span>
+                                    </div>
+                                  )
+                                  return (
+                                    <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
+                                        <FolderOpen size={13} /> Ver Carta Oferta
+                                      </a>
+                                      <span
+                                        onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
+                                        style={{ fontSize: '10px', color: '#9CA3AF', cursor: 'pointer', wordBreak: 'break-all' }}
+                                        title="Click para copiar"
+                                      >{driveUrl}</span>
+                                    </div>
+                                  )
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )
+                })()}
               </>
             ) : (
               <>
@@ -4638,6 +4666,7 @@ export function AsignacionesModule() {
                         <>
                           <PatenteBadge patente={viewAsignacion.vehiculos?.patente} />
                           <span className="asig-det-modelo">{viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}</span>
+                          <SeguroVehiculo cobertura={viewAsignacion.vehiculos?.cobertura} />
                         </>
                       )}
                       <span className="asig-det-codigo">

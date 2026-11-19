@@ -1,11 +1,12 @@
 // src/modules/conductores/panel/calificacionConductor.ts
 // Calificación de 1 a 5 estrellas por conductor (Seguimiento de Conductores), con
-// los mismos datos que muestra el panel. Seis factores, cada uno de 0 a 1
-// (fórmula acordada el 2026-11-02, rige desde la semana del 02/11):
+// los mismos datos que muestra el panel. Siete factores, cada uno de 0 a 1
+// (fórmula acordada el 2026-11-02; Seguimiento sumado el 2026-11-19, reunión con Gandhy del 18/11):
 //
 //   · Pagos (30%): sin deuda = 1; si la garantía la cubre = 0,7; si no, baja según lo
 //     que queda sin cubrir.
-//   · Ingresos (25%): lo que facturó en Cabify contra lo que tenía que cubrir esa
+//   · Ingresos (20%): lo que generó en la semana (Cabify + pagos de DiDi + pagos en
+//     efectivo o por transferencia; 2026-11-19) contra lo que tenía que cubrir esa
 //     semana (alquiler + garantía o Toshipass). Cubrirlo 1,5 veces o más = 1.
 //     (Antes había dos factores, viajes e ingresos, que medían casi lo mismo.)
 //   · Cuidado del auto (20%): siniestros con culpa del conductor (últimas 12 semanas)
@@ -15,6 +16,9 @@
 //   · Aprovechamiento del auto (10%): % de los km del GPS hechos con viaje asignado.
 //     Pesa poco porque el GPS a veces atribuye los km al compañero de turno.
 //   · Antigüedad (5%): semanas desde su primera asignación.
+//   · Seguimiento (5%): cómo viene según la Bitácora de seguimiento (notas de cobranza y
+//     llamadas de 2Chat), leída por IA todos los días: bueno = 1, regular = 0,5, malo = 0.
+//     Sin bitácora no cuenta. (Sale del 25% que tenía Ingresos.)
 //
 // Si falta un dato (ej. sin cruce con Cabify o sin GPS), ese factor no cuenta y los
 // demás se reparten su peso. Con menos de 2 factores no se califica.
@@ -24,7 +28,7 @@ import type { ConductorPanelRow } from './conductoresPanelService'
 import { formatPlata } from '../../../utils/format'
 
 export interface FactorCalificacion {
-  clave: 'deuda' | 'ingresos' | 'cuidado' | 'multas' | 'aprovechamiento' | 'antiguedad' | 'viajes' | 'km'
+  clave: 'deuda' | 'ingresos' | 'cuidado' | 'multas' | 'aprovechamiento' | 'antiguedad' | 'seguimiento' | 'viajes' | 'km'
   nombre: string
   peso: number            // peso original (0-1)
   puntaje: number | null  // 0-1; null = sin dato
@@ -40,6 +44,11 @@ export interface Calificacion {
 }
 
 export const PESOS: Partial<Record<FactorCalificacion['clave'], number>> = {
+  deuda: 0.3, ingresos: 0.2, cuidado: 0.2, multas: 0.1, aprovechamiento: 0.1, antiguedad: 0.05, seguimiento: 0.05,
+}
+
+/** Pesos del 2026-11-02 al 2026-11-19 (antes de sumar Seguimiento), para semanas guardadas. */
+export const PESOS_SIN_SEGUIMIENTO: Partial<Record<FactorCalificacion['clave'], number>> = {
   deuda: 0.3, ingresos: 0.25, cuidado: 0.2, multas: 0.1, aprovechamiento: 0.1, antiguedad: 0.05,
 }
 
@@ -50,8 +59,12 @@ export const PESOS_ANTERIORES: Partial<Record<FactorCalificacion['clave'], numbe
 
 /** Peso de un factor según la fórmula con la que se guardó esa semana. */
 function pesoDe(clave: FactorCalificacion['clave'], claves: string[]): number {
-  const esNueva = claves.includes('cuidado') || claves.includes('antiguedad')
-  return (esNueva ? PESOS[clave] : PESOS_ANTERIORES[clave]) ?? PESOS[clave] ?? PESOS_ANTERIORES[clave] ?? 0
+  const tabla = claves.includes('seguimiento')
+    ? PESOS
+    : claves.includes('cuidado') || claves.includes('antiguedad')
+      ? PESOS_SIN_SEGUIMIENTO
+      : PESOS_ANTERIORES
+  return tabla[clave] ?? PESOS[clave] ?? PESOS_ANTERIORES[clave] ?? 0
 }
 
 export interface CargoSemanal {
@@ -70,15 +83,23 @@ export interface ExtrasCalificacion {
   siniestrosCulpa: Map<string, number> | null
   /** Semanas desde su primera asignación. */
   antiguedadSemanas: Map<string, number> | null
+  /**
+   * Pagos de la semana que no vienen de Cabify: DiDi y manuales (efectivo o transferencia).
+   * Se suman a lo de Cabify en el factor Ingresos.
+   */
+  otrosIngresos?: Map<string, { didi: number; manual: number }> | null
+  /** Nivel de la Bitácora de seguimiento (conductores_seguimiento_resumen). */
+  seguimiento?: Map<string, { nivel: 'bueno' | 'regular' | 'malo'; motivo: string | null }> | null
 }
 
 export const NOMBRES_FACTOR: Record<FactorCalificacion['clave'], string> = {
   deuda: 'Pagos',
-  ingresos: 'Ingresos vs lo que tenía que cubrir',
+  ingresos: 'Ingresos vs lo que tenía que cubrir',  // Cabify + DiDi + efectivo/transferencia
   cuidado: 'Cuidado del auto',
   multas: 'Multas',
   aprovechamiento: 'Aprovechamiento del auto',
   antiguedad: 'Antigüedad',
+  seguimiento: 'Seguimiento (notas y llamadas)',
   viajes: 'Viajes completados (Cabify)',
   km: 'Límite de km',
 }
@@ -249,21 +270,41 @@ function factorAntiguedad(r: ConductorPanelRow, antiguedad: Map<string, number> 
   return { ...base, puntaje, valor, explicacion: sem >= 26 ? 'Lleva más de 6 meses con nosotros.' : 'Suma a medida que se queda (6 meses = puntaje completo).' }
 }
 
-function factorIngresos(r: ConductorPanelRow, referencia: Map<string, number[]>, cargo: CargoSemanal | undefined): FactorCalificacion {
+function factorIngresos(
+  r: ConductorPanelRow,
+  referencia: Map<string, number[]>,
+  cargo: CargoSemanal | undefined,
+  otros: { didi: number; manual: number } | undefined,
+): FactorCalificacion {
   const base = { clave: 'ingresos' as const, nombre: NOMBRES_FACTOR.ingresos, peso: PESOS.ingresos ?? 0 }
-  const g = r.cabify?.gananciaTotal
-  // Con auto asignado y cruzado con Cabify, no facturar nada en la semana es un dato
+  // Lo que generó en la semana: Cabify + lo que pagó por DiDi, en efectivo o por transferencia
+  const cabify = Math.max(r.cabify?.gananciaTotal ?? 0, 0)
+  const didi = Math.max(otros?.didi ?? 0, 0)
+  const manual = Math.max(otros?.manual ?? 0, 0)
+  const g = cabify + didi + manual
+  const partes = [
+    cabify > 0 ? `Cabify ${pesos(cabify)}` : null,
+    didi > 0 ? `DiDi ${pesos(didi)}` : null,
+    manual > 0 ? `efectivo/transferencia ${pesos(manual)}` : null,
+  ].filter(Boolean)
+  const origen = partes.length > 1 ? ` (${partes.join(' + ')})` : partes.length === 1 && cabify <= 0 ? ` (${partes[0]})` : ''
+  // Con auto asignado y cruzado con Cabify, no generar nada en la semana es un dato
   // (cuenta como 0), no una falta de dato.
-  if (r.cabify && r.tieneAsignacion && (g === null || g === undefined || g <= 0)) {
+  if (r.cabify && r.tieneAsignacion && g <= 0) {
     return {
       ...base,
       puntaje: 0,
       valor: '$ 0 en la semana',
-      explicacion: 'Tiene auto asignado pero no registra viajes ni ingresos en Cabify esta semana.',
+      explicacion: 'Tiene auto asignado pero no registra ingresos en Cabify ni pagos por DiDi, en efectivo o por transferencia esta semana.',
     }
   }
-  if (!r.cabify || g === null || g === undefined || g <= 0) {
-    return { ...base, puntaje: null, valor: 'Sin dato', explicacion: 'No tiene ingresos de Cabify en la semana (o no cruzó con Cabify).' }
+  if (g <= 0) {
+    return {
+      ...base,
+      puntaje: null,
+      valor: 'Sin dato',
+      explicacion: 'No tiene ingresos de Cabify (o no cruzó con Cabify) ni pagos por DiDi, en efectivo o por transferencia en la semana.',
+    }
   }
   // Contra todo lo que tenía que cubrir esa semana: la cuota (alquiler + garantía o
   // Toshipass) más los otros cargos de la semana (peajes, multas, incidencias…)
@@ -282,12 +323,12 @@ function factorIngresos(r: ConductorPanelRow, referencia: Map<string, number[]>,
         : g >= cargo.cuota
           ? 'Cubre la cuota, pero no los otros cargos de la semana.'
           : 'No le alcanza lo que factura ni para la cuota de la semana.'
-    return { ...base, puntaje, valor: `${pesos(g)} · ${pct}% de los ${pesos(cargo.total)} a cubrir${detalle}`, explicacion }
+    return { ...base, puntaje, valor: `${pesos(g)}${origen} · ${pct}% de los ${pesos(cargo.total)} a cubrir${detalle}`, explicacion }
   }
   // Sin facturación de la semana: se compara con los de su turno (como antes)
   const grupo = referencia.get(r.turno || 'todos') ?? referencia.get('todos') ?? []
   if (grupo.length < 3) {
-    return { ...base, puntaje: null, valor: pesos(g), explicacion: 'No hay suficientes conductores para comparar.' }
+    return { ...base, puntaje: null, valor: `${pesos(g)}${origen}`, explicacion: 'No hay suficientes conductores para comparar.' }
   }
   const puntaje = posicionEn(g, grupo)
   const posicion = Math.round(puntaje * 100)
@@ -297,7 +338,7 @@ function factorIngresos(r: ConductorPanelRow, referencia: Map<string, number[]>,
     : posicion >= 40
       ? `Factura en la media de ${deQuien}.`
       : `Factura por debajo de la mayoría de ${deQuien}.`
-  return { ...base, puntaje, valor: `${pesos(g)} · supera al ${posicion}% de ${deQuien}`, explicacion }
+  return { ...base, puntaje, valor: `${pesos(g)}${origen} · supera al ${posicion}% de ${deQuien}`, explicacion }
 }
 
 function factorDeuda(r: ConductorPanelRow): FactorCalificacion {
@@ -376,6 +417,21 @@ export function referenciaIngresos(rows: ConductorPanelRow[]): Referencias {
   }
 }
 
+const PUNTAJE_SEGUIMIENTO = { bueno: 1, regular: 0.5, malo: 0 } as const
+const TEXTO_SEGUIMIENTO = { bueno: 'Bueno', regular: 'Regular', malo: 'Malo' } as const
+
+function factorSeguimiento(r: ConductorPanelRow, seguimiento: ExtrasCalificacion['seguimiento']): FactorCalificacion {
+  const base = { clave: 'seguimiento' as const, nombre: NOMBRES_FACTOR.seguimiento, peso: PESOS.seguimiento ?? 0 }
+  const s = seguimiento?.get(r.id)
+  if (!s) return { ...base, puntaje: null, valor: 'Sin bitácora', explicacion: 'No tiene notas ni llamadas en la Bitácora de seguimiento.' }
+  return {
+    ...base,
+    puntaje: PUNTAJE_SEGUIMIENTO[s.nivel],
+    valor: TEXTO_SEGUIMIENTO[s.nivel],
+    explicacion: s.motivo || 'Según la Bitácora de seguimiento.',
+  }
+}
+
 export function calificarConductor(
   r: ConductorPanelRow,
   referencia: Referencias,
@@ -384,11 +440,12 @@ export function calificarConductor(
 ): Calificacion {
   const factores = [
     factorDeuda(r),
-    factorIngresos(r, referencia.ingresos, extras?.cargoSemanal?.get(r.id)),
+    factorIngresos(r, referencia.ingresos, extras?.cargoSemanal?.get(r.id), extras?.otrosIngresos?.get(r.id)),
     factorCuidado(r, excesos, extras?.siniestrosCulpa ?? null),
     factorMultas(r),
     factorAprovechamiento(r),
     factorAntiguedad(r, extras?.antiguedadSemanas ?? null),
+    factorSeguimiento(r, extras?.seguimiento ?? null),
   ]
   const conDato = factores.filter(f => f.puntaje !== null)
   if (conDato.length < 2) return { estrellas: null, puntaje: null, factores, parcial: true }

@@ -1747,6 +1747,209 @@ twoChatRouter.get('/llamadas', async (req, res) => {
 })
 
 /* -------------------------------------------------------------------------- */
+/* Resumen de seguimiento del conductor (Gemini)                               */
+/* -------------------------------------------------------------------------- */
+// Lee la Bitácora de seguimiento (notas de cobranza + llamadas de 2Chat desde la primera
+// asignación) y deja en conductores_seguimiento_resumen un resumen corto para la
+// operación y un nivel (bueno/regular/malo) que es el factor «Seguimiento» de la
+// calificación. Solo se rehace si la bitácora cambió. Sin GEMINI_API_KEY o sin la tabla
+// (sql/conductores_seguimiento_resumen.sql) no hace nada.
+
+const SEGUIMIENTO_MAX_ENTRADAS = 40
+const SEGUIMIENTO_POR_TANDA = 30
+const NIVELES_SEGUIMIENTO = ['bueno', 'regular', 'malo']
+// Conductores sin nada que resumir (p. ej. solo llamadas de cuando eran lead), por día:
+// así la tanda de cada hora no los vuelve a revisar
+const sinBitacora = { dia: null, ids: new Set() }
+
+const PROMPT_SEGUIMIENTO = `Sos coordinador de operaciones de Toshify (Argentina). Toshify alquila autos a
+conductores para que trabajen con apps como Cabify y Uber. El equipo los llama y les deja notas para
+coordinar entregas y devoluciones del auto, turnos con el compañero, cobranzas, o para preguntar si
+está todo bien. Abajo está la bitácora de UN conductor: notas del equipo y llamadas con su resumen.
+
+Lo que importa es CÓMO ES TRATAR CON ESTA PERSONA, para que quien lo contacte sepa qué esperar.
+No repitas lo que se habló en cada llamada.
+
+Devolvé SOLO un JSON con estas claves:
+- resumen: 2 o 3 oraciones cortas en español rioplatense sobre su perfil: cómo se comunica (atiende,
+  responde, es claro), su trato (respetuoso, amable, cortante, grosero, se enoja), si es fácil o difícil
+  coordinar y acordar cosas con él y si cumple lo que acuerda; si se queja, de qué se queja (el auto,
+  los pagos, el compañero, la atención…) y si es seguido; y, si hubo deuda o cobranza, cómo
+  reacciona (paga, promete y no cumple, se pone a la defensiva). Cerrá con una recomendación práctica
+  para tratarlo si la hay. Si la bitácora no alcanza para saber algo, no lo inventes.
+- nivel: cómo es la relación con él:
+  "bueno" (buena comunicación, respetuoso, fácil de coordinar, cumple),
+  "regular" (cuesta contactarlo o coordinar, cumple a medias, algún roce o se queja seguido),
+  "malo" (no responde, grosero o agresivo, incumple acuerdos o pagos prometidos).
+  Si la bitácora casi no muestra cómo es (solo avisos operativos), "bueno".
+- motivo: una oración con lo que más pesó para el nivel.`
+
+async function geminiJSON(geminiKey, prompt) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), GEMINI_TIMEOUT_MS)
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODELO}:generateContent`,
+      {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 2000 },
+        }),
+      },
+    )
+    const json = await res.json().catch(() => null)
+    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${json?.error?.message || ''}`.slice(0, 200))
+    const texto = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || ''
+    return JSON.parse(texto)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Día (YYYY-MM-DD) en Argentina */
+const diaART = (iso) => new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+const fechaHoraART = (iso) =>
+  new Date(iso).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'short', timeStyle: 'short' })
+
+/** Entradas de la bitácora (notas + llamadas desde la primera asignación), más viejas primero */
+async function entradasSeguimiento(cfg, conductorId) {
+  const notas = await selectTodo(
+    cfg,
+    `conductores_notas_cobranza?select=nota,created_at,usuario_nombre&conductor_id=eq.${conductorId}`,
+  )
+  const asig = await selectTodo(
+    cfg,
+    `asignaciones_conductores?select=fecha_inicio,asignaciones!inner(estado,fecha_inicio)&conductor_id=eq.${conductorId}&asignaciones.estado=neq.cancelada`,
+  )
+  const inicios = asig.map((a) => a.fecha_inicio || a.asignaciones?.fecha_inicio).filter(Boolean).sort()
+  const llamadas = inicios.length
+    ? await selectTodo(
+        cfg,
+        'twochat_llamadas?select=fecha,direccion,agente,resultado,duracion,resumen,proximo_paso' +
+          `&conductor_id=eq.${conductorId}&fecha=gte.${encodeURIComponent(new Date(inicios[0]).toISOString())}`,
+      )
+    : []
+  return [
+    ...notas.map((n) => ({ fecha: n.created_at, texto: `Nota de ${n.usuario_nombre || 'alguien del equipo'}: ${n.nota}` })),
+    ...llamadas.map((l) => ({
+      fecha: l.fecha,
+      texto:
+        `Llamada ${l.direccion === 'entrante' ? 'entrante' : 'saliente'} (${l.agente || 'sin agente'}), ` +
+        `${l.resultado}${l.duracion ? `, ${l.duracion} seg` : ''}` +
+        `${l.resumen ? `: ${l.resumen}` : ''}${l.proximo_paso ? ` Próximo paso: ${l.proximo_paso}` : ''}`,
+    })),
+  ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+}
+
+async function resumenGuardado(cfg, conductorId) {
+  const res = await fetchConTimeout(
+    `${cfg.url}/rest/v1/conductores_seguimiento_resumen?conductor_id=eq.${conductorId}&select=*`,
+    { headers: headersServicio(cfg) },
+  )
+  if (!res.ok) throw new Error(`conductores_seguimiento_resumen (¿falta sql/conductores_seguimiento_resumen.sql?): ${(await res.text()).slice(0, 150)}`)
+  return (await res.json())[0] || null
+}
+
+/**
+ * Devuelve el resumen de seguimiento del conductor; lo genera de nuevo si la bitácora
+ * cambió o si es de otro día (se actualiza todos los días: una promesa de pago vencida
+ * cambia el nivel aunque no haya notas nuevas). null si la bitácora está vacía.
+ */
+export async function resumenSeguimiento(cfg, conductorId) {
+  const entradas = await entradasSeguimiento(cfg, conductorId)
+  const guardado = await resumenGuardado(cfg, conductorId)
+  if (!entradas.length) return null
+  const ultima = entradas[entradas.length - 1].fecha
+  const igual = guardado && guardado.entradas === entradas.length &&
+    new Date(guardado.ultima_entrada).getTime() === new Date(ultima).getTime() &&
+    diaART(guardado.generado_en) === diaART(new Date().toISOString())
+  if (igual || !cfg.geminiKey) return guardado
+
+  const texto = entradas.slice(-SEGUIMIENTO_MAX_ENTRADAS).map((e) => `[${fechaHoraART(e.fecha)}] ${e.texto}`).join('\n')
+  const r = await geminiJSON(cfg.geminiKey, `${PROMPT_SEGUIMIENTO}\n\nHoy es ${fechaHoraART(new Date().toISOString())}.\n\nBitácora:\n${texto}`)
+  const nivel = NIVELES_SEGUIMIENTO.includes(r?.nivel) ? r.nivel : null
+  const resumen = textoONull(r?.resumen)
+  if (!nivel || !resumen) throw new Error('Gemini no devolvió un resumen válido')
+  const fila = {
+    conductor_id: conductorId,
+    resumen,
+    nivel,
+    motivo: textoONull(r?.motivo),
+    entradas: entradas.length,
+    ultima_entrada: ultima,
+    generado_en: new Date().toISOString(),
+  }
+  const res = await fetchConTimeout(`${cfg.url}/rest/v1/conductores_seguimiento_resumen?on_conflict=conductor_id`, {
+    method: 'POST',
+    headers: { ...headersServicio(cfg), Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(fila),
+  })
+  if (!res.ok) throw new Error(`No se pudo guardar el resumen: ${(await res.text()).slice(0, 150)}`)
+  return fila
+}
+
+/**
+ * Rehace los resúmenes de los conductores con notas o llamadas nuevas desde su último
+ * resumen y, una vez por día, todos los demás (para que la calificación esté al día
+ * sin abrir cada detalle). Corre cada hora en tandas: primero los que cambiaron.
+ */
+export async function resumirSeguimientosPendientes(cfg, { limite = SEGUIMIENTO_POR_TANDA } = {}) {
+  if (!cfg.geminiKey) return { resumidos: 0, omitida: 'sin GEMINI_API_KEY' }
+  const guardados = new Map(
+    (await selectTodo(cfg, 'conductores_seguimiento_resumen?select=conductor_id,generado_en')).map((g) => [g.conductor_id, g.generado_en]),
+  )
+  const desde = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+  const recientes = [
+    ...(await selectTodo(cfg, `conductores_notas_cobranza?select=conductor_id,fecha:created_at&created_at=gte.${encodeURIComponent(desde)}`)),
+    ...(await selectTodo(cfg, `twochat_llamadas?select=conductor_id,fecha:sincronizado_en&conductor_id=not.is.null&sincronizado_en=gte.${encodeURIComponent(desde)}`)),
+  ]
+  const hoy = diaART(new Date().toISOString())
+  // 1) con notas o llamadas nuevas desde su último resumen
+  const cambiaron = recientes
+    .filter((x) => x.conductor_id && (!guardados.has(x.conductor_id) || new Date(x.fecha) > new Date(guardados.get(x.conductor_id))))
+    .map((x) => x.conductor_id)
+  // 2) los que tienen bitácora pero nunca se resumieron (p. ej. la carga inicial de notas)
+  const nunca = [
+    ...(await selectTodo(cfg, 'conductores_notas_cobranza?select=conductor_id')),
+    ...(await selectTodo(cfg, 'twochat_llamadas?select=conductor_id&conductor_id=not.is.null')),
+  ].map((x) => x.conductor_id).filter((id) => !guardados.has(id))
+  // 3) una vez por día, todos los demás
+  const viejos = [...guardados].filter(([, g]) => diaART(g) !== hoy).map(([id]) => id)
+  if (sinBitacora.dia !== hoy) Object.assign(sinBitacora, { dia: hoy, ids: new Set() })
+  const pendientes = [...new Set([...cambiaron, ...viejos, ...nunca])]
+    .filter((id) => !sinBitacora.ids.has(id) || cambiaron.includes(id))
+    .slice(0, limite)
+  let ok = 0
+  for (const id of pendientes) {
+    try {
+      if (await resumenSeguimiento(cfg, id)) ok += 1
+      else sinBitacora.ids.add(id)
+    } catch (err) {
+      console.error(`[2chat] Resumen de seguimiento ${id}:`, err.message)
+    }
+  }
+  if (pendientes.length) console.log(`[2chat] Resúmenes de seguimiento: ${ok} de ${pendientes.length}`)
+  return { resumidos: ok }
+}
+
+/** GET /api/2chat/seguimiento/:conductorId → { resumen } (null si la bitácora está vacía) */
+twoChatRouter.get('/seguimiento/:conductorId', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    if (!UUID_RE.test(req.params.conductorId)) return res.status(400).json({ error: 'conductor inválido' })
+    res.json({ resumen: await resumenSeguimiento(ctx.cfg, req.params.conductorId) })
+  } catch (error) {
+    console.error('[2chat/seguimiento]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/* -------------------------------------------------------------------------- */
 /* Actualización automática de llamadas                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -1790,6 +1993,12 @@ export function iniciarSyncAutomatico() {
         await transcribirPendientes(cfg)
       } catch (errTr) {
         console.error('[2chat] Transcripción en la actualización automática:', errTr.message)
+      }
+      try {
+        await resumirSeguimientosPendientes(cfg)
+      } catch (errSeg) {
+        // Sin la tabla (sql/conductores_seguimiento_resumen.sql): no frena el resto
+        console.error('[2chat] Resúmenes de seguimiento en la actualización automática:', errSeg.message)
       }
       try {
         const m = await sincronizarMensajes(cfg, { forzar: true })
