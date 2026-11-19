@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Loader2, Plus } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { formatDateTimeAR } from '../../../utils/dateUtils';
@@ -12,6 +13,18 @@ interface NotaVehiculo {
   created_at: string;
   usuario_nombre: string | null;
   origen: string;
+}
+
+/**
+ * Entrada que no es una nota escrita (p. ej. una llamada de 2Chat): se muestra mezclada
+ * con las notas por fecha, pero no se guarda en la tabla de la bitácora.
+ */
+export interface EntradaBitacora {
+  id: string;
+  fecha: string;
+  autor: string;
+  icono?: ReactNode;
+  contenido: ReactNode;
 }
 
 /** Cuántas notas se muestran antes de "Ver todas" */
@@ -35,6 +48,12 @@ interface BitacoraNotasVehiculoProps {
     /** Texto de cada origen distinto de 'app' (p. ej. 'carga_inicial') */
     etiquetaOrigen?: Record<string, string>;
   };
+  /** Otras entradas para mezclar con las notas (ya cargadas por quien usa la bitácora) */
+  extras?: EntradaBitacora[];
+  /** Se agregó una nota (p. ej. para rehacer el resumen de seguimiento) */
+  onNotaAgregada?: () => void;
+  /** Contenido entre el título y el cuadro de nueva nota (p. ej. un resumen) */
+  encabezado?: ReactNode;
 }
 
 const CONFIG_VEHICULO = {
@@ -49,7 +68,7 @@ const CONFIG_VEHICULO = {
  * Bitácora de notas del vehículo (sql/vehiculos_notas.sql): cada nota queda con
  * fecha y autor; solo se agregan, no se editan ni se borran.
  */
-export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior, config = CONFIG_VEHICULO }: BitacoraNotasVehiculoProps) {
+export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior, config = CONFIG_VEHICULO, extras, onNotaAgregada, encabezado }: BitacoraNotasVehiculoProps) {
   const [notas, setNotas] = useState<NotaVehiculo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -93,6 +112,7 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior, config
       setNuevaNota('');
       setNotas(await cargar());
       showSuccess('Nota agregada');
+      onNotaAgregada?.();
     } catch (error) {
       console.error('No se pudo agregar la nota:', error);
       showError('No se pudo agregar la nota');
@@ -101,14 +121,29 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior, config
     }
   };
 
+  type Item = { key: string; fecha: string; autor: string; icono?: ReactNode; contenido: ReactNode };
+  const items: Item[] = [
+    ...notas.map(n => ({
+      key: `n${n.id}`,
+      fecha: n.created_at,
+      autor: n.origen !== 'app' && config.etiquetaOrigen?.[n.origen]
+        ? config.etiquetaOrigen[n.origen]
+        : n.usuario_nombre || 'Sin usuario',
+      contenido: n.nota as ReactNode,
+    })),
+    ...(extras || []).map(e => ({ key: `e${e.id}`, fecha: e.fecha, autor: e.autor, icono: e.icono, contenido: e.contenido })),
+  ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
   return (
     <div className="bnv">
       <div className="section-title">
         {config.titulo}
-        {!isLoading && !hasError && notas.length > 0 && (
-          <span className="bnv-contador">({notas.length})</span>
+        {!isLoading && !hasError && items.length > 0 && (
+          <span className="bnv-contador">({items.length})</span>
         )}
       </div>
+
+      {encabezado}
 
       {canAdd && !hasError && (
         <div className="bnv-nueva">
@@ -144,28 +179,25 @@ export function BitacoraNotasVehiculo({ vehiculoId, canAdd, notaAnterior, config
             La bitácora todavía no está activa: falta correr {config.sqlArchivo}.
           </p>
         </>
-      ) : notas.length === 0 ? (
+      ) : items.length === 0 ? (
         <p className="bnv-vacia">Sin notas todavía.</p>
       ) : (
         <>
         <ul className={`bnv-lista${verTodas ? ' bnv-lista--todas' : ''}`}>
-          {(verTodas ? notas : notas.slice(0, NOTAS_VISIBLES)).map(n => (
-            <li key={n.id} className="bnv-item">
+          {(verTodas ? items : items.slice(0, NOTAS_VISIBLES)).map(n => (
+            <li key={n.key} className="bnv-item">
               <div className="bnv-meta">
-                <span className="bnv-fecha">{formatDateTimeAR(n.created_at)}</span>
-                <span>
-                  {n.origen !== 'app' && config.etiquetaOrigen?.[n.origen]
-                    ? config.etiquetaOrigen[n.origen]
-                    : n.usuario_nombre || 'Sin usuario'}
-                </span>
+                {n.icono}
+                <span className="bnv-fecha">{formatDateTimeAR(n.fecha)}</span>
+                <span>{n.autor}</span>
               </div>
-              <div className="bnv-texto">{n.nota}</div>
+              <div className="bnv-texto">{n.contenido}</div>
             </li>
           ))}
         </ul>
-        {notas.length > NOTAS_VISIBLES && (
+        {items.length > NOTAS_VISIBLES && (
           <button type="button" className="bnv-ver-todas" onClick={() => setVerTodas(v => !v)}>
-            {verTodas ? 'Ver solo las últimas' : `Ver todas (${notas.length})`}
+            {verTodas ? 'Ver solo las últimas' : `Ver todas (${items.length})`}
           </button>
         )}
         </>

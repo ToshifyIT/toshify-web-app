@@ -11,6 +11,18 @@ export function esResponsabilidadCivil(cobertura: string | null | undefined): bo
 }
 
 /**
+ * Nombre de la cobertura para mostrar: el campo es texto libre y viene escrito de
+ * muchas formas ("TERCERO COMPLETO", "Terceros completos (NO TRANSPORTE…)", …).
+ */
+export function etiquetaCobertura(cobertura: string | null | undefined): string {
+  const texto = (cobertura || '').replace(/\s+/g, ' ').trim()
+  if (!texto) return 'Sin dato'
+  if (esResponsabilidadCivil(texto)) return 'Responsabilidad Civil'
+  if (/terceros?\s*completos?/i.test(texto)) return 'Terceros completos'
+  return texto
+}
+
+/**
  * Hook que carga los ids de los vehiculos con cobertura Responsabilidad Civil.
  * Usado para el indicador "RC" en Programacion y Asignaciones.
  */

@@ -17,7 +17,10 @@
 //   Alto  = debe 1 semana o más y la deuda sube, o 3 semanas cortas seguidas
 //   Medio = debe más de 1/4 de semana, o tuvo alguna semana corta
 //   Bajo  = el resto
-// Hace falta haber facturado las 4 semanas; si no, queda sin nivel.
+// Conductores nuevos (menos de 4 semanas seguidas facturadas, 2026-11-19): se evalúan con
+// las que tienen, según cómo pagaron la semana anterior. Con 2 o más pagos conocidos, «Alto»
+// por semanas cortas pide que TODAS sean cortas; con 1 solo, una corta da «Medio». Sin
+// ningún pago conocido todavía (arrancó la última semana) queda sin nivel.
 
 import { supabase } from '../../../lib/supabase'
 
@@ -29,8 +32,10 @@ export interface RiesgoDeuda {
   semanasDeuda: number
   /** Deuda actual en pesos */
   deuda: number
-  /** Semanas (de las 3 anteriores) en las que pagó menos del 90% */
+  /** Semanas (de las 3 anteriores, o de las que tenga) en las que pagó menos del 90% */
   semanasCortas: number
+  /** Pagos semanales evaluados (3, o menos si es nuevo) */
+  semanasEvaluadas: number
   /** Cambio de la deuda en las últimas 3 semanas, en semanas de alquiler */
   tendencia: number
   /** Semana cerrada usada como referencia, ej. "S45/2026" */
@@ -41,8 +46,20 @@ export interface RiesgoDeuda {
   deudaInicio: number
 }
 
-function nivelDe(semanasDeuda: number, tendencia: number, semanasCortas: number): NivelRiesgoDeuda {
-  return (semanasDeuda >= 1 && tendencia > 0) || semanasCortas >= 3 ? 'alto'
+export interface ResultadoRiesgoDeuda {
+  riesgos: Map<string, RiesgoDeuda>
+  /**
+   * Conductores que en las 2 últimas semanas cerradas con pago conocido pagaron menos que
+   * la facturación de esa semana (subtotal_neto, sin la deuda anterior). Va aparte del
+   * riesgo: alcanza con 2 semanas facturadas, así entran también los conductores nuevos.
+   */
+  sinCubrir2Semanas: Set<string>
+}
+
+function nivelDe(semanasDeuda: number, tendencia: number, semanasCortas: number, evaluadas = 3): NivelRiesgoDeuda {
+  // «Alto» por semanas cortas: todas las evaluadas (3; un nuevo con 2 pagos, las 2)
+  const cortasAlto = evaluadas >= 2 ? Math.min(3, evaluadas) : Infinity
+  return (semanasDeuda >= 1 && tendencia > 0) || semanasCortas >= cortasAlto ? 'alto'
     : semanasDeuda >= 0.25 || semanasCortas >= 1 ? 'medio'
       : 'bajo'
 }
@@ -63,13 +80,14 @@ export function ajustarConSaldoActual(
     const deuda = Math.max(saldo, 0)
     const semanasDeuda = deuda / r.cargo
     const tendencia = (deuda - r.deudaInicio) / r.cargo
-    out.set(id, { ...r, deuda, semanasDeuda, tendencia, nivel: nivelDe(semanasDeuda, tendencia, r.semanasCortas) })
+    out.set(id, { ...r, deuda, semanasDeuda, tendencia, nivel: nivelDe(semanasDeuda, tendencia, r.semanasCortas, r.semanasEvaluadas) })
   }
   return out
 }
 
 const SEMANAS = 4
 const PAGO_COMPLETO = 0.9
+const TOLERANCIA_PESOS = 1
 
 interface FilaFact {
   periodo_id: string
@@ -90,11 +108,12 @@ export function textoRiesgo(r: RiesgoDeuda): string {
   const partes = [
     `Riesgo ${NIVEL_RIESGO_LABEL[r.nivel].toLowerCase()} (${r.semanaRef})`,
     r.deuda > 0 ? `Debe ${fmt(r.semanasDeuda)} semana(s) de alquiler` : 'Sin deuda',
-    `Semanas pagando menos del 90%: ${r.semanasCortas} de 3`,
+    `Semanas pagando menos del 90%: ${r.semanasCortas} de ${r.semanasEvaluadas}`,
   ]
   if (r.deuda > 0 && r.tendencia !== 0) {
-    partes.push(`La deuda ${r.tendencia > 0 ? 'subió' : 'bajó'} ${fmt(Math.abs(r.tendencia))} semana(s) en 3 semanas`)
+    partes.push(`La deuda ${r.tendencia > 0 ? 'subió' : 'bajó'} ${fmt(Math.abs(r.tendencia))} semana(s) en ${r.semanasEvaluadas} semana(s)`)
   }
+  if (r.semanasEvaluadas < 3) partes.push(`Conductor nuevo: evaluado con ${r.semanasEvaluadas} semana(s) de pago`)
   return partes.join('\n')
 }
 
@@ -102,7 +121,7 @@ export function textoRiesgo(r: RiesgoDeuda): string {
  * Riesgo por conductor con las últimas semanas cerradas de la sede (o de todas
  * las sedes si sedeId es null; cada conductor se mide con las de su sede).
  */
-export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<string, RiesgoDeuda>> {
+export async function cargarRiesgoDeuda(sedeId: string | null): Promise<ResultadoRiesgoDeuda> {
   let q = supabase
     .from('periodos_facturacion')
     .select('id, semana, anio, sede_id, estado')
@@ -133,7 +152,7 @@ export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<stri
     lista.reverse()
     ids.push(...lista.map(p => p.id))
   }
-  if (!ids.length) return new Map()
+  if (!ids.length) return { riesgos: new Map(), sinCubrir2Semanas: new Set() }
 
   const filas: FilaFact[] = []
   for (let desde = 0; ; desde += 1000) {
@@ -148,6 +167,7 @@ export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<stri
   }
 
   const resultado = new Map<string, RiesgoDeuda>()
+  const sinCubrir2Semanas = new Set<string>()
   // Saldo con el que arranca la semana siguiente, por conductor y sede
   const saldoSiguiente = new Map<string, number>()
   for (const f of filas) {
@@ -157,7 +177,6 @@ export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<stri
   }
 
   for (const [sede, lista] of porSede) {
-    if (lista.length < SEMANAS) continue
     const ultima = lista[lista.length - 1]
     const semanaRef = `S${ultima.semana}/${ultima.anio}`
     const idsSede = new Set(lista.map(p => p.id))
@@ -171,16 +190,41 @@ export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<stri
       porConductor.set(f.conductor_id, sem)
     }
     for (const [conductorId, sem] of porConductor) {
-      if (sem.some(f => !f)) continue
-      const s = sem as FilaFact[]
-      const cargo = s.reduce((a, f) => a + Math.max(Number(f.subtotal_neto) || 0, 0), 0) / SEMANAS
+      // ¿No cubrió lo facturado en las 2 últimas semanas con pago conocido? (el pago de una
+      // semana = lo que tenía que pagar menos el saldo con que arrancó la siguiente)
+      {
+        const prox = saldoSiguiente.get(`${sede}|${conductorId}`)
+        const saldoDespues = (i: number): number | undefined =>
+          i === SEMANAS - 1 ? prox : sem[i + 1] ? Number(sem[i + 1]!.saldo_anterior) || 0 : undefined
+        const ultimas: boolean[] = []
+        for (let i = SEMANAS - 1; i >= 0 && ultimas.length < 2; i--) {
+          const f = sem[i]
+          const despues = saldoDespues(i)
+          if (!f || despues === undefined) {
+            if (ultimas.length) break // tienen que ser seguidas
+            continue
+          }
+          const facturado = Math.max(Number(f.subtotal_neto) || 0, 0)
+          const pagado = (Number(f.total_a_pagar) || 0) - despues
+          ultimas.push(facturado > 0 && pagado < facturado - TOLERANCIA_PESOS)
+        }
+        if (ultimas.length === 2 && ultimas.every(Boolean)) sinCubrir2Semanas.add(conductorId)
+      }
+      // Semanas seguidas hasta la última cerrada (un conductor nuevo tiene menos de 4)
+      let desdeIdx = SEMANAS
+      while (desdeIdx > 0 && sem[desdeIdx - 1]) desdeIdx--
+      const s = sem.slice(desdeIdx) as FilaFact[]
+      if (!s.length) continue
+      const cargo = s.reduce((a, f) => a + Math.max(Number(f.subtotal_neto) || 0, 0), 0) / s.length
       if (cargo <= 0) continue
       // Saldos al arrancar cada semana; con la semana siguiente, uno más (ya con el último pago)
       const saldos = s.map(f => Number(f.saldo_anterior) || 0)
       const prox = saldoSiguiente.get(`${sede}|${conductorId}`)
       if (prox !== undefined) saldos.push(prox)
-      // Las 3 últimas semanas con pago conocido
-      const desdeSemana = saldos.length - 1 - (SEMANAS - 1)
+      // Las 3 últimas semanas con pago conocido (o las que tenga)
+      const desdeSemana = Math.max(0, saldos.length - 1 - (SEMANAS - 1))
+      const semanasEvaluadas = saldos.length - 1 - desdeSemana
+      if (semanasEvaluadas < 1) continue // todavía ningún pago conocido
       let semanasCortas = 0
       for (let i = desdeSemana; i < saldos.length - 1; i++) {
         const aPagar = Number(s[i].total_a_pagar) || 0
@@ -191,10 +235,10 @@ export async function cargarRiesgoDeuda(sedeId: string | null): Promise<Map<stri
       const deuda = Math.max(saldos[saldos.length - 1], 0)
       const semanasDeuda = deuda / cargo
       const tendencia = (deuda - Math.max(saldos[desdeSemana], 0)) / cargo
-      const nivel = nivelDe(semanasDeuda, tendencia, semanasCortas)
+      const nivel = nivelDe(semanasDeuda, tendencia, semanasCortas, semanasEvaluadas)
       const deudaInicio = Math.max(saldos[desdeSemana], 0)
-      resultado.set(conductorId, { nivel, semanasDeuda, deuda, semanasCortas, tendencia, semanaRef, cargo, deudaInicio })
+      resultado.set(conductorId, { nivel, semanasDeuda, deuda, semanasCortas, tendencia, semanaRef, cargo, deudaInicio, semanasEvaluadas })
     }
   }
-  return resultado
+  return { riesgos: resultado, sinCubrir2Semanas }
 }

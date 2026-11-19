@@ -37,6 +37,8 @@ import { EmptyState } from '../../components/ui/EstadosVista'
 import './VehicleManagement.css'
 import { formatNumero } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { RcBadge } from '../../components/ui/RcBadge'
+import { esResponsabilidadCivil, etiquetaCobertura } from '../../hooks/useVehiculosRC'
 import { GUIAS_ACTIVOS } from '../leads/guias'
 import { TabsBar, type TabsBarItem } from '../../components/ui/TabsBar'
 import { TurnoBadge } from '../../components/ui/TurnoBadge'
@@ -441,7 +443,7 @@ export function VehicleManagement() {
           .select(`
             id, patente, provisoria, marca, modelo, anio, color, kilometraje_actual, kilometraje_geotab, kilometraje_geotab_updated_at, estado_id, created_at,
             drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular, grupo_flota, categoria,
-            cantidad_llaves, lugar_radicacion, vencimiento_seguro, guia_responsable,
+            cantidad_llaves, lugar_radicacion, vencimiento_seguro, guia_responsable, cobertura,
             vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha,
             vehiculos_estados (id, codigo, descripcion),
             vehiculos_titulares!left (id, activo, titular_id, titulares (id, tipo, nombres, apellidos, razon_social))
@@ -2273,6 +2275,29 @@ export function VehicleManagement() {
             : <span style={{ color: 'var(--text-tertiary)' }}>-</span>
         },
         meta: { mobileLabel: 'Capitán' },
+        enableSorting: true,
+      },
+      {
+        // Seguro del vehículo (vehiculos.cobertura, texto libre): se muestra unificado
+        // y con el escudito de RC, como en Programaciones y Asignaciones.
+        id: 'seguro',
+        header: 'Seguro',
+        accessorFn: (row) => etiquetaCobertura((row as any).cobertura),
+        cell: ({ row }) => {
+          const cobertura = (row.original as any).cobertura as string | null
+          const esRc = esResponsabilidadCivil(cobertura)
+          if (!cobertura?.trim()) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return (
+            <span
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', fontSize: '12px' }}
+              title={cobertura}
+            >
+              {esRc && <RcBadge />}
+              {etiquetaCobertura(cobertura)}
+            </span>
+          )
+        },
+        meta: { mobileLabel: 'Seguro' },
         enableSorting: true,
       },
       {

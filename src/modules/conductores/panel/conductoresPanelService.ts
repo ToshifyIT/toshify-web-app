@@ -480,32 +480,50 @@ export async function cargarPanelConductores(
     }
   }
 
-  // Nuevos de la semana: con auto asignado y cuya PRIMERA asignación (de todo su
-  // historial, sin las canceladas) arrancó desde el lunes. Un cambio de auto no cuenta.
+  // Nuevos de la semana (punto azul): con auto asignado y que arrancaron desde el lunes
+  //  - su PRIMERA asignación (de todo su historial, sin las canceladas), o
+  //  - una asignación activa a la que entró con Carta Oferta, si vuelve después de más de
+  //    30 días sin auto (p. ej. alguien que trabajó hace meses). Si dejó el auto hace unos
+  //    días y vuelve, no es nuevo aunque la asignación diga Carta Oferta.
+  // Un cambio de auto (Anexo) no cuenta.
   const nuevosEstaSemana = new Set<string>()
   try {
     const conAuto = [...vehiculoPorConductor.keys()]
     const lunes = lunesSemanaART()
-    const primerInicio = new Map<string, string>()
+    const DIAS_PARA_VOLVER_COMO_NUEVO = 30
+    type FilaNuevo = { conductor_id: string; estado: string | null; fecha_inicio: string | null; fecha_fin: string | null; documento: string | null; asignaciones: { estado: string | null; fecha_inicio: string | null; fecha_inicio_real: string | null; fecha_fin: string | null } | null }
+    const porConductor = new Map<string, FilaNuevo[]>()
     for (let i = 0; i < conAuto.length; i += 200) {
       const lote = conAuto.slice(i, i + 200)
-      const filas = await fetchAll<{ conductor_id: string; fecha_inicio: string | null; asignaciones: { estado: string | null; fecha_inicio: string | null; fecha_inicio_real: string | null } | null }>((from, to) =>
+      const filas = await fetchAll<FilaNuevo>((from, to) =>
         supabase
           .from('asignaciones_conductores')
-          .select('conductor_id, fecha_inicio, asignaciones(estado, fecha_inicio, fecha_inicio_real)')
+          .select('conductor_id, estado, fecha_inicio, fecha_fin, documento, asignaciones(estado, fecha_inicio, fecha_inicio_real, fecha_fin)')
           .in('conductor_id', lote)
           .range(from, to))
       for (const f of filas) {
-        const a = f.asignaciones
-        if (!a || /cancel/i.test(a.estado || '')) continue
-        const inicio = f.fecha_inicio || a.fecha_inicio_real || a.fecha_inicio
-        if (!inicio) continue
-        const prev = primerInicio.get(f.conductor_id)
-        if (!prev || inicio < prev) primerInicio.set(f.conductor_id, inicio)
+        // Sin las canceladas (la asignación o el conductor dentro de ella)
+        if (!f.asignaciones || /cancel/i.test(f.asignaciones.estado || '') || /cancel/i.test(f.estado || '')) continue
+        const lista = porConductor.get(f.conductor_id) || []
+        lista.push(f)
+        porConductor.set(f.conductor_id, lista)
       }
     }
-    for (const [cid, inicio] of primerInicio) {
-      if ((fechaISOART(inicio) || '') >= lunes) nuevosEstaSemana.add(cid)
+    const inicioDe = (f: FilaNuevo) => f.fecha_inicio || f.asignaciones?.fecha_inicio_real || f.asignaciones?.fecha_inicio || null
+    for (const [cid, lista] of porConductor) {
+      const conInicio = lista.filter(f => inicioDe(f)).sort((a, b) => inicioDe(a)!.localeCompare(inicioDe(b)!))
+      if (!conInicio.length) continue
+      // Primera asignación de todo el historial, desde el lunes
+      if ((fechaISOART(inicioDe(conInicio[0])!) || '') >= lunes) { nuevosEstaSemana.add(cid); continue }
+      // Volvió con Carta Oferta después de más de 30 días sin auto
+      const actual = conInicio.find(f => f.asignaciones?.estado === 'activa' && f.documento === 'CARTA_OFERTA'
+        && (fechaISOART(inicioDe(f)!) || '') >= lunes)
+      if (!actual) continue
+      const inicioActual = new Date(inicioDe(actual)!).getTime()
+      const finAnterior = Math.max(0, ...conInicio
+        .filter(f => f !== actual && new Date(inicioDe(f)!).getTime() < inicioActual)
+        .map(f => new Date(f.fecha_fin || f.asignaciones?.fecha_fin || inicioDe(f)!).getTime()))
+      if (inicioActual - finAnterior > DIAS_PARA_VOLVER_COMO_NUEVO * 86400000) nuevosEstaSemana.add(cid)
     }
   } catch (err) {
     console.warn('[panel] No se pudo calcular los nuevos de la semana:', err)

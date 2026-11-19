@@ -312,3 +312,20 @@ export function abrirLeadEnPestana(leadId: string): void {
   const base = window.location.pathname.startsWith('/demo') ? '/demo' : ''
   window.open(`${base}/leads?lead=${encodeURIComponent(leadId)}`, '_blank', 'noopener')
 }
+
+/* Resumen de seguimiento del conductor (Bitácora de seguimiento) */
+
+export type NivelSeguimiento = 'bueno' | 'regular' | 'malo'
+
+export interface ResumenSeguimiento {
+  resumen: string
+  nivel: NivelSeguimiento
+  motivo: string | null
+  generado_en: string
+}
+
+/** Resumen con IA de notas y llamadas; null si la bitácora está vacía. Se rehace si cambió o es de otro día. */
+export async function obtenerResumenSeguimiento(conductorId: string): Promise<ResumenSeguimiento | null> {
+  const r = await pedir<{ resumen: ResumenSeguimiento | null }>(`/seguimiento/${conductorId}`)
+  return r.resumen
+}

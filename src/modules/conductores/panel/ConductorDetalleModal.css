@@ -105,9 +105,9 @@
 /* Badge de estado dentro de una tarjeta KPI (estado de garantía). */
 .cdet-kpi-badge {
   display: inline-block;
-  padding: 2px 8px; border-radius: var(--radius-sm);
+  /* Sin resaltado (diseño actual): solo texto en color */
   font-size: 12px; font-weight: 700; white-space: nowrap;
-  background: var(--bg-tertiary, #f3f4f6); color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary, #6b7280);
 }
 .cdet-kpi-detalle {
   display: inline-flex; align-items: center; gap: 3px;

@@ -2462,9 +2462,9 @@ export function ProgramacionV2Module() {
         <div className="prog-vehiculo-cell">
           <span>
             <PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" />
-            {row.original.vehiculo_entregar_id && vehiculosRC.has(row.original.vehiculo_entregar_id) && <RcBadge style={{ marginLeft: 4 }} />}
           </span>
           <span className="prog-modelo">
+            {row.original.vehiculo_entregar_id && vehiculosRC.has(row.original.vehiculo_entregar_id) && <RcBadge style={{ marginRight: 6 }} />}
             {row.original.vehiculo_entregar_modelo || row.original.vehiculo_entregar_modelo_sistema || ''}
           </span>
         </div>
@@ -2886,9 +2886,9 @@ export function ProgramacionV2Module() {
         <div className="prog-vehiculo-cell">
           <span>
             <PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" />
-            {row.original.vehiculo_entregar_id && vehiculosRC.has(row.original.vehiculo_entregar_id) && <RcBadge style={{ marginLeft: 4 }} />}
           </span>
           <span className="prog-modelo" style={{ fontSize: '11px' }}>
+            {row.original.vehiculo_entregar_id && vehiculosRC.has(row.original.vehiculo_entregar_id) && <RcBadge style={{ marginRight: 6 }} />}
             {row.original.vehiculo_entregar_modelo || row.original.vehiculo_entregar_modelo_sistema || ''}
           </span>
         </div>

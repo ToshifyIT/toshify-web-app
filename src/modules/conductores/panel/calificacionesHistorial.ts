@@ -72,6 +72,8 @@ const DIA = 86400000
  *    La deuda de semanas anteriores no entra: la mide el factor Pagos.
  *  - siniestrosCulpa: siniestros con culpa del conductor en las 12 semanas previas.
  *  - antiguedadSemanas: semanas desde su primera asignación.
+ *  - seguimiento: nivel de la Bitácora de seguimiento (conductores_seguimiento_resumen).
+ *  - otrosIngresos: pagos de la semana por DiDi y manuales (efectivo o transferencia).
  * Cada parte es tolerante: si falla queda en null y ese factor no cuenta.
  */
 export async function cargarExtrasCalificacion(
@@ -154,8 +156,52 @@ export async function cargarExtrasCalificacion(
     return new Map([...primera].map(([k, f]) => [k, Math.max(0, (hasta.getTime() - new Date(f).getTime()) / (7 * DIA))]))
   })().catch(err => { console.error('[Calificaciones] antigüedad', err); return null })
 
-  const [cargoSemanal, siniestrosCulpa, antiguedadSemanas] = await Promise.all([cargo, siniestros, antiguedad])
-  return { cargoSemanal, siniestrosCulpa, antiguedadSemanas }
+  const seguimientoNivel = (async () => {
+    // Nivel de la Bitácora de seguimiento (lo actualiza el servidor todos los días)
+    const out: NonNullable<ExtrasCalificacion['seguimiento']> = new Map()
+    for (const lote of lotes) {
+      const { data, error } = await (supabase.from('conductores_seguimiento_resumen') as any)
+        .select('conductor_id, nivel, motivo')
+        .in('conductor_id', lote)
+      if (error) throw error
+      for (const s of (data || []) as { conductor_id: string; nivel: 'bueno' | 'regular' | 'malo'; motivo: string | null }[]) {
+        out.set(s.conductor_id, { nivel: s.nivel, motivo: s.motivo })
+      }
+    }
+    return out
+  })().catch(err => { console.error('[Calificaciones] seguimiento (¿falta sql/conductores_seguimiento_resumen.sql?)', err); return null })
+
+  const otros = (async () => {
+    // Pagos de la semana por DiDi y manuales (efectivo o transferencia), de control_saldos
+    const { data: per, error: ep } = await (supabase.from('periodos_facturacion') as any)
+      .select('semana, anio')
+      .eq('fecha_inicio', semanaInicio)
+      .limit(1)
+    if (ep) throw ep
+    const p = (per || [])[0] as { semana: number; anio: number } | undefined
+    const out: NonNullable<ExtrasCalificacion['otrosIngresos']> = new Map()
+    if (!p) return out
+    for (const lote of lotes) {
+      const { data, error } = await (supabase.from('control_saldos') as any)
+        .select('conductor_id, tipo_movimiento, monto_movimiento')
+        .in('conductor_id', lote)
+        .eq('semana', p.semana)
+        .eq('anio', p.anio)
+        .in('tipo_movimiento', ['pago_didi', 'pago_manual', 'pago'])
+      if (error) throw error
+      for (const m of (data || []) as { conductor_id: string; tipo_movimiento: string; monto_movimiento: number | null }[]) {
+        const v = out.get(m.conductor_id) || { didi: 0, manual: 0 }
+        const monto = Math.abs(Number(m.monto_movimiento) || 0)
+        if (m.tipo_movimiento === 'pago_didi') v.didi += monto
+        else v.manual += monto
+        out.set(m.conductor_id, v)
+      }
+    }
+    return out
+  })().catch(err => { console.error('[Calificaciones] otros ingresos (DiDi, efectivo, transferencia)', err); return null })
+
+  const [cargoSemanal, siniestrosCulpa, antiguedadSemanas, seguimiento, otrosIngresos] = await Promise.all([cargo, siniestros, antiguedad, seguimientoNivel, otros])
+  return { cargoSemanal, siniestrosCulpa, antiguedadSemanas, seguimiento, otrosIngresos }
 }
 
 /** Lunes (YYYY-MM-DD) de la última semana cerrada. */

@@ -209,10 +209,12 @@ export function CalificacionTab({ conductorId, enCurso }: { conductorId: string;
       )}
 
       <p className="cal-nota">
-        Cada lunes se guarda la calificación de la semana que cerró. Pesos: pagos 30%, ingresos contra lo que
-        tenía que cubrir 25%, cuidado del auto 20% (siniestros con culpa y excesos de km), multas 10%,
-        aprovechamiento 10% y antigüedad 5%. Si falta un dato, ese factor no cuenta y los demás se reparten su
-        peso. Las semanas anteriores al 02/11 se calcularon con la fórmula vieja. El efecto de cada factor es aproximado.
+        Cada lunes se guarda la calificación de la semana que cerró. Pesos: pagos 30%, ingresos (Cabify, DiDi, efectivo o
+        transferencia) contra lo que tenía que cubrir 20%, cuidado del auto 20% (siniestros con culpa y excesos de km), multas 10%,
+        aprovechamiento 10%, antigüedad 5% y seguimiento 5% (notas y llamadas de la bitácora, que la IA revisa
+        todos los días). Si falta un dato, ese factor no cuenta y los demás se reparten su peso. Las semanas
+        anteriores al 02/11 se calcularon con la fórmula vieja y hasta el 19/11 sin seguimiento (ingresos 25%).
+        El efecto de cada factor es aproximado.
       </p>
     </div>
   )
