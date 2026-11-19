@@ -98,7 +98,10 @@
 
 .date-range-tab {
   flex: 1;
-  padding: 8px 12px;
+  /* min-width 0 + padding chico: con 5 pestañas (Día…Rango) no se salen de la caja */
+  min-width: 0;
+  padding: 8px 6px;
+  white-space: nowrap;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
