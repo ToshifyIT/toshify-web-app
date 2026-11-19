@@ -39,6 +39,10 @@ interface DateRangeSelectorProps {
   // Con allowMonthYear: Mes y Año toman solo sus días (1 al último / 1-ene al 31-dic),
   // sin extenderse a semanas completas. Para módulos que no desglosan por semana.
   mesCalendario?: boolean
+  // Sin la columna de atajos (Esta semana, Semana pasada, Este año, Todo el historial)
+  sinAtajos?: boolean
+  // Con allowMonthYear: suma la pestaña «Día» (un solo día) antes de Semana
+  conDia?: boolean
 }
 
 // Días de la semana (Lunes a Domingo)
@@ -119,6 +123,8 @@ export function DateRangeSelector({
   extraShortcuts = [],
   weekOnly = false,
   allowMonthYear = false,
+  sinAtajos = false,
+  conDia = false,
   mesCalendario = false,
 }: DateRangeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -130,6 +136,7 @@ export function DateRangeSelector({
       return selectedRange.type
     }
     if (allowMonthYear && selectedRange?.type === 'custom') return 'range'
+    if (allowMonthYear && conDia && selectedRange?.type === 'day') return 'day'
     return 'week'
   })
   // Rango libre: primer clic fija el ancla (inicio); segundo clic cierra el rango.
@@ -160,6 +167,7 @@ export function DateRangeSelector({
       if (selectedRange.type === 'month') setSelectionMode('month')
       else if (selectedRange.type === 'year') setSelectionMode('year')
       else if (selectedRange.type === 'custom') setSelectionMode('range')
+      else if (conDia && selectedRange.type === 'day') setSelectionMode('day')
       else setSelectionMode('week')
     }
     let year: number
@@ -625,6 +633,15 @@ export function DateRangeSelector({
           {/* Pestañas Semana/Mes/Año (Exceso de KM: siempre desglose semanal) */}
           {allowMonthYear && (
           <div className="date-range-tabs">
+            {conDia && (
+              <button
+                type="button"
+                className={`date-range-tab ${selectionMode === 'day' ? 'active' : ''}`}
+                onClick={() => handleModeChange('day')}
+              >
+                Día
+              </button>
+            )}
             <button
               type="button"
               className={`date-range-tab ${selectionMode === 'week' ? 'active' : ''}`}
@@ -744,7 +761,7 @@ export function DateRangeSelector({
           </div>
 
           {/* Atajos rápidos */}
-          <div className="date-range-shortcuts">
+          {!sinAtajos && <div className="date-range-shortcuts">
             {extraShortcuts.map(shortcut => (
               <button
                 key={shortcut.id}
@@ -788,7 +805,7 @@ export function DateRangeSelector({
                 Todo el historial
               </button>
             )}
-          </div>
+          </div>}
         </div>,
         document.getElementById('root') ?? document.body,
       )}

@@ -4,25 +4,22 @@
 // Números: función SQL get_dashboard_marketing (sql/dashboard_marketing.sql).
 // Solo datos agregados: no muestra nombres, teléfonos ni DNI. No incluye costos de pauta.
 import { useMemo, useState } from 'react'
+import { DateRangeSelector } from '../../../components/ui/DateRangeSelector'
+import type { DateRange } from '../../../components/ui/DateRangeSelector'
 import type { ReactNode } from 'react'
 import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Info } from 'lucide-react'
 import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { ZonasPendientesChart } from '../../dashboard/components/ZonasPendientesChart'
 import {
-  etiquetaSemana,
   fechaCorta,
   fmtInt,
   fmtPct,
   hoyArgentina,
-  lunesDe,
-  sumarDias,
   ratio,
   variacion,
 } from '../directivo/directivoTypes'
 import type { Variacion } from '../directivo/directivoTypes'
-import { NavegadorPeriodo, SelectorGranularidad } from '../../../components/ui/NavegadorPeriodo'
-import type { Granularidad, PeriodoOpcion } from '../../../components/ui/NavegadorPeriodo'
 import {
   FILTROS_SEGMENTO,
   enSegmento,
@@ -116,57 +113,52 @@ function BarraPerfiles({ perfiles, total }: { perfiles: Record<Perfil, number>; 
 
 const MESES_LARGOS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
-type PeriodoMkt = PeriodoOpcion & { desde: string; hasta: string }
-
-/** Semanas (lunes a domingo, las últimas 52) o meses (los últimos 24), del más viejo al más nuevo. */
-function periodosMarketing(g: Granularidad, hoy: string): PeriodoMkt[] {
-  const out: PeriodoMkt[] = []
-  if (g === 'semana') {
-    const lunes = lunesDe(hoy)
-    for (let i = 0; i < 52; i++) {
-      const desde = sumarDias(lunes, -7 * i)
-      const hasta = sumarDias(desde, 6)
-      out.unshift({ key: desde, desde, hasta, enCurso: i === 0, label: `${etiquetaSemana(desde)} · ${fechaCorta(desde)} al ${fechaCorta(hasta)}` })
-    }
-  } else {
-    const [y, m] = hoy.split('-').map(Number)
-    for (let i = 0; i < 24; i++) {
-      const t = new Date(Date.UTC(y, m - 1 - i, 1))
-      const anio = t.getUTCFullYear()
-      const mes = t.getUTCMonth() + 1
-      const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
-      const hasta = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10)
-      out.unshift({ key: desde, desde, hasta, enCurso: i === 0, label: `${MESES_LARGOS[mes - 1]} ${anio}` })
-    }
-  }
-  return out
+/** Período por defecto: el último mes completo. */
+function rangoPorDefecto(hoy: string): DateRange {
+  const [y, m] = hoy.split('-').map(Number)
+  const t = new Date(Date.UTC(y, m - 2, 1))
+  const anio = t.getUTCFullYear()
+  const mes = t.getUTCMonth() + 1
+  const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
+  const hasta = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10)
+  return { startDate: desde, endDate: hasta, label: `${MESES_LARGOS[mes - 1]} ${anio}`, type: 'month' }
 }
 
-function Filtros({ periodos, periodo, granularidad, keyActual, d, filtro, cargando, onPeriodo, onGranularidad, onFiltro }: {
-  periodos: PeriodoMkt[]
-  periodo: PeriodoMkt
-  granularidad: Granularidad
-  keyActual: string
+// Recuerda el último período elegido (en este navegador)
+const CLAVE_PERIODO = 'dashboard-marketing-periodo'
+function rangoGuardado(): DateRange | null {
+  try {
+    const r = JSON.parse(localStorage.getItem(CLAVE_PERIODO) || 'null') as DateRange | null
+    return r && /^\d{4}-\d{2}-\d{2}$/.test(r.startDate) && /^\d{4}-\d{2}-\d{2}$/.test(r.endDate) ? r : null
+  } catch {
+    return null
+  }
+}
+
+function Filtros({ rango, d, filtro, cargando, onRango, onFiltro }: {
+  rango: DateRange
   d: MarketingRaw | null
   filtro: FiltroSegmento
   cargando: boolean
-  onPeriodo: (key: string) => void
-  onGranularidad: (g: Granularidad) => void
+  onRango: (r: DateRange) => void
   onFiltro: (f: FiltroSegmento) => void
 }) {
   const hoy = hoyArgentina()
-  const desde = periodo.desde
-  const hasta = periodo.hasta > hoy ? hoy : periodo.hasta
+  const desde = rango.startDate
+  const hasta = rango.endDate > hoy ? hoy : rango.endDate
   return (
     <div className="ddir-periodo mkt-periodo">
       <div className="ddir-periodo-controles">
-        <NavegadorPeriodo
-          periodos={periodos}
-          valor={periodo.key}
-          onCambio={onPeriodo}
-          granularidad={granularidad}
-          keyActual={keyActual}
+        {/* Día, semana, mes, año o rango, ya marcado con el período que se ve */}
+        <DateRangeSelector
+          selectedRange={rango}
+          onRangeChange={onRango}
           disabled={cargando}
+          allowMonthYear
+          mesCalendario
+          sinAtajos
+          conDia
+          showAllOption={false}
         />
       </div>
       <div className="ddir-periodo-info">
@@ -191,7 +183,6 @@ function Filtros({ periodos, periodo, granularidad, keyActual, d, filtro, cargan
             </AdaptiveTooltip>
           ))}
         </div>
-        <SelectorGranularidad valor={granularidad} onCambio={onGranularidad} disabled={cargando} />
       </div>
     </div>
   )
@@ -801,18 +792,16 @@ function Glosario() {
 // ───────────── Módulo ─────────────
 
 export function DashboardMarketingModule() {
-  // Mismo navegador que Dashboard KPI's: Semanal / Mensual con flechas.
-  // Por defecto, el último mes completo (antes: "último mes" corrido).
+  // Selector de fechas (Semana / Mes / Año / Rango), como en Siniestros. Por defecto, el
+  // último mes completo; recuerda el último período elegido en este navegador.
   const hoy = useMemo(() => hoyArgentina(), [])
-  const [granularidad, setGranularidad] = useState<Granularidad>('mes')
-  const periodos = useMemo(() => periodosMarketing(granularidad, hoy), [granularidad, hoy])
-  const keyActual = periodos[periodos.length - 1].key
-  const [elegido, setElegido] = useState<string | null>(null)
-  const periodo = periodos.find(p => p.key === elegido)
-    ?? (granularidad === 'mes' ? periodos[periodos.length - 2] : periodos[periodos.length - 1])
-  const cambiarGranularidad = (g: Granularidad) => { setGranularidad(g); setElegido(null) }
+  const [rango, setRangoEstado] = useState<DateRange>(() => rangoGuardado() ?? rangoPorDefecto(hoy))
+  const setRango = (r: DateRange) => {
+    setRangoEstado(r)
+    try { localStorage.setItem(CLAVE_PERIODO, JSON.stringify(r)) } catch { /* sin almacenamiento */ }
+  }
   const [filtro, setFiltro] = useState<FiltroSegmento>('Pauta redes')
-  const { data, isLoading, error } = useMarketingData(periodo.desde, periodo.hasta)
+  const { data, isLoading, error } = useMarketingData(rango.startDate, rango.endDate)
 
   const contenido = useMemo(() => {
     if (!data) return null
@@ -841,15 +830,11 @@ export function DashboardMarketingModule() {
     <div className="ddir-module mkt-module">
       <LoadingOverlay show={isLoading} message="Cargando indicadores de marketing..." size="lg" />
       <Filtros
-        periodos={periodos}
-        periodo={periodo}
-        granularidad={granularidad}
-        keyActual={keyActual}
+        rango={rango}
         d={data}
         filtro={filtro}
         cargando={isLoading}
-        onPeriodo={setElegido}
-        onGranularidad={cambiarGranularidad}
+        onRango={setRango}
         onFiltro={setFiltro}
       />
       {error ? <div className="ddir-error" role="alert">{error}</div> : null}

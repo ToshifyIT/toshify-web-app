@@ -97,8 +97,11 @@
 }
 
 .date-range-tab {
-  flex: 1;
-  padding: 8px 12px;
+  /* Cada pestaña toma el ancho de su texto y reparte el sobrante: con 5 (Día…Rango)
+     «Semana» no queda apretada contra la de al lado ni se salen de la caja */
+  flex: 1 1 auto;
+  padding: 8px 10px;
+  white-space: nowrap;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
