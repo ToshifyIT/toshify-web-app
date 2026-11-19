@@ -517,7 +517,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
   // Estadísticas de vehículos en una sola pasada
   const {
     totalVehiculosFlota, desgloseFlota, vehiculosOperativos, vehiculosPkgOn, vehiculosEnUso,
-    vehiculosPkgOnSinAsignacion, todosVehiculosPkgOn,
+    vehiculosPkgOnSinAsignacion, todosVehiculosPkgOn, vehiculosEnUsoSinAsignacion,
   } = useMemo(() => {
     // Vehículos que tienen asignación activa (de cualquier agente)
     const vehiculosConAsignacion = new Set(asignacionesTodas.map(a => a.vehiculo_id))
@@ -528,6 +528,8 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
     let enUso = 0
     const pkgOnSinAsignacion: any[] = []
     const todosLosPkgOn: any[] = []
+    // EN USO sin asignación activa: solo para listarlos en Capitanes (no cambian los números)
+    const enUsoSinAsignacion: any[] = []
     // Desglose por estado (mismo orden que ESTADOS_TOTAL_FLOTA)
     const desglose = ESTADOS_TOTAL_FLOTA.map(e => ({ label: e.label, count: 0 }))
 
@@ -558,6 +560,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
       } else if (estadoCodigo === 'EN_USO') {
         operativos++
         enUso++
+        if (!vehiculosConAsignacion.has(v.id)) enUsoSinAsignacion.push(v)
       }
     }
 
@@ -569,6 +572,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
       vehiculosEnUso: enUso,
       vehiculosPkgOnSinAsignacion: pkgOnSinAsignacion,
       todosVehiculosPkgOn: todosLosPkgOn,
+      vehiculosEnUsoSinAsignacion: enUsoSinAsignacion,
     }
   }, [vehiculosTodos, asignacionesTodas, filtroAgente])
 
@@ -725,10 +729,6 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
   // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
     let result = asignaciones
-    // Buscando sin tarjeta activa: también los autos en PKG ON sin asignación (los
-    // "Disponibles"), que no están en la lista por defecto y si no el buscador no los
-    // encuentra (ej. AE066MU).
-    const buscando = busquedaTabla.trim() !== '' && !activeStatFilter
 
     // Filtrar por stat card clickeada
     if (activeStatFilter) {
@@ -756,10 +756,20 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
       }
     }
 
-    // Si el filtro es vacantes (o se está buscando), agregar los PKG_ON_BASE sin asignación
-    if (activeStatFilter === 'vacantes' || buscando) {
+    // Los autos en PKG ON sin asignación activa (los "Disponibles", p. ej. con una
+    // asignación solo programada) también se listan, con los dos turnos vacantes: en la
+    // vista por defecto, en Vacantes y en Total Flota (2026-11-19, Capitanes: antes solo al
+    // buscar). En Estado de flota, como antes: en Vacantes o al buscar.
+    const buscando = busquedaTabla.trim() !== '' && !activeStatFilter
+    const sumarSinAsignacion = activeStatFilter === 'vacantes' || buscando
+      || (esAgentes && (!activeStatFilter || activeStatFilter === 'totalFlota'))
+    if (sumarSinAsignacion) {
       // Crear filas "fake" para vehículos sin asignación
-      const vehiculosSinAsignacionRows = vehiculosPkgOnSinAsignacion.map(v => ({
+      // En Capitanes también los EN USO sin asignación activa (todo auto en PKG ON o EN USO)
+      const sinAsignacion = esAgentes && activeStatFilter !== 'vacantes'
+        ? [...vehiculosPkgOnSinAsignacion, ...vehiculosEnUsoSinAsignacion]
+        : vehiculosPkgOnSinAsignacion
+      const vehiculosSinAsignacionRows = sinAsignacion.map(v => ({
         id: `sin-asignacion-${v.id}`,
         codigo: '-',
         vehiculo_id: v.id,
@@ -824,7 +834,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
     }
 
     return result
-  }, [asignaciones, activeStatFilter, vehiculosPkgOnSinAsignacion, todosVehiculosPkgOn, busquedaTabla])
+  }, [asignaciones, activeStatFilter, vehiculosPkgOnSinAsignacion, vehiculosEnUsoSinAsignacion, todosVehiculosPkgOn, busquedaTabla, esAgentes])
 
   // Procesar asignaciones - UNA fila por asignación (no expandir)
   const processedAsignaciones = useMemo(() => {
