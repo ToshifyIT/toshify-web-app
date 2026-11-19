@@ -53,12 +53,13 @@ import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { GUIAS_ACTIVOS, agenteDelUsuario, claveEmail } from '../../leads/guias'
 import { useSede } from '../../../contexts/SedeContext'
+import { useVehiculosRC } from '../../../hooks/useVehiculosRC'
 
 import { ProgramacionAssignmentWizardV2 } from './components/ProgramacionAssignmentWizardV2'
 import type { PrecargaParMapa } from '../../../types/programacionPrecarga.types'
 import { tomarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../../types/onboarding.types'
-import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
+import { cargarConceptosTarifa, getEtiquetaTarifa, getPeriodoTarifa, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
 import { avisarDatosIncompletos, avisarTarifasFaltantes, esBarilocheTurno, validarDatosDocumento, validarTarifasDocumento, type ConductorAValidar } from '../validacionDocumento'
 import { Alerta } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
@@ -80,6 +81,7 @@ import { calcularMinutosEntre, tieneCoordenadas, type Coordenada } from './dista
 import { documentoSegunTarifa, permiteAnexo } from './documentoTarifa'
 import { esConductorInterno } from '../../../utils/conductorUtils'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
+import { RcBadge } from '../../../components/ui/RcBadge'
 import { TabsBar } from '../../../components/ui/TabsBar'
 import { TurnoBadge } from '../../../components/ui/TurnoBadge'
 import { formatFecha } from '../../../utils/format'
@@ -264,6 +266,7 @@ export function ProgramacionV2Module() {
     if (propio) setCapitanFiltro(propio)
   }, [user?.email, profile?.full_name])
   const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
+  const vehiculosRC = useVehiculosRC()
   const canCreate = canCreateInMenu('programacion-entregas')
   const canEdit = canEditInMenu('programacion-entregas')
   const canDelete = canDeleteInMenu('programacion-entregas')
@@ -1017,6 +1020,14 @@ export function ProgramacionV2Module() {
       loadHistorico()
     }
   }, [activeTab, sedeActualId, aplicarFiltroSede])
+
+  /** Tarifa para el detalle: «Nueva (OCT-26)». Sin dato en la fila, la antigua (mismo default que la edicion). */
+  const textoTarifa = (tarifa?: string | null) => {
+    const tipo: TipoTarifa = tarifa === 'nueva' ? 'nueva' : 'antigua'
+    const nombre = tipo === 'nueva' ? 'Nueva' : 'Antigua'
+    const periodo = getPeriodoTarifa(conceptosTarifa, tipo)
+    return periodo.startsWith('Tarifa') ? nombre : `${nombre} (${periodo})`
+  }
 
   // Conceptos de alquiler para las etiquetas del selector de Tarifa (una sola vez).
   useEffect(() => {
@@ -2449,7 +2460,10 @@ export function ProgramacionV2Module() {
       header: 'Vehiculo',
       cell: ({ row }) => (
         <div className="prog-vehiculo-cell">
-          <span><PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" /></span>
+          <span>
+            <PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" />
+            {row.original.vehiculo_entregar_id && vehiculosRC.has(row.original.vehiculo_entregar_id) && <RcBadge style={{ marginLeft: 4 }} />}
+          </span>
           <span className="prog-modelo">
             {row.original.vehiculo_entregar_modelo || row.original.vehiculo_entregar_modelo_sistema || ''}
           </span>
@@ -2861,7 +2875,7 @@ export function ProgramacionV2Module() {
       )
     }
     // cuentasLead: las columnas Cabify / DiDi muestran el dato del lead, que vive en ese estado.
-  ], [canCreate, canEdit, canDelete, cuentasLead])
+  ], [canCreate, canEdit, canDelete, cuentasLead, vehiculosRC])
 
   // Columnas para Enviados (igual que pendientes pero solo botón Ver)
   const enviadosColumns = useMemo<ColumnDef<ProgramacionOnboardingCompleta, any>[]>(() => [
@@ -2870,7 +2884,10 @@ export function ProgramacionV2Module() {
       header: 'Vehiculo',
       cell: ({ row }) => (
         <div className="prog-vehiculo-cell">
-          <span><PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" /></span>
+          <span>
+            <PatenteBadge patente={row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema} size="sm" />
+            {row.original.vehiculo_entregar_id && vehiculosRC.has(row.original.vehiculo_entregar_id) && <RcBadge style={{ marginLeft: 4 }} />}
+          </span>
           <span className="prog-modelo" style={{ fontSize: '11px' }}>
             {row.original.vehiculo_entregar_modelo || row.original.vehiculo_entregar_modelo_sistema || ''}
           </span>
@@ -3164,7 +3181,7 @@ export function ProgramacionV2Module() {
         </div>
       )
     }
-  ], [])
+  ], [vehiculosRC])
 
   // Stats cards ocultas temporalmente - mostrar todas las programaciones
   const deCapitan = (lista: ProgramacionOnboardingCompleta[]) =>
@@ -4131,6 +4148,23 @@ export function ProgramacionV2Module() {
                     <label>Modalidad</label>
                     <p>{previewProgramacion.modalidad === 'turno' ? 'Turno' : 'A Cargo'}</p>
                   </div>
+                  {previewProgramacion.modalidad === 'turno' ? (
+                    <>
+                      <div>
+                        <label>Tarifa Diurno</label>
+                        <p>{textoTarifa(previewProgramacion.tipo_tarifa_diurno || previewProgramacion.tipo_tarifa)}</p>
+                      </div>
+                      <div>
+                        <label>Tarifa Nocturno</label>
+                        <p>{textoTarifa(previewProgramacion.tipo_tarifa_nocturno || previewProgramacion.tipo_tarifa)}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label>Tarifa</label>
+                      <p>{textoTarifa(previewProgramacion.tipo_tarifa)}</p>
+                    </div>
+                  )}
                   {previewProgramacion.turno && (
                     <div>
                       <label>Turno</label>

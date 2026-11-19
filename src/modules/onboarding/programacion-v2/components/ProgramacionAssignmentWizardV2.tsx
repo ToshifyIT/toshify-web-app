@@ -23,6 +23,7 @@ import { TimeInput24h } from '../../../../components/ui/TimeInput24h'
 import { LoadingOverlay } from '../../../../components/ui/LoadingOverlay'
 import { Alerta } from '../../../../components/ui/alertas'
 import { TurnoBadge } from '../../../../components/ui/TurnoBadge'
+import { RcBadge } from '../../../../components/ui/RcBadge'
 import { showError, showSuccess } from '../../../../utils/toast'
 import type { TipoCandidatoV2, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../../types/onboarding.types'
 import type { Vehicle } from '../../../../types/vehiculo.types'
@@ -30,6 +31,7 @@ import type { Conductor } from '../../../../types/conductor.types'
 import { PROGRAMACION_ESTADO_LABELS } from '../../../../utils/conductorUtils'
 import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../../lib/googleMaps'
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
+import { useVehiculosRC } from '../../../../hooks/useVehiculosRC'
 import { cargarConceptosTarifa, getEtiquetaTarifa, getPeriodoTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
 import { enRangoDiasART, hoyART, sumarDiasISO } from '../../../../utils/fechaArgentina'
 import { repartirTurnosDelPar } from '../../../../types/programacionPrecarga.types'
@@ -208,6 +210,7 @@ interface Props {
 export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, precarga }: Props) {
   const { user, profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
+  const vehiculosRC = useVehiculosRC()
   const { grupos: gruposFlota } = useGruposFlota()
   const isEditMode = !!editData
 
@@ -4416,6 +4419,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           <div className="vehicle-info">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                               <h4 className="vehicle-patente" style={{ margin: 0 }}>{vehicle.patente}</h4>
+                              {vehiculosRC.has(vehicle.id) && <RcBadge />}
                               <span style={{
                                 background: badgeBg,
                                 color: badgeColor,
@@ -4635,6 +4639,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               <div style={{ minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
+                                  {vehiculosRC.has(vehicle.id) && <RcBadge />}
                                   <span style={{
                                     background: badgeBg, color: badgeColor,
                                     padding: '1px 6px', borderRadius: 'var(--radius-xs)',
@@ -4720,6 +4725,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               <div style={{ minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
+                                  {vehiculosRC.has(vehicle.id) && <RcBadge />}
                                   <span style={{
                                     background: badgeBg, color: badgeColor,
                                     padding: '1px 6px', borderRadius: 'var(--radius-xs)',
