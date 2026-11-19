@@ -16,9 +16,11 @@
 -- LEADS DEL PERÍODO: created_at en hora Argentina (columna "Creación" de Leads).
 --
 -- ORIGEN DEL LEAD (segmento):
---   Pauta redes : tiene canal o link de anuncio (fuente_pauta / id_fuente) o la
---                 fuente es Sellium, Intercom o una red social.
---   Web         : formulario del sitio (orgánico).
+--   Pauta redes : SOLO los linkeados a un anuncio (link / canal del anuncio:
+--                 id_fuente o fuente_pauta). (2026-11-19: antes también por fuente
+--                 Sellium, Intercom o red social aunque no trajeran el link.)
+--   Web         : formulario del sitio (orgánico) y los de Sellium / Intercom / redes
+--                 a los que no se les detecta el anuncio.
 --   Referidos / Otras fuentes / Sin fuente.
 --   Canal (solo pauta): Facebook, Instagram, TikTok, Estado; si no se puede
 --   identificar: 'Sin canal identificado'.
@@ -230,9 +232,8 @@ leads_n AS (
     ((lb.estado IN ('descartado', 'no le interesa', 'no cumple edad', 'no apto - hireflix', 'auto del pueblo')
       OR lb.timeout_wpp) AND NOT lb.convertido) AS descartado,
     CASE
-      WHEN lb.fuente_pauta <> '' OR lb.id_fuente <> ''
-        OR lb.fuente ~* '(sellium|intercom|facebook|instagram|tiktok|meta|whatsapp|pauta|redes)' THEN 'Pauta redes'
-      WHEN lb.fuente ~* '(web|p[aá]gina|portal|formulario)' THEN 'Web'
+      WHEN lb.fuente_pauta <> '' OR lb.id_fuente <> '' THEN 'Pauta redes'
+      WHEN lb.fuente ~* '(web|p[aá]gina|portal|formulario|sellium|intercom|facebook|instagram|tiktok|meta|whatsapp|pauta|redes)' THEN 'Web'
       WHEN lb.fuente ~* 'referid' THEN 'Referidos'
       WHEN lb.fuente = '' THEN 'Sin fuente'
       ELSE 'Otras fuentes'

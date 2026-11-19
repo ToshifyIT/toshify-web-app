@@ -8,8 +8,8 @@ export type FiltroSegmento = 'Pauta redes' | 'Web' | 'Todos'
 export type Perfil = 'Cumple' | 'Medio' | 'No cumple' | 'Sin datos'
 
 export const FILTROS_SEGMENTO: { id: FiltroSegmento; label: string; info: string }[] = [
-  { id: 'Pauta redes', label: 'Pauta redes', info: 'Leads que vienen de la pauta en redes: tienen canal o link de anuncio, o entraron por Sellium / Intercom.' },
-  { id: 'Web', label: 'Web (orgánico)', info: 'Leads del formulario del sitio web. No vienen de la pauta.' },
+  { id: 'Pauta redes', label: 'Pauta redes', info: 'Solo los leads linkeados a un anuncio (traen el link o el canal del anuncio).' },
+  { id: 'Web', label: 'Web (orgánico)', info: 'Leads del formulario del sitio web y los que no traen el link de un anuncio (no se detecta que vengan de la pauta).' },
   { id: 'Todos', label: 'Todos', info: 'Todas las fuentes, incluidos referidos y leads sin fuente cargada.' },
 ]
 

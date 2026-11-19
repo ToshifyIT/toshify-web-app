@@ -586,3 +586,10 @@
    Semanal / Mensual a la derecha (como Dashboard KPI's) */
 .mkt-periodo .ddir-periodo-info { margin-left: auto; gap: 8px; }
 .mkt-periodo .mkt-periodo-texto { white-space: nowrap; }
+
+/* Barra de período y origen fija arriba al bajar (2026-11-19) */
+.mkt-periodo {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
