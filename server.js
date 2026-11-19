@@ -982,6 +982,8 @@ const CONTRACT_CONFIG = {
     // Tarifa nueva (OCT-26 / Toshipass): una sola plantilla para todo documento
     // con tarifa nueva (Carta Oferta y Anexo, Turno y A cargo, cualquier sede).
     cartaOfertaToshipass: '1HX7OzmSlbVz8zu-MI_D3P0EwRIyMt1sycnktSztsYRM',
+    // Tarifa nueva con vehiculo de cobertura Responsabilidad Civil (Mobility Management).
+    cartaOfertaToshipassRC: '1iJ0VmzyDQ0Ms1W36HclF1uE8CEx3iJWHGyK9j5gN54Y',
     // Plantillas de prueba (TB)
     cartaOfertaTurnoTB: '1rjSKaYDUqls9T-NQU22CvR6TDfhCeX_rSlPREXh8CRQ',
     actualizacionTurnoTB: '1xSfKu0QzyOUBiP3tSBoQkm79pFK1b9XVr0-JNlNdOoo',
@@ -1058,6 +1060,18 @@ function getTemplateId(templateKey) {
 }
 
 const TEMPLATE_TARIFA_NUEVA = 'cartaOfertaToshipass'
+// Misma estructura que la Toshipass, para vehiculos con cobertura Responsabilidad Civil
+const TEMPLATE_TARIFA_NUEVA_RC = 'cartaOfertaToshipassRC'
+
+/** Plantillas OCT-26: comparten campos, validacion de poliza, correlativo y Completar Control. */
+function esPlantillaTarifaNueva(templateKey) {
+  return templateKey === TEMPLATE_TARIFA_NUEVA || templateKey === TEMPLATE_TARIFA_NUEVA_RC
+}
+
+/** Cobertura del vehiculo de tipo Responsabilidad Civil (vehiculos.cobertura es texto libre). */
+function esResponsabilidadCivil(cobertura) {
+  return /responsabilidad\s*civil/i.test(String(cobertura || ''))
+}
 
 /**
  * {{TYPE_OF_MINUTES}} (Anexo II, "Tipo de acta") segun el tipo de asignacion
@@ -1113,8 +1127,9 @@ async function siguienteCorrelativo(conductorId) {
 
 /**
  * Determina qué plantilla usar según tipo_documento + modalidad + sede (+ tarifa)
+ * esRC: el vehiculo tiene cobertura Responsabilidad Civil (solo cambia la tarifa nueva).
  */
-function resolveTemplateKey(tipoDocumento, modalidad, sedeCode, tipoTarifa) {
+function resolveTemplateKey(tipoDocumento, modalidad, sedeCode, tipoTarifa, esRC = false) {
   if (tipoDocumento === 'na') return null
 
   const isBariloche = sedeCode && sedeCode.toUpperCase() === 'BRC'
@@ -1122,9 +1137,11 @@ function resolveTemplateKey(tipoDocumento, modalidad, sedeCode, tipoTarifa) {
   // Bariloche no tiene modalidad turno, no generar contrato
   if (isBariloche && modalidad === 'turno') return null
 
-  // Tarifa nueva (OCT-26): todo documento sale de la plantilla Toshipass
+  // Tarifa nueva (OCT-26): todo documento sale de la plantilla Toshipass,
+  // o de su variante RC si el vehiculo tiene cobertura Responsabilidad Civil.
+  // La tarifa antigua no cambia aunque el vehiculo sea RC.
   if (tipoTarifa === 'nueva' && (tipoDocumento === 'carta_oferta' || tipoDocumento === 'anexo')) {
-    return TEMPLATE_TARIFA_NUEVA
+    return esRC ? TEMPLATE_TARIFA_NUEVA_RC : TEMPLATE_TARIFA_NUEVA
   }
 
   if (tipoDocumento === 'carta_oferta') {
@@ -1471,7 +1488,7 @@ async function generateContractForConductor({
 }) {
   const templateId = getTemplateId(templateKey)
   if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
-  const esTarifaNueva = templateKey === TEMPLATE_TARIFA_NUEVA
+  const esTarifaNueva = esPlantillaTarifaNueva(templateKey)
 
   // Plantilla OCT-26: la poliza es obligatoria y el numero tiene que ser numerico
   // (Programacion ya lo valida antes de enviar; esto cubre cualquier otro camino).
@@ -1679,13 +1696,14 @@ app.post('/api/generate-contract', async (req, res) => {
     const drive = getDriveServiceFull()
     const sedeCode = await fetchSedeCode(sede_id)
     const vehiculo = await fetchVehiculoData(vehiculo_id)
+    const vehiculoEsRC = esResponsabilidadCivil(vehiculo.cobertura)
 
     const results = []
 
     if (modalidad === 'a_cargo' && conductor_id) {
       // Modo A CARGO: un solo conductor
       if (tipo_documento && tipo_documento !== 'na') {
-        const templateKey = resolveTemplateKey(tipo_documento, 'a_cargo', sedeCode, tipo_tarifa || 'antigua')
+        const templateKey = resolveTemplateKey(tipo_documento, 'a_cargo', sedeCode, tipo_tarifa || 'antigua', vehiculoEsRC)
         if (templateKey) {
           const conductor = await fetchConductorData(conductor_id)
           const result = await generateContractForConductor({
@@ -1733,7 +1751,7 @@ app.post('/api/generate-contract', async (req, res) => {
 
       for (const cfg of turnoConfigs) {
         if (cfg.id && cfg.doc && cfg.doc !== 'na') {
-          const templateKey = resolveTemplateKey(cfg.doc, 'turno', sedeCode, cfg.tarifa)
+          const templateKey = resolveTemplateKey(cfg.doc, 'turno', sedeCode, cfg.tarifa, vehiculoEsRC)
           if (templateKey) {
             const conductor = await fetchConductorData(cfg.id)
             const result = await generateContractForConductor({
@@ -1897,7 +1915,7 @@ app.post('/api/complete-control', async (req, res) => {
     // Plantilla OCT-26: vehiculo devuelto. La patente sale de la programacion (no
     // se edita); el km lo carga el usuario en el modal. Si no es cambio de
     // vehiculo el documento ya salio con N/A y estos reemplazos no encuentran nada.
-    if (plantillaUsada === TEMPLATE_TARIFA_NUEVA) {
+    if (esPlantillaTarifaNueva(plantillaUsada)) {
       const tipoAsig = (docRecord.turno === 'diurno' && progRow.tipo_asignacion_diurno)
         || (docRecord.turno === 'nocturno' && progRow.tipo_asignacion_nocturno)
         || progRow.tipo_asignacion

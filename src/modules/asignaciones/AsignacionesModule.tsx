@@ -10,6 +10,7 @@ import { actualizarEstadoVehiculo } from '../../services/vehiculoEstadoService'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
+import { useVehiculosRC } from '../../hooks/useVehiculosRC'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion-v2
 import { Alerta } from '../../components/ui/alertas'
@@ -36,6 +37,7 @@ import { EmptyState } from '../../components/ui/EstadosVista'
 import { TIPO_ASIGNACION_LABELS as ETIQUETAS_TIPO_ASIGNACION } from '../../types/onboarding.types'
 import './AsignacionesModule.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
+import { RcBadge } from '../../components/ui/RcBadge'
 import { LicenciaBadge } from '../../components/ui/LicenciaBadge'
 import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { LogoCabify, LogoDidi } from '../../components/ui/LogosApp'
@@ -378,6 +380,7 @@ export function AsignacionesModule() {
   const { canEditInMenu, canDeleteInMenu, isAdmin: esAdmin } = usePermissions()
   const { profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedes } = useSede()
+  const vehiculosRC = useVehiculosRC()
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
   
@@ -584,7 +587,8 @@ export function AsignacionesModule() {
       .from('documentos_generados')
       .select('turno')
       .eq('programacion_id', prog.id)
-      .eq('plantilla_usada', 'cartaOfertaToshipass')
+      // Plantillas OCT-26: Toshipass y su variante para vehiculos con Responsabilidad Civil
+      .in('plantilla_usada', ['cartaOfertaToshipass', 'cartaOfertaToshipassRC'])
       .not('google_doc_id', 'is', null)
     const tipoDeDoc = (turno: string | null) =>
       (turno === 'diurno' && prog.tipo_asignacion_diurno)
@@ -3640,7 +3644,10 @@ export function AsignacionesModule() {
           const modeloCambio = row.original.motivoDetalle?.vehiculoCambioModelo
           return (
             <div className="asig-vehiculo-cambio">
-              <PatenteBadge patente={row.original.vehiculos?.patente} size="sm" title="Vehículo que se entrega" />
+              <div>
+                <PatenteBadge patente={row.original.vehiculos?.patente} size="sm" title="Vehículo que se entrega" />
+                {vehiculosRC.has(row.original.vehiculo_id) && <RcBadge style={{ marginLeft: 4 }} />}
+              </div>
               <div
                 className="asig-vehiculo-cambio-fila"
                 title={`Cambio por ${patenteCambio}${modeloCambio ? ` (${modeloCambio})` : ''}`}
@@ -3656,7 +3663,10 @@ export function AsignacionesModule() {
         }
         return (
           <div>
-            <div><PatenteBadge patente={row.original.vehiculos?.patente} size="sm" /></div>
+            <div>
+              <PatenteBadge patente={row.original.vehiculos?.patente} size="sm" />
+              {vehiculosRC.has(row.original.vehiculo_id) && <RcBadge style={{ marginLeft: 4 }} />}
+            </div>
             {badgeModalidad}
           </div>
         )
@@ -4127,7 +4137,7 @@ export function AsignacionesModule() {
         return <ActionsMenu actions={actions} />
       }
     }
-  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, cuentasPorAsignacion, appsPagoPorConductor])
+  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, cuentasPorAsignacion, appsPagoPorConductor, vehiculosRC])
 
   return (
     <div className="asig-module">
