@@ -3,9 +3,11 @@
 // 2Chat («Toshify Clientes»). Si todavía no hay conversación, deja editar el saludo
 // y lo manda para iniciarla. En los dos casos el servidor la etiqueta «Lead» y la
 // asigna al usuario que la abre (server-2chat.js, /api/2chat/lead-chat).
+// Con tipo="conductor" (Seguimiento de conductores): etiqueta «Conductor», equipo
+// Clientes y asignada a su capitán (/api/2chat/conductor-chat).
 import { useEffect, useState } from 'react'
 import { MessageCircle, Send, X } from 'lucide-react'
-import { abrirChatLead, obtenerChatLead } from '../../../services/twoChatService'
+import { abrirChatConductor, abrirChatLead, obtenerChatConductor, obtenerChatLead } from '../../../services/twoChatService'
 import type { ChatLeadInfo } from '../../../services/twoChatService'
 import { showError, showSuccess, showWarning } from '../../../utils/toast'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
@@ -14,9 +16,14 @@ interface ChatLeadModalProps {
   leadId: string
   nombre: string
   onClose: () => void
+  /** «conductor»: leadId es el id del conductor (etiqueta Conductor, equipo Clientes, su capitán) */
+  tipo?: 'lead' | 'conductor'
 }
 
-export function ChatLeadModal({ leadId, nombre, onClose }: ChatLeadModalProps) {
+export function ChatLeadModal({ leadId, nombre, onClose, tipo = 'lead' }: ChatLeadModalProps) {
+  const esConductor = tipo === 'conductor'
+  const etiqueta = esConductor ? 'Conductor' : 'Lead'
+  const equipo = esConductor ? 'Clientes' : 'Ventas'
   const [info, setInfo] = useState<ChatLeadInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState('')
@@ -24,11 +31,11 @@ export function ChatLeadModal({ leadId, nombre, onClose }: ChatLeadModalProps) {
 
   useEffect(() => {
     let cancelado = false
-    obtenerChatLead(leadId)
+    ;(esConductor ? obtenerChatConductor(leadId) : obtenerChatLead(leadId))
       .then(d => { if (!cancelado) { setInfo(d); setMensaje(d.saludo) } })
       .catch(e => { if (!cancelado) setError(e instanceof Error ? e.message : 'No se pudo consultar 2Chat') })
     return () => { cancelado = true }
-  }, [leadId])
+  }, [leadId, esConductor])
 
   const abrir = async () => {
     if (!info) return
@@ -37,7 +44,8 @@ export function ChatLeadModal({ leadId, nombre, onClose }: ChatLeadModalProps) {
     const pestana = window.open('about:blank', '_blank')
     setIsEnviando(true)
     try {
-      const r = await abrirChatLead(leadId, info.existe ? undefined : mensaje.trim())
+      const texto = info.existe ? undefined : mensaje.trim()
+      const r = await (esConductor ? abrirChatConductor(leadId, texto) : abrirChatLead(leadId, texto))
       if (pestana) pestana.location.href = r.url
       else window.open(r.url, '_blank')
       r.avisos.forEach(a => showWarning('2Chat', a))
@@ -91,8 +99,8 @@ export function ChatLeadModal({ leadId, nombre, onClose }: ChatLeadModalProps) {
 
           {info?.existe && (
             <p style={{ margin: 0 }}>
-              Ya hay una conversación con este número. Se abre en 2Chat con la etiqueta «Lead», en el equipo Ventas
-              {info.agente ? <> y asignada a <b>{info.agente}</b></> : ' (tu usuario no está en 2Chat: queda sin asignar)'}.
+              Ya hay una conversación con este número. Se abre en 2Chat con la etiqueta «{etiqueta}», en el equipo {equipo}
+              {info.agente ? <> y asignada a <b>{info.agente}</b>{info.es_capitan ? ' (su capitán)' : ''}</> : ' (tu usuario no está en 2Chat: queda sin asignar)'}.
             </p>
           )}
 
@@ -100,7 +108,7 @@ export function ChatLeadModal({ leadId, nombre, onClose }: ChatLeadModalProps) {
             <>
               <p style={{ margin: 0 }}>
                 Todavía no hay conversación con este número. Se inicia mandando este mensaje desde el WhatsApp de Toshify
-                {info.agente ? <>, queda asignada a <b>{info.agente}</b></> : ''}, con la etiqueta «Lead» y en el equipo Ventas.
+                {info.agente ? <>, queda asignada a <b>{info.agente}</b>{info.es_capitan ? ' (su capitán)' : ''}</> : ''}, con la etiqueta «{etiqueta}» y en el equipo {equipo}.
               </p>
               <textarea
                 value={mensaje}

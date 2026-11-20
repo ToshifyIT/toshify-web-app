@@ -1080,6 +1080,9 @@ twoChatRouter.post('/crear-lead', async (req, res) => {
 const LIVE_CHAT_BASE = 'https://app.2chat.io/live-chat/STEc7fa4009-df4e-43e7-b267-2e9adc836ea7'
 const ETIQUETA_LEAD = 'Lead'
 const EQUIPO_LEADS = 'Ventas'
+// Conversaciones de conductores: al capitán que tiene en Toshibase (conductores.guia)
+const ETIQUETA_CONDUCTOR = 'Conductor'
+const EQUIPO_CONDUCTORES = 'Clientes'
 const MAX_MENSAJE = 1000
 const CACHE_CANAL_MS = 10 * 60 * 1000
 
@@ -1196,20 +1199,23 @@ function saludoSugerido(nombreLead, nombreAgente) {
     'Estamos buscando conductores para sumar a nuestra flota y me llegó tu solicitud. ¿Seguís interesado?'
 }
 
-/** Etiqueta «Lead» y asigna al agente. Devuelve avisos (no corta el flujo si falla) */
-async function etiquetarYAsignar(apiKey, sessionKey, agente) {
+/**
+ * Etiqueta y asigna al equipo y al agente (por defecto «Lead» / Ventas; conductores:
+ * «Conductor» / Clientes). Devuelve avisos (no corta el flujo si falla)
+ */
+async function etiquetarYAsignar(apiKey, sessionKey, agente, { etiqueta = ETIQUETA_LEAD, nombreEquipo = EQUIPO_LEADS } = {}) {
   const avisos = []
-  const tag = await twoChat(apiKey, '/tags', { method: 'POST', body: { name: ETIQUETA_LEAD, session_key: sessionKey } })
-  if (!tag.ok) avisos.push(`No se pudo poner la etiqueta «${ETIQUETA_LEAD}»: ${mensajeError2Chat(tag)}`)
-  const equipo = await equipo2Chat(apiKey, EQUIPO_LEADS)
+  const tag = await twoChat(apiKey, '/tags', { method: 'POST', body: { name: etiqueta, session_key: sessionKey } })
+  if (!tag.ok) avisos.push(`No se pudo poner la etiqueta «${etiqueta}»: ${mensajeError2Chat(tag)}`)
+  const equipo = await equipo2Chat(apiKey, nombreEquipo)
   if (equipo) {
     const eq = await twoChat(apiKey, `/conversations/${encodeURIComponent(sessionKey)}/assignment/team`, {
       method: 'POST',
       body: { team_uuid: equipo.uuid },
     })
-    if (!eq.ok) avisos.push(`No se pudo asignar al equipo ${EQUIPO_LEADS}: ${mensajeError2Chat(eq)}`)
+    if (!eq.ok) avisos.push(`No se pudo asignar al equipo ${nombreEquipo}: ${mensajeError2Chat(eq)}`)
   } else {
-    avisos.push(`No existe el equipo «${EQUIPO_LEADS}» en 2Chat`)
+    avisos.push(`No existe el equipo «${nombreEquipo}» en 2Chat`)
   }
   if (agente) {
     const asig = await twoChat(apiKey, `/conversations/${encodeURIComponent(sessionKey)}/assignment/user`, {
@@ -1221,6 +1227,53 @@ async function etiquetarYAsignar(apiKey, sessionKey, agente) {
     avisos.push('Tu usuario no está en 2Chat: la conversación quedó sin asignar')
   }
   return avisos
+}
+
+/**
+ * Asigna cada conversación de un conductor al usuario de 2Chat de su capitán en Toshibase
+ * (conductores.guia; se cruza por nombre, p. ej. «Eunice D'Urso» = «Eunice Durso»), con el
+ * equipo «Clientes» y la etiqueta «Conductor». Si estaba asignada a otra persona, la pasa
+ * al capitán (así sigue al capitán si cambia). Leads y números sin cruce no se tocan.
+ * Corre al final de cada sincronización de mensajes.
+ */
+export async function asignarConversacionesACapitan(cfg) {
+  const conversaciones = await selectTodo(
+    cfg,
+    'twochat_conversaciones?select=session_key,agente_id,conductores(guia)&conductor_id=not.is.null',
+  )
+  if (!conversaciones.length) return { asignadas: 0 }
+  const usuarios = await usuarios2Chat(cfg.apiKey)
+  const equipo = await equipo2Chat(cfg.apiKey, EQUIPO_CONDUCTORES)
+  let asignadas = 0
+  for (const c of conversaciones) {
+    const guia = c.conductores?.guia
+    if (!guia) continue
+    const capitan = cruzarUsuario2Chat({ full_name: guia }, usuarios)
+    if (!capitan || c.agente_id === capitan.uuid) continue
+    const sk = encodeURIComponent(c.session_key)
+    if (equipo) {
+      await twoChat(cfg.apiKey, `/conversations/${sk}/assignment/team`, { method: 'POST', body: { team_uuid: equipo.uuid } })
+    }
+    const asig = await twoChat(cfg.apiKey, `/conversations/${sk}/assignment/user`, { method: 'POST', body: { user_uuid: capitan.uuid } })
+    if (!asig.ok) {
+      console.error(`[2chat] No se pudo asignar ${c.session_key} a ${guia}:`, mensajeError2Chat(asig))
+      continue
+    }
+    await twoChat(cfg.apiKey, '/tags', { method: 'POST', body: { name: ETIQUETA_CONDUCTOR, session_key: c.session_key } })
+    await fetchConTimeout(`${cfg.url}/rest/v1/twochat_conversaciones?session_key=eq.${sk}`, {
+      method: 'PATCH',
+      headers: { ...headersServicio(cfg), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        agente_id: capitan.uuid,
+        agente: `${capitan.first_name || ''} ${capitan.last_name || ''}`.trim(),
+        ...(equipo ? { equipo: equipo.name } : {}),
+        actualizado_en: new Date().toISOString(),
+      }),
+    })
+    asignadas += 1
+  }
+  if (asignadas) console.log(`[2chat] Conversaciones de conductores asignadas a su capitán: ${asignadas}`)
+  return { asignadas }
 }
 
 /** GET /api/2chat/lead-chat/:leadId -> si ya hay conversación y el saludo sugerido */
@@ -1252,6 +1305,40 @@ twoChatRouter.get('/lead-chat/:leadId', async (req, res) => {
  * Si no hay: manda `mensaje` (obligatorio), espera a que aparezca la conversación,
  * la etiqueta, la asigna y devuelve el link.
  */
+/**
+ * Abre la conversación con c.telefono o la inicia mandando `mensaje`; después la
+ * etiqueta y la asigna (opciones de etiquetarYAsignar). Responde { enviado, url, avisos }.
+ */
+async function abrirOIniciarChat(ctx, c, mensajeCrudo, opciones, res) {
+  let conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
+  let enviado = false
+  if (!conversacion) {
+    const mensaje = String(mensajeCrudo || '').trim()
+    if (!mensaje) return res.status(400).json({ error: 'Escribí el primer mensaje para iniciar la conversación' })
+    if (mensaje.length > MAX_MENSAJE) return res.status(400).json({ error: `El mensaje no puede pasar de ${MAX_MENSAJE} caracteres` })
+    const envio = await twoChat(ctx.cfg.apiKey, '/whatsapp/send-message', {
+      method: 'POST',
+      body: { from_number: c.canal.numero, to_number: c.telefono, text: mensaje },
+    })
+    if (!envio.ok) return res.status(502).json({ error: `2Chat no pudo mandar el mensaje: ${mensajeError2Chat(envio)}` })
+    enviado = true
+    // El envío queda en cola: la conversación aparece a los pocos segundos
+    for (let intento = 0; intento < 6 && !conversacion; intento += 1) {
+      await esperar(1500)
+      conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
+    }
+  }
+  if (!conversacion) {
+    return res.json({
+      enviado,
+      url: LIVE_CHAT_BASE.replace(/\/STE.*$/, '/'),
+      avisos: ['El mensaje salió, pero la conversación todavía no aparece en 2Chat: buscala en el Chat en vivo en unos segundos'],
+    })
+  }
+  const avisos = await etiquetarYAsignar(ctx.cfg.apiKey, conversacion.session_key, c.agente, opciones)
+  return res.json({ enviado, url: `${LIVE_CHAT_BASE}/${conversacion.session_key}`, avisos })
+}
+
 twoChatRouter.post('/lead-chat/:leadId', async (req, res) => {
   try {
     const ctx = await requireUsuario(req, res)
@@ -1259,37 +1346,73 @@ twoChatRouter.post('/lead-chat/:leadId', async (req, res) => {
     if (!UUID_RE.test(req.params.leadId)) return res.status(400).json({ error: 'lead inválido' })
     const c = await contextoChatLead(ctx, req.params.leadId)
     if (c.error) return res.status(c.status).json({ error: c.error })
-
-    let conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
-    let enviado = false
-    if (!conversacion) {
-      const mensaje = String(req.body?.mensaje || '').trim()
-      if (!mensaje) return res.status(400).json({ error: 'Escribí el primer mensaje para iniciar la conversación' })
-      if (mensaje.length > MAX_MENSAJE) return res.status(400).json({ error: `El mensaje no puede pasar de ${MAX_MENSAJE} caracteres` })
-      const envio = await twoChat(ctx.cfg.apiKey, '/whatsapp/send-message', {
-        method: 'POST',
-        body: { from_number: c.canal.numero, to_number: c.telefono, text: mensaje },
-      })
-      if (!envio.ok) return res.status(502).json({ error: `2Chat no pudo mandar el mensaje: ${mensajeError2Chat(envio)}` })
-      enviado = true
-      // El envío queda en cola: la conversación aparece a los pocos segundos
-      for (let intento = 0; intento < 6 && !conversacion; intento += 1) {
-        await esperar(1500)
-        conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
-      }
-    }
-
-    if (!conversacion) {
-      return res.json({
-        enviado,
-        url: LIVE_CHAT_BASE.replace(/\/STE.*$/, '/'),
-        avisos: ['El mensaje salió, pero la conversación todavía no aparece en 2Chat: buscala en el Chat en vivo en unos segundos'],
-      })
-    }
-    const avisos = await etiquetarYAsignar(ctx.cfg.apiKey, conversacion.session_key, c.agente)
-    res.json({ enviado, url: `${LIVE_CHAT_BASE}/${conversacion.session_key}`, avisos })
+    await abrirOIniciarChat(ctx, c, req.body?.mensaje, undefined, res)
   } catch (error) {
     console.error('[2chat/lead-chat POST]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/* Chat con un conductor (Seguimiento de conductores): etiqueta «Conductor», equipo
+   Clientes y asignado a su capitán en Toshibase (si no está en 2Chat, a quien lo abre). */
+
+const OPCIONES_CONDUCTOR = { etiqueta: ETIQUETA_CONDUCTOR, nombreEquipo: EQUIPO_CONDUCTORES }
+
+async function contextoChatConductor(ctx, conductorId) {
+  const [conductores, cuenta, usuarios] = await Promise.all([
+    selectTodo(ctx.cfg, `conductores?select=id,nombres,apellidos,telefono_contacto,guia&id=eq.${conductorId}`),
+    usuario2ChatDe(ctx.cfg, ctx.userId),
+    usuarios2Chat(ctx.cfg.apiKey),
+  ])
+  const conductor = conductores[0]
+  if (!conductor) return { error: 'No se encontró el conductor', status: 404 }
+  const telefono = normalizarCelularAR(conductor.telefono_contacto)
+  if (!telefono) return { error: 'El conductor no tiene un celular válido', status: 400 }
+  const capitan = conductor.guia ? cruzarUsuario2Chat({ full_name: conductor.guia }, usuarios) : null
+  const agente = capitan || cuenta.agente
+  const canal = await canalWhatsApp(ctx.cfg.apiKey)
+  const nombreConductor = capitalizar(String(conductor.nombres || '').trim().split(/\s+/)[0] || '')
+  const nombreQuienEscribe = capitalizar(
+    (!cuenta.compartida && cuenta.agente?.first_name?.split(/\s+/)[0]) || String(cuenta.perfil.full_name || '').split(/\s+/)[0] || '',
+  )
+  return { telefono, canal, agente, esCapitan: !!capitan, nombreConductor, nombreQuienEscribe }
+}
+
+/** GET /api/2chat/conductor-chat/:conductorId -> si ya hay conversación, a quién se asigna y el saludo */
+twoChatRouter.get('/conductor-chat/:conductorId', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    if (!UUID_RE.test(req.params.conductorId)) return res.status(400).json({ error: 'conductor inválido' })
+    const c = await contextoChatConductor(ctx, req.params.conductorId)
+    if (c.error) return res.status(c.status).json({ error: c.error })
+    const conversacion = await buscarConversacion(ctx.cfg.apiKey, c.canal.uuid, c.telefono)
+    res.json({
+      telefono: c.telefono,
+      existe: !!conversacion,
+      canal: c.canal.numero,
+      canal_conectado: c.canal.conectado,
+      agente: c.agente ? `${c.agente.first_name} ${c.agente.last_name}`.trim() : null,
+      es_capitan: c.esCapitan,
+      saludo: `Hola${c.nombreConductor ? ` ${c.nombreConductor}` : ''}, ¿cómo estás? Soy ${c.nombreQuienEscribe || '…'}, te escribo de Toshify. `,
+    })
+  } catch (error) {
+    console.error('[2chat/conductor-chat]', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/** POST /api/2chat/conductor-chat/:conductorId { mensaje? } -> como lead-chat, para conductores */
+twoChatRouter.post('/conductor-chat/:conductorId', async (req, res) => {
+  try {
+    const ctx = await requireUsuario(req, res)
+    if (!ctx) return
+    if (!UUID_RE.test(req.params.conductorId)) return res.status(400).json({ error: 'conductor inválido' })
+    const c = await contextoChatConductor(ctx, req.params.conductorId)
+    if (c.error) return res.status(c.status).json({ error: c.error })
+    await abrirOIniciarChat(ctx, c, req.body?.mensaje, OPCIONES_CONDUCTOR, res)
+  } catch (error) {
+    console.error('[2chat/conductor-chat POST]', error.message)
     res.status(500).json({ error: error.message })
   }
 })
@@ -1620,6 +1743,12 @@ export async function sincronizarMensajes(cfg, { forzar = false } = {}) {
       })
     }
     await upsert(cfg, 'twochat_conversaciones', conversaciones, 'session_key')
+    try {
+      await asignarConversacionesACapitan(cfg)
+    } catch (err) {
+      // No frena la sincronización de mensajes
+      console.error('[2chat] Asignación al capitán:', err.message)
+    }
     ultimaSyncMensajes = Date.now()
     return { procesados: filas.length }
   })()

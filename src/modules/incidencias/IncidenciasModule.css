@@ -26,6 +26,18 @@
   min-height: 0;
 }
 
+/* Celular (2026-11-19): la tabla pasa a tarjetas, que no tienen scroll propio. Con el alto
+   fijo y overflow hidden de arriba no se podía bajar: en celular scrollea la página. */
+@media (max-width: 768px) {
+  .incidencias-module {
+    height: auto;
+    overflow: visible;
+  }
+  .incidencias-module .dt-container {
+    overflow: visible;
+  }
+}
+
 /* =====================================================
    TABS ROW - Diseño armonioso y responsivo
    ===================================================== */
