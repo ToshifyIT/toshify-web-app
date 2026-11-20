@@ -122,6 +122,66 @@ function extractFolderId(input) {
   return match ? match[1] : null
 }
 
+// API: Prueba carga — sube una foto a una carpeta fija de Drive.
+// La foto llega como cuerpo binario (no JSON) y el nombre en el header X-Nombre-Archivo.
+// La credencial de Google queda solo en el servidor.
+const PRUEBA_CARGA_FOLDER_ID = process.env.GOOGLE_DRIVE_PRUEBA_CARGA_FOLDER_ID || '1vmB3RbGsKG1w5G9B7K3naMVvXHWheCEB'
+const PRUEBA_CARGA_MAX_BYTES = 25 * 1024 * 1024
+
+app.post(
+  '/api/prueba-carga/subir-foto',
+  express.raw({ type: 'image/*', limit: PRUEBA_CARGA_MAX_BYTES }),
+  async (req, res) => {
+    try {
+      const usuario = await requireUsuario(req, res)
+      if (!usuario) return
+
+      const tipo = String(req.headers['content-type'] || '')
+      if (!tipo.startsWith('image/') || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: 'Adjuntá una foto (imagen)' })
+      }
+
+      let nombre = 'foto'
+      try {
+        nombre = decodeURIComponent(String(req.headers['x-nombre-archivo'] || 'foto'))
+      } catch {
+        // nombre mal codificado: se usa el genérico
+      }
+      nombre = nombre.replace(/[\\/:*?"<>|\r\n]/g, '_').slice(0, 120) || 'foto'
+      const sello = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+
+      const drive = getDriveServiceFull()
+      const archivo = await drive.files.create({
+        requestBody: {
+          name: `${sello} ${nombre}`,
+          parents: [PRUEBA_CARGA_FOLDER_ID],
+          description: `Subida desde Toshibase (Prueba carga) por ${usuario.email || usuario.id}`,
+        },
+        media: { mimeType: tipo, body: Readable.from(req.body) },
+        fields: 'id, name, webViewLink',
+        supportsAllDrives: true,
+      })
+      res.json({ id: archivo.data.id, nombre: archivo.data.name, url: archivo.data.webViewLink })
+    } catch (error) {
+      console.error('[prueba-carga] Error subiendo foto:', error.message)
+      const sinAcceso = /not found|insufficient|permission/i.test(error.message || '')
+      res.status(sinAcceso ? 403 : 500).json({
+        error: sinAcceso
+          ? 'El servidor no tiene acceso a la carpeta de Drive'
+          : 'No se pudo subir la foto a Drive',
+      })
+    }
+  }
+)
+
+// Foto demasiado pesada (límite de express.raw)
+app.use('/api/prueba-carga', (err, _req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'La foto pesa más de 25 MB' })
+  }
+  next(err)
+})
+
 // API: List Drive files
 app.post('/api/list-drive-files', async (req, res) => {
   try {
