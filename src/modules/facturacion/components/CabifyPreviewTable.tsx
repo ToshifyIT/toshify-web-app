@@ -1036,11 +1036,13 @@ export function CabifyPreviewTable({
         .fact-preview-search button { background: none; border: none; padding: 2px; cursor: pointer; color: var(--text-muted); }
         .fact-preview-count { font-size: 11px; color: var(--text-secondary); margin-left: auto; }
         .changes-indicator { color: #f59e0b; font-weight: 600; }
-        .fact-preview-table-wrapper { overflow: auto; border: 1px solid var(--border-color); border-radius: 6px; max-height: 60vh; }
-        .fact-preview-table-wrapper::-webkit-scrollbar { height: 12px; width: 12px; }
-        .fact-preview-table-wrapper::-webkit-scrollbar-track { background: var(--bg-tertiary); }
-        .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #7C3AED; border-radius: 6px; border: 2px solid var(--bg-tertiary); }
-        .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #6D28D9; }
+        .fact-preview-table-wrapper { overflow: auto; border: 1px solid var(--border-color); border-radius: 6px; max-height: 60vh; scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+        .fact-preview-table-wrapper::-webkit-scrollbar { height: 8px; width: 8px; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-track { background: transparent; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        [data-theme="dark"] .fact-preview-table-wrapper { scrollbar-color: #404040 transparent; }
+        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #404040; }
         .fact-preview-table.cabify-table { width: 100%; min-width: 1800px; border-collapse: collapse; font-size: 12px; }
         .fact-preview-table.cabify-table th { padding: 10px 8px; text-align: left; background: var(--bg-secondary); border-bottom: 2px solid var(--border-color); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 10px; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
         .cabify-col-th { background: rgba(124, 58, 237, 0.08) !important; border-left: 2px solid rgba(124, 58, 237, 0.25) !important; }
