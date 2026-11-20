@@ -98,18 +98,38 @@ interface Asignacion {
 }
 
 /**
- * Conductor nuevo en esta asignación: entró con Carta Oferta (mismo criterio que la
- * tarjeta "Cond. Nuevos"; Anexo / N/A = conductor que ya estaba).
+ * Conductor nuevo: esta es su primera asignación (la más antigua que no se canceló).
+ * `primeras` = conductor_id → id de su primera asignación (ver cargarPrimerasAsignaciones).
  */
-function esConductorNuevo(a: any, conductorId: string | null | undefined): boolean {
-  if (!conductorId) return false
-  return (a?.asignaciones_conductores || []).some(
-    (c: any) => String(c.conductor_id) === String(conductorId) && c.documento === 'CARTA_OFERTA',
-  )
+function esConductorNuevo(a: any, conductorId: string | null | undefined, primeras: Map<string, string>): boolean {
+  if (!conductorId || !a?.id) return false
+  return primeras.get(String(conductorId)) === String(a.id)
 }
 
 function PuntoNuevo() {
-  return <span className="asig-punto-nuevo" title="Conductor nuevo (Carta Oferta)" aria-label="Conductor nuevo" />
+  return <span className="asig-punto-nuevo" title="Conductor nuevo: es su primera asignación" aria-label="Conductor nuevo" />
+}
+
+/** conductor_id → id de su primera asignación no cancelada (de todas las sedes) */
+async function cargarPrimerasAsignaciones(): Promise<Map<string, string>> {
+  const primeras = new Map<string, { id: string; fecha: string }>()
+  const PAGINA = 1000
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await (supabase.from('asignaciones_conductores') as any)
+      .select('conductor_id, estado, asignaciones!inner(id, estado, fecha_programada, fecha_inicio, created_at)')
+      .neq('asignaciones.estado', 'cancelada')
+      .range(desde, desde + PAGINA - 1)
+    if (error) throw error
+    for (const r of (data || []) as any[]) {
+      if (!r.conductor_id || r.estado === 'cancelado' || !r.asignaciones?.id) continue
+      const as = r.asignaciones
+      const fecha = String(as.fecha_programada || as.fecha_inicio || as.created_at || '')
+      const actual = primeras.get(String(r.conductor_id))
+      if (!actual || fecha < actual.fecha) primeras.set(String(r.conductor_id), { id: String(as.id), fecha })
+    }
+    if (!data || data.length < PAGINA) break
+  }
+  return new Map([...primeras].map(([c, v]) => [c, v.id]))
 }
 
 /**
@@ -407,6 +427,13 @@ export function AsignacionesModule() {
   const isAdmin = esAdmin()
 
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
+  // Punto azul: conductor_id → su primera asignación (se recarga con la lista)
+  const [primerasAsignaciones, setPrimerasAsignaciones] = useState<Map<string, string>>(new Map())
+  useEffect(() => {
+    cargarPrimerasAsignaciones()
+      .then(setPrimerasAsignaciones)
+      .catch((e) => console.error('No se pudieron cargar las primeras asignaciones:', e))
+  }, [asignaciones])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Capitán del vehículo (vehiculos.guia_responsable: Ali, Carla, Eunice), por vehiculo_id
@@ -1013,7 +1040,8 @@ export function AsignacionesModule() {
         // Solo contar conductores activos (no completados/finalizados/cancelados)
         if (c.estado === 'completado' || c.estado === 'finalizado' || c.estado === 'cancelado') continue
         
-        if (c.documento === 'CARTA_OFERTA' && c.conductor_id) {
+        // Cond. Nuevos: conductores cuya PRIMERA asignación es esta (mismo criterio que el punto azul)
+        if (c.conductor_id && primerasAsignaciones.get(String(c.conductor_id)) === String(a.id)) {
           conductoresCartaOfertaSet.add(c.conductor_id)
           registrarTurno(cartaOfertaTurnoPorConductor, c.conductor_id, turnoDe(c.horario), fechaRef || '')
         }
@@ -1062,7 +1090,7 @@ export function AsignacionesModule() {
       lunesSemanaStr,
       domingoSemanaStr
     }
-  }, [vehiculosData, conductoresData, asignaciones])
+  }, [vehiculosData, conductoresData, asignaciones, primerasAsignaciones])
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo con límites
   const loadAllData = async () => {
@@ -3787,7 +3815,7 @@ export function AsignacionesModule() {
               <span className="asig-conductor-compacto asig-conductor-turno">
                 <TurnoBadge turno="a_cargo" size={12} />
                 {conductorCargo.nombre}
-                {esConductorNuevo(row.original, conductorCargo.id) && <PuntoNuevo />}
+                {esConductorNuevo(row.original, conductorCargo.id, primerasAsignaciones) && <PuntoNuevo />}
               </span>
             )
           }
@@ -3807,7 +3835,7 @@ export function AsignacionesModule() {
             >
               <TurnoBadge turno="diurno" size={12} />
               {diurno ? diurno.nombre : 'Vacante'}
-              {diurno && esConductorNuevo(row.original, diurno.id) && <PuntoNuevo />}
+              {diurno && esConductorNuevo(row.original, diurno.id, primerasAsignaciones) && <PuntoNuevo />}
             </span>
             <span 
               className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}
@@ -3816,7 +3844,7 @@ export function AsignacionesModule() {
             >
               <TurnoBadge turno="nocturno" size={12} />
               {nocturno ? nocturno.nombre : 'Vacante'}
-              {nocturno && esConductorNuevo(row.original, nocturno.id) && <PuntoNuevo />}
+              {nocturno && esConductorNuevo(row.original, nocturno.id, primerasAsignaciones) && <PuntoNuevo />}
             </span>
           </div>
         )
@@ -4162,7 +4190,7 @@ export function AsignacionesModule() {
         return <ActionsMenu actions={actions} />
       }
     }
-  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, cuentasPorAsignacion, appsPagoPorConductor, vehiculosRC])
+  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, cuentasPorAsignacion, appsPagoPorConductor, vehiculosRC, primerasAsignaciones])
 
   return (
     <div className="asig-module">
@@ -4211,7 +4239,7 @@ export function AsignacionesModule() {
                   {/* Métricas por tipo de documento (misma grilla, mismas medidas) */}
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'cartaOferta' ? 'stat-card-active' : ''}`}
-            title={`Conductores nuevos que firmaron Carta Oferta (conteo por conductor único) - Diurnos: ${calculatedStats.cartaOfertaD} | Nocturnos: ${calculatedStats.cartaOfertaN} | A cargo: ${calculatedStats.cartaOfertaCargo}`}
+            title={`Conductores nuevos: su primera asignación es de esta semana (conteo por conductor único) - Diurnos: ${calculatedStats.cartaOfertaD} | Nocturnos: ${calculatedStats.cartaOfertaN} | A cargo: ${calculatedStats.cartaOfertaCargo}`}
             onClick={() => handleStatCardClick('cartaOferta')}
           >
             <UserPlus size={18} className="stat-icon" />
