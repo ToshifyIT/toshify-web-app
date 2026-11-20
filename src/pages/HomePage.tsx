@@ -468,6 +468,12 @@ export function HomePage() {
     setSidebarOpen(!sidebarOpen)
   }
 
+  // Celular: con el menú lateral abierto, la página de atrás no scrollea (index.css)
+  useEffect(() => {
+    document.body.classList.toggle('menu-lateral-abierto', sidebarOpen)
+    return () => document.body.classList.remove('menu-lateral-abierto')
+  }, [sidebarOpen])
+
   const toggleNestedMenu = (submenuId: string, isCurrentlyOpen: boolean) => {
     setOpenNestedMenus(prev => ({ ...prev, [submenuId]: !isCurrentlyOpen }))
   }

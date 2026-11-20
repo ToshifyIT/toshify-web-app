@@ -626,6 +626,8 @@ export interface DataTableProps<T> {
   resetFiltersKey?: number | string;
   /** Desactiva los filtros automáticos de columna (para módulos con filtros personalizados) */
   disableAutoFilters?: boolean;
+  /** Celular: tarjetas compactas (datos en dos columnas, nombre arriba y valor abajo) */
+  tarjetasCompactas?: boolean;
   /** Fija la primera columna a la izquierda durante scroll horizontal */
   stickyFirstColumn?: boolean;
   /** Cantidad de columnas a fijar a la izquierda (sobreescribe stickyFirstColumn). */
@@ -721,6 +723,7 @@ export function DataTable<T>({
   stickyLeftColumns,
   resetFiltersKey,
   disableAutoFilters = false,
+  tarjetasCompactas = false,
   externalFilters = [],
   mostrarTablaSinDatos = false,
   onClearAllFilters,
@@ -1937,7 +1940,7 @@ export function DataTable<T>({
       <div className="dt-container">
         {/* Mobile Cards View */}
         {isMobile ? (
-          <div className="dt-cards-container">
+          <div className={`dt-cards-container${tarjetasCompactas ? ' dt-cards-container--compactas' : ''}`}>
             {table.getRowModel().rows.length === 0 ? (
               <div className="dt-no-results-card">No se encontraron resultados</div>
             ) : (

@@ -125,7 +125,9 @@ function extractFolderId(input) {
 // API: Prueba carga — sube una foto a una carpeta fija de Drive.
 // La foto llega como cuerpo binario (no JSON) y el nombre en el header X-Nombre-Archivo.
 // La credencial de Google queda solo en el servidor.
-const PRUEBA_CARGA_FOLDER_ID = process.env.GOOGLE_DRIVE_PRUEBA_CARGA_FOLDER_ID || '1vmB3RbGsKG1w5G9B7K3naMVvXHWheCEB'
+// Tiene que ser una carpeta de una unidad compartida: la cuenta de servicio no tiene espacio
+// propio y Google rechaza archivos nuevos en un Mi unidad personal. Acepta ID o URL.
+const PRUEBA_CARGA_FOLDER_ID = extractFolderId(process.env.GOOGLE_DRIVE_PRUEBA_CARGA_FOLDER_ID) || '1lRutJLsCefzYDBfG6-D4kc48n1hcB9de'
 const PRUEBA_CARGA_MAX_BYTES = 25 * 1024 * 1024
 
 app.post(
@@ -148,7 +150,10 @@ app.post(
         // nombre mal codificado: se usa el genérico
       }
       nombre = nombre.replace(/[\\/:*?"<>|\r\n]/g, '_').slice(0, 120) || 'foto'
-      const sello = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+      // Fecha y hora de Argentina, ej. 2026-11-20 14-02-03
+      const sello = new Date()
+        .toLocaleString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' })
+        .replace(/:/g, '-')
 
       const drive = getDriveServiceFull()
       const archivo = await drive.files.create({
@@ -163,13 +168,19 @@ app.post(
       })
       res.json({ id: archivo.data.id, nombre: archivo.data.name, url: archivo.data.webViewLink })
     } catch (error) {
-      console.error('[prueba-carga] Error subiendo foto:', error.message)
-      const sinAcceso = /not found|insufficient|permission/i.test(error.message || '')
-      res.status(sinAcceso ? 403 : 500).json({
-        error: sinAcceso
-          ? 'El servidor no tiene acceso a la carpeta de Drive'
-          : 'No se pudo subir la foto a Drive',
-      })
+      // Se devuelve también el mensaje real de Google para poder diagnosticar
+      const detalle = String(error?.errors?.[0]?.message || error?.message || '')
+      console.error('[prueba-carga] Error subiendo foto:', detalle)
+      let mensaje = 'No se pudo subir la foto a Drive'
+      let estado = 500
+      if (/storage quota/i.test(detalle)) {
+        mensaje = 'La carpeta tiene que estar en una unidad compartida (la cuenta de servicio no tiene espacio propio en Mi unidad)'
+        estado = 403
+      } else if (/not found|insufficient|permission/i.test(detalle)) {
+        mensaje = 'El servidor no tiene acceso a la carpeta de Drive'
+        estado = 403
+      }
+      res.status(estado).json({ error: mensaje, detalle })
     }
   }
 )

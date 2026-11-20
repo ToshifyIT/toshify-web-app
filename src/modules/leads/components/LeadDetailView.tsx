@@ -9,6 +9,7 @@ import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
 import { clasificarMotivoDesinteres } from '../leadMotivos'
 import { estadoMonotributo } from '../monotributo'
 import { formatFechaHora, formatPlata } from '../../../utils/format'
+import { BCRA_CONSULTA_DESDE } from '../bcraConsulta'
 import { alertasLicencia, clasesDeLicencia } from '../licenciaLead'
 import { AlertasLicencia } from './AlertasLicencia'
 import { TurnoBadge } from '../../../components/ui/TurnoBadge'
@@ -188,9 +189,11 @@ function TarjetaBcra({ lead }: { lead: Lead }) {
       <Tarjeta titulo="BCRA">
         <Item
           label="Situación"
-          valor={lead.cuit || lead.dni
-            ? 'Pendiente de consulta'
-            : 'Sin CUIT ni DNI: se consulta cuando se cargue alguno'}
+          valor={!lead.cuit && !lead.dni
+            ? 'Sin CUIT ni DNI: se consulta cuando se cargue alguno'
+            : lead.created_at && lead.created_at < BCRA_CONSULTA_DESDE
+              ? 'Sin consultar: la consulta automática toma los leads creados desde el 20/11/2026'
+              : 'Pendiente: se consulta en los próximos minutos'}
           largo
         />
       </Tarjeta>

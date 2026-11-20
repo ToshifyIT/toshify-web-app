@@ -36,6 +36,7 @@ import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilt
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
+import { BCRA_CONSULTA_DESDE } from './bcraConsulta'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
 import { esGuiaActivo, GUIAS_ACTIVOS, homologarGuia } from './guias'
@@ -481,7 +482,28 @@ const COLUMNAS_LISTA = [
   'disponibilidad', 'proceso', 'entrevista_ia', 'estado_de_lead', 'estado_manual_at', 'fase_de_preguntas',
   'causal_de_cierre', 'entrevistador_asignado', 'observaciones', 'referido', 'embajador_id', 'ayuda_entrevista',
   'url_folder', 'fuente_de_lead', 'companero', 'patente',
+  'bcra_nivel', 'bcra_nivel_motivo', 'bcra_error', 'bcra_consultado_at',
 ].join(', ')
+
+/** Grupo BCRA del lead para la columna y su filtro (ver server-bcra.js y Parámetros > Riesgo BCRA). */
+const OPCIONES_BCRA = ['Verde', 'Amarillo', 'Rojo', 'Sin validar', 'Pendiente', 'Sin consultar', 'Sin CUIT ni DNI']
+const COLOR_BCRA: Record<string, string> = {
+  Verde: 'var(--color-success)',
+  Amarillo: 'var(--color-warning)',
+  Rojo: 'var(--color-danger)',
+  'Sin validar': 'var(--color-warning)',
+}
+function grupoBcra(l: Lead): string {
+  if (l.bcra_consultado_at) {
+    if (l.bcra_error) return 'Sin validar'
+    if (l.bcra_nivel === 'verde') return 'Verde'
+    if (l.bcra_nivel === 'amarillo') return 'Amarillo'
+    if (l.bcra_nivel === 'rojo') return 'Rojo'
+  }
+  if (!l.cuit && !l.dni) return 'Sin CUIT ni DNI'
+  // Los creados antes de que arrancara la consulta automática no se consultan solos
+  return l.created_at && l.created_at < BCRA_CONSULTA_DESDE ? 'Sin consultar' : 'Pendiente'
+}
 
 /** El lead con todas sus columnas (la lista trae solo COLUMNAS_LISTA). */
 async function leadCompleto(lead: Lead): Promise<Lead> {
@@ -815,6 +837,7 @@ export function LeadsModule() {
   const [zonaFilter, setZonaFilter] = useState<string[]>([])
   /** Filtro de la columna Categoría (B1 / D1 / Otros / Sin dato). */
   const [categoriaLicFilter, setCategoriaLicFilter] = useState<string[]>([])
+  const [bcraFilter, setBcraFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([])
   const [fuenteFilter, setFuenteFilter] = useState<string[]>([])
@@ -1790,6 +1813,10 @@ export function LeadsModule() {
       const set = new Set(turnoFilter)
       result = result.filter(l => set.has(normalizarTurno(l.turno)))
     }
+    if (bcraFilter.length > 0) {
+      const set = new Set(bcraFilter)
+      result = result.filter(l => set.has(grupoBcra(l)))
+    }
     if (disponibilidadFilter.length > 0) {
       const set = new Set(disponibilidadFilter)
       result = result.filter(l => set.has(l.disponibilidad || ''))
@@ -1816,7 +1843,7 @@ export function LeadsModule() {
     }
 
     return result.sort((a, b) => getDateTime(b.created_at) - getDateTime(a.created_at))
-  }, [leads, nombreFilter, zonaFilter, categoriaLicFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta])
+  }, [leads, nombreFilter, zonaFilter, categoriaLicFilter, bcraFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta])
 
   /** leadsBase + tarjeta activa (lo que se exporta con "Exportar"). */
   const filteredLeads = useMemo(() => leadsBase.filter(filtroTarjeta), [leadsBase, filtroTarjeta])
@@ -1878,11 +1905,11 @@ export function LeadsModule() {
   // con filtros los números no son comparables de una semana a otra.
   const vistaPorDefecto = useMemo(() => {
     const def = rangoUltimoMesART()
-    return !nombreFilter.length && !zonaFilter.length && !categoriaLicFilter.length && !turnoFilter.length && !disponibilidadFilter.length
+    return !nombreFilter.length && !zonaFilter.length && !categoriaLicFilter.length && !bcraFilter.length && !turnoFilter.length && !disponibilidadFilter.length
       && !fuenteFilter.length && !estadoFilter.length && activeStatCards.length === 0
       && creacionDesde === def.desde && creacionHasta === def.hasta
       && (leadsVisibles === null || leadsVisibles.length === filteredLeads.length)
-  }, [nombreFilter, zonaFilter, categoriaLicFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCards,
+  }, [nombreFilter, zonaFilter, categoriaLicFilter, bcraFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCards,
     creacionDesde, creacionHasta, leadsVisibles, filteredLeads])
   const fotoAnteriorLeads = useFotoSemanaAnterior('leads', {
     contactadoSellium: stats.contactadoSellium,
@@ -3181,6 +3208,21 @@ export function LeadsModule() {
                     </button>
                   )
                 })()}
+                {row.original.bcra_nivel === 'rojo' && !row.original.bcra_error && (
+                  <button
+                    type="button"
+                    className="lead-alerta-bcra"
+                    onClick={(e) => { e.stopPropagation(); handleOpenDetails(row.original) }}
+                    title={`BCRA en rojo${row.original.bcra_nivel_motivo ? `: ${row.original.bcra_nivel_motivo}` : ''}`}
+                    aria-label="BCRA en rojo"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', flexShrink: 0, padding: 0, border: 'none',
+                      background: 'none', cursor: 'pointer', color: 'var(--color-danger)',
+                    }}
+                  >
+                    <AlertTriangle size={14} />
+                  </button>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
               <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
@@ -3439,6 +3481,43 @@ export function LeadsModule() {
       header: 'DNI',
       cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{row.original.dni || '-'}</span>,
       size: 85,
+      enableSorting: true,
+    },
+    {
+      // Nivel de riesgo BCRA (consulta automática). Solo texto en color; el motivo, al pasar el mouse
+      id: 'bcra',
+      accessorFn: (row) => grupoBcra(row),
+      header: () => (
+        <ExcelColumnFilter
+          label="BCRA"
+          options={OPCIONES_BCRA}
+          selectedValues={bcraFilter}
+          onSelectionChange={setBcraFilter}
+          filterId="lead_bcra"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+          selectAll
+        />
+      ),
+      cell: ({ row }) => {
+        const grupo = grupoBcra(row.original)
+        const color = COLOR_BCRA[grupo]
+        const detalle = row.original.bcra_error || row.original.bcra_nivel_motivo || ''
+        return (
+          <span
+            title={detalle || undefined}
+            style={{
+              fontSize: '11px',
+              whiteSpace: 'nowrap',
+              color: color ?? 'var(--text-tertiary)',
+              fontWeight: color ? 600 : 400,
+            }}
+          >
+            {grupo}
+          </span>
+        )
+      },
+      size: 95,
       enableSorting: true,
     },
     {
@@ -3708,11 +3787,11 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, categoriaLicFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, categoriaLicFilter, bcraFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
-    zonaFilter.length > 0 || categoriaLicFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 ||
+    zonaFilter.length > 0 || categoriaLicFilter.length > 0 || bcraFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 ||
     creacionDesde !== null || creacionHasta !== null || activeStatCards.length > 0
 
   function clearAllFilters() {
@@ -3720,6 +3799,7 @@ export function LeadsModule() {
     setEstadoFilter([])
     setZonaFilter([])
     setCategoriaLicFilter([])
+    setBcraFilter([])
     setTurnoFilter([])
     setDisponibilidadFilter([])
     setFuenteFilter([])
@@ -3743,6 +3823,7 @@ export function LeadsModule() {
     addFilters(nombreFilter, 'Candidato', setNombreFilter)
     addFilters(zonaFilter, 'Zona', setZonaFilter)
     addFilters(categoriaLicFilter, 'Categoría', setCategoriaLicFilter)
+    addFilters(bcraFilter, 'BCRA', setBcraFilter)
     addFilters(turnoFilter, 'Turno', setTurnoFilter)
     addFilters(disponibilidadFilter, 'Disponibilidad', setDisponibilidadFilter)
     addFilters(fuenteFilter, 'Fuente', setFuenteFilter)
@@ -3783,7 +3864,7 @@ export function LeadsModule() {
       }
     }
     return filters
-  }, [hasActiveFilters, nombreFilter, zonaFilter, categoriaLicFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, activeStatCards])
+  }, [hasActiveFilters, nombreFilter, zonaFilter, categoriaLicFilter, bcraFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, activeStatCards])
 
   // ---------- RENDER ----------
   return (

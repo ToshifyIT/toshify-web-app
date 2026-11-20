@@ -3331,6 +3331,7 @@ export function IncidenciasModule() {
 
           {/* Tabla con DataTable */}
           <DataTable
+            tarjetasCompactas
             data={incidenciasLogisticas}
             columns={incidenciasColumns}
             // Fecha, Sem, Patente y Conductor quedan fijas al scrollear a la derecha
@@ -3578,6 +3579,7 @@ export function IncidenciasModule() {
 
           {/* Tabla con DataTable - usa columnas específicas con botón Generar Cobro */}
           <DataTable
+            tarjetasCompactas
             data={soloPendientesEnviar ? incidenciasEnviables : incidenciasCobro}
             columns={incidenciasCobroColumns}
             // Hasta Conductor fijas (+1 si está la columna de selección masiva)
@@ -3759,6 +3761,7 @@ export function IncidenciasModule() {
 
           {/* Tabla Penalidades con DataTable */}
           <DataTable
+            tarjetasCompactas
             data={penalidadesFiltradas}
             columns={penalidadesColumns}
             // Hasta Conductor fijas (Fecha, Sem, Sem Apl., Patente, Conductor; +1 con selección)
@@ -3882,6 +3885,7 @@ export function IncidenciasModule() {
 
           {/* Tabla Penalidades Aplicadas con DataTable */}
           <DataTable
+            tarjetasCompactas
             data={penalidadesFiltradas}
             columns={penalidadesColumns}
             // Hasta Conductor fijas (Fecha, Sem, Sem Apl., Patente, Conductor; +1 con selección)
@@ -3922,6 +3926,7 @@ export function IncidenciasModule() {
           </div>
 
           <DataTable
+            tarjetasCompactas
             data={penalidadesFiltradas}
             columns={penalidadesColumns}
             // Hasta Conductor fijas (Fecha, Sem, Sem Apl., Patente, Conductor; +1 con selección)

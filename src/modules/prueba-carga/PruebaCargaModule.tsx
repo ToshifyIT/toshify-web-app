@@ -1,19 +1,31 @@
-// Prueba carga: módulo de prueba para subir una foto a una carpeta de Google Drive.
-// En el celular se saca con la cámara o se elige de la galería; en la laptop se adjunta un archivo.
-// La subida pasa por el servidor (/api/prueba-carga/subir-foto): la credencial de Google
-// nunca llega al frontend.
+// Prueba carga: módulo de prueba para subir fotos a una carpeta de Google Drive.
+// En el celular se sacan con la cámara o se eligen de la galería (varias a la vez); en la
+// laptop se adjuntan archivos. La subida pasa por el servidor (/api/prueba-carga/subir-foto),
+// una foto por pedido: la credencial de Google nunca llega al frontend.
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useDeviceType } from '../../hooks/useDeviceType';
-import { showError, showSuccess } from '../../utils/toast';
+import { showError, showSuccess, showWarning } from '../../utils/toast';
 import '../../styles/modules.css';
 import './PruebaCargaModule.css';
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
+interface FotoElegida {
+  id: string;
+  archivo: File;
+  vistaPrevia: string;
+}
+
 interface FotoSubida {
   nombre: string;
   url: string;
+}
+
+function formatoPeso(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function PruebaCargaModule() {
@@ -21,72 +33,116 @@ export function PruebaCargaModule() {
   const camaraRef = useRef<HTMLInputElement>(null);
   const galeriaRef = useRef<HTMLInputElement>(null);
   const archivoRef = useRef<HTMLInputElement>(null);
-  const [foto, setFoto] = useState<File | null>(null);
-  const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
-  const [isSubiendo, setIsSubiendo] = useState(false);
+  const [fotos, setFotos] = useState<FotoElegida[]>([]);
+  const [progreso, setProgreso] = useState<{ actual: number; total: number } | null>(null);
   const [subidas, setSubidas] = useState<FotoSubida[]>([]);
+  const fotosRef = useRef<FotoElegida[]>([]);
+  fotosRef.current = fotos;
+  const isSubiendo = progreso !== null;
 
-  useEffect(() => {
-    if (!foto) {
-      setVistaPrevia(null);
-      return;
-    }
-    const url = URL.createObjectURL(foto);
-    setVistaPrevia(url);
-    return () => URL.revokeObjectURL(url);
-  }, [foto]);
+  // Al salir de la pantalla se liberan las vistas previas
+  useEffect(() => () => fotosRef.current.forEach(f => URL.revokeObjectURL(f.vistaPrevia)), []);
 
-  const elegirFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const archivo = e.target.files?.[0] ?? null;
+  const agregarFotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const archivos = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!archivo) return;
-    if (!archivo.type.startsWith('image/')) {
-      showError('Archivo no válido', 'Elegí una foto (imagen).');
-      return;
+    if (archivos.length === 0) return;
+    const validas = archivos.filter(a => a.type.startsWith('image/') && a.size <= MAX_BYTES);
+    const descartadas = archivos.length - validas.length;
+    if (descartadas > 0) {
+      showWarning(
+        descartadas === 1 ? '1 archivo no se agregó' : `${descartadas} archivos no se agregaron`,
+        'Solo se aceptan fotos de hasta 25 MB.',
+      );
     }
-    if (archivo.size > MAX_BYTES) {
-      showError('Foto muy pesada', 'La foto pesa más de 25 MB.');
-      return;
-    }
-    setFoto(archivo);
+    const nuevas = validas.map((archivo, i) => ({
+      id: `${Date.now()}-${i}-${archivo.name}`,
+      archivo,
+      vistaPrevia: URL.createObjectURL(archivo),
+    }));
+    setFotos(prev => [...prev, ...nuevas]);
   };
 
-  const subir = async () => {
-    if (!foto) return;
-    setIsSubiendo(true);
+  const quitarFoto = (id: string) => {
+    setFotos(prev => {
+      const foto = prev.find(f => f.id === id);
+      if (foto) URL.revokeObjectURL(foto.vistaPrevia);
+      return prev.filter(f => f.id !== id);
+    });
+  };
+
+  const subirUna = async (archivo: File, token: string): Promise<FotoSubida> => {
+    const respuesta = await fetch('/api/prueba-carga/subir-foto', {
+      method: 'POST',
+      headers: {
+        'Content-Type': archivo.type,
+        'X-Nombre-Archivo': encodeURIComponent(archivo.name || 'foto.jpg'),
+        Authorization: `Bearer ${token}`,
+      },
+      body: archivo,
+    });
+    const datos = await respuesta.json().catch(() => ({}));
+    if (!respuesta.ok) {
+      const detalle = datos.detalle ? ` (Google: ${datos.detalle})` : '';
+      throw new Error(`${datos.error || 'No se pudo subir la foto'}${detalle}`);
+    }
+    return { nombre: datos.nombre, url: datos.url };
+  };
+
+  const subirTodas = async () => {
+    if (fotos.length === 0) return;
+    const pendientes = [...fotos];
+    let fallidas = 0;
+    let ultimoError = '';
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Sesión vencida, volvé a iniciar sesión');
-      const respuesta = await fetch('/api/prueba-carga/subir-foto', {
-        method: 'POST',
-        headers: {
-          'Content-Type': foto.type,
-          'X-Nombre-Archivo': encodeURIComponent(foto.name || 'foto.jpg'),
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: foto,
-      });
-      const datos = await respuesta.json().catch(() => ({}));
-      if (!respuesta.ok) throw new Error(datos.error || 'No se pudo subir la foto');
-      setSubidas(prev => [{ nombre: datos.nombre, url: datos.url }, ...prev]);
-      setFoto(null);
-      showSuccess('Foto subida', 'Quedó guardada en la carpeta de Drive.');
-    } catch (error) {
-      console.error('Error subiendo foto a Drive:', error);
-      showError('Error', error instanceof Error ? error.message : 'No se pudo subir la foto');
+      if (!session) {
+        showError('Error', 'Sesión vencida, volvé a iniciar sesión');
+        return;
+      }
+      for (let i = 0; i < pendientes.length; i++) {
+        const foto = pendientes[i];
+        setProgreso({ actual: i + 1, total: pendientes.length });
+        try {
+          const subida = await subirUna(foto.archivo, session.access_token);
+          setSubidas(prev => [subida, ...prev]);
+          quitarFoto(foto.id);
+        } catch (error) {
+          console.error('Error subiendo foto a Drive:', error);
+          fallidas++;
+          ultimoError = error instanceof Error ? error.message : 'No se pudo subir la foto';
+        }
+      }
     } finally {
-      setIsSubiendo(false);
+      setProgreso(null);
+    }
+    const subidasOk = pendientes.length - fallidas;
+    if (fallidas === 0) {
+      showSuccess(
+        subidasOk === 1 ? 'Foto subida' : `${subidasOk} fotos subidas`,
+        'Quedaron guardadas en la carpeta de Drive.',
+      );
+    } else {
+      // Las que fallaron quedan en la lista para reintentar
+      showError(
+        subidasOk === 0 ? 'No se subió ninguna foto' : `Se subieron ${subidasOk} de ${pendientes.length}`,
+        ultimoError,
+      );
     }
   };
+
+  const textoBoton = progreso
+    ? `Subiendo ${progreso.actual} de ${progreso.total}...`
+    : fotos.length === 1 ? 'Subir a Drive' : `Subir ${fotos.length} fotos a Drive`;
 
   return (
     <div className="module-container prueba-carga">
       <div className="prueba-carga-card">
-        <h3>Subir una foto a Drive</h3>
+        <h3>Subir fotos a Drive</h3>
         <p className="prueba-carga-ayuda">
           {isMobile
-            ? 'Sacá una foto con la cámara o elegí una de la galería.'
-            : 'Adjuntá una foto desde la computadora.'}
+            ? 'Sacá una foto con la cámara o elegí una o varias de la galería.'
+            : 'Adjuntá una o varias fotos desde la computadora.'}
         </p>
 
         <input
@@ -95,10 +151,10 @@ export function PruebaCargaModule() {
           accept="image/*"
           capture="environment"
           hidden
-          onChange={elegirFoto}
+          onChange={agregarFotos}
         />
-        <input ref={galeriaRef} type="file" accept="image/*" hidden onChange={elegirFoto} />
-        <input ref={archivoRef} type="file" accept="image/*" hidden onChange={elegirFoto} />
+        <input ref={galeriaRef} type="file" accept="image/*" multiple hidden onChange={agregarFotos} />
+        <input ref={archivoRef} type="file" accept="image/*" multiple hidden onChange={agregarFotos} />
 
         <div className="prueba-carga-botones">
           {isMobile ? (
@@ -127,40 +183,43 @@ export function PruebaCargaModule() {
               disabled={isSubiendo}
               onClick={() => archivoRef.current?.click()}
             >
-              Adjuntar archivo
+              Adjuntar archivos
             </button>
           )}
         </div>
 
-        {foto && vistaPrevia && (
-          <div className="prueba-carga-vista">
-            <img src={vistaPrevia} alt="Foto elegida" />
+        {fotos.length > 0 && (
+          <>
+            <div className="prueba-carga-grilla">
+              {fotos.map(f => (
+                <div key={f.id} className="prueba-carga-miniatura">
+                  <img src={f.vistaPrevia} alt={f.archivo.name} />
+                  <span className="prueba-carga-ayuda">{formatoPeso(f.archivo.size)}</span>
+                  <button
+                    type="button"
+                    className="prueba-carga-quitar"
+                    disabled={isSubiendo}
+                    onClick={() => quitarFoto(f.id)}
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
             <div className="prueba-carga-vista-pie">
               <span className="prueba-carga-ayuda">
-                {foto.name} ({foto.size < 1024 * 1024
-                  ? `${Math.max(1, Math.round(foto.size / 1024))} KB`
-                  : `${(foto.size / 1024 / 1024).toFixed(1)} MB`})
+                {fotos.length === 1 ? '1 foto elegida' : `${fotos.length} fotos elegidas`}
               </span>
-              <div className="prueba-carga-botones">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  disabled={isSubiendo}
-                  onClick={() => setFoto(null)}
-                >
-                  Quitar
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  disabled={isSubiendo}
-                  onClick={() => void subir()}
-                >
-                  {isSubiendo ? 'Subiendo...' : 'Subir a Drive'}
-                </button>
-              </div>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={isSubiendo}
+                onClick={() => void subirTodas()}
+              >
+                {textoBoton}
+              </button>
             </div>
-          </div>
+          </>
         )}
       </div>
 
