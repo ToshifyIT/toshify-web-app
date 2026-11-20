@@ -21,6 +21,8 @@ import { cabifyRouter, obtenerTokenCabifyParaCompany, requireUsuario } from './s
 import { cresiumRouter, iniciarSyncAutomaticoCresium } from './server-cresium.js'
 // Integraciones > Alegra: Excel de ARCA (comprobantes recibidos) -> Alegra (token solo en el servidor)
 import { alegraRouter } from './server-alegra.js'
+// Leads: consulta automática a la Central de Deudores del BCRA (API pública, sin clave)
+import { iniciarConsultaAutomaticaBcra } from './server-bcra.js'
 // Administración > Integraciones & Tokens: credenciales y monitor de edge functions
 import { adminIntegracionesRouter } from './server-admin-integraciones.js'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
@@ -64,6 +66,8 @@ app.use('/api/cresium', cresiumRouter)
 // Movimientos de Cresium (44 Dreams y Grupo CG) cada 10 minutos, las 24 h. Solo la tabla
 // cresium_movimientos: no toca Alegra. CRESIUM_SYNC_AUTO=0 la apaga.
 iniciarSyncAutomaticoCresium()
+// Leads nuevos con CUIT: situación en el BCRA cada 5 minutos. BCRA_CONSULTA_AUTO=0 la apaga.
+iniciarConsultaAutomaticaBcra()
 
 // Google Drive service
 function getDriveService(writeAccess = false) {

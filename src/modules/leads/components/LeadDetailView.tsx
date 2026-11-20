@@ -8,6 +8,7 @@ import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
 import { clasificarMotivoDesinteres } from '../leadMotivos'
 import { estadoMonotributo } from '../monotributo'
+import { formatFechaHora, formatPlata } from '../../../utils/format'
 import { alertasLicencia, clasesDeLicencia } from '../licenciaLead'
 import { AlertasLicencia } from './AlertasLicencia'
 import { TurnoBadge } from '../../../components/ui/TurnoBadge'
@@ -144,6 +145,39 @@ function Tarjeta({ titulo, children }: { titulo: string; children: ReactNode }) 
 }
 
 /** Fila etiqueta / valor. `largo`: textos de varias líneas. Vacío = guion. */
+/**
+ * Resultado de la consulta automática a la Central de Deudores del BCRA
+ * (server-bcra.js). Sin consulta todavía no muestra nada.
+ */
+function ConsultaBcra({ lead }: { lead: Lead }) {
+  if (!lead.bcra_consultado_at) return null
+  if (lead.bcra_error) {
+    return <Item label="Consulta BCRA" valor={`No se pudo consultar: ${lead.bcra_error}`} largo />
+  }
+  const entidades = lead.bcra_detalle?.entidades ?? []
+  const nombreLead = (lead.nombre_completo ?? '').trim().toUpperCase()
+  const nombreBcra = (lead.bcra_nombre ?? '').trim()
+  const nombreDistinto = Boolean(nombreBcra && nombreLead && nombreBcra.toUpperCase() !== nombreLead)
+  return (
+    <>
+      {entidades.length > 0 && (
+        <Item
+          label="Deudas por entidad"
+          largo
+          valor={entidades.map(e => (
+            <div key={e.entidad}>
+              {e.entidad}: situación {e.situacion}, {formatPlata(e.monto)}
+              {e.proceso_judicial ? ', con proceso judicial' : ''}
+            </div>
+          ))}
+        />
+      )}
+      {nombreDistinto && <Item label="Nombre en el BCRA" valor={nombreBcra} />}
+      <Item label="Consulta BCRA" valor={formatFechaHora(lead.bcra_consultado_at, { segundos: false })} />
+    </>
+  )
+}
+
 function Item({ label, valor, largo, mono }: {
   label: string
   valor: ReactNode | null | undefined
@@ -373,7 +407,8 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
               <Item label="Experiencia previa" valor={lead.experiencia_previa} />
               <Item label="Experiencia de manejo" valor={lead.experiencia_manejo} largo />
               <Item label="Disponibilidad" valor={lead.disponibilidad} />
-              <Item label="BCRA" valor={lead.bcra} />
+              <Item label="BCRA" valor={lead.bcra} largo />
+              <ConsultaBcra lead={lead} />
               <Item label="Monotributo" valor={lead.monotributo} />
               {estadoMonotributo(lead.monotributo) === 'no' && (
                 <Item label="Motivo sin monotributo" valor={lead.motivo_sin_monotributo} largo />

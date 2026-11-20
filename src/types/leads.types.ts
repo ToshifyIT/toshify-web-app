@@ -94,6 +94,28 @@ export interface Lead {
   /** Por qué se permite ingresar sin monotributo (obligatorio si monotributo = No). */
   motivo_sin_monotributo?: string | null
   bcra?: string | null
+  /** Consulta automática al BCRA (server-bcra.js, sql/leads_bcra_consulta.sql). */
+  bcra_consultado_at?: string | null
+  /** Peor situación actual: 0 sin deudas, 1 normal ... 6. */
+  bcra_situacion?: number | null
+  /** Deuda actual total en pesos. */
+  bcra_deuda_total?: number | null
+  bcra_cheques?: number | null
+  /** Nombre que figura en el BCRA para el CUIT (para cotejar con el lead). */
+  bcra_nombre?: string | null
+  bcra_resumen?: string | null
+  bcra_detalle?: {
+    periodo: string | null
+    entidades: {
+      entidad: string
+      situacion: number
+      monto: number
+      dias_atraso: number | null
+      proceso_judicial: boolean
+      en_revision: boolean
+    }[]
+  } | null
+  bcra_error?: string | null
   experiencia_previa?: string | null
   experiencia_manejo?: string | null
   antecedentes_penales?: boolean | null
