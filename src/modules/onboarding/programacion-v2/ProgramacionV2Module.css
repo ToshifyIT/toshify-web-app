@@ -1676,3 +1676,17 @@ select.prog-inline-select-mini:hover {
 @media (max-width: 768px) {
   .prog-modal-editar .prog-modal-grid { grid-template-columns: 1fr; }
 }
+
+/* Celular: el fondo de color de los selectores de las tarjetas se quita (sin resaltado);
+   el tamaño lo resuelve la regla general de DataTable.css */
+@media (max-width: 768px) {
+  .dt-card :is(.prog-inline-select, .prog-inline-select-mini) {
+    background: var(--bg-primary) !important;
+  }
+  .dt-card :is(.prog-tipo-asig-turno, .prog-documento-turno) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+}

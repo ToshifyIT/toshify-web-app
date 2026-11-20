@@ -964,14 +964,15 @@ export function ConductoresPanelModule() {
                   ? 'No hay filas para exportar'
                   : `Exporta las ${filasAExportar.length} filas que pasan los filtros actuales`
               }
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1 }}
             >
               <Download size={16} />
               Exportar
             </button>
             <button className="btn-secondary" onClick={() => setReloadKey(k => k + 1)} disabled={loading}
               title="Recargar" aria-label="Recargar"
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              // Solo ícono: ancho fijo (en celular no se estira a media fila)
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 44px', width: 44, minWidth: 44 }}>
               <RefreshCw size={16} />
             </button>
           </div>

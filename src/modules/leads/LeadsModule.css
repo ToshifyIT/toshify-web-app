@@ -1428,3 +1428,26 @@ button.lead-pareja-badge:hover { filter: none; }
   width: 6px;
   height: 6px;
 }
+
+/* Celular: las 4 acciones secundarias en una fila de botones iguales (solo ícono o texto
+   corto) y «Nuevo Lead» abajo, a lo ancho. Antes quedaban de anchos distintos y mezclados. */
+@media (max-width: 640px) {
+  .leads-module .dt-header-action {
+    width: 100%;
+  }
+  #root .leads-module .dt-header-action .leads-header-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+  #root .leads-module .leads-header-actions :is(.btn-primary, .btn-secondary) {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+  #root .leads-module .leads-header-actions .btn-primary {
+    grid-column: 1 / -1;
+    order: 99;
+  }
+}

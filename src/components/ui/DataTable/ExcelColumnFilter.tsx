@@ -7,6 +7,9 @@
 import { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 
+// En pantallas táctiles no se enfoca el campo al abrir el filtro (el teclado taparía las opciones)
+const ES_TACTIL = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+
 // Icono de filtro estilo Excel - dropdown arrow pequeño y sutil
 const FilterIcon = ({ size = 8 }: { size?: number }) => (
   <svg
@@ -240,7 +243,7 @@ export function ExcelColumnFilter({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="dt-filter-search"
-            autoFocus
+            autoFocus={!ES_TACTIL}
           />
           <div className="dt-filter-options">
             {selectAll && filteredOptions.length > 3 && (

@@ -25,10 +25,16 @@
   background: var(--bg-tertiary, #f3f4f6);
 }
 
+/* Con período elegido: sin resaltado (ni fondo rosa ni borde rojo), solo texto más marcado.
+   El rosa sobre fondo claro casi no se leía, sobre todo en celular. */
 .date-range-btn.has-selection {
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.05);
-  color: #ef4444;
+  border-color: var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.date-range-btn.has-selection svg {
+  color: var(--color-primary);
 }
 
 .date-range-btn:disabled {
@@ -369,5 +375,15 @@
   }
   .date-range-shortcut {
     padding: 8px 10px;
+  }
+}
+
+/* Celular: mismo alto que los demás botones de la barra (Exportar, Nuevo…) */
+@media (max-width: 768px) {
+  #root .date-range-btn {
+    height: 40px;
+    min-height: 40px;
+    padding: 0 12px;
+    justify-content: center;
   }
 }

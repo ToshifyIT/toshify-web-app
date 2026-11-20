@@ -761,6 +761,14 @@ const GRUPO_TARJETA: Record<string, 'estado' | 'zona' | 'fuente' | 'vista'> = {
   todos: 'vista',
 }
 
+/** «2026-10-20» → «20/10» (con año solo si no es el actual); sin fecha, «…» */
+function fechaCorta(iso: string | null): string {
+  if (!iso) return '…'
+  const [a, m, d] = iso.slice(0, 10).split('-')
+  if (!a || !m || !d) return iso
+  return a === String(new Date().getFullYear()) ? `${d}/${m}` : `${d}/${m}/${a.slice(2)}`
+}
+
 export function LeadsModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions()
   const { profile } = useAuth()
@@ -3742,7 +3750,7 @@ export function LeadsModule() {
     if (creacionDesde || creacionHasta) {
       filters.push({
         id: 'creacion-rango',
-        label: `Creación: ${creacionDesde || '...'} - ${creacionHasta || '...'}`,
+        label: `Creación: ${fechaCorta(creacionDesde)} – ${fechaCorta(creacionHasta)}`,
         onClear: () => {
           setCreacionDesde(null)
           setCreacionHasta(null)

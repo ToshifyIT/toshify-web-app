@@ -2,6 +2,9 @@ import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react
 import { createPortal } from 'react-dom'
 import './DataTable.css'
 
+// En pantallas táctiles no se enfoca el campo al abrir el filtro (el teclado taparía las opciones)
+const ES_TACTIL = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+
 /**
  * Filtro de encabezado por rango de cantidad (Desde / Hasta), para columnas de montos o
  * números. Mismo comportamiento y estilos que el rango numérico automático del DataTable
@@ -139,7 +142,7 @@ export function ExcelNumberRangeFilter({
                     value={min ?? ''}
                     onChange={e => onRangeChange(leer(e.target.value), max)}
                     className="dt-filter-number-input"
-                    autoFocus
+                    autoFocus={!ES_TACTIL}
                   />
                 </div>
               </label>

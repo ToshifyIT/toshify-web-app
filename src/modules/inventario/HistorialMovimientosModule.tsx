@@ -469,20 +469,26 @@ pageSize={100}
               <option value="daño">Daño</option>
               <option value="perdida">Pérdida</option>
             </select>
-            <input
-              className="hist-date-filter"
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-              aria-label="Fecha desde"
-            />
-            <input
-              className="hist-date-filter"
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-              aria-label="Fecha hasta"
-            />
+            <label className="hist-date-campo">
+              <span>Desde</span>
+              <input
+                className="hist-date-filter"
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                aria-label="Fecha desde"
+              />
+            </label>
+            <label className="hist-date-campo">
+              <span>Hasta</span>
+              <input
+                className="hist-date-filter"
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                aria-label="Fecha hasta"
+              />
+            </label>
             <button
               type="button"
               className="hist-action-btn"

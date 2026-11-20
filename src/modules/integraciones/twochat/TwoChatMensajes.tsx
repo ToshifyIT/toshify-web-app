@@ -427,7 +427,7 @@ export function TwoChatMensajesModule() {
         </StatsGrid>
       </div>
 
-      <div className="tc-filtros" style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: 8, overflowX: 'auto' }}>
+      <div className="tc-filtros">
         <label className="tc-campo">
           <span>Desde</span>
           <input type="date" className="form-input" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} />
@@ -438,7 +438,7 @@ export function TwoChatMensajesModule() {
         </label>
         <label className="tc-campo">
           <span>Contacto</span>
-          <select className="form-input" value={tipo} onChange={(e) => setTipo(e.target.value as FiltroTipo)} style={{ width: 150 }}>
+          <select className="form-input" value={tipo} onChange={(e) => setTipo(e.target.value as FiltroTipo)}>
             {(Object.keys(ETIQUETA_TIPO) as FiltroTipo[]).map((t) => (
               <option key={t} value={t}>{ETIQUETA_TIPO[t]} ({conteoTipo[t]})</option>
             ))}
@@ -446,7 +446,7 @@ export function TwoChatMensajesModule() {
         </label>
         <label className="tc-campo">
           <span>Agente</span>
-          <select className="form-input" value={agente} onChange={(e) => setAgente(e.target.value)} style={{ width: 150 }}>
+          <select className="form-input" value={agente} onChange={(e) => setAgente(e.target.value)}>
             <option value="todos">Todos</option>
             {agentes.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
