@@ -19,7 +19,7 @@ import {
   type Table,
   type FilterFn,
 } from "@tanstack/react-table";
-import { Calendar, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Info, SlidersHorizontal } from "lucide-react";
 
 // Icono de filtro estilo Excel - dropdown arrow pequeño y sutil
 const FilterIcon = ({ size = 8 }: { size?: number }) => (
@@ -145,6 +145,10 @@ interface FilterHeaderProps {
   onNumberChange?: (colId: string, field: 'min' | 'max', value: number | undefined) => void;
   onClearFilter: (colId: string) => void;
 }
+
+// En pantallas táctiles no se enfoca el buscador del filtro al abrirlo: el teclado del
+// celular taparía las opciones (se toca el buscador si se lo quiere usar).
+const ES_TACTIL = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
 
 function FilterHeader({
   colId,
@@ -503,7 +507,7 @@ function FilterHeader({
                       value={numberFilter?.min ?? ''}
                       onChange={e => onNumberChange(colId, 'min', e.target.value === '' ? undefined : Number(e.target.value))}
                       className="dt-filter-number-input"
-                      autoFocus
+                      autoFocus={!ES_TACTIL}
                     />
                   </div>
                 </label>
@@ -531,7 +535,7 @@ function FilterHeader({
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="dt-filter-search"
-                autoFocus
+                autoFocus={!ES_TACTIL}
               />
               <div className="dt-filter-options">
                 {/* Con más de 3 opciones: marcar/desmarcar todas (las que coinciden con la búsqueda) */}
@@ -752,6 +756,8 @@ export function DataTable<T>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
+  // Celular: panel con los filtros de columna (en tarjetas no hay encabezados)
+  const [verFiltrosMovil, setVerFiltrosMovil] = useState(false);
   const [dynamicMaxHeight, setDynamicMaxHeight] = useState<number | null>(null);
 
   // Cantidad efectiva de columnas sticky a la izquierda. Combina ambos props
@@ -1807,6 +1813,59 @@ export function DataTable<T>({
           )}
         </div>
       )}
+
+      {/* Celular: en tarjetas no hay encabezados de columna, así que los filtros (y el
+          orden) de cada columna se abren desde este botón */}
+      {isMobile && (() => {
+        const encabezados = (table.getHeaderGroups().at(-1)?.headers || []).filter(h =>
+          !alwaysVisibleColumns.includes(h.id)
+          && (typeof h.column.columnDef.header === 'function' || h.column.getCanSort()));
+        if (!encabezados.length || data.length === 0) return null;
+        // Filtros de columna propios de la tabla y los que maneja el módulo (externalFilters)
+        const cantidad = activeFiltersInfo.length + externalFilters.length;
+        return (
+          <div className="dt-mobile-filtros">
+            <button
+              type="button"
+              className={`dt-mobile-filtros-toggle${cantidad ? ' dt-mobile-filtros-toggle--activo' : ''}`}
+              onClick={() => setVerFiltrosMovil(v => !v)}
+              aria-expanded={verFiltrosMovil}
+            >
+              <SlidersHorizontal size={15} />
+              <span>Filtrar y ordenar{cantidad ? ` (${cantidad})` : ''}</span>
+              <ChevronDown size={15} className={verFiltrosMovil ? 'dt-mobile-filtros-flecha--abierta' : undefined} />
+            </button>
+            {verFiltrosMovil && (
+              <div className="dt-mobile-filtros-panel">
+                {encabezados.map(h => {
+                  const orden = h.column.getIsSorted();
+                  const tieneFiltro = typeof h.column.columnDef.header === 'function';
+                  return (
+                    <div key={h.id} className="dt-mobile-filtro">
+                      <div className="dt-mobile-filtro-nombre">
+                        {tieneFiltro
+                          ? flexRender(h.column.columnDef.header, h.getContext())
+                          : String(h.column.columnDef.header ?? h.id)}
+                      </div>
+                      {h.column.getCanSort() && (
+                        <button
+                          type="button"
+                          className={`dt-mobile-filtro-orden${orden ? ' dt-mobile-filtro-orden--activo' : ''}`}
+                          onClick={h.column.getToggleSortingHandler()}
+                          aria-label={`Ordenar por ${String(typeof h.column.columnDef.header === 'string' ? h.column.columnDef.header : h.id)}`}
+                        >
+                          {orden === 'asc' ? <ArrowUp size={14} /> : orden === 'desc' ? <ArrowDown size={14} /> : <ArrowUpDown size={14} />}
+                          {orden === 'asc' ? 'Menor a mayor' : orden === 'desc' ? 'Mayor a menor' : 'Ordenar'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Active Filters Bar */}
       {hasActiveFilters && (

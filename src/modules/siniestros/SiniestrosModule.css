@@ -2651,3 +2651,119 @@
 .categoria-badge.es-robo { color: #b91c1c; }
 [data-theme="dark"] .categoria-badge.es-robo { color: #f87171; }
 .ss-tipo { padding-left: 0; padding-right: 0; background: transparent !important; }
+
+/* ===== Nuevo siniestro en celular =====
+   Los 5 pasos no entraban a lo ancho y empujaban el formulario fuera de la pantalla.
+   En celular: modal a pantalla casi completa, pasos solo con el número (el nombre del
+   paso ya figura debajo, en el título del formulario) y sin desborde horizontal. */
+@media (max-width: 640px) {
+  .modal-overlay:has(.siniestro-wizard) {
+    padding: 8px;
+    align-items: stretch;
+  }
+  .modal-overlay:has(.siniestro-wizard) > .modal-content {
+    max-height: none;
+    height: 100%;
+  }
+  .modal-overlay:has(.siniestro-wizard) .modal-header {
+    padding: 14px 44px 0;
+  }
+  .modal-overlay:has(.siniestro-wizard) .modal-close {
+    top: 8px;
+    right: 8px;
+  }
+  .modal-overlay:has(.siniestro-wizard) .modal-body {
+    padding: 12px 0 0;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #root .siniestro-wizard {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+  #root .siniestro-wizard .wizard-progress {
+    justify-content: space-between;
+    padding: 0 16px 12px;
+    margin-bottom: 12px;
+  }
+  #root .siniestro-wizard .wizard-step-container {
+    flex: 1;
+    min-width: 0;
+  }
+  #root .siniestro-wizard .wizard-step-container:last-child {
+    flex: 0 0 auto;
+  }
+  #root .siniestro-wizard .wizard-step {
+    padding: 2px;
+  }
+  #root .siniestro-wizard .wizard-step-title,
+  #root .siniestro-wizard .wizard-step-optional {
+    display: none;
+  }
+  #root .siniestro-wizard .wizard-step-line {
+    flex: 1;
+    width: auto;
+    min-width: 8px;
+    margin: 0 4px;
+  }
+  #root .siniestro-wizard .wizard-content {
+    padding: 0 16px;
+  }
+  #root .siniestro-wizard .form-row,
+  #root .siniestro-wizard .form-row.three-cols {
+    grid-template-columns: 1fr;
+  }
+  #root .siniestro-wizard .form-group,
+  #root .siniestro-wizard .form-group input,
+  #root .siniestro-wizard .form-group select,
+  #root .siniestro-wizard .form-group textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+  #root .siniestro-wizard .wizard-footer {
+    position: sticky;
+    bottom: 0;
+    flex-direction: row;
+    gap: 8px;
+    padding: 10px 16px;
+    margin-top: 16px;
+  }
+  #root .siniestro-wizard .wizard-nav-buttons {
+    width: auto;
+  }
+}
+
+/* ===== Filtros de Siniestros en celular =====
+   Período y Exportar lado a lado, del mismo ancho, y «Nuevo Siniestro» abajo a lo ancho
+   (antes el período quedaba solo al centro y Exportar a media fila). */
+@media (max-width: 640px) {
+  .siniestros-tabs-row.header-controls-inline {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+  .siniestros-tabs-row .siniestros-periodo,
+  .siniestros-tabs-row .siniestros-periodo > * {
+    width: 100%;
+    min-width: 0;
+  }
+  .siniestros-tabs-row .siniestros-periodo button {
+    width: 100%;
+    justify-content: center;
+  }
+  .siniestros-tabs-row .tabs-actions {
+    display: contents;
+  }
+  .siniestros-tabs-row .tabs-actions > .btn-secondary,
+  .siniestros-tabs-row .tabs-actions > .btn-primary {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+  .siniestros-tabs-row .tabs-actions > *:last-child {
+    grid-column: 1 / -1;
+  }
+}

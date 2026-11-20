@@ -1526,7 +1526,7 @@ export function AsignacionesActivasModule({ modo = 'flota' }: { modo?: 'flota' |
         // Agentes: Capitán, Vehículo y Asignados quedan fijos al scrollear a la derecha
         // (Acciones ya va fija a la derecha por ser la columna 'acciones')
         stickyLeftColumns={esAgentes ? 3 : undefined}
-        searchPlaceholder="Buscar por vehiculo, conductor, numero de asignacion..."
+        searchPlaceholder="Buscar patente, conductor o asignación..."
         headerAction={esAgentes ? (
           <select
             className="asig-agente-select"
