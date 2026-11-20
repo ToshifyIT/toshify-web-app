@@ -2,7 +2,7 @@
  * Consulta automática de leads en la Central de Deudores del BCRA.
  *
  * Cada 5 minutos busca los leads con CUIT o DNI que todavía no se consultaron
- * (bcra_consultado_at vacío, creados desde CONSULTAR_DESDE) y le pregunta al
+ * (bcra_consultado_at vacío), los más nuevos primero, y le pregunta al
  * BCRA su situación actual y si tiene cheques rechazados. Guarda el resultado
  * en las columnas bcra_* de leads (sql/leads_bcra_consulta.sql).
  *
@@ -29,8 +29,6 @@ const CADA_MIN = 5
 const MAX_POR_TURNO = 15
 const PAUSA_ENTRE_CONSULTAS_MS = 2000
 const MAX_INTENTOS = 5
-// Solo leads nuevos: los creados antes de esta fecha no se consultan solos
-const CONSULTAR_DESDE = '2026-11-20T00:00:00-03:00'
 const PESOS_CUIT = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
 // Prefijos del CUIL a probar desde el DNI: hombre, mujer y los de desempate
 const PREFIJOS_CUIL = ['20', '27', '23', '24']
@@ -206,8 +204,8 @@ async function leadsPendientes(cfg) {
     select: 'id,cuit,dni,nombre_completo,nombre_completo_2,primer_nombre,apellido,bcra,bcra_resumen,bcra_intentos',
     bcra_consultado_at: 'is.null',
     or: '(cuit.not.is.null,dni.not.is.null)',
-    created_at: `gte.${CONSULTAR_DESDE}`,
-    order: 'created_at.asc',
+    // Los más nuevos primero: los que entran hoy no esperan a que terminen los viejos
+    order: 'created_at.desc',
     limit: String(MAX_POR_TURNO),
   })
   const res = await fetchConTimeout(`${cfg.url}/rest/v1/leads?${q}`, { headers: headersServicio(cfg) })
@@ -375,5 +373,5 @@ export function iniciarConsultaAutomaticaBcra() {
     }
   }
   setInterval(() => { void revisar() }, 60 * 1000).unref?.()
-  console.log(`[bcra] Consulta automática activa: leads nuevos con CUIT o DNI, cada ${CADA_MIN} minutos`)
+  console.log(`[bcra] Consulta automática activa: leads con CUIT o DNI, cada ${CADA_MIN} minutos`)
 }

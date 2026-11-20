@@ -36,7 +36,6 @@ import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilt
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
-import { BCRA_CONSULTA_DESDE } from './bcraConsulta'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
 import { esGuiaActivo, GUIAS_ACTIVOS, homologarGuia } from './guias'
@@ -486,7 +485,7 @@ const COLUMNAS_LISTA = [
 ].join(', ')
 
 /** Grupo BCRA del lead para la columna y su filtro (ver server-bcra.js y Parámetros > Riesgo BCRA). */
-const OPCIONES_BCRA = ['Verde', 'Amarillo', 'Rojo', 'Sin validar', 'Pendiente', 'Sin consultar', 'Sin CUIT ni DNI']
+const OPCIONES_BCRA = ['Verde', 'Amarillo', 'Rojo', 'Sin validar', 'Pendiente', 'Sin CUIT ni DNI']
 const COLOR_BCRA: Record<string, string> = {
   Verde: 'var(--color-success)',
   Amarillo: 'var(--color-warning)',
@@ -500,9 +499,7 @@ function grupoBcra(l: Lead): string {
     if (l.bcra_nivel === 'amarillo') return 'Amarillo'
     if (l.bcra_nivel === 'rojo') return 'Rojo'
   }
-  if (!l.cuit && !l.dni) return 'Sin CUIT ni DNI'
-  // Los creados antes de que arrancara la consulta automática no se consultan solos
-  return l.created_at && l.created_at < BCRA_CONSULTA_DESDE ? 'Sin consultar' : 'Pendiente'
+  return l.cuit || l.dni ? 'Pendiente' : 'Sin CUIT ni DNI'
 }
 
 /** El lead con todas sus columnas (la lista trae solo COLUMNAS_LISTA). */
@@ -1716,6 +1713,15 @@ export function LeadsModule() {
   const uniqueZonas = useMemo(() =>
     [...new Set(leads.map(l => zonaVisible(l.zona)).filter(Boolean))].sort() as string[]
   , [leads])
+
+  // Opciones del filtro BCRA: solo las que tiene algún lead de la lista (en el orden fijo),
+  // más las ya elegidas para poder quitarlas
+  const opcionesBcra = useMemo(() => {
+    const presentes = new Set(
+      leads.filter(l => l.estado_de_lead !== 'Conductor' && l.estado_de_lead !== 'Reingreso').map(grupoBcra),
+    )
+    return OPCIONES_BCRA.filter(o => presentes.has(o) || bcraFilter.includes(o))
+  }, [leads, bcraFilter])
 
   // Guías existentes (entrevistador_asignado), sin duplicados por mayúsculas/espacios.
   // Son las opciones para asignar: sin los guías inactivos (el lead que ya tiene
@@ -3490,7 +3496,7 @@ export function LeadsModule() {
       header: () => (
         <ExcelColumnFilter
           label="BCRA"
-          options={OPCIONES_BCRA}
+          options={opcionesBcra}
           selectedValues={bcraFilter}
           onSelectionChange={setBcraFilter}
           filterId="lead_bcra"
@@ -3787,7 +3793,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, categoriaLicFilter, bcraFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, categoriaLicFilter, bcraFilter, opcionesBcra, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
