@@ -116,6 +116,12 @@ export interface Lead {
     }[]
   } | null
   bcra_error?: string | null
+  /** CUIT/CUIL con el que se consultó y de dónde salió ('cuit' cargado o 'dni' armado). */
+  bcra_cuil?: string | null
+  bcra_cuil_origen?: 'cuit' | 'dni' | null
+  /** Nivel de alerta según Parámetros > Riesgo BCRA (sql/bcra_umbrales.sql). */
+  bcra_nivel?: 'verde' | 'amarillo' | 'rojo' | null
+  bcra_nivel_motivo?: string | null
   experiencia_previa?: string | null
   experiencia_manejo?: string | null
   antecedentes_penales?: boolean | null

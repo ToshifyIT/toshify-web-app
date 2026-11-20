@@ -144,40 +144,130 @@ function Tarjeta({ titulo, children }: { titulo: string; children: ReactNode }) 
   )
 }
 
-/** Fila etiqueta / valor. `largo`: textos de varias líneas. Vacío = guion. */
+const SITUACIONES_BCRA: Record<number, string> = {
+  0: 'Sin deudas',
+  1: 'Normal',
+  2: 'Riesgo bajo',
+  3: 'Riesgo medio',
+  4: 'Riesgo alto',
+  5: 'Irrecuperable',
+  6: 'Irrecuperable por disposición técnica',
+}
+
+/** Nivel de alerta (Parámetros > Riesgo BCRA): solo texto en color, sin fondo. */
+const NIVELES_BCRA: Record<'verde' | 'amarillo' | 'rojo', { label: string; color: string }> = {
+  verde: { label: 'Verde', color: 'var(--color-success)' },
+  amarillo: { label: 'Amarillo', color: 'var(--color-warning)' },
+  rojo: { label: 'Rojo', color: 'var(--color-danger)' },
+}
+
+/** Color del texto de la situación (sin fondo): verde normal, amarillo 2-3, rojo 4 a 6. */
+function colorSituacionBcra(situacion: number): string {
+  if (situacion <= 1) return 'var(--color-success)'
+  if (situacion <= 3) return 'var(--color-warning)'
+  return 'var(--color-danger)'
+}
+
+/** "27289938724" -> "27-28993872-4" */
+function formatCuil(cuil: string): string {
+  return /^\d{11}$/.test(cuil) ? `${cuil.slice(0, 2)}-${cuil.slice(2, 10)}-${cuil.slice(10)}` : cuil
+}
+
+/** "202609" -> "09/2026" */
+function periodoBcra(periodo: string | null | undefined): string | null {
+  return periodo && /^\d{6}$/.test(periodo) ? `${periodo.slice(4)}/${periodo.slice(0, 4)}` : null
+}
+
 /**
- * Resultado de la consulta automática a la Central de Deudores del BCRA
- * (server-bcra.js). Sin consulta todavía no muestra nada.
+ * Resumen de la consulta automática a la Central de Deudores del BCRA
+ * (server-bcra.js): situación, deuda, cheques y detalle por entidad.
  */
-function ConsultaBcra({ lead }: { lead: Lead }) {
-  if (!lead.bcra_consultado_at) return null
-  if (lead.bcra_error) {
-    return <Item label="Consulta BCRA" valor={`No se pudo consultar: ${lead.bcra_error}`} largo />
+function TarjetaBcra({ lead }: { lead: Lead }) {
+  if (!lead.bcra_consultado_at) {
+    return (
+      <Tarjeta titulo="BCRA">
+        <Item
+          label="Situación"
+          valor={lead.cuit || lead.dni
+            ? 'Pendiente de consulta'
+            : 'Sin CUIT ni DNI: se consulta cuando se cargue alguno'}
+          largo
+        />
+      </Tarjeta>
+    )
   }
+  if (lead.bcra_error) {
+    return (
+      <Tarjeta titulo="BCRA">
+        <Item
+          label="Situación"
+          valor={<span style={{ color: 'var(--color-warning)' }}>Sin validar: {lead.bcra_error}</span>}
+          largo
+        />
+        {lead.bcra_cuil && <Item label="CUIL consultado" valor={formatCuil(lead.bcra_cuil)} />}
+        <Item label="Consulta" valor={formatFechaHora(lead.bcra_consultado_at, { segundos: false })} />
+      </Tarjeta>
+    )
+  }
+  const situacion = lead.bcra_situacion ?? 0
   const entidades = lead.bcra_detalle?.entidades ?? []
-  const nombreLead = (lead.nombre_completo ?? '').trim().toUpperCase()
-  const nombreBcra = (lead.bcra_nombre ?? '').trim()
-  const nombreDistinto = Boolean(nombreBcra && nombreLead && nombreBcra.toUpperCase() !== nombreLead)
+  const judicial = entidades.some(e => e.proceso_judicial)
+  const deudaAtraso = entidades.filter(e => e.situacion >= 2).reduce((acc, e) => acc + e.monto, 0)
+  const nivel = lead.bcra_nivel ? NIVELES_BCRA[lead.bcra_nivel] : null
   return (
-    <>
+    <Tarjeta titulo="BCRA">
+      {nivel && (
+        <Item
+          label="Alerta"
+          largo
+          valor={
+            <span>
+              <span style={{ color: nivel.color, fontWeight: 600 }}>{nivel.label}</span>
+              {lead.bcra_nivel_motivo ? ` - ${lead.bcra_nivel_motivo}` : ''}
+            </span>
+          }
+        />
+      )}
+      <Item
+        label="Situación"
+        valor={
+          <span style={{ color: colorSituacionBcra(situacion), fontWeight: 600 }}>
+            {situacion > 0 ? `${situacion} - ` : ''}{SITUACIONES_BCRA[situacion] ?? '-'}
+          </span>
+        }
+      />
+      <Item label="Deuda con atraso" valor={formatPlata(deudaAtraso)} />
+      <Item label="Deuda total" valor={formatPlata(lead.bcra_deuda_total ?? 0)} />
+      <Item label="Entidades" valor={entidades.length} />
+      <Item label="Cheques rechazados" valor={lead.bcra_cheques ? lead.bcra_cheques : 'No'} />
+      <Item label="Proceso judicial" valor={judicial ? 'Sí' : 'No'} />
       {entidades.length > 0 && (
         <Item
-          label="Deudas por entidad"
+          label="Por entidad"
           largo
           valor={entidades.map(e => (
             <div key={e.entidad}>
-              {e.entidad}: situación {e.situacion}, {formatPlata(e.monto)}
-              {e.proceso_judicial ? ', con proceso judicial' : ''}
+              {e.entidad}:{' '}
+              <span style={{ color: colorSituacionBcra(e.situacion) }}>situación {e.situacion}</span>
+              , {formatPlata(e.monto)}
             </div>
           ))}
         />
       )}
-      {nombreDistinto && <Item label="Nombre en el BCRA" valor={nombreBcra} />}
-      <Item label="Consulta BCRA" valor={formatFechaHora(lead.bcra_consultado_at, { segundos: false })} />
-    </>
+      {lead.bcra_nombre && <Item label="Nombre en el BCRA" valor={lead.bcra_nombre} />}
+      {lead.bcra_cuil && (
+        <Item
+          label="CUIL consultado"
+          valor={`${formatCuil(lead.bcra_cuil)}${lead.bcra_cuil_origen === 'dni' ? ' (armado desde el DNI)' : ''}`}
+        />
+      )}
+      <Item label="Período informado" valor={periodoBcra(lead.bcra_detalle?.periodo)} />
+      <Item label="Consulta" valor={formatFechaHora(lead.bcra_consultado_at, { segundos: false })} />
+    </Tarjeta>
   )
 }
 
+/** Fila etiqueta / valor. `largo`: textos de varias líneas. Vacío = guion. */
 function Item({ label, valor, largo, mono }: {
   label: string
   valor: ReactNode | null | undefined
@@ -407,8 +497,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
               <Item label="Experiencia previa" valor={lead.experiencia_previa} />
               <Item label="Experiencia de manejo" valor={lead.experiencia_manejo} largo />
               <Item label="Disponibilidad" valor={lead.disponibilidad} />
-              <Item label="BCRA" valor={lead.bcra} largo />
-              <ConsultaBcra lead={lead} />
+              <Item label="BCRA" valor={lead.bcra} />
               <Item label="Monotributo" valor={lead.monotributo} />
               {estadoMonotributo(lead.monotributo) === 'no' && (
                 <Item label="Motivo sin monotributo" valor={lead.motivo_sin_monotributo} largo />
@@ -524,6 +613,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
               <Item label="Detalle Hireflix" valor={lead.resumen_hireflix} largo />
               <Item label="Observaciones" valor={lead.observaciones} largo />
             </Tarjeta>
+            <TarjetaBcra lead={lead} />
           </>
         )}
       </div>
