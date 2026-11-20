@@ -92,10 +92,30 @@ body.device-mobile .main-content {
     top: 0 !important;
     bottom: 0 !important;
     width: 280px !important;
+    /* dvh: en el celular 100vh incluye la barra de Safari y el final del menú quedaba tapado */
     height: 100vh !important;
+    height: 100dvh !important;
     z-index: var(--z-sidebar);
     transition: left 0.3s ease;
     overflow-y: auto;
+    /* El scroll del menú no se pasa a la página de atrás */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* El menú scrollea por dentro: la lista de opciones ocupa el alto que queda */
+  .sidebar .sidebar-nav {
+    min-height: 0;
+    overscroll-behavior: contain;
+  }
+
+  /* Con el menú abierto, la página de atrás no se mueve */
+  body.menu-lateral-abierto {
+    overflow: hidden;
+    touch-action: none;
+  }
+  body.menu-lateral-abierto .sidebar {
+    touch-action: pan-y;
   }
 
   .sidebar.open {
