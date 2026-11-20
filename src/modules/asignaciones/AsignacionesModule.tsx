@@ -438,6 +438,8 @@ export function AsignacionesModule() {
   const [error, setError] = useState<string | null>(null)
   // Capitán del vehículo (vehiculos.guia_responsable: Ali, Carla, Eunice), por vehiculo_id
   const [capitanPorVehiculo, setCapitanPorVehiculo] = useState<Map<string, string>>(new Map())
+  // Capitán de cada conductor (conductores.guia): se usa si el auto no tiene capitán
+  const [capitanPorConductor, setCapitanPorConductor] = useState<Map<string, string>>(new Map())
   // Cuentas Cabify / DiDi de cada turno, por asignacion_id (mismo dato que Programaciones)
   const [cuentasPorAsignacion, setCuentasPorAsignacion] = useState<Map<string, CuentasAsignacion>>(new Map())
   // App con la que pagó cada conductor esta semana (Facturación), por conductor_id
@@ -1401,6 +1403,24 @@ export function AsignacionesModule() {
         if (!cancelado) setCapitanPorVehiculo(resultado)
       } catch (err) {
         console.error('No se pudo cargar el capitán de los vehículos:', err)
+      }
+      // Capitán de los conductores asignados (para los autos sin capitán)
+      try {
+        const idsConductores = [...new Set(asignaciones.flatMap(a =>
+          (a.asignaciones_conductores || []).map(c => c.conductor_id)).filter(Boolean))] as string[]
+        const porConductor = new Map<string, string>()
+        for (let i = 0; i < idsConductores.length; i += 300) {
+          const { data, error } = await (supabase.from('conductores') as any)
+            .select('id, guia')
+            .in('id', idsConductores.slice(i, i + 300))
+          if (error) throw error
+          for (const c of (data || []) as { id: string; guia: string | null }[]) {
+            if (c.guia?.trim()) porConductor.set(c.id, c.guia.trim())
+          }
+        }
+        if (!cancelado) setCapitanPorConductor(porConductor)
+      } catch (err) {
+        console.error('No se pudo cargar el capitán de los conductores:', err)
       }
     }
     cargarCapitanes()
@@ -4035,13 +4055,36 @@ export function AsignacionesModule() {
     {
       id: 'capitan',
       header: 'Capitán',
-      // Guía responsable del vehículo (vehiculos.guia_responsable)
-      accessorFn: (row) => capitanPorVehiculo.get(row.vehiculo_id) || '-',
-      cell: ({ getValue }) => {
+      // Guía responsable del vehículo (vehiculos.guia_responsable). Si el auto no tiene,
+      // el capitán del conductor asignado (conductores.guia): primero los que siguen en
+      // la asignación, después cualquiera de los que estuvieron.
+      accessorFn: (row) => {
+        const delAuto = capitanPorVehiculo.get(row.vehiculo_id)
+        if (delAuto) return delAuto
+        const conds = (row.asignaciones_conductores || []) as Array<{ conductor_id?: string | null; estado?: string | null }>
+        const ordenados = [
+          ...conds.filter(c => c.estado !== 'cancelado' && c.estado !== 'completado'),
+          ...conds,
+        ]
+        for (const c of ordenados) {
+          const guia = c.conductor_id ? capitanPorConductor.get(String(c.conductor_id)) : undefined
+          if (guia) return guia
+        }
+        return '-'
+      },
+      cell: ({ getValue, row }) => {
         const capitan = getValue() as string
         if (capitan === '-') return <span className="text-muted">-</span>
+        const delConductor = !capitanPorVehiculo.get(row.original.vehiculo_id)
         // Solo el nombre (Ali, Carla, Eunice) para que la columna ocupe poco; completo en el tooltip
-        return <span style={{ fontSize: '12px' }} title={capitan}>{capitan.trim().split(/\s+/)[0]}</span>
+        return (
+          <span
+            style={{ fontSize: '12px' }}
+            title={delConductor ? `${capitan} (capitán del conductor; el auto no tiene capitán)` : capitan}
+          >
+            {capitan.trim().split(/\s+/)[0]}
+          </span>
+        )
       }
     },
     {
@@ -4190,7 +4233,7 @@ export function AsignacionesModule() {
         return <ActionsMenu actions={actions} />
       }
     }
-  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, cuentasPorAsignacion, appsPagoPorConductor, vehiculosRC, primerasAsignaciones])
+  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, capitanPorConductor, cuentasPorAsignacion, appsPagoPorConductor, vehiculosRC, primerasAsignaciones])
 
   return (
     <div className="asig-module">
