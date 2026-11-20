@@ -10848,9 +10848,9 @@ export function ReporteFacturacionTab() {
       const daysSoFarPeriodo = Math.min(differenceInCalendarDays(hoyPeriodo, fechaInicio) + 1, 7)
       const necesitaProyeccionPeriodo = daysSoFarPeriodo > 0 && daysSoFarPeriodo < 7
 
-      // Obtener precio semanal exacto por conductor desde facturacion_detalle
+      // Obtener precio diario exacto por conductor desde facturacion_detalle
       // Query fresca por periodo_id (no depende de IDs en estado que pueden ser preview-xxx)
-      const precioSemanalByConductor = new Map<string, number>()
+      const precioDiarioByConductor = new Map<string, number>()
       if (necesitaProyeccionPeriodo) {
         const { data: fcFromDb } = await supabase
           .from('facturacion_conductores')
@@ -10872,9 +10872,33 @@ export function ReporteFacturacionTab() {
             const conductorId = dbIdToConId.get(d.facturacion_id)
             const pu = Number(d.precio_unitario) || 0
             if (conductorId && pu > 0) {
-              precioSemanalByConductor.set(conductorId, Math.round(pu * 7))
+              precioDiarioByConductor.set(conductorId, pu)
             }
           })
+        }
+      }
+
+      // Saldo al día de cada conductor. La facturación guarda el saldo del momento en que se
+      // recalculó; los pagos manuales o transferencias cargados después ya están en el saldo
+      // actual y al cierre de semana se van a descontar, así que el preview usa el saldo de hoy.
+      const saldoActualByConductor = new Map<string, number>()
+      const idsConductores = [...new Set(facturaciones.map(f => f.conductor_id).filter(Boolean))]
+      if (idsConductores.length > 0) {
+        const { data: saldosData } = await (supabase.from('saldos_conductores') as any)
+          .select('conductor_id, saldo_actual')
+          .in('conductor_id', idsConductores)
+        ;(saldosData || []).forEach((r: { conductor_id: string; saldo_actual: number | null }) => {
+          saldoActualByConductor.set(r.conductor_id, Number(r.saldo_actual) || 0)
+        })
+      }
+
+      // Días de la semana que faltan (para proyectar el descuento de la promoción)
+      const diasRestantesFechas: string[] = []
+      if (necesitaProyeccionPeriodo) {
+        for (let i = daysSoFarPeriodo; i < 7; i++) {
+          const d = new Date(fechaInicio)
+          d.setDate(d.getDate() + i)
+          diasRestantesFechas.push(format(d, 'yyyy-MM-dd'))
         }
       }
 
@@ -10909,25 +10933,60 @@ export function ReporteFacturacionTab() {
 
         const actualAlquiler = f.subtotal_alquiler || 0
 
-        // Proyectar alquiler a semana completa usando precio exacto del detalle
+        // Proyectar alquiler hasta el fin de semana: lo cobrado hasta hoy + los días que faltan.
+        // Solo para conductores con asignación al cierre (Activo). Si está de baja o en pausa,
+        // la facturación ya se cortó y se cobra lo real. Si empezó a mitad de semana, solo se
+        // suman los días que faltan, no la semana entera.
+        const diasCobrados = Number(f.turnos_cobrados) || 0
         let importeContrato = actualAlquiler
-        if (necesitaProyeccionPeriodo && f.estado_billing !== 'De baja' && actualAlquiler > 0) {
-          const precioSemanal = precioSemanalByConductor.get(f.conductor_id)
-          if (precioSemanal) {
-            importeContrato = precioSemanal
-          } else {
-            importeContrato = Math.round((actualAlquiler / daysSoFarPeriodo) * 7)
+        let diasProyectados = diasCobrados
+        // Descuento de la promoción (10% del alquiler) por los días que faltan: si todos los
+        // días cobrados tuvieron la promo, los que faltan también, hasta que termine la promo.
+        let descuentoPromoProyectado = 0
+        if (necesitaProyeccionPeriodo && f.estado_billing === 'Activo' && actualAlquiler > 0) {
+          const diasRestantes = 7 - daysSoFarPeriodo
+          const precioDiario = precioDiarioByConductor.get(f.conductor_id)
+            || (diasCobrados > 0 ? actualAlquiler / diasCobrados : actualAlquiler / daysSoFarPeriodo)
+          diasProyectados = Math.min(diasCobrados + diasRestantes, 7)
+          importeContrato = Math.min(actualAlquiler + precioDiario * diasRestantes, precioDiario * 7)
+          const diasAgregados = Math.max(0, Math.round((importeContrato - actualAlquiler) / precioDiario))
+          const promoAlquiler = ((f as any)._detalles || [])
+            .filter((d: any) => d.referencia_tipo === REFERENCIA_PROMOCION)
+            .map((d: any) => leerCalculoPromocion(d.descripcion))
+            .find((c: any) => c?.tipo === 'alquiler')
+          if (promoAlquiler && (promoAlquiler.dias?.length || 0) >= Math.ceil(diasCobrados)) {
+            const diasConPromo = diasRestantesFechas
+              .slice(0, diasAgregados)
+              .filter(fecha => fecha <= promoAlquiler.promocion.hasta).length
+            descuentoPromoProyectado = Math.round(precioDiario * promoAlquiler.porcentaje * diasConPromo * 100) / 100
           }
         }
+        importeContrato = Math.round(importeContrato)
+
+        // Montos por modalidad: la facturación guardada no los trae, se reparten del contrato
+        // según los días de cada modalidad para que el detalle sume lo mismo que la columna.
+        const diasCargoF = f.prorrateo_cargo_dias || 0
+        const diasDiurnoF = f.prorrateo_diurno_dias || 0
+        const diasNocturnoF = f.prorrateo_nocturno_dias || 0
+        const diasModalidades = diasCargoF + diasDiurnoF + diasNocturnoF
+        const montoModalidad = (dias: number, guardado?: number) =>
+          guardado || (diasModalidades > 0 ? Math.round((importeContrato * dias / diasModalidades) * 100) / 100 : 0)
 
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
         // Si tiene telepase, peajes = 0
         const tieneTelepaseCerrado = f.tiene_telepase === true
         const peajesRealesCerrado = tieneTelepaseCerrado ? 0 : (f.monto_peajes || 0)
-        const saldoPendiente = f.saldo_anterior || 0
+        // Saldo de hoy (deuda positiva). Sin registro en saldos, el guardado en la facturación.
+        const saldoGuardado = f.saldo_anterior || 0
+        const saldoActual = saldoActualByConductor.get(f.conductor_id)
+        const saldoPendiente = saldoActual !== undefined
+          ? (Math.abs(saldoActual) < 0.01 ? 0 : Math.round(-saldoActual * 100) / 100)
+          : saldoGuardado
+        const pagosPosteriores = Math.round((saldoGuardado - saldoPendiente) * 100) / 100
+        const descuentosProyectados = (f.subtotal_descuentos || 0) + descuentoPromoProyectado
         // Toshipass (tarifa nueva) reemplaza a la garantía: nunca vienen los dos, va en excedentes igual
         const subtotalCargosRecalcCerrado = actualAlquiler + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0) + peajesRealesCerrado + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
-        const excedentes = subtotalCargosRecalcCerrado - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
+        const excedentes = Math.round((subtotalCargosRecalcCerrado - descuentosProyectados - actualAlquiler + saldoPendiente) * 100) / 100
 
         return {
           anio: periodo.anio,
@@ -10947,13 +11006,13 @@ export function ReporteFacturacionTab() {
           generadoEfectivo: cabifyInfo.efectivo,
           flotaPrioritaria: f.grupo_flota || null,
           detalle: {
-            diasTrabajados: 7,
-            prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
-            prorrateoCargoMonto: f.prorrateo_cargo_monto || 0,
-            prorrateoDiurnoDias: f.prorrateo_diurno_dias || 0,
-            prorrateoDiurnoMonto: f.prorrateo_diurno_monto || 0,
-            prorrateoNocturnoDias: f.prorrateo_nocturno_dias || 0,
-            prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
+            diasTrabajados: diasProyectados,
+            prorrateoCargoDias: diasCargoF,
+            prorrateoCargoMonto: montoModalidad(diasCargoF, f.prorrateo_cargo_monto),
+            prorrateoDiurnoDias: diasDiurnoF,
+            prorrateoDiurnoMonto: montoModalidad(diasDiurnoF, f.prorrateo_diurno_monto),
+            prorrateoNocturnoDias: diasNocturnoF,
+            prorrateoNocturnoMonto: montoModalidad(diasNocturnoF, f.prorrateo_nocturno_monto),
             subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             montoToshipass: f.monto_toshipass || 0,
@@ -10963,9 +11022,10 @@ export function ReporteFacturacionTab() {
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
             subtotalCargos: subtotalCargosRecalcCerrado - actualAlquiler + importeContrato,
-            subtotalDescuentos: f.subtotal_descuentos || 0,
-            saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: subtotalCargosRecalcCerrado - (f.subtotal_descuentos || 0) + saldoPendiente - actualAlquiler + importeContrato,
+            subtotalDescuentos: descuentosProyectados,
+            saldoAnterior: saldoPendiente,
+            pagosPosteriores: Math.abs(pagosPosteriores) >= 0.01 ? pagosPosteriores : 0,
+            totalAPagar: importeContrato + excedentes,
           }
         }
       })

@@ -33,7 +33,8 @@ export interface CabifyPreviewRowDetalle {
   ticketsFavor: number
   subtotalCargos: number
   subtotalDescuentos: number
-  saldoAnterior: number
+  saldoAnterior: number // positivo = deuda, negativo = a favor
+  pagosPosteriores?: number // pagos cargados después del último cálculo (ya restados del saldo)
   totalAPagar: number
 }
 
@@ -699,7 +700,7 @@ export function CabifyPreviewTable({
           </div>
 
           <!-- Detalles ocultos para los (i) -->
-          <div style="display:none"><div id="det-garantia">${toshipass > 0 ? 'Toshipass semanal (tarifa nueva, en lugar de la garantía)' : garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + ${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo acumulado de semanas anteriores</div><div id="det-contrato">Precio diario × 7 días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Tickets ${fmt(d.ticketsFavor)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
+          <div style="display:none"><div id="det-garantia">${toshipass > 0 ? 'Toshipass semanal (tarifa nueva, en lugar de la garantía)' : garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + ${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo del conductor al día de hoy${d.pagosPosteriores ? ` (incluye ${fmt(d.pagosPosteriores)} de pagos cargados después del último cálculo)` : ''}</div><div id="det-contrato">Precio diario × ${d.diasTrabajados} días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Descuentos ${fmt(d.subtotalDescuentos)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
 
           <div id="cbf-info-box" style="display:none;background:#1e1e2e;color:#fff;padding:8px 12px;border-radius:6px;font-size:11px;line-height:1.4;margin-bottom:8px;"></div>
           <table style="width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
@@ -711,7 +712,7 @@ export function CabifyPreviewTable({
               <tr><td style="padding: 4px 0; color: #16a34a;">Tickets a favor ${iBtn('det-tickets')}</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.ticketsFavor)}</td></tr>
               <tr style="border-top: 1px solid #ddd;"><td style="padding: 4px 0;">Subtotal Cargos ${iBtn('det-subtotal')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalCargos)}</td></tr>
               <tr><td style="padding: 4px 0;">Subtotal Descuentos ${iBtn('det-descuentos')}</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.subtotalDescuentos)}</td></tr>
-              <tr><td style="padding: 4px 0;">Saldo anterior ${iBtn('det-saldo')}</td><td style="text-align: right; font-family: monospace; ${d.saldoAnterior > 0 ? 'color: #16a34a;' : d.saldoAnterior < 0 ? 'color: #dc2626;' : ''}">${d.saldoAnterior > 0 ? '-' : ''}${fmt(Math.abs(d.saldoAnterior))}</td></tr>
+              <tr><td style="padding: 4px 0;">Saldo anterior ${iBtn('det-saldo')}</td><td style="text-align: right; font-family: monospace; ${d.saldoAnterior > 0 ? 'color: #dc2626;' : d.saldoAnterior < 0 ? 'color: #16a34a;' : ''}">${d.saldoAnterior < 0 ? '-' : ''}${fmt(Math.abs(d.saldoAnterior))}</td></tr>
             </tbody>
           </table>
 
@@ -1035,11 +1036,13 @@ export function CabifyPreviewTable({
         .fact-preview-search button { background: none; border: none; padding: 2px; cursor: pointer; color: var(--text-muted); }
         .fact-preview-count { font-size: 11px; color: var(--text-secondary); margin-left: auto; }
         .changes-indicator { color: #f59e0b; font-weight: 600; }
-        .fact-preview-table-wrapper { overflow: auto; border: 1px solid var(--border-color); border-radius: 6px; max-height: 60vh; }
-        .fact-preview-table-wrapper::-webkit-scrollbar { height: 12px; width: 12px; }
-        .fact-preview-table-wrapper::-webkit-scrollbar-track { background: var(--bg-tertiary); }
-        .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #7C3AED; border-radius: 6px; border: 2px solid var(--bg-tertiary); }
-        .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #6D28D9; }
+        .fact-preview-table-wrapper { overflow: auto; border: 1px solid var(--border-color); border-radius: 6px; max-height: 60vh; scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+        .fact-preview-table-wrapper::-webkit-scrollbar { height: 8px; width: 8px; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-track { background: transparent; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        [data-theme="dark"] .fact-preview-table-wrapper { scrollbar-color: #404040 transparent; }
+        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #404040; }
         .fact-preview-table.cabify-table { width: 100%; min-width: 1800px; border-collapse: collapse; font-size: 12px; }
         .fact-preview-table.cabify-table th { padding: 10px 8px; text-align: left; background: var(--bg-secondary); border-bottom: 2px solid var(--border-color); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 10px; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
         .cabify-col-th { background: rgba(124, 58, 237, 0.08) !important; border-left: 2px solid rgba(124, 58, 237, 0.25) !important; }

@@ -1253,12 +1253,12 @@ export function FacturacionPreviewTable({
         .fact-preview-filter-group { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
         .fact-preview-filter-group select { padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); font-size: 11px; }
         .fact-preview-count { font-size: 11px; color: var(--text-secondary); margin-left: auto; }
-        .fact-preview-table-wrapper { overflow: scroll !important; border: 1px solid var(--border-color); border-radius: 6px; max-height: 60vh; width: 100%; }
-        .fact-preview-table-wrapper::-webkit-scrollbar { height: 16px; width: 16px; display: block !important; }
-        .fact-preview-table-wrapper::-webkit-scrollbar-track { background: #d1d5db; }
-        .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #059669; border-radius: 8px; border: 3px solid #d1d5db; min-height: 40px; min-width: 40px; }
-        .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #047857; }
-        .fact-preview-table-wrapper::-webkit-scrollbar-corner { background: #d1d5db; }
+        .fact-preview-table-wrapper { overflow: auto; border: 1px solid var(--border-color); border-radius: 6px; max-height: 60vh; width: 100%; scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+        .fact-preview-table-wrapper::-webkit-scrollbar { height: 8px; width: 8px; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-track { background: transparent; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; min-height: 40px; min-width: 40px; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        .fact-preview-table-wrapper::-webkit-scrollbar-corner { background: transparent; }
         .fact-preview-table { min-width: 2400px; border-collapse: collapse; font-size: 11px; }
         .fact-preview-table th { padding: 8px 6px; text-align: left; background: var(--bg-secondary); border-bottom: 2px solid var(--border-color); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 9px; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
         .fact-preview-table td { padding: 4px 6px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); white-space: nowrap; }
@@ -1323,8 +1323,9 @@ export function FacturacionPreviewTable({
         [data-theme="dark"] .col-action select:hover { border-color: #fbbf24; }
         [data-theme="dark"] .btn-ver-detalle { border-color: var(--border-primary); color: var(--text-secondary); }
         [data-theme="dark"] .btn-ver-detalle:hover { background: var(--bg-tertiary); border-color: var(--text-tertiary); color: var(--text-primary); }
-        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-track { background: var(--bg-tertiary); }
-        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-thumb { border-color: var(--bg-tertiary); }
+        [data-theme="dark"] .fact-preview-table-wrapper { scrollbar-color: #404040 transparent; }
+        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-thumb { background: #404040; }
+        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #525252; }
         [data-theme="dark"] .fact-preview-table tr.row-saldos-pendientes { background: rgba(251, 191, 36, 0.1); }
         [data-theme="dark"] .fact-preview-table tr.row-saldos-pendientes:hover { background: rgba(251, 191, 36, 0.2); }
         [data-theme="dark"] .fact-preview-table tr.row-new { background: rgba(16, 185, 129, 0.1) !important; }
