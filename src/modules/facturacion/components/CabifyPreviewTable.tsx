@@ -33,7 +33,8 @@ export interface CabifyPreviewRowDetalle {
   ticketsFavor: number
   subtotalCargos: number
   subtotalDescuentos: number
-  saldoAnterior: number
+  saldoAnterior: number // positivo = deuda, negativo = a favor
+  pagosPosteriores?: number // pagos cargados después del último cálculo (ya restados del saldo)
   totalAPagar: number
 }
 
@@ -699,7 +700,7 @@ export function CabifyPreviewTable({
           </div>
 
           <!-- Detalles ocultos para los (i) -->
-          <div style="display:none"><div id="det-garantia">${toshipass > 0 ? 'Toshipass semanal (tarifa nueva, en lugar de la garantía)' : garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + ${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo acumulado de semanas anteriores</div><div id="det-contrato">Precio diario × 7 días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Tickets ${fmt(d.ticketsFavor)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
+          <div style="display:none"><div id="det-garantia">${toshipass > 0 ? 'Toshipass semanal (tarifa nueva, en lugar de la garantía)' : garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + ${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo del conductor al día de hoy${d.pagosPosteriores ? ` (incluye ${fmt(d.pagosPosteriores)} de pagos cargados después del último cálculo)` : ''}</div><div id="det-contrato">Precio diario × ${d.diasTrabajados} días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">${etiquetaGarantia} ${fmt(montoGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Descuentos ${fmt(d.subtotalDescuentos)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
 
           <div id="cbf-info-box" style="display:none;background:#1e1e2e;color:#fff;padding:8px 12px;border-radius:6px;font-size:11px;line-height:1.4;margin-bottom:8px;"></div>
           <table style="width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
@@ -711,7 +712,7 @@ export function CabifyPreviewTable({
               <tr><td style="padding: 4px 0; color: #16a34a;">Tickets a favor ${iBtn('det-tickets')}</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.ticketsFavor)}</td></tr>
               <tr style="border-top: 1px solid #ddd;"><td style="padding: 4px 0;">Subtotal Cargos ${iBtn('det-subtotal')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalCargos)}</td></tr>
               <tr><td style="padding: 4px 0;">Subtotal Descuentos ${iBtn('det-descuentos')}</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.subtotalDescuentos)}</td></tr>
-              <tr><td style="padding: 4px 0;">Saldo anterior ${iBtn('det-saldo')}</td><td style="text-align: right; font-family: monospace; ${d.saldoAnterior > 0 ? 'color: #16a34a;' : d.saldoAnterior < 0 ? 'color: #dc2626;' : ''}">${d.saldoAnterior > 0 ? '-' : ''}${fmt(Math.abs(d.saldoAnterior))}</td></tr>
+              <tr><td style="padding: 4px 0;">Saldo anterior ${iBtn('det-saldo')}</td><td style="text-align: right; font-family: monospace; ${d.saldoAnterior > 0 ? 'color: #dc2626;' : d.saldoAnterior < 0 ? 'color: #16a34a;' : ''}">${d.saldoAnterior < 0 ? '-' : ''}${fmt(Math.abs(d.saldoAnterior))}</td></tr>
             </tbody>
           </table>
 
