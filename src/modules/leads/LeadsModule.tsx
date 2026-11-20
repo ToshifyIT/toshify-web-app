@@ -481,6 +481,8 @@ const COLUMNAS_LISTA = [
   'disponibilidad', 'proceso', 'entrevista_ia', 'estado_de_lead', 'estado_manual_at', 'fase_de_preguntas',
   'causal_de_cierre', 'entrevistador_asignado', 'observaciones', 'referido', 'embajador_id', 'ayuda_entrevista',
   'url_folder', 'fuente_de_lead', 'companero', 'patente',
+  // tipo: lo usa calcularEstadoLead ('auto' → Auto del pueblo, 'flota' → Gestión flota)
+  'tipo',
   'bcra_nivel', 'bcra_nivel_motivo', 'bcra_error', 'bcra_consultado_at',
 ].join(', ')
 
