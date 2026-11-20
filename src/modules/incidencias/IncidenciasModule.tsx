@@ -3185,6 +3185,10 @@ export function IncidenciasModule() {
           flex: 1;
           min-height: 0;
         }
+        /* Celular: tarjetas sin scroll propio, scrollea la página (ver IncidenciasModule.css) */
+        @media (max-width: 768px) {
+          .incidencias-module .dt-wrapper { overflow: visible; }
+        }
       `}</style>
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando incidencias..." size="lg" />
