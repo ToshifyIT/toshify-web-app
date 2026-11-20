@@ -20,7 +20,13 @@
  * Variables (ya existen): VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
  * BCRA_CONSULTA_AUTO=0 la apaga. La arranca server.js (producción); el dev server
  * de vite no, para no duplicar las consultas.
+ *
+ * Además, POST /api/bcra/consultar/:id consulta un lead en el momento (la ficha lo
+ * llama al guardar un lead con DNI o CUIT nuevo o cambiado). La vuelta de 5 minutos
+ * queda de respaldo para los que entran por otro lado o si el BCRA corta.
  */
+
+import express from 'express'
 
 const BCRA_API = 'https://api.bcra.gob.ar/CentralDeDeudores/v1.0/Deudas'
 const TIMEOUT_MS = 20000
@@ -199,9 +205,14 @@ export async function consultarBcra(cuit, deudasPrevias) {
   }
 }
 
+const COLUMNAS_CONSULTA = 'id,cuit,dni,nombre_completo,nombre_completo_2,primer_nombre,apellido,bcra,bcra_resumen,bcra_intentos'
+
+// Leads que se están consultando ahora (al instante o en la vuelta): no se consultan dos veces
+const enCurso = new Set()
+
 async function leadsPendientes(cfg) {
   const q = new URLSearchParams({
-    select: 'id,cuit,dni,nombre_completo,nombre_completo_2,primer_nombre,apellido,bcra,bcra_resumen,bcra_intentos',
+    select: COLUMNAS_CONSULTA,
     bcra_consultado_at: 'is.null',
     or: '(cuit.not.is.null,dni.not.is.null)',
     // Los más nuevos primero: los que entran hoy no esperan a que terminen los viejos
@@ -326,7 +337,14 @@ export async function consultarPendientes(cfg = config()) {
   const leads = await leadsPendientes(cfg)
   const r = { revisados: 0, ok: 0, invalidos: 0, fallidos: 0, limitado: false }
   for (const lead of leads) {
-    const estado = await procesarLead(cfg, lead)
+    if (enCurso.has(lead.id)) continue
+    enCurso.add(lead.id)
+    let estado
+    try {
+      estado = await procesarLead(cfg, lead)
+    } finally {
+      enCurso.delete(lead.id)
+    }
     // Límite del BCRA: se corta el turno y el resto queda para dentro de 5 minutos
     if (estado === 'limite') { r.limitado = true; break }
     r.revisados += 1
@@ -375,3 +393,79 @@ export function iniciarConsultaAutomaticaBcra() {
   setInterval(() => { void revisar() }, 60 * 1000).unref?.()
   console.log(`[bcra] Consulta automática activa: leads con CUIT o DNI, cada ${CADA_MIN} minutos`)
 }
+
+// =====================================================
+// Consulta al instante de un lead: POST /api/bcra/consultar/:id
+// =====================================================
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Solo usuarios con sesión iniciada y activos. Devuelve el cfg o responde el error. */
+async function requireUsuario(req, res) {
+  const cfg = config()
+  if (!cfg.url || !cfg.serviceKey) {
+    res.status(500).json({ error: 'Configuración del servidor incompleta' })
+    return null
+  }
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'No autorizado' })
+    return null
+  }
+  const userRes = await fetchConTimeout(`${cfg.url}/auth/v1/user`, {
+    headers: { Authorization: authHeader, apikey: cfg.serviceKey },
+  })
+  if (!userRes.ok) {
+    res.status(401).json({ error: 'Sesión inválida, volvé a iniciar sesión' })
+    return null
+  }
+  const user = await userRes.json()
+  const perfilRes = await fetchConTimeout(
+    `${cfg.url}/rest/v1/user_profiles?id=eq.${user.id}&select=is_active`,
+    { headers: headersServicio(cfg) },
+  )
+  const perfil = perfilRes.ok ? (await perfilRes.json())[0] : null
+  if (!perfil || perfil.is_active === false) {
+    res.status(403).json({ error: 'Usuario inactivo' })
+    return null
+  }
+  return cfg
+}
+
+export const bcraRouter = express.Router()
+
+/**
+ * Consulta el lead si está pendiente (bcra_consultado_at vacío y con CUIT o DNI).
+ * Responde { estado }: 'ok' | 'invalido' | 'reintentar' | 'limite' | 'en_curso'
+ * | 'ya_consultado' | 'sin_documento'. Con 'limite' o 'reintentar' lo toma la vuelta de 5 minutos.
+ */
+bcraRouter.post('/consultar/:id', async (req, res) => {
+  try {
+    const cfg = await requireUsuario(req, res)
+    if (!cfg) return
+    const { id } = req.params
+    if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Lead inválido' })
+
+    const q = new URLSearchParams({ select: `${COLUMNAS_CONSULTA},bcra_consultado_at`, id: `eq.${id}` })
+    const r = await fetchConTimeout(`${cfg.url}/rest/v1/leads?${q}`, { headers: headersServicio(cfg) })
+    if (!r.ok) throw new Error(`Supabase leads ${r.status}`)
+    const lead = (await r.json())[0]
+    if (!lead) return res.status(404).json({ error: 'No se encontró el lead' })
+    if (lead.bcra_consultado_at) return res.json({ estado: 'ya_consultado' })
+    if (!String(lead.cuit ?? '').trim() && !String(lead.dni ?? '').trim()) {
+      return res.json({ estado: 'sin_documento' })
+    }
+    if (enCurso.has(id)) return res.json({ estado: 'en_curso' })
+
+    enCurso.add(id)
+    try {
+      const estado = await procesarLead(cfg, lead)
+      res.json({ estado })
+    } finally {
+      enCurso.delete(id)
+    }
+  } catch (err) {
+    console.error('[bcra] Consulta al instante falló:', err.message)
+    res.status(500).json({ error: 'No se pudo consultar el BCRA' })
+  }
+})

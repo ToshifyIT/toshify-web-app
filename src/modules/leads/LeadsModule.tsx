@@ -27,7 +27,7 @@ import { useConductoresEmbajador } from '../../hooks/useConductoresEmbajador'
 import { Alerta } from '../../components/ui/alertas'
 import { ESTADO_DESCARTADO, lineaDescarte, pedirMotivoDescarte } from './motivoDescarte'
 import { ComparacionSemana, useFotoSemanaAnterior } from '../../components/ui/ComparacionSemana'
-import { showError, showSuccess, showWarning } from '../../utils/toast'
+import { showError, showInfo, showSuccess, showWarning } from '../../utils/toast'
 import type { Lead, LeadFormData } from '../../types/leads.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -46,6 +46,7 @@ import { ChatLeadModal } from './components/ChatLeadModal'
 import { nombresDelLead } from './nombreLead'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, MARCA_RECONTACTO_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
+import { cambioDatosBcra, pedirConsultaBcra } from './bcraConsultaService'
 import type { ConductorSinCompanero, LeadCercaHtml, ParejaLead, ProgramacionesActivas } from './parejasLeads'
 import { cargarLeadsCercaPorCalle, cargarParejasCalle, procesarLeadsNuevos } from './rutasLeadsService'
 import type { ParejasCalle } from './rutasLeadsService'
@@ -481,6 +482,8 @@ const COLUMNAS_LISTA = [
   'disponibilidad', 'proceso', 'entrevista_ia', 'estado_de_lead', 'estado_manual_at', 'fase_de_preguntas',
   'causal_de_cierre', 'entrevistador_asignado', 'observaciones', 'referido', 'embajador_id', 'ayuda_entrevista',
   'url_folder', 'fuente_de_lead', 'companero', 'patente',
+  // tipo: lo usa calcularEstadoLead ('auto' → Auto del pueblo, 'flota' → Gestión flota)
+  'tipo',
   'bcra_nivel', 'bcra_nivel_motivo', 'bcra_error', 'bcra_consultado_at',
 ].join(', ')
 
@@ -2063,6 +2066,15 @@ export function LeadsModule() {
     return false
   }
 
+  /** Consulta el BCRA del lead recién guardado sin esperar la vuelta de 5 minutos. */
+  function consultarBcraAhora(leadId: string, nombre: unknown) {
+    void pedirConsultaBcra(leadId).then(estado => {
+      if (estado !== 'ok' && estado !== 'invalido') return
+      showInfo('BCRA consultado', `Se actualizó el BCRA de ${String(nombre || 'el lead')}`)
+      loadLeads()
+    })
+  }
+
   async function handleSaveCreate() {
     const fields = formDataToDbFields(formData)
     normalizarLicenciaAlGuardar(fields)
@@ -2082,6 +2094,7 @@ export function LeadsModule() {
       setShowCreateModal(false)
       loadLeads()
       if (recalcular && creado?.id) void ubicarLeadGuardado({ ...(fields as Partial<Lead>), id: creado.id } as Lead)
+      if (creado?.id && cambioDatosBcra(fields, null)) consultarBcraAhora(creado.id, fields.nombre_completo)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo crear el lead'
       showError('Error', msg)
@@ -2114,6 +2127,7 @@ export function LeadsModule() {
       setShowEditModal(false)
       loadLeads()
       if (recalcular) void ubicarLeadGuardado({ ...selectedLead, ...(fields as Partial<Lead>) } as Lead)
+      if (cambioDatosBcra(fields, selectedLead)) consultarBcraAhora(selectedLead.id, fields.nombre_completo)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo actualizar'
       showError('Error', msg)
