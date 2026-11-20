@@ -2417,6 +2417,16 @@ export function AsignacionesModule() {
     }
   }
 
+  // Conductor que salió de una programación sin confirmar (dado de baja o desasignado):
+  // la tabla ya muestra su turno como Vacante, así que no se ofrece para confirmar.
+  const salioSinConfirmar = (asig: { estado?: string | null }, ac: { estado?: string | null; confirmado?: boolean | null }) =>
+    !ac.confirmado
+    && (asig.estado === 'programado' || asig.estado === 'activa' || asig.estado === 'activo')
+    && (ac.estado === 'completado' || ac.estado === 'finalizado' || ac.estado === 'cancelado')
+
+  const conductoresParaConfirmar = <T extends { estado?: string | null; asignaciones_conductores?: Array<{ estado?: string | null; confirmado?: boolean | null }> | null }>(asig: T) =>
+    (asig.asignaciones_conductores || []).filter(ac => !salioSinConfirmar(asig, ac)) as NonNullable<T['asignaciones_conductores']>
+
   const handleConfirmProgramacion = async () => {
     if (isSubmitting || !selectedAsignacion || conductoresToConfirm.length === 0) return
 
@@ -4342,9 +4352,9 @@ export function AsignacionesModule() {
               <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '14px' }}>
                 Selecciona los conductores que confirman:
               </label>
-              {selectedAsignacion.asignaciones_conductores?.length ? (
+              {conductoresParaConfirmar(selectedAsignacion).length ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {selectedAsignacion.asignaciones_conductores.map((ac) => (
+                  {conductoresParaConfirmar(selectedAsignacion).map((ac) => (
                     <label key={ac.id} className={`asig-confirm-conductor ${ac.confirmado ? 'confirmed' : 'pending'}`}>
                       <input
                         type="checkbox"
@@ -4821,6 +4831,10 @@ export function AsignacionesModule() {
                                       </button>
                                     )}
                                   </>
+                                ) : salioSinConfirmar(viewAsignacion, ac) ? (
+                                  <span className="asig-det-fuera" title="Salió de la programación antes de confirmar (baja o desasignación): el turno queda vacante">
+                                    No sigue · turno vacante
+                                  </span>
                                 ) : (
                                   <span className="asig-det-pendiente">Pendiente</span>
                                 )}
