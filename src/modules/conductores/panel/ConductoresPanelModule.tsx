@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown, Wallet, Banknote } from 'lucide-react'
+import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown, Wallet, Banknote, MessageCircle } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -33,6 +33,7 @@ import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { LlamadaConductor } from '../../integraciones/twochat/LlamadaConductor'
 import { useLineaVoz } from '../../integraciones/twochat/useLineaVoz'
 import { ElegirNumeroLlamada } from '../../integraciones/twochat/ElegirNumeroLlamada'
+import { ChatLeadModal } from '../../leads/components/ChatLeadModal'
 import { telefonosParaLlamar, type TelefonoLlamada, type TipoTelefono } from '../../integraciones/twochat/telefonosConductor'
 
 // Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
@@ -135,6 +136,7 @@ export function ConductoresPanelModule() {
   const [reloadKey, setReloadKey] = useState(0)
   const [detalle, setDetalle] = useState<{ fila: ConductorPanelRow; tab: 'facturacion' | 'calificacion' } | null>(null)
   // Llamada en curso desde Toshibase (2Chat): una a la vez
+  const [chat, setChat] = useState<{ id: string; nombre: string } | null>(null)
   const [llamada, setLlamada] = useState<{ id: string; nombre: string; telefono: TipoTelefono } | null>(null)
   // Conductor con más de un número (WhatsApp y secundario): primero se elige a cuál llamar
   const [eligiendo, setEligiendo] = useState<{ id: string; nombre: string; telefonos: TelefonoLlamada[] } | null>(null)
@@ -861,6 +863,14 @@ export function ConductoresPanelModule() {
                 else setLlamada({ id, nombre, telefono: 'principal' })
               },
             },
+            {
+              // WhatsApp en 2Chat: abre o inicia la conversación, etiqueta «Conductor»,
+              // equipo Clientes y asignada a su capitán
+              icon: <MessageCircle size={15} />,
+              label: 'Chat (2Chat)',
+              variant: 'success',
+              onClick: () => setChat({ id: row.original.id, nombre: row.original.nombre }),
+            },
           ]}
         />
       ),
@@ -983,6 +993,9 @@ export function ConductoresPanelModule() {
           onElegir={(tipo) => { setLlamada({ id: eligiendo.id, nombre: eligiendo.nombre, telefono: tipo }); setEligiendo(null) }}
           onClose={() => setEligiendo(null)}
         />
+      )}
+      {chat && (
+        <ChatLeadModal tipo="conductor" leadId={chat.id} nombre={chat.nombre} onClose={() => setChat(null)} />
       )}
       {llamada && (
         <LlamadaConductor

@@ -267,6 +267,8 @@ export interface ChatLeadInfo {
   canal_conectado: boolean
   /** Usuario de 2Chat al que se asigna (el que abre), o null si no está en 2Chat */
   agente: string | null
+  /** Conductores: el agente es su capitán (si no, el que abre) */
+  es_capitan?: boolean
   saludo: string
 }
 
@@ -284,6 +286,19 @@ export function obtenerChatLead(leadId: string): Promise<ChatLeadInfo> {
 /** Abre (o inicia con `mensaje`) el chat del lead: etiqueta «Lead» y lo asigna a quien lo abre */
 export function abrirChatLead(leadId: string, mensaje?: string): Promise<ChatLeadAbierto> {
   return pedir<ChatLeadAbierto>(`/lead-chat/${leadId}`, {
+    method: 'POST',
+    body: JSON.stringify({ mensaje: mensaje ?? null }),
+  })
+}
+
+/** Estado del chat de WhatsApp del conductor (se asigna a su capitán) y saludo sugerido */
+export function obtenerChatConductor(conductorId: string): Promise<ChatLeadInfo> {
+  return pedir<ChatLeadInfo>(`/conductor-chat/${conductorId}`)
+}
+
+/** Abre (o inicia con `mensaje`) el chat del conductor: etiqueta «Conductor», equipo Clientes, su capitán */
+export function abrirChatConductor(conductorId: string, mensaje?: string): Promise<ChatLeadAbierto> {
+  return pedir<ChatLeadAbierto>(`/conductor-chat/${conductorId}`, {
     method: 'POST',
     body: JSON.stringify({ mensaje: mensaje ?? null }),
   })
