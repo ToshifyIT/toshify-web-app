@@ -60,7 +60,7 @@ import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 import { normalizeDni, normalizePatente, normalizeCuit } from '../../../utils/normalizeDocuments'
-import { insertControlSaldo } from '../../../services/controlSaldosService'
+import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
 import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
 import {
   camposLockLiberado,
@@ -109,7 +109,6 @@ import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 import { cargarAppsPagoSemana, type AppsPago } from '../../../services/appsPagoService'
 import { quitarDiasPromocion } from '../../../utils/conceptoLabels'
-import { formatNumero } from '../../../utils/format'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
 function parseImporteMulta(val: string): number {
@@ -190,6 +189,61 @@ function descripcionConPeriodo(desc: string, codigo: string, periodos: Map<strin
 function descripcionSinNumeroCuota(desc: string, codigo: string | null | undefined): string {
   if (codigo !== 'P003') return desc || ''
   return (desc || '').replace(/\s+\d+(?:\s+de\s+\d+)?\s*$/i, '').trim()
+}
+
+/**
+ * Filas de asignaciones_conductores que cuentan para facturar (filtro PostgREST).
+ * Una fila cancelada SIN fecha de inicio es un conductor que nunca arrancó en esa asignación
+ * (por ejemplo, se canceló el cambio de turno o de auto): no cuenta días. Antes tomaba la
+ * fecha de inicio de la asignación y se le cobraba un día que no manejó (caso S47/2026,
+ * AG304XD). Las canceladas con fecha de inicio (uso viejo, ene-mar 2026) siguen contando.
+ */
+const FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN =
+  'estado.in.(asignado,activo,activa,finalizado,finalizada,completado),' +
+  'and(estado.in.(cancelado,cancelada),fecha_inicio.not.is.null)'
+
+/**
+ * Misma regla que el conteo de días: una asignación programada todavía no empezó, y una
+ * finalizada o cancelada sin fecha de fin es un registro huérfano. Ninguna de las dos cuenta.
+ */
+function asignacionCuentaParaSemana(asig: { estado?: string | null; fecha_fin?: string | null }): boolean {
+  const estado = (asig.estado || '').toLowerCase()
+  if (['programado', 'programada'].includes(estado)) return false
+  if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estado) && !asig.fecha_fin) return false
+  return true
+}
+
+/** Cuota semanal de garantía si no hay precio configurado. */
+const GARANTIA_CUOTA_SEMANAL_DEFAULT = 50000
+
+/**
+ * Cuota semanal de garantía (P003). Usa el "Total por semana" configurado en Conceptos
+ * (con IVA, si tuviera), igual que el Toshipass. Si no hay total semanal, precio diario × 7.
+ * Antes el respaldo era 7143 × 7 = $50.001 y la Vista Previa podía diferir del recálculo.
+ */
+function cuotaSemanalGarantia(concepto?: { precio_semanal?: number | null; precio_final?: number | null; iva_porcentaje?: number | null } | null): number {
+  const semanal = Number(concepto?.precio_semanal) || 0
+  if (semanal > 0) return Math.round(semanal * (1 + (Number(concepto?.iva_porcentaje) || 0) / 100) * 100) / 100
+  const diario = Number(concepto?.precio_final) || 0
+  return diario > 0 ? Math.round(diario * 7) : GARANTIA_CUOTA_SEMANAL_DEFAULT
+}
+
+/**
+ * Una cuota de cobro fraccionado se factura una sola vez: en el período donde quedó marcada
+ * (periodo_facturado_id) o, si todavía no se facturó, en el primero que la tome. Si no se
+ * paga, lo que falta viaja por el saldo y la cuota no se repite la semana siguiente.
+ */
+function cuotaFacturableEn(cuota: { periodo_facturado_id?: string | null }, periodoId: string | null | undefined): boolean {
+  return !cuota.periodo_facturado_id || cuota.periodo_facturado_id === periodoId
+}
+
+/**
+ * Filtro PostgREST "hasta la semana N del año A, incluidos los años anteriores".
+ * Con `.lte('semana', N).eq('anio', A)` las cuotas pendientes del año anterior quedaban
+ * afuera al pasar de la semana 52 a la 1.
+ */
+function hastaSemana(semana: number, anio: number): string {
+  return `anio.lt.${anio},and(anio.eq.${anio},semana.lte.${semana})`
 }
 
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
@@ -354,6 +408,106 @@ function getSemanaArgentina(date: Date) {
 }
 
 // Helper: upsert saldo en saldos_conductores (evita duplicar lógica insert/update)
+/**
+ * Movimientos del saldo que la factura NO tiene en cuenta y que un pago de esa factura no
+ * debe borrar.
+ *
+ * El pago de una factura (Cabify, DiDi o el botón "Pago") escribe el saldo como
+ * "lo que queda de la factura". La factura tomó el saldo del conductor al recalcularse, así
+ * que lo que entró después (un pago en efectivo desde Saldos, un ajuste, una devolución) no
+ * está ahí y se perdía. Caso real S44/2026: tres pagos en efectivo cargados después del
+ * recálculo desaparecieron al importar Cabify y hubo que reponerlos con ajustes manuales.
+ *
+ * Cuenta los movimientos creados después del recálculo de la factura, o anotados en una
+ * semana posterior a la de la factura (después del cierre, el efectivo va a la semana
+ * siguiente). No cuenta los pagos de la propia factura ('pago', 'pago_cabify', 'pago_didi',
+ * 'eliminacion_pago' y 'edicion_pago' anotados en la semana de la factura): esos ya están en
+ * lo cobrado. Los pagos de una factura ANTERIOR cargados después del cálculo sí cuentan: la
+ * factura tomó el saldo antes de ese pago. El efecto de cada movimiento es la
+ * diferencia con el saldo del movimiento anterior, así sirve para pagos, ajustes y
+ * devoluciones sin importar el signo.
+ * Devuelve el monto a sumar al saldo (positivo = a favor del conductor).
+ */
+const MOVIMIENTOS_DE_LA_FACTURA = ['pago', 'pago_cabify', 'pago_didi', 'eliminacion_pago', 'edicion_pago']
+async function movimientosPosterioresALaFactura(conductorId: string, facturacionId: string): Promise<number> {
+  if (!facturacionId || facturacionId.startsWith('preview')) return 0
+  const { data: fact, error: errFact } = await (supabase.from('facturacion_conductores') as any)
+    .select('created_at, periodo:periodos_facturacion(semana, anio)')
+    .eq('id', facturacionId)
+    .maybeSingle()
+  if (errFact) throw errFact
+  if (!fact?.created_at || !fact.periodo) return 0
+  const calculoMs = new Date(fact.created_at).getTime()
+  const semanaFactura = Number(fact.periodo.anio) * 100 + Number(fact.periodo.semana)
+
+  // Margen hacia atrás para tener el movimiento anterior al primero que cuenta
+  const desde = new Date(calculoMs - 60 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: movs, error: errMovs } = await (supabase.from('control_saldos') as any)
+    .select('tipo_movimiento, monto_movimiento, saldo_pendiente, semana, anio, created_at')
+    .eq('conductor_id', conductorId)
+    .gte('created_at', desde)
+    .order('created_at', { ascending: true })
+  if (errMovs) throw errMovs
+
+  let total = 0
+  const lista = (movs || []) as Array<{ tipo_movimiento: string; monto_movimiento: number | null; saldo_pendiente: number | null; semana: number | null; anio: number | null; created_at: string }>
+  lista.forEach((m, i) => {
+    const semanaMov = (Number(m.anio) || 0) * 100 + (Number(m.semana) || 0)
+    // Pagos de esta misma factura: ya están en lo cobrado
+    if (MOVIMIENTOS_DE_LA_FACTURA.includes(m.tipo_movimiento) && semanaMov === semanaFactura) return
+    const posteriorAlCalculo = new Date(m.created_at).getTime() > calculoMs
+    const semanaPosterior = semanaMov > semanaFactura
+    if (!posteriorAlCalculo && !semanaPosterior) return
+    const anterior = i > 0 ? lista[i - 1] : null
+    const efecto = anterior
+      ? (Number(m.saldo_pendiente) || 0) - (Number(anterior.saldo_pendiente) || 0)
+      : (Number(m.monto_movimiento) || 0)
+    total += efecto
+  })
+  return Math.round(total * 100) / 100
+}
+
+/**
+ * Abono (auditoría en abonos_conductores) que corresponde a un pago de factura. Antes se
+ * buscaba solo por conductor + monto y podía tocar el abono de otra semana con el mismo
+ * importe; ahora también por el concepto/referencia del pago, el más reciente.
+ */
+async function buscarAbonoDelPago(conductorId: string, monto: number, referencia: string | null): Promise<string | null> {
+  let query = (supabase.from('abonos_conductores') as any)
+    .select('id')
+    .eq('conductor_id', conductorId)
+    .eq('tipo', 'abono')
+    .eq('monto', monto)
+  if (referencia) query = query.or(`concepto.eq.${JSON.stringify(referencia)},referencia.eq.${JSON.stringify(referencia)}`)
+  const { data, error } = await query.order('fecha_abono', { ascending: false }).limit(1)
+  if (error) throw error
+  return (data && data[0]?.id) || null
+}
+
+/**
+ * Suma `delta` al saldo del conductor sobre el valor real de la base, con control de
+ * concurrencia. Si el conductor no tiene fila de saldo, no hace nada y devuelve null.
+ */
+async function sumarAlSaldoConductor(conductorId: string, delta: number): Promise<number | null> {
+  const { data: saldo, error } = await (supabase.from('saldos_conductores') as any)
+    .select('id').eq('conductor_id', conductorId).maybeSingle()
+  if (error) throw error
+  if (!saldo) return null
+  return aplicarMovimientoSaldo({ saldoId: saldo.id, delta })
+}
+
+/** movimientosPosterioresALaFactura para varias filas (vista previa de pagos de apps). */
+async function posterioresPorFacturacion(filas: Array<{ conductor_id: string; facturacion_id: string }>): Promise<Map<string, number>> {
+  const m = new Map<string, number>()
+  const validas = filas.filter(f => f.conductor_id && f.facturacion_id)
+  for (let i = 0; i < validas.length; i += 10) {
+    const lote = validas.slice(i, i + 10)
+    const montos = await Promise.all(lote.map(f => movimientosPosterioresALaFactura(f.conductor_id, f.facturacion_id).catch(() => 0)))
+    lote.forEach((f, j) => m.set(f.facturacion_id, montos[j]))
+  }
+  return m
+}
+
 async function upsertSaldoConductor(params: {
   conductorId: string
   conductorNombre: string
@@ -407,9 +561,6 @@ async function upsertSaldoConductor(params: {
  * métricas cuentan como pagado / cubierto. Ej.: un saldo pendiente de $0,03 no "debe".
  */
 const TOLERANCIA_PESOS = 1
-/** Recalcular: facturaciones por llamada al guardar en bloque, y conductores por llamada al guardar el detalle. */
-const LOTE_FACTURACIONES = 100
-const LOTE_DETALLE_CONDUCTORES = 50
 
 function coberturaToshipass(f: { monto_toshipass?: number; subtotal_alquiler?: number; ganancia_cabify?: number }): 'cubrio' | 'no_cubrio' | 'sin_datos' | null {
   const toshipass = f.monto_toshipass || 0
@@ -491,6 +642,7 @@ interface PagoDidiFila {
   metodo: MetodoCruceDidi
   excel: string // nombre y celular tal como vienen en el Excel
   ya_registrado: boolean // ya tiene un "Pago DiDi" de esta semana: no se vuelve a registrar
+  posteriores?: number // pagos/ajustes cargados después del cálculo de la factura (se suman al saldo)
 }
 /** Saldo anterior separado: saldo al cierre de la semana previa + pagos hechos en la semana. */
 interface SaldoSeparado { saldoCierre: number; pagos: PagoSemana[]; totalPagos: number }
@@ -897,6 +1049,7 @@ export function ReporteFacturacionTab() {
     conductor_id: string
     conductor_cuit: string
     monto_cobrado: number    // ya cobrado previamente
+    posteriores?: number     // pagos/ajustes cargados después del cálculo de la factura (se suman al saldo)
   }[]>([])
   const [loadingCabifyPagos, setLoadingCabifyPagos] = useState(false)
   const [procesandoCabifyPagos, setProcesandoCabifyPagos] = useState(false)
@@ -1199,7 +1352,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(patente, gnc, grupo_flota, updated_at))
           `)
           .eq('conductor_id', realConductorId)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
+          .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN),
         supabase.from('conductores').select('fecha_terminacion').eq('id', realConductorId).maybeSingle(),
         // Buscar devolucion en programaciones_onboarding (donde se guarda ultimo_dia_cobro)
         (supabase as any)
@@ -1570,7 +1723,8 @@ export function ReporteFacturacionTab() {
         devolucion: devolucionInfo,
         fechaBaja: conductorDesglose?.fecha_terminacion || null,
       })
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo cargar el desglose de días:', errorCapturado)
       showError('Error', 'No se pudo cargar el desglose de días')
       setShowDiasModal(false)
     } finally {
@@ -1664,7 +1818,8 @@ export function ReporteFacturacionTab() {
         conductorDni,
         asignaciones: asignacionesDedup,
       })
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo cargar el historial de asignaciones:', errorCapturado)
       showError('Error', 'No se pudo cargar el historial de asignaciones')
       setShowHistorialModal(false)
     } finally {
@@ -1772,7 +1927,7 @@ export function ReporteFacturacionTab() {
         .from('asignaciones_conductores') as any)
         .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin, vehiculos(patente, grupo_flota))')
         .in('conductor_id', conductorIdsLoad)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+        .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
       : { data: [] }
 
       // Estado REAL de la garantia por conductor (garantias_conductores).
@@ -1863,9 +2018,9 @@ export function ReporteFacturacionTab() {
         const condId = ac.conductor_id
         if (!condId) continue
         const asig = ac.asignaciones
-        if (!asig) continue
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : (asig.fecha_inicio ? parseISO(asig.fecha_inicio) : null)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+        if (!asig || !asignacionCuentaParaSemana(asig)) continue
+        const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : (asig.fecha_inicio ? parseISO(toArgDate(asig.fecha_inicio)) : null)
+        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
         if (!acInicio) continue
         if (acFin < fechaInicioPeriodoLoad || acInicio > fechaFinPeriodoLoadGrupo) continue
         const grupo = asig.vehiculos?.grupo_flota || null
@@ -2292,9 +2447,9 @@ export function ReporteFacturacionTab() {
         if (pu > 0) puMap.set(d.facturacion_id, pu)
       })
 
-      // Proyectado = precio_diario × diasProyectados
-      // diasProyectados = (dias calendario desde primeraFecha hasta domingo) - descuentos
-      // Si conductor de baja o asignacion finalizada: PROY = ALQ (sin proyeccion)
+      // Proyectado = lo cobrado + precio_diario × días que faltan hasta el domingo
+      // (desde el día en que se calculó la facturación; tope: días desde la primera asignación)
+      // Si conductor de baja o en pausa: PROY = ALQ (sin proyeccion)
       // Si diasRaw = 0: PROY = 0
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pu = puMap.get(f.id) || 0
@@ -2304,33 +2459,37 @@ export function ReporteFacturacionTab() {
         // Si no hay precio unitario, usar alquiler tal cual
         if (pu <= 0) return { ...f, proyectado_alquiler: alquiler, _diasProyectados: diasRaw }
 
-        // Si conductor de baja o asignacion finalizada individualmente: PROY = ALQ
-        if (f.estado_billing === 'De baja') {
+        // Si conductor de baja o en pausa (sin asignación al cierre): PROY = ALQ.
+        // La facturación ya se cortó, no hay días por delante que proyectar.
+        if (f.estado_billing !== 'Activo') {
           return { ...f, proyectado_alquiler: alquiler, _diasProyectados: diasRaw }
         }
 
         // Si 0 dias trabajados: PROY = 0
         if (diasRaw <= 0) return { ...f, proyectado_alquiler: 0, _diasProyectados: 0 }
 
-        // Calcular dias proyectados: desde primeraFecha hasta domingo - descuentos
+        // Tope: días calendario desde la primera asignación de la semana hasta el domingo
         const primeraFecha = primeraFechaInicioLoad.get(f.conductor_id)
-        const descuento = f.alerta_prorrateo_ingreso?.descuento_turnos || 0
         let diasCalendario = 7
         if (primeraFecha) {
           diasCalendario = Math.min(7, Math.max(1,
             Math.round((fechaFinPeriodoLoad.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1
           ))
         }
-        const diasProyectados = Math.max(1, diasCalendario - descuento)
 
-        // Si los dias trabajados ya cubren o superan los proyectados: PROY = ALQ
+        // Proyectado = lo cobrado + precio diario × días que faltan desde el día en que se
+        // calculó la facturación hasta el domingo. Así se respetan los descuentos ya aplicados
+        // (medio turno por hora de entrega, vehículo fuera de servicio) y el que empezó a
+        // mitad de semana suma solo los días que le quedan.
+        const fechaCalculo = f.updated_at ? parseISO(toArgDate(f.updated_at)) : startOfDay(new Date())
+        const diasRestantes = Math.max(0, differenceInCalendarDays(fechaFinPeriodoLoad, fechaCalculo))
+        const diasProyectados = Math.min(diasCalendario, diasRaw + diasRestantes)
         if (diasRaw >= diasProyectados) {
-          return { ...f, proyectado_alquiler: alquiler, _diasProyectados: diasProyectados }
+          return { ...f, proyectado_alquiler: alquiler, _diasProyectados: diasRaw }
         }
-
-        // Proyectar: precio_diario × diasProyectados
-        const precioDiario = alquiler / diasRaw
-        return { ...f, proyectado_alquiler: Math.round(precioDiario * diasProyectados), _diasProyectados: diasProyectados }
+        const precioDiario = pu > 0 ? pu : alquiler / diasRaw
+        const proyectado = alquiler + precioDiario * (diasProyectados - diasRaw)
+        return { ...f, proyectado_alquiler: Math.round(proyectado * 100) / 100, _diasProyectados: diasProyectados }
       })
 
       // Excluir conductores con 0 días y sin penalidades (igual que en Vista Previa).
@@ -2387,15 +2546,24 @@ export function ReporteFacturacionTab() {
       // para alimentar el nuevo indicador "Importe Generado"
       const esPeriodoCerrado = ((periodoData as any).estado || '').toLowerCase() === 'cerrado'
       if (esPeriodoCerrado) {
-        const { data: pagosData } = await (supabase.from('pagos_conductores') as any)
-          .select('conductor_id, monto')
-          .eq('anio', (periodoData as any).anio)
-          .eq('semana', (periodoData as any).semana)
-          .eq('tipo_cobro', 'facturacion_semanal')
-          // Cabify y DiDi: los dos cuentan como cobrado de la semana
-          .or('referencia.ilike.Pago Cabify*,referencia.ilike.Pago DiDi*')
+        // Primero se cierra la semana y después llega el Cabify/DiDi de ESA semana. La columna
+        // `semana` del pago es la del día en que se cargó (la semana siguiente), así que no
+        // sirve: se buscan los pagos que apuntan a las facturas de este período y cuya
+        // referencia lleva esta semana ("Pago Cabify S46/2026").
+        const semRef = `S${(periodoData as any).semana}/${(periodoData as any).anio}`
+        const factIdsPeriodo = facturacionesTransformadas.map((f: any) => f.id).filter(Boolean)
+        const pagosData: Array<{ conductor_id: string; monto: number }> = []
+        for (let i = 0; i < factIdsPeriodo.length; i += 200) {
+          const { data } = await (supabase.from('pagos_conductores') as any)
+            .select('conductor_id, monto')
+            .eq('tipo_cobro', 'facturacion_semanal')
+            .in('referencia_id', factIdsPeriodo.slice(i, i + 200))
+            // Cabify y DiDi: los dos cuentan como cobrado de la semana
+            .or(`referencia.ilike.Pago Cabify ${semRef}*,referencia.ilike.Pago DiDi ${semRef}*`)
+          pagosData.push(...((data || []) as Array<{ conductor_id: string; monto: number }>))
+        }
         const mapa = new Map<string, number>()
-        for (const p of (pagosData || []) as Array<{ conductor_id: string; monto: number }>) {
+        for (const p of pagosData) {
           mapa.set(p.conductor_id, (mapa.get(p.conductor_id) || 0) + Number(p.monto || 0))
         }
         setPagosCabifyMap(mapa)
@@ -2431,7 +2599,8 @@ export function ReporteFacturacionTab() {
         // Solo es un aviso: si falla la consulta no se muestra.
       }
 
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo cargar la facturación:', errorCapturado)
       showError('Error', 'No se pudo cargar la facturación')
     } finally {
       setLoading(false)
@@ -2465,7 +2634,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, fecha_inicio, vehiculo_id, vehiculos(patente, gnc, telepase, grupo_flota, updated_at)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+          .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
           .order('fecha_inicio', { ascending: false }),
         (supabase.from('penalidades') as any)
           .select('conductor_id, conductores!inner(numero_dni, sede_id)')
@@ -2492,15 +2661,16 @@ export function ReporteFacturacionTab() {
         for (const ac of (asignacionesSemanaVP || []) as any[]) {
           const cond = ac.conductores
           const asig = ac.asignaciones
-          if (!cond || !asig) continue
+          if (!cond || !asig || !asignacionCuentaParaSemana(asig)) continue
           if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
-          const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : (asig.fecha_inicio ? parseISO(asig.fecha_inicio) : null)
-          const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+          const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : (asig.fecha_inicio ? parseISO(toArgDate(asig.fecha_inicio)) : null)
+          const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
           if (!acInicio) continue
           if (acFin < semInicioGrupo || acInicio > semFinGrupo) continue
           const grupo = asig.vehiculos?.grupo_flota || null
           if (!grupo) continue
-          const dni = cond.numero_dni
+          // DNI normalizado: el mapa se consulta con conductor_dni ya normalizado
+          const dni = normalizeDni(cond.numero_dni)
           if (!grupoFlotaCandidatosVP.has(dni)) grupoFlotaCandidatosVP.set(dni, [])
           grupoFlotaCandidatosVP.get(dni)!.push({ grupo, fechaInicio: acInicio })
         }
@@ -2620,7 +2790,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(gnc, updated_at))
         `)
         .in('conductor_id', conductorIds)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+        .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
 
       // Cargar historial GNC de vehículos para evaluar por fecha
       const vehiculoIdsVP = new Set<string>()
@@ -2975,7 +3145,7 @@ export function ReporteFacturacionTab() {
           .gte('fecha_vigencia_hasta', fechaInicio),
         supabase
           .from('conceptos_nomina')
-          .select('codigo, precio_base, precio_final')
+          .select('codigo, precio_base, precio_final, precio_semanal, iva_porcentaje')
           .eq('activo', true)
           .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
       ])
@@ -3179,8 +3349,9 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, saldo_pendiente, semana, anio, tipo_movimiento, created_at')
           .in('conductor_id', conductorIds)
           .or(`anio.lt.${anioDelPeriodo},and(anio.eq.${anioDelPeriodo},semana.lte.${semanaDelPeriodo})`)
-          .order('anio', { ascending: false })
-          .order('semana', { ascending: false })
+          // El saldo es el del ÚLTIMO movimiento cargado (por fecha de carga), no el de la semana
+          // más alta: un Pago Cabify de la semana anterior importado después de un pago en
+          // efectivo de esta semana es el saldo vigente (ya incluye ese efectivo).
           .order('created_at', { ascending: false }),
         (supabase.from('garantias_conductores') as any)
           .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total, monto_realmente_pagado')
@@ -3205,30 +3376,26 @@ export function ReporteFacturacionTab() {
           .in('conductor_id', conductorIds),
         supabase.from('cabify_dni_mapeo')
           .select('cabify_hash, dni_real'),
-        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing)
+        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing).
+        // Solo períodos ANTERIORES a esta semana: la cuota de esta semana se suma aparte, y los
+        // períodos posteriores (si se recalcula una semana vieja) no deben bajar esta cuota.
         (supabase.from('facturacion_conductores') as any)
-          .select('conductor_id, subtotal_garantia')
+          .select('conductor_id, subtotal_garantia, periodo:periodos_facturacion!inner(fecha_fin)')
           .in('conductor_id', conductorIds)
-          .gt('subtotal_garantia', 0),
+          .gt('subtotal_garantia', 0)
+          .lt('periodo.fecha_fin', fechaInicio),
         // Fraccionamientos hasta esta semana: para no arrastrar como saldo la deuda ya fraccionada
         (supabase.from('cobros_fraccionados') as any)
           .select('conductor_id, descripcion, created_at')
           .in('conductor_id', conductorIds)
-          .lte('semana', semanaDelPeriodo)
-          .eq('anio', anioDelPeriodo)
+          .or(hastaSemana(semanaDelPeriodo, anioDelPeriodo))
           .neq('estado', 'cancelada_por_baja'),
       ])
 
       // Mapa acumulado de garantía facturada por conductor (suma histórica de subtotal_garantia)
       const garantiaAcumuladaVP = new Map<string, number>()
-      const garantiaUltimaCobroVP = new Map<string, { semana: number; anio: number }>()
       for (const f of (garantiaHistorialVP || []) as any[]) {
         garantiaAcumuladaVP.set(f.conductor_id, (garantiaAcumuladaVP.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
-        const prev = garantiaUltimaCobroVP.get(f.conductor_id)
-        const fAnio = Number(f.anio), fSem = Number(f.semana)
-        if (!prev || fAnio > prev.anio || (fAnio === prev.anio && fSem > prev.semana)) {
-          garantiaUltimaCobroVP.set(f.conductor_id, { semana: fSem, anio: fAnio })
-        }
       }
 
       // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
@@ -3469,7 +3636,7 @@ export function ReporteFacturacionTab() {
       })
 
       // Cuota de garantía semanal: precio diario de conceptos_nomina × 7
-      const cuotaGarantiaSemanalVP = Math.round((preciosBaseVP.get('P003') || 7143) * 7)
+      const cuotaGarantiaSemanalVP = cuotaSemanalGarantia((conceptosNominaVP || []).find((c: any) => c.codigo === 'P003'))
 
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
@@ -3619,6 +3786,14 @@ export function ReporteFacturacionTab() {
         const cuotaFijaSemanal = subtotalAlquiler + subtotalGarantia + montoToshipass
         const cubreCuota = cobroAppCabify >= cuotaFijaSemanal
 
+        // Estado: De baja si no está activo; Activo si tiene 7 días o asignación al cierre
+        const estadoBillingVP: 'Activo' | 'Pausa' | 'De baja' = (() => {
+          // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
+          if (conductor.estado_id !== ESTADO_ACTIVO_ID) return 'De baja'
+          const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
+          return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
+        })()
+
         facturacionesProyectadas.push({
           id: `preview-${conductorId}`,
           periodo_id: 'preview',
@@ -3633,7 +3808,8 @@ export function ReporteFacturacionTab() {
           turnos_cobrados: Math.round(factorProporcional * 7),
           factor_proporcional: factorProporcional,
            subtotal_alquiler: subtotalAlquiler,
-           proyectado_alquiler: prorrateo.proyectado_raw || subtotalAlquiler,
+           // De baja o en pausa no se proyecta: la facturación ya se cortó
+           proyectado_alquiler: estadoBillingVP === 'Activo' ? (prorrateo.proyectado_raw || subtotalAlquiler) : subtotalAlquiler,
           subtotal_garantia: subtotalGarantia,
           subtotal_cargos: subtotalCargos,
           subtotal_descuentos: subtotalDescuentos,
@@ -3682,12 +3858,7 @@ export function ReporteFacturacionTab() {
             tickets_detalle: ticketsDetalleMap.get(conductorId) || [],
             // Estado: De baja si tiene fecha_terminacion o no está activo
            // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
-            estado_billing: (() => {
-              // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
-              if (conductor.estado_id !== ESTADO_ACTIVO_ID) return 'De baja'
-              const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
-              return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
-            })(),
+            estado_billing: estadoBillingVP,
              // GNC del vehículo (leído de tabla vehiculos)
              tiene_gnc: control.tiene_gnc,
              // Permiso de efectivo Cabify
@@ -3840,7 +4011,8 @@ export function ReporteFacturacionTab() {
       setModoVistaPrevia(false)
       autoRecalcularRef.current = true
       // El useEffect de abajo detectará el cambio y llamará recalcularPeriodoAbierto()
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo crear el período de facturación:', errorCapturado)
       showError('Error', 'No se pudo crear el período de facturación')
       setGenerando(false)
     }
@@ -3954,6 +4126,61 @@ export function ReporteFacturacionTab() {
     if (!periodo || (periodo.estado !== 'abierto' && periodo.estado !== 'procesando')) {
       showError('Error', 'Solo se puede recalcular un período abierto')
       return
+    }
+
+    // Semana con pagos de la factura cargados (Cabify, DiDi o "Pago"): no se recalcula.
+    // El recálculo vuelve a tomar el saldo anterior, que ya trae esos pagos (la deuda se
+    // contaría dos veces), y borra las facturas a las que apuntan los pagos. Para corregir:
+    // eliminar esos pagos (devuelven el saldo), recalcular y volver a cargarlos.
+    {
+      const { data: factsPeriodo, error: errFacts } = await (supabase.from('facturacion_conductores') as any)
+        .select('id, conductor_nombre')
+        .eq('periodo_id', periodo.id)
+      if (errFacts) {
+        showError('Error', 'No se pudo verificar si la semana tiene pagos cargados')
+        return
+      }
+      const nombrePorFact = new Map<string, string>(
+        ((factsPeriodo || []) as Array<{ id: string; conductor_nombre: string }>).map(f => [f.id, f.conductor_nombre])
+      )
+      const ids = [...nombrePorFact.keys()]
+      const conPagos = new Set<string>()
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data: pagos, error: errPagos } = await (supabase.from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'facturacion_semanal')
+          .in('referencia_id', ids.slice(i, i + 200))
+        if (errPagos) {
+          showError('Error', 'No se pudo verificar si la semana tiene pagos cargados')
+          return
+        }
+        for (const pg of (pagos || []) as Array<{ referencia_id: string }>) conPagos.add(String(pg.referencia_id))
+      }
+      if (conPagos.size > 0) {
+        // La factura queda como estaba al cerrarse (no se recalcula): se puede volver a cerrar
+        setPeriodoRecalculadoId(periodo.id)
+        const nombres = [...conPagos].map(id => nombrePorFact.get(id) || 'Conductor').sort()
+        if (skipConfirm) {
+          // Recálculo automático al abrir la semana: se saltea sin interrumpir
+          console.warn(`[Recalcular] Semana ${periodo.semana}/${periodo.anio} con pagos cargados: no se recalcula`)
+          return
+        }
+        const lista = nombres.slice(0, 10).map(n => `<li>${n}</li>`).join('')
+        const resto = nombres.length > 10 ? `<li>… y ${nombres.length - 10} más</li>` : ''
+        await Alerta.fire({
+          icon: 'warning',
+          title: 'No se puede recalcular',
+          html: `<div style="text-align:left;font-size:13px;">
+            <p style="margin:0 0 8px 0">La semana tiene pagos de la factura cargados (Cabify, DiDi o manuales). Recalcular contaría dos veces la deuda.</p>
+            <p style="margin:0 0 4px 0">Conductores con pagos:</p>
+            <ul style="margin:0 0 8px 18px;padding:0">${lista}${resto}</ul>
+            <p style="margin:0;color:#6B7280;font-size:12px">La semana se puede cerrar tal como está. Para recalcular, primero eliminá esos pagos desde el detalle de cada conductor y después volvé a cargarlos.</p>
+          </div>`,
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: '#7C3AED',
+        })
+        return
+      }
     }
 
     // Si otra persona tiene el candado y sigue vigente, no hay nada que hacer.
@@ -4109,39 +4336,68 @@ export function ReporteFacturacionTab() {
       lockTokenRef.current = miToken
       setPeriodo(prev => prev ? { ...prev, ...(candado as any) } : prev)
 
-      // 1. RESET: Revertir flags de aplicado para registros vinculados a este período
-      // Tickets: tienen periodo_aplicado_id
-      await (supabase.from('tickets_favor') as any)
-        .update({ estado: 'aprobado', periodo_aplicado_id: null, fecha_aplicacion: null })
-        .eq('periodo_aplicado_id', periodoId)
+      // Señal de vida del candado: se refresca durante TODO el recálculo (antes solo al
+      // guardar; si el cálculo pasaba los 10 minutos otro usuario podía tomar el período).
+      let ultimoLatido = Date.now()
+      let progresoLatido = { actual: 0, total: 0 }
+      const latido = (forzar = false) => {
+        if (!forzar && Date.now() - ultimoLatido < 30_000) return
+        ultimoLatido = Date.now()
+        // Sin await: es telemetría (mantiene vivo el candado y publica el progreso).
+        void (supabase.from('periodos_facturacion') as any)
+          .update({
+            procesando_desde: new Date().toISOString(),
+            procesando_actual: progresoLatido.actual,
+            procesando_total: progresoLatido.total,
+          })
+          .eq('id', periodoId)
+          .eq('lock_token', miToken)
+      }
 
-      // Excesos: tienen periodo_id
-      await (supabase.from('excesos_kilometraje') as any)
-        .update({ aplicado: false, fecha_aplicacion: null })
-        .eq('periodo_id', periodoId)
-
+      // 1-2. La facturación vieja NO se toca hasta el final: se calcula todo en memoria y
+      // se reemplaza en un solo paso dentro de la base (reemplazar_facturacion_periodo, ver
+      // sql/recalculo_facturacion_atomico.sql). Si algo falla en el medio, el período queda
+      // como estaba. Los tickets y excesos aplicados a este período, y las cuotas facturadas
+      // en él, se vuelven a tomar en el cálculo (la función los resetea y los vuelve a marcar).
       // Penalidades: NO se resetean — las aplica otra persona desde incidencias.
-      // Recalcular solo toma las que ya están aplicado=true.
-
-      // Cobros fraccionados: NO se resetean aquí. El flag aplicado solo cambia
-      // al CERRAR el periodo (PeriodosTab) o al PAGAR (CobrosFraccionadosTab).
-      // Recalcular es un preview, no debe alterar el estado de las cuotas.
-
-      // 2. BORRAR toda la facturación existente del período
-      const { data: factExistentes } = await supabase
+      const { data: factExistentes, error: errFactExistentes } = await supabase
         .from('facturacion_conductores')
         .select('id, conductor_id')
         .eq('periodo_id', periodoId)
+      if (errFactExistentes) throw errFactExistentes
 
       for (const f of (factExistentes || []) as Array<{ id: string; conductor_id: string | null }>) {
         if (f.conductor_id) factViejaPorConductor.set(f.conductor_id, f.id)
       }
 
-      if (factExistentes && factExistentes.length > 0) {
-        const factIds = factExistentes.map((f: any) => f.id)
-        await supabase.from('facturacion_detalle').delete().in('facturacion_id', factIds)
+      /** Reemplaza la facturación del período en una sola transacción. */
+      const reemplazarFacturacion = async (params: {
+        facturaciones: Array<Record<string, unknown>>
+        detalles: Array<Record<string, unknown>>
+        ticketIds: string[]
+        excesoIds: string[]
+        cobroIds: string[]
+      }): Promise<number> => {
+        const { data, error } = await (supabase as any).rpc('reemplazar_facturacion_periodo', {
+          p_periodo_id: periodoId,
+          p_lock_token: miToken,
+          p_facturaciones: params.facturaciones,
+          p_detalles: params.detalles,
+          p_ticket_ids: params.ticketIds,
+          p_exceso_ids: params.excesoIds,
+          p_cobro_ids: params.cobroIds,
+        })
+        if (error) {
+          if (String(error.message || '').includes('candado_perdido')) {
+            throw new Error('Este recálculo perdió el candado del período y otra ejecución tomó el control. No se cambió nada.')
+          }
+          if (error.code === 'PGRST202' || String(error.message || '').includes('reemplazar_facturacion_periodo')) {
+            throw new Error('Falta instalar en la base la función reemplazar_facturacion_periodo (sql/recalculo_facturacion_atomico.sql). No se cambió nada.')
+          }
+          throw error
+        }
+        return Number(data) || 0
       }
-      await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
       const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean; tiene_telepase: boolean }[] = []
@@ -4157,7 +4413,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc, telepase, updated_at)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+          .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
           .order('fecha_inicio', { ascending: false })
 
         const semInicioRecalc = parseISO(fechaInicio)
@@ -4254,7 +4510,9 @@ export function ReporteFacturacionTab() {
       }
 
       if (!conductoresControl || conductoresControl.length === 0) {
-        // Salida temprana: también hay que soltar el candado (con la llave)
+        // Salida temprana: la semana queda sin facturación (se reemplaza por nada, en un
+        // solo paso) y se suelta el candado (con la llave)
+        await reemplazarFacturacion({ facturaciones: [], detalles: [], ticketIds: [], excesoIds: [], cobroIds: [] })
         await (supabase.from('periodos_facturacion') as any)
           .update({
             estado: 'abierto',
@@ -4290,7 +4548,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(gnc, updated_at))
         `)
         .in('conductor_id', conductorIdsTemp)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+        .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
 
       // Cargar historial GNC de vehículos para evaluar por fecha
       const vehiculoIdsRecalc = new Set<string>()
@@ -4792,7 +5050,7 @@ export function ReporteFacturacionTab() {
         return tipoTarifa === 'nueva' ? codigosTarifaNueva[codigo] : codigo
       }
       // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
-      const cuotaGarantia = Math.round(preciosActuales['P003'] * 7)
+      const cuotaGarantia = cuotaSemanalGarantia(conceptosPorCodigo.get('P003'))
 
       // 4b. Limpiar entradas regularizado anteriores de este período (idempotencia del recálculo)
       // Esto evita que un recálculo previo deje una entrada regularizado que infle el saldo_anterior
@@ -4810,16 +5068,19 @@ export function ReporteFacturacionTab() {
       const MULTAS_HABILITADAS = false
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc, garantiaHistorialRecalcRes] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
-        (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
+        // Aprobados + los ya aplicados a ESTE período (se vuelven a aplicar al guardar)
+        (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).or(`estado.eq.aprobado,periodo_aplicado_id.eq.${periodoId}`),
         // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
         (supabase.from('control_saldos') as any)
           .select('conductor_id, saldo_pendiente, semana, anio, tipo_movimiento, created_at')
           .in('conductor_id', conductorIds)
           .or(`anio.lt.${anioNum},and(anio.eq.${anioNum},semana.lte.${semanaNum})`)
-          .order('anio', { ascending: false })
-          .order('semana', { ascending: false })
+          // El saldo es el del ÚLTIMO movimiento cargado (por fecha de carga), no el de la semana
+          // más alta: un Pago Cabify de la semana anterior importado después de un pago en
+          // efectivo de esta semana es el saldo vigente (ya incluye ese efectivo).
           .order('created_at', { ascending: false }),
-        (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
+        // Sin aplicar + los ya aplicados a ESTE período (se vuelven a aplicar al guardar)
+        (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).or(`aplicado.eq.false,periodo_id.eq.${periodoId}`),
         // Peajes de la SEMANA ANTERIOR
         (() => {
           const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
@@ -4827,17 +5088,20 @@ export function ReporteFacturacionTab() {
           return supabase.from(getCabifyTable(sedeDelPeriodo)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
         })(),
         (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
-        (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum).neq('estado', 'cancelada_por_baja'),
+        (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).or(hastaSemana(semanaNum, anioNum)).neq('estado', 'cancelada_por_baja'),
         // Multas: se consulta pero solo se usa si MULTAS_HABILITADAS = true
         MULTAS_HABILITADAS
           ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').is('deleted_at', null).gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
           : Promise.resolve({ data: [] }),
         supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
-        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing)
+        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing).
+        // Solo períodos ANTERIORES a esta semana: la cuota de esta semana se suma aparte, y los
+        // períodos posteriores (si se recalcula una semana vieja) no deben bajar esta cuota.
         (supabase.from('facturacion_conductores') as any)
-          .select('conductor_id, subtotal_garantia')
+          .select('conductor_id, subtotal_garantia, periodo:periodos_facturacion!inner(fecha_fin)')
           .in('conductor_id', conductorIds)
-          .gt('subtotal_garantia', 0),
+          .gt('subtotal_garantia', 0)
+          .lt('periodo.fecha_fin', fechaInicio),
       ])
 
       // Mapa acumulado de garantía facturada por conductor
@@ -4896,8 +5160,11 @@ export function ReporteFacturacionTab() {
       const garantias = garantiasRes.data || []
       // Cobros fraccionados: excluir los ya aplicados (cerrados en períodos anteriores)
       // y los que ya tienen un pago registrado en pagos_conductores.
+      // Cuotas sin pagar que no se facturaron en OTRO período: una cuota se factura una sola
+      // vez; si no se paga, lo que falta viaja por el saldo (no se repite la semana siguiente).
       const cobros = (cobrosRes.data || []).filter((c: any) =>
-        c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id)
+        c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id) &&
+        (!c.periodo_facturado_id || c.periodo_facturado_id === periodoId)
       )
 
       // ─── O(1) lookup Maps — construidos una vez, usados en el loop por conductor ───
@@ -4917,9 +5184,12 @@ export function ReporteFacturacionTab() {
         const nuevasGarantias = conductoresSinGarantia.map((c) => ({
           conductor_id: c.conductor_id,
           conductor_nombre: c.conductor_nombre,
-          tipo_alquiler: 'TURNO',
+          // Tipo predominante de la semana (antes siempre 'TURNO', aunque fuera a cargo)
+          tipo_alquiler: (c.dias_cargo + c.dias_cargo_sin_gnc) >
+            (c.dias_turno_diurno + c.dias_turno_diurno_sin_gnc + c.dias_turno_nocturno + c.dias_turno_nocturno_sin_gnc)
+            ? 'CARGO' : 'TURNO',
           monto_total: 1000000,
-          monto_cuota_semanal: 50000,
+          monto_cuota_semanal: cuotaGarantia,
           cuotas_totales: 20,
           monto_pagado: 0,
           monto_realmente_pagado: 0,
@@ -5015,12 +5285,6 @@ export function ReporteFacturacionTab() {
       let totalCargosGlobal = 0
       let totalDescuentosGlobal = 0
       let conductoresProcesadosCount = 0
-      let erroresConsecutivos = 0
-      let totalErrores = 0
-      let primerError = ''
-      // Conductores que quedaron con problemas en este recálculo, para nombrarlos
-      // en el aviso final (antes solo se mostraba "N fallaron" y el primer error).
-      const conductoresConProblema: Array<{ nombre: string; motivo: string }> = []
       setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
       // Lo calculado de cada conductor; se guarda todo junto en el paso 6b
       interface PendienteGuardar {
@@ -5029,6 +5293,7 @@ export function ReporteFacturacionTab() {
         detalles: any[]
         ticketIds: string[]
         excesoIds: string[]
+        cobroIds: string[]
       }
       const pendientesGuardar: PendienteGuardar[] = []
 
@@ -5232,7 +5497,8 @@ export function ReporteFacturacionTab() {
         // Calcular proyectado_alquiler (misma lógica que cargarFacturacion post-load)
         let proyectadoAlquiler = alquilerTotal
         if (conductor.total_dias > 0 && alquilerTotal > 0) {
-          if (conductor.estado_billing === 'De baja') {
+          // De baja o en pausa: la facturación ya se cortó, no se proyecta
+          if (conductor.estado_billing !== 'Activo') {
             proyectadoAlquiler = alquilerTotal
           } else {
             const primeraFechaR = primeraFechaRecalc.get(conductor.conductor_id)
@@ -5472,9 +5738,8 @@ export function ReporteFacturacionTab() {
           // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
         }
 
-        // cobros_fraccionados: NO se marcan como aplicados aquí.
-        // Solo se marcan al CERRAR el periodo (PeriodosTab) o al PAGAR (CobrosFraccionadosTab).
-        void cobroIdsAplicar
+        // cobros_fraccionados: NO se marcan como aplicados (pagados) aquí; eso es al PAGAR.
+        // Sí se marcan como facturados en este período (periodo_facturado_id) al guardar.
 
         // El kardex (control_saldos) + saldos_conductores se materializan al CERRAR
         // el período (cerrarPeriodo), no aquí. Durante recalcular el período sigue
@@ -5486,146 +5751,38 @@ export function ReporteFacturacionTab() {
           detalles: todosDetalles,
           ticketIds: ticketIdsAplicar,
           excesoIds: excesoIdsAplicar,
+          cobroIds: cobroIdsAplicar,
         })
-      }
-
-      // 6b. GUARDAR EN BLOQUE (antes: 3-4 llamadas en fila por conductor, ~2 min con 70).
-      // Facturaciones en lotes; si un lote falla se reintenta conductor por conductor
-      // para nombrar al que falla (un lote con error no guarda nada, todo o nada).
-      // El paso 2 ya borró la facturación y el detalle del período: no hay detalle viejo.
-      const latido = () => {
-        // Sin await: es telemetría (mantiene vivo el candado y publica el progreso).
-        void (supabase.from('periodos_facturacion') as any)
-          .update({
-            procesando_desde: new Date().toISOString(),
-            procesando_actual: conductoresProcesadosCount,
-            procesando_total: pendientesGuardar.length
-          })
-          .eq('id', periodoId)
-          .eq('lock_token', miToken)
-      }
-      const fallaFacturacion = (nombre: string, mensaje: string) => {
-        totalErrores++
-        erroresConsecutivos++
-        if (!primerError) primerError = mensaje
-        conductoresConProblema.push({ nombre, motivo: `no se pudo guardar la facturación (${mensaje})` })
-      }
-      const guardados: Array<{ pendiente: PendienteGuardar; facturacionId: string }> = []
-      for (let i = 0; i < pendientesGuardar.length; i += LOTE_FACTURACIONES) {
-        const lote = pendientesGuardar.slice(i, i + LOTE_FACTURACIONES)
-        const { data: filas, error: errLote } = await (supabase.from('facturacion_conductores') as any)
-          .upsert(lote.map(p => p.fila), { onConflict: 'periodo_id,conductor_id' })
-          .select('id, conductor_id')
-        if (!errLote) {
-          const idPorConductor = new Map(((filas || []) as Array<{ id: string; conductor_id: string }>).map(f => [f.conductor_id, f.id]))
-          for (const p of lote) {
-            const id = idPorConductor.get(p.fila.conductor_id)
-            if (id) {
-              guardados.push({ pendiente: p, facturacionId: id })
-              erroresConsecutivos = 0
-            } else {
-              fallaFacturacion(p.nombre, 'la base no devolvió la facturación guardada')
-            }
-          }
-        } else {
-          for (const p of lote) {
-            const { data: fila, error: errFact } = await (supabase.from('facturacion_conductores') as any)
-              .upsert(p.fila, { onConflict: 'periodo_id,conductor_id' })
-              .select('id')
-              .single()
-            if (errFact || !fila) {
-              fallaFacturacion(p.nombre, errFact?.message || 'error desconocido')
-              // Si los primeros 3 fallan seguidos, es un problema sistémico - abortar
-              if (erroresConsecutivos >= 3 && guardados.length === 0) {
-                throw new Error(`Error sistémico al insertar conductores (${erroresConsecutivos} fallos consecutivos): ${primerError}`)
-              }
-              continue
-            }
-            erroresConsecutivos = 0
-            guardados.push({ pendiente: p, facturacionId: (fila as any).id })
-          }
-        }
-        conductoresProcesadosCount = guardados.length
-        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: pendientesGuardar.length, nombre: 'Guardando facturaciones...' })
+        progresoLatido = { actual: pendientesGuardar.length, total: conductoresProcesados.length }
         latido()
       }
 
-      // Detalle de conceptos: un insert por lote de conductores; si falla, uno por uno.
-      // Antes el error de este insert se ignoraba: la facturación quedaba sin conceptos
-      // y el recálculo informaba "completado".
-      const fallaDetalle = (nombre: string, mensaje: string) => {
-        totalErrores++
-        if (!primerError) primerError = mensaje
-        conductoresConProblema.push({ nombre, motivo: `no se guardó el detalle de conceptos (${mensaje})` })
-      }
-      const conDetalle = guardados.filter(g => g.pendiente.detalles.length > 0)
-      for (let i = 0; i < conDetalle.length; i += LOTE_DETALLE_CONDUCTORES) {
-        const lote = conDetalle.slice(i, i + LOTE_DETALLE_CONDUCTORES)
-        const filasDetalle = (g: typeof lote[number]) => g.pendiente.detalles.map(d => ({ ...d, facturacion_id: g.facturacionId }))
-        const { error: errLote } = await (supabase.from('facturacion_detalle') as any).insert(lote.flatMap(filasDetalle))
-        if (errLote) {
-          for (const g of lote) {
-            const { error: errDetalle } = await (supabase.from('facturacion_detalle') as any).insert(filasDetalle(g))
-            if (errDetalle) fallaDetalle(g.pendiente.nombre, errDetalle.message || 'error desconocido')
-          }
-        }
-        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: pendientesGuardar.length, nombre: 'Guardando conceptos...' })
-        latido()
-      }
+      // 6b. GUARDAR: todo junto, en una sola transacción dentro de la base
+      // (reemplazar_facturacion_periodo). Resetea lo aplicado al período, borra la
+      // facturación vieja, inserta la nueva y marca tickets, excesos y cuotas. Si falla,
+      // el período queda como estaba. Cada conductor conserva el id de su facturación
+      // anterior, así los pagos ya registrados siguen apuntando a ella.
+      setRecalculandoProgreso({ actual: pendientesGuardar.length, total: pendientesGuardar.length, nombre: 'Guardando facturaciones...' })
+      progresoLatido = { actual: pendientesGuardar.length, total: pendientesGuardar.length }
+      latido(true)
+      const facturacionesGuardar = pendientesGuardar.map(pg => ({
+        ...pg.fila,
+        id: factViejaPorConductor.get(pg.fila.conductor_id) || crypto.randomUUID(),
+      }))
+      const detallesGuardar = pendientesGuardar.flatMap((pg, idx) =>
+        pg.detalles.map(d => ({ ...d, facturacion_id: facturacionesGuardar[idx].id }))
+      )
+      conductoresProcesadosCount = await reemplazarFacturacion({
+        facturaciones: facturacionesGuardar,
+        detalles: detallesGuardar,
+        ticketIds: pendientesGuardar.flatMap(pg => pg.ticketIds),
+        excesoIds: pendientesGuardar.flatMap(pg => pg.excesoIds),
+        cobroIds: pendientesGuardar.flatMap(pg => pg.cobroIds),
+      })
 
-      // Marcar tickets y excesos como aplicados (solo de las facturaciones guardadas)
-      const ticketIdsAplicados = guardados.flatMap(g => g.pendiente.ticketIds)
-      const excesoIdsAplicados = guardados.flatMap(g => g.pendiente.excesoIds)
-      const marcarAplicados: Promise<any>[] = []
-      for (let i = 0; i < ticketIdsAplicados.length; i += 200) {
-        marcarAplicados.push(
-          (supabase.from('tickets_favor') as any)
-            .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
-            .in('id', ticketIdsAplicados.slice(i, i + 200))
-        )
-      }
-      for (let i = 0; i < excesoIdsAplicados.length; i += 200) {
-        marcarAplicados.push(
-          (supabase.from('excesos_kilometraje') as any)
-            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString(), periodo_id: periodoId })
-            .in('id', excesoIdsAplicados.slice(i, i + 200))
-        )
-      }
-      if (marcarAplicados.length > 0) await Promise.all(marcarAplicados)
-
-      // 7. Validar que se procesó al menos un conductor
-      if (conductoresProcesadosCount === 0) {
-        throw new Error(
-          `No se pudo insertar ningún conductor (${totalErrores} errores de ${conductoresProcesados.length} intentos). ` +
-          `Primer error: ${primerError || 'desconocido'}. ` +
-          `Los datos del período fueron eliminados — regenere desde la pestaña Períodos.`
-        )
-      }
-
-      // 7a. Control de integridad: facturaciones del período que quedaron sin
-      // ningún concepto en el detalle. Cubre el caso de una falla de conexión
-      // en la que la facturación SÍ se guardó pero la respuesta no llegó, así
-      // que el recálculo la dio por fallida y no cargó su detalle.
-      try {
-        const { data: factsPeriodo } = await (supabase.from('facturacion_conductores') as any)
-          .select('id, conductor_nombre')
-          .eq('periodo_id', periodoId)
-        const idsPeriodo = ((factsPeriodo || []) as Array<{ id: string }>).map(f => f.id)
-        if (idsPeriodo.length > 0) {
-          const { data: conDetalle } = await (supabase.from('facturacion_detalle') as any)
-            .select('facturacion_id')
-            .in('facturacion_id', idsPeriodo)
-          const idsConDetalle = new Set(((conDetalle || []) as Array<{ facturacion_id: string }>).map(d => String(d.facturacion_id)))
-          for (const f of (factsPeriodo || []) as Array<{ id: string; conductor_nombre: string | null }>) {
-            if (idsConDetalle.has(String(f.id))) continue
-            const nombre = f.conductor_nombre || 'Sin nombre'
-            const previo = conductoresConProblema.find(c => c.nombre === nombre)
-            if (previo) previo.motivo += ' · quedó guardada sin conceptos en el detalle'
-            else conductoresConProblema.push({ nombre, motivo: 'quedó guardada sin conceptos en el detalle' })
-          }
-        }
-      } catch {
-        // El control es informativo: si falla, se informa lo que ya se sabe.
+      // 7. Validar que se guardó al menos un conductor
+      if (conductoresProcesadosCount === 0 && pendientesGuardar.length > 0) {
+        throw new Error('La base no guardó ninguna facturación. No se cambió nada del período.')
       }
 
       // 7b. Reasignar los pagos ya registrados a las facturaciones nuevas.
@@ -5678,25 +5835,8 @@ export function ReporteFacturacionTab() {
       // 11. Recargar datos
       await cargarFacturacion()
 
-      if (totalErrores > 0 || conductoresConProblema.length > 0) {
-        setPeriodoRecalculadoId(null)
-        const esc = (t: string) => t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
-        const lista = conductoresConProblema
-          .map(c => `<li style="margin-bottom:4px"><strong>${esc(c.nombre)}</strong>: ${esc(c.motivo)}</li>`)
-          .join('')
-        Alerta.fire({
-          icon: 'warning',
-          title: 'Recálculo incompleto',
-          html: `<div style="text-align:left;font-size:13px">
-            <p style="margin:0 0 8px 0">Se procesaron ${conductoresProcesadosCount} conductores, pero ${conductoresConProblema.length || totalErrores} quedaron con problemas:</p>
-            ${lista ? `<ul style="margin:0 0 10px 18px;padding:0">${lista}</ul>` : `<p style="margin:0 0 10px 0">Error: ${esc(primerError || 'desconocido')}</p>`}
-            <p style="margin:0"><strong>Volvé a tocar "Recalcular" antes de cerrar el período.</strong> Suele ser una falla de conexión momentánea.</p>
-            ${avisoPagos ? `<p style="margin:10px 0 0 0;color:#6B7280">${esc(avisoPagos)}</p>` : ''}
-          </div>`,
-          confirmButtonText: 'Entendido',
-          confirmButtonColor: '#f59e0b',
-        })
-      } else if (avisoPagos) {
+      // El guardado es todo o nada: si llegó acá, se guardaron todas las facturaciones.
+      if (avisoPagos) {
         setPeriodoRecalculadoId(periodoId)
         Alerta.fire('Recálculo completado con pagos a revisar',
           `${conductoresProcesadosCount} conductores regenerados. ${avisoPagos}`,
@@ -5721,14 +5861,12 @@ export function ReporteFacturacionTab() {
         .eq('lock_token', lockTokenRef.current)
       setPeriodo(prev => prev ? { ...prev, estado: 'abierto' as const } : prev)
       showError('Error', error?.message || 'No se pudo recalcular el período')
-      // Si el paso 2 ya borró la facturación, reasignar los pagos a las
-      // facturaciones que alcanzaron a recrearse (best-effort; los que no
-      // tengan destino quedan visibles en el aviso de pagos sin vincular).
+      // El guardado es una sola transacción: si falló, el período quedó como estaba. Si falló
+      // DESPUÉS de guardar (reasignar pagos o totales), se reintenta la reasignación de pagos
+      // (best-effort; los que no tengan destino quedan en el aviso de pagos sin vincular).
       if (factViejaPorConductor.size > 0) {
         await reasignarPagosTrasRecalculo(periodo.id, factViejaPorConductor)
       }
-      // El paso 2 ya borró la facturación previa: hay que recargar para no
-      // dejar en pantalla filas que ya no existen en la base.
       await cargarFacturacion()
     } finally {
       lockTokenRef.current = null
@@ -5806,7 +5944,7 @@ export function ReporteFacturacionTab() {
           cobradoPorFact.set(String(c.referencia_id), (cobradoPorFact.get(String(c.referencia_id)) || 0) + (Number(c.monto) || 0))
         }
         const totalPorFact = new Map<string, number>()
-        nuevaPorConductor.forEach(f => totalPorFact.set(f.id, Math.abs(Number(f.total_a_pagar) || 0)))
+        nuevaPorConductor.forEach(f => totalPorFact.set(f.id, Number(f.total_a_pagar) || 0))
         const pagadas = idsNuevas.filter(id => (cobradoPorFact.get(id) || 0) >= (totalPorFact.get(id) ?? Infinity))
         if (pagadas.length > 0) {
           await (supabase.from('facturacion_conductores') as any)
@@ -5848,7 +5986,7 @@ export function ReporteFacturacionTab() {
     }
     const totalPorId = new Map<string, number>()
     for (const f of (factRes.data || []) as Array<{ id: string; total_a_pagar: number }>) {
-      totalPorId.set(String(f.id), Math.abs(Number(f.total_a_pagar) || 0))
+      totalPorId.set(String(f.id), Number(f.total_a_pagar) || 0)
     }
     const cobradoPorId = new Map<string, number>()
     for (const c of (pagosRes.data || []) as Array<{ referencia_id: string; monto: number }>) {
@@ -6438,8 +6576,7 @@ export function ReporteFacturacionTab() {
           .from('cobros_fraccionados') as any)
           .select('*')
           .eq('conductor_id', facturacion.conductor_id)
-          .lte('semana', semDetalle)
-          .eq('anio', anioDetalle)
+          .or(hastaSemana(semDetalle, anioDetalle))
 
         const { data: pagosCobrosDetalle } = await (supabase
           .from('pagos_conductores') as any)
@@ -6449,7 +6586,7 @@ export function ReporteFacturacionTab() {
           (pagosCobrosDetalle || []).map((p: any) => p.referencia_id).filter(Boolean)
         )
 
-        ;((cobrosDetalle || []).filter((c: any) => c.aplicado !== true && !cobrosDetallePagadosIds.has(c.id))).forEach((cobro: any, idx: number) => {
+        ;((cobrosDetalle || []).filter((c: any) => c.aplicado !== true && !cobrosDetallePagadosIds.has(c.id) && cuotaFacturableEn(c, facturacion.periodo_id))).forEach((cobro: any, idx: number) => {
           const mt = cobro.monto_total || 0
           const mc = cobro.monto_cuota || 0
           const tc = cobro.total_cuotas || 1
@@ -6663,7 +6800,8 @@ export function ReporteFacturacionTab() {
         // Si falla la lectura del desglose, se mantiene la vista simple (sin romper el modal).
         setDetalleSaldoBreakdown(null)
       }
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo cargar el detalle:', errorCapturado)
       showError('Error', 'No se pudo cargar el detalle')
       setShowDetalle(false)
     } finally {
@@ -6687,22 +6825,18 @@ export function ReporteFacturacionTab() {
     if (!confirm.isConfirmed) return
 
     try {
+      // Referencia del pago (para encontrar su abono, no el de otra semana con igual monto)
+      const { data: pagoRow } = await (supabase.from('pagos_conductores') as any)
+        .select('referencia').eq('id', pagoId).maybeSingle()
+      const referenciaPago: string | null = pagoRow?.referencia || null
+
       // 1. Eliminar el pago
       const { error: errPago } = await (supabase.from('pagos_conductores') as any)
         .delete().eq('id', pagoId)
       if (errPago) throw errPago
 
-      // 2. Revertir saldo (restar el monto del pago)
-      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-        .select('id, saldo_actual').eq('conductor_id', conductorId).maybeSingle()
-      const nuevoSaldoElim = (saldoExistente?.saldo_actual || 0) - monto
-      if (saldoExistente) {
-        await (supabase.from('saldos_conductores') as any)
-          .update({
-            saldo_actual: nuevoSaldoElim,
-            ultima_actualizacion: new Date().toISOString()
-          }).eq('id', saldoExistente.id)
-      }
+      // 2. Revertir saldo (restar el monto del pago) sobre el saldo real de la base
+      const nuevoSaldoElim = (await sumarAlSaldoConductor(conductorId, -monto)) ?? -monto
 
       // 2b. Registrar movimiento en kardex (control_saldos)
       const semanaElim = periodo?.semana || getISOWeek(semanaActual.inicio)
@@ -6718,12 +6852,11 @@ export function ReporteFacturacionTab() {
         userName: profile?.full_name,
       })
 
-      // 3. Eliminar abono correspondiente (mismo monto, misma fecha aprox)
-      const { data: abonos } = await (supabase.from('abonos_conductores') as any)
-        .select('id').eq('conductor_id', conductorId).eq('tipo', 'abono').eq('monto', monto)
-        .limit(1)
-      if (abonos && abonos.length > 0) {
-        await (supabase.from('abonos_conductores') as any).delete().eq('id', abonos[0].id)
+      // 3. Eliminar el abono de este pago
+      const abonoId = await buscarAbonoDelPago(conductorId, monto, referenciaPago)
+      if (abonoId) {
+        const { error: errAbono } = await (supabase.from('abonos_conductores') as any).delete().eq('id', abonoId)
+        if (errAbono) console.error('No se pudo eliminar el abono del pago:', errAbono)
       }
 
       // 4. Recalcular estado: verificar si queda algún pago que cubra el total
@@ -6732,7 +6865,7 @@ export function ReporteFacturacionTab() {
       const totalCobrado = (pagosRestantes || []).reduce((s: number, p: { monto: number }) => s + p.monto, 0)
       const { data: factData } = await (supabase.from('facturacion_conductores') as any)
         .select('total_a_pagar').eq('id', facturacionId).single()
-      const totalAPagar = Math.abs(factData?.total_a_pagar || 0)
+      const totalAPagar = Number(factData?.total_a_pagar) || 0
 
       const nuevoEstado = totalCobrado >= totalAPagar ? 'pagado' : 'cerrado'
       await (supabase.from('facturacion_conductores') as any)
@@ -7234,22 +7367,17 @@ export function ReporteFacturacionTab() {
     const diferencia = nuevoMonto - montoActual
 
     try {
+      const { data: pagoRow } = await (supabase.from('pagos_conductores') as any)
+        .select('referencia').eq('id', pagoId).maybeSingle()
+      const referenciaPago: string | null = pagoRow?.referencia || null
+
       // 1. Actualizar monto del pago
       const { error: errPago } = await (supabase.from('pagos_conductores') as any)
         .update({ monto: nuevoMonto }).eq('id', pagoId)
       if (errPago) throw errPago
 
-      // 2. Ajustar saldo (sumar la diferencia)
-      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-        .select('id, saldo_actual').eq('conductor_id', conductorId).maybeSingle()
-      const nuevoSaldoEdit = (saldoExistente?.saldo_actual || 0) + diferencia
-      if (saldoExistente) {
-        await (supabase.from('saldos_conductores') as any)
-          .update({
-            saldo_actual: nuevoSaldoEdit,
-            ultima_actualizacion: new Date().toISOString()
-          }).eq('id', saldoExistente.id)
-      }
+      // 2. Ajustar saldo (sumar la diferencia) sobre el saldo real de la base
+      const nuevoSaldoEdit = (await sumarAlSaldoConductor(conductorId, diferencia)) ?? diferencia
 
       // 2b. Registrar movimiento en kardex (control_saldos)
       const semanaEdit = periodo?.semana || getISOWeek(semanaActual.inicio)
@@ -7265,13 +7393,12 @@ export function ReporteFacturacionTab() {
         userName: profile?.full_name,
       })
 
-      // 3. Actualizar abono correspondiente
-      const { data: abonos } = await (supabase.from('abonos_conductores') as any)
-        .select('id').eq('conductor_id', conductorId).eq('tipo', 'abono').eq('monto', montoActual)
-        .limit(1)
-      if (abonos && abonos.length > 0) {
-        await (supabase.from('abonos_conductores') as any)
-          .update({ monto: nuevoMonto }).eq('id', abonos[0].id)
+      // 3. Actualizar el abono de este pago
+      const abonoId = await buscarAbonoDelPago(conductorId, montoActual, referenciaPago)
+      if (abonoId) {
+        const { error: errAbono } = await (supabase.from('abonos_conductores') as any)
+          .update({ monto: nuevoMonto }).eq('id', abonoId)
+        if (errAbono) console.error('No se pudo actualizar el abono del pago:', errAbono)
       }
 
       // 4. Recalcular estado
@@ -7280,7 +7407,7 @@ export function ReporteFacturacionTab() {
       const totalCobrado = (pagosRestantes || []).reduce((s: number, p: { monto: number }) => s + p.monto, 0)
       const { data: factData } = await (supabase.from('facturacion_conductores') as any)
         .select('total_a_pagar').eq('id', facturacionId).single()
-      const totalAPagar = Math.abs(factData?.total_a_pagar || 0)
+      const totalAPagar = Number(factData?.total_a_pagar) || 0
 
       const nuevoEstado = totalCobrado >= totalAPagar ? 'pagado' : 'cerrado'
       await (supabase.from('facturacion_conductores') as any)
@@ -7363,7 +7490,7 @@ export function ReporteFacturacionTab() {
     const saldoHtml = ''
     const moraHtml = ''
 
-    const totalAbsoluto = Math.abs(facturacion.total_a_pagar)
+    const totalAbsoluto = Number(facturacion.total_a_pagar) || 0
     const yaCobrado = facturacion.monto_cobrado || 0
     const montoPendiente = Math.max(0, totalAbsoluto - yaCobrado)
 
@@ -7535,7 +7662,9 @@ export function ReporteFacturacionTab() {
       // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
       // es simplemente lo que queda sin pagar (negativo = deuda, 0 = saldado)
       const pendienteAntesPago = totalAbsoluto - yaCobrado
-      const saldoCrudoManual = -(pendienteAntesPago - formValues.monto)
+      // + pagos en efectivo, ajustes, etc. cargados después del cálculo de la factura (no se pierden)
+      const posterioresManual = await movimientosPosterioresALaFactura(facturacion.conductor_id, facturacion.id)
+      const saldoCrudoManual = -(pendienteAntesPago - formValues.monto) + posterioresManual
       const nuevoSaldo = Math.abs(saldoCrudoManual) < 1 ? 0 : saldoCrudoManual
 
       await upsertSaldoConductor({
@@ -7681,7 +7810,6 @@ export function ReporteFacturacionTab() {
       // Si no, el archivo no es del formato Cabify y se aborta.
       // ─────────────────────────────────────────────────────────────────────
       const COL_DNI_IDX = 7        // Col H
-      const COL_NOMBRE_IDX = 4     // Col E
       const COL_IMPORTE_CONTRATO_IDX = 8  // Col I
       const COL_DESCONTAR_IDX = 16 // Col Q
 
@@ -7834,15 +7962,6 @@ export function ReporteFacturacionTab() {
         return
       }
 
-      // Observación inicial: resumen de lo detectado
-      const resumenInicial = {
-        sheetName,
-        filasTotal: filasConContenido,
-        filasConDni,
-        nombreEjemplo: String((dataRows[0] || [])[COL_NOMBRE_IDX] || '').trim(),
-      }
-      void resumenInicial
-
       // Parsear filas del Excel (saltear header - fila 0)
       // Col E (4) = Nombre, Col G (6) = Patente, Col H (7) = DNI
       // Col I (8) = Importe Contrato, Col P (15) = Disponible, Col Q (16) = Importe Descontado, Col R (17) = Saldo
@@ -7898,7 +8017,7 @@ export function ReporteFacturacionTab() {
           disponible: exRow.disponible,
           importe_descontar: exRow.importe_descontar,
           saldo_adeudado: exRow.saldo_adeudado,
-          total_a_pagar: fact ? Math.abs(fact.total_a_pagar) : 0,
+          total_a_pagar: fact ? Number(fact.total_a_pagar) || 0 : 0,
           facturacion_id: fact?.id || '',
           conductor_id: fact?.conductor_id || '',
           conductor_cuit: fact?.conductor_cuit || '',
@@ -7915,7 +8034,9 @@ export function ReporteFacturacionTab() {
         return
       }
 
-      setCabifyPagosData(matched)
+      // Pagos en efectivo / ajustes cargados después del cálculo: se ven en la columna Saldo
+      const posterioresCabify = await posterioresPorFacturacion(matched)
+      setCabifyPagosData(matched.map(r => ({ ...r, posteriores: posterioresCabify.get(r.facturacion_id) || 0 })))
       setShowCabifyPagosPreview(true)
 
       if (noMatch.length > 0) {
@@ -8012,7 +8133,7 @@ export function ReporteFacturacionTab() {
           conductor_dni: f.conductor_dni || '',
           conductor_cuit: f.conductor_cuit || '',
           patente: f.vehiculo_patente || '',
-          total_a_pagar: Math.abs(f.total_a_pagar || 0),
+          total_a_pagar: Number(f.total_a_pagar) || 0,
           monto_cobrado: f.monto_cobrado || 0,
           monto_didi: c.monto,
           metodo: c.metodo,
@@ -8021,7 +8142,9 @@ export function ReporteFacturacionTab() {
         }
       }).sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
 
-      setDidiPagosData(filas)
+      // Pagos en efectivo / ajustes cargados después del cálculo: se ven en la columna Saldo
+      const posterioresDidi = await posterioresPorFacturacion(filas)
+      setDidiPagosData(filas.map(r => ({ ...r, posteriores: posterioresDidi.get(r.facturacion_id) || 0 })))
       setDidiNoCruzados(noCruzados)
       setDidiIgnoradas(lectura.ignoradasMontoCero)
       setShowDidiPagosPreview(true)
@@ -8131,6 +8254,8 @@ export function ReporteFacturacionTab() {
     const { semanaNum, anioNum, semanaHoy, anioHoy, hoy } = ctx
     const referencia = `Pago ${app} S${semanaNum}/${anioNum}`
     const yaCobrado = pago.monto_cobrado
+    // Con signo: un total negativo es saldo a favor. Con Math.abs el crédito se convertía en
+    // deuda (caso real S46/2026: factura −179.614,28 quedó como deuda al importar Cabify $0).
     const totalAbsoluto = pago.total_a_pagar
 
     // 1. Registrar pago en pagos_conductores
@@ -8156,7 +8281,9 @@ export function ReporteFacturacionTab() {
     // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
     // es lo que queda sin pagar (negativo = deuda, 0 = saldado)
     const pendiente = pago.total_a_pagar - yaCobrado
-    const saldoCrudo = -(pendiente - monto)
+    // + pagos en efectivo, ajustes, etc. cargados después del cálculo de la factura (no se pierden)
+    const posteriores = await movimientosPosterioresALaFactura(pago.conductor_id, pago.facturacion_id)
+    const saldoCrudo = -(pendiente - monto) + posteriores
     // Write-off de residuos < $1 (redondeos distintos entre la app y la facturación
     // dejan diferencias de centavos que no queremos arrastrar).
     const nuevoSaldo = Math.abs(saldoCrudo) < 1 ? 0 : saldoCrudo
@@ -8307,10 +8434,50 @@ export function ReporteFacturacionTab() {
       return
     }
 
+    // No registrar dos veces: se consulta en la base (no en la pantalla) qué facturaciones ya
+    // tienen un "Pago Cabify" de esta semana, así un Excel cargado dos veces, o desde dos
+    // pestañas, no duplica pagos. Las filas sin facturación tampoco se procesan.
+    const factIdsCabify = [...new Set(cabifyPagosData.map(d => d.facturacion_id).filter(Boolean))]
+    const yaRegistradasCabify = new Set<string>()
+    try {
+      for (let i = 0; i < factIdsCabify.length; i += 200) {
+        const { data, error } = await (supabase.from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'facturacion_semanal')
+          .in('referencia_id', factIdsCabify.slice(i, i + 200))
+          .ilike('referencia', `Pago Cabify S${semanaNum}/${anioNum}%`)
+        if (error) throw error
+        for (const p of (data || []) as Array<{ referencia_id: string }>) yaRegistradasCabify.add(String(p.referencia_id))
+      }
+    } catch (error) {
+      console.error('Error verificando pagos Cabify ya registrados:', error)
+      showError('Error', 'No se pudo verificar qué pagos ya estaban registrados. No se registró nada.')
+      return
+    }
+    const sinFacturacion = cabifyPagosData.filter(d => !d.facturacion_id)
+    const yaRegistrados = cabifyPagosData.filter(d => d.facturacion_id && yaRegistradasCabify.has(d.facturacion_id))
+    const aRegistrar = cabifyPagosData.filter(d => d.facturacion_id && !yaRegistradasCabify.has(d.facturacion_id))
+
+    if (aRegistrar.length === 0) {
+      await Alerta.fire({
+        icon: 'info',
+        title: 'No hay pagos nuevos',
+        html: `<div style="text-align:left;font-size:13px;">
+          ${yaRegistrados.length > 0 ? `<p>${yaRegistrados.length} conductores ya tienen el Pago Cabify S${semanaNum}/${anioNum} registrado.</p>` : ''}
+          ${sinFacturacion.length > 0 ? `<p>${sinFacturacion.length} conductores del Excel no tienen facturación en esta semana.</p>` : ''}
+        </div>`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#7C3AED',
+      })
+      return
+    }
+
     const confirm = await Alerta.fire({
       title: 'Confirmar Pagos Cabify',
       html: `<div style="text-align:left;font-size:13px;">
-        <p>Se registrarán <strong>${cabifyPagosData.length} pagos</strong> por un total de <strong>${formatCurrency(cabifyPagosData.reduce((s, d) => s + d.importe_descontar, 0))}</strong></p>
+        <p>Se registrarán <strong>${aRegistrar.length} pagos</strong> por un total de <strong>${formatCurrency(aRegistrar.reduce((s, d) => s + d.importe_descontar, 0))}</strong></p>
+        ${yaRegistrados.length > 0 ? `<p style="color:#B45309;font-size:12px;margin-top:8px;">${yaRegistrados.length} conductores ya tienen este pago registrado y no se vuelven a registrar.</p>` : ''}
+        ${sinFacturacion.length > 0 ? `<p style="color:#B45309;font-size:12px;margin-top:4px;">${sinFacturacion.length} conductores del Excel no tienen facturación en esta semana y se omiten.</p>` : ''}
         <p style="color:#6B7280;font-size:12px;margin-top:8px;">Referencia: Pago Cabify S${semanaNum}/${anioNum}</p>
       </div>`,
       icon: 'question',
@@ -8328,7 +8495,7 @@ export function ReporteFacturacionTab() {
     const errores: string[] = []
 
     const ctxPago = { semanaNum, anioNum, semanaHoy, anioHoy, hoy }
-    for (const pago of cabifyPagosData) {
+    for (const pago of aRegistrar) {
       try {
         await registrarPagoApp('Cabify', pago, pago.importe_descontar, ctxPago)
         exitosos++
@@ -8573,7 +8740,8 @@ export function ReporteFacturacionTab() {
       pdf.save(nombreArchivo)
 
       showSuccess('PDF Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo exportar el PDF:', errorCapturado)
       showError('Error', 'No se pudo exportar el PDF')
     } finally {
       setExportingPdf(false)
@@ -8678,7 +8846,8 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo exportar el reporte:', errorCapturado)
       showError('Error', 'No se pudo exportar el reporte')
     } finally {
       setExportingExcel(false)
@@ -8842,8 +9011,7 @@ export function ReporteFacturacionTab() {
           .from('cobros_fraccionados') as any)
           .select('*, conductor:conductores(nombres, apellidos)')
           .in('conductor_id', conductorIds)
-          .lte('semana', periodo.semana)
-          .eq('anio', periodo.anio),
+          .or(hastaSemana(periodo.semana, periodo.anio)),
         (supabase
           .from('pagos_conductores') as any)
           .select('referencia_id')
@@ -8852,7 +9020,7 @@ export function ReporteFacturacionTab() {
       const cobrosPagadosPendIds = new Set(
         (pagosCobrosResPend.data || []).map((p: any) => p.referencia_id).filter(Boolean)
       )
-      const cobrosPendientes = (cobrosResPend.data || []).filter((c: any) => c.aplicado !== true && !cobrosPagadosPendIds.has(c.id))
+      const cobrosPendientes = (cobrosResPend.data || []).filter((c: any) => c.aplicado !== true && !cobrosPagadosPendIds.has(c.id) && cuotaFacturableEn(c, periodo?.id))
 
       for (const c of (cobrosPendientes || []) as any[]) {
         if (!detallesReferencias.has(c.id)) {
@@ -9064,7 +9232,7 @@ export function ReporteFacturacionTab() {
             // El pago diario de la licencia B1 no va: es un pago del conductor, no un descuento.
             if (det.referencia_tipo === REFERENCIA_PROMOCION) {
               if (esPagoPromocionB1(det.descripcion)) continue
-              filasPreview.push(crearFilaPreview(
+              const filaPromo = crearFilaPreview(
                 numeroFactura++,
                 fact,
                 det.total,
@@ -9072,7 +9240,10 @@ export function ReporteFacturacionTab() {
                 textoLineaPromocion(det.concepto_codigo, det.concepto_descripcion || ''),
                 fact.id,
                 det.id
-              ))
+              )
+              // El 10% del alquiler se proyecta junto con el alquiler (Proyectado ON)
+              if (leerCalculoPromocion(det.descripcion)?.tipo === 'alquiler') filaPromo.promoAlquiler = true
+              filasPreview.push(filaPromo)
               continue
             }
 
@@ -9154,7 +9325,8 @@ export function ReporteFacturacionTab() {
       setSiFacturaPreviewData(filasPreview)
       setShowSiFacturaPreview(true)
 
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo cargar el preview de SiFactura:', errorCapturado)
       showError('Error', 'No se pudo cargar el preview de SiFactura')
     } finally {
       setLoadingSiFacturaPreview(false)
@@ -9261,7 +9433,8 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Facturación Exportada', `Se descargó: ${nombreArchivo} (${filasExport.length} líneas)`)
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo exportar el reporte de facturación:', errorCapturado)
       showError('Error', 'No se pudo exportar el reporte de facturación')
     } finally {
       setExportingSiFactura(false)
@@ -9352,8 +9525,7 @@ export function ReporteFacturacionTab() {
           .from('cobros_fraccionados') as any)
           .select('*')
           .in('conductor_id', conductorIds)
-          .lte('semana', semana)
-          .eq('anio', anio),
+          .or(hastaSemana(semana, anio)),
         (supabase
           .from('pagos_conductores') as any)
           .select('referencia_id')
@@ -9362,7 +9534,7 @@ export function ReporteFacturacionTab() {
       const pagosFraccionadosIds = new Set(
         (pagosCloseRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
       )
-      const cobrosData = (cobrosCloseRes.data || []).filter((c: any) => c.aplicado !== true && !pagosFraccionadosIds.has(c.id))
+      const cobrosData = (cobrosCloseRes.data || []).filter((c: any) => c.aplicado !== true && !pagosFraccionadosIds.has(c.id) && cuotaFacturableEn(c, periodo?.id))
 
       // Agrupar cobros por conductor
       const cobrosMap = new Map<string, any[]>()
@@ -9412,11 +9584,10 @@ export function ReporteFacturacionTab() {
       const { data: todosCobrosData } = await (supabase
         .from('cobros_fraccionados') as any)
         .select('*, conductor:conductores(nombres, apellidos)')
-        .lte('semana', semana)
-        .eq('anio', anio)
+        .or(hastaSemana(semana, anio))
 
       const cobrosNoIncluidos = ((todosCobrosData || []).filter(
-        (c: any) => !conductorIdsSetPreview.has(c.conductor_id) && c.aplicado !== true && !pagosFraccionadosIds.has(c.id)
+        (c: any) => !conductorIdsSetPreview.has(c.conductor_id) && c.aplicado !== true && !pagosFraccionadosIds.has(c.id) && cuotaFacturableEn(c, periodo?.id)
       ))
 
       // Crear lista de conceptos NO incluidos para mostrar en el panel
@@ -9681,13 +9852,16 @@ export function ReporteFacturacionTab() {
         // El pago diario de la licencia B1 no va: es un pago del conductor, no un descuento.
         for (const linea of fact.promo_lineas || []) {
           if (linea.calculo.tipo === 'b1') continue
-          filasPreview.push(crearFilaPreview(
+          const filaPromo = crearFilaPreview(
             numeroFactura++,
             fact,
             linea.monto,
             'P004',
             textoLineaPromocion(linea.codigo, linea.descripcion)
-          ))
+          )
+          // El 10% del alquiler se proyecta junto con el alquiler (Proyectado ON)
+          if (linea.calculo.tipo === 'alquiler') filaPromo.promoAlquiler = true
+          filasPreview.push(filaPromo)
         }
 
         // P005 - Peajes (desde cabify - ya calculado en vistaPreviaData)
@@ -9775,7 +9949,8 @@ export function ReporteFacturacionTab() {
       setSiFacturaPreviewData(filasPreview)
       setShowSiFacturaPreview(true)
 
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo cargar el preview de Facturación:', errorCapturado)
       showError('Error', 'No se pudo cargar el preview de Facturación')
     } finally {
       setLoadingSiFacturaPreview(false)
@@ -9935,7 +10110,8 @@ export function ReporteFacturacionTab() {
       setRitPreviewData(previewData)
       setShowRITPreview(true)
 
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo cargar los datos del preview:', errorCapturado)
       showError('Error', 'No se pudo cargar los datos del preview')
     } finally {
       setLoadingRITPreview(false)
@@ -10202,7 +10378,8 @@ export function ReporteFacturacionTab() {
       await cargarFacturacion()
 
       return true
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudieron guardar los cambios:', errorCapturado)
       showError('Error', 'No se pudieron guardar los cambios')
       return false
     }
@@ -10409,7 +10586,8 @@ export function ReporteFacturacionTab() {
       await prepararSiFacturaPreview()
 
       return true
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo enlazar el concepto:', errorCapturado)
       showError('Error', 'No se pudo enlazar el concepto')
       return false
     }
@@ -10633,7 +10811,8 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo exportar el reporte:', errorCapturado)
       showError('Error', 'No se pudo exportar el reporte')
     } finally {
       setExportingExcel(false)
@@ -10778,7 +10957,8 @@ export function ReporteFacturacionTab() {
 
       setCabifyPreviewData(previewRows)
       setShowCabifyPreview(true)
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo generar el preview de Cabify:', errorCapturado)
       showError('Error', 'No se pudo generar el preview de Cabify')
     } finally {
       setLoadingCabifyPreview(false)
@@ -10848,36 +11028,6 @@ export function ReporteFacturacionTab() {
       const daysSoFarPeriodo = Math.min(differenceInCalendarDays(hoyPeriodo, fechaInicio) + 1, 7)
       const necesitaProyeccionPeriodo = daysSoFarPeriodo > 0 && daysSoFarPeriodo < 7
 
-      // Obtener precio diario exacto por conductor desde facturacion_detalle
-      // Query fresca por periodo_id (no depende de IDs en estado que pueden ser preview-xxx)
-      const precioDiarioByConductor = new Map<string, number>()
-      if (necesitaProyeccionPeriodo) {
-        const { data: fcFromDb } = await supabase
-          .from('facturacion_conductores')
-          .select('id, conductor_id')
-          .eq('periodo_id', periodo.id)
-        const dbIdToConId = new Map<string, string>()
-        const dbIds: string[] = []
-        ;(fcFromDb || []).forEach((r: { id: string; conductor_id: string }) => {
-          dbIdToConId.set(r.id, r.conductor_id)
-          dbIds.push(r.id)
-        })
-        if (dbIds.length > 0) {
-          const { data: detallesAlquiler } = await supabase
-            .from('facturacion_detalle')
-            .select('facturacion_id, precio_unitario')
-            .in('facturacion_id', dbIds)
-            .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
-          ;(detallesAlquiler || []).forEach((d: { facturacion_id: string; precio_unitario: number }) => {
-            const conductorId = dbIdToConId.get(d.facturacion_id)
-            const pu = Number(d.precio_unitario) || 0
-            if (conductorId && pu > 0) {
-              precioDiarioByConductor.set(conductorId, pu)
-            }
-          })
-        }
-      }
-
       // Saldo al día de cada conductor. La facturación guarda el saldo del momento en que se
       // recalculó; los pagos manuales o transferencias cargados después ya están en el saldo
       // actual y al cierre de semana se van a descontar, así que el preview usa el saldo de hoy.
@@ -10890,16 +11040,6 @@ export function ReporteFacturacionTab() {
         ;(saldosData || []).forEach((r: { conductor_id: string; saldo_actual: number | null }) => {
           saldoActualByConductor.set(r.conductor_id, Number(r.saldo_actual) || 0)
         })
-      }
-
-      // Días de la semana que faltan (para proyectar el descuento de la promoción)
-      const diasRestantesFechas: string[] = []
-      if (necesitaProyeccionPeriodo) {
-        for (let i = daysSoFarPeriodo; i < 7; i++) {
-          const d = new Date(fechaInicio)
-          d.setDate(d.getDate() + i)
-          diasRestantesFechas.push(format(d, 'yyyy-MM-dd'))
-        }
       }
 
       // Generar filas para el preview
@@ -10933,33 +11073,19 @@ export function ReporteFacturacionTab() {
 
         const actualAlquiler = f.subtotal_alquiler || 0
 
-        // Proyectar alquiler hasta el fin de semana: lo cobrado hasta hoy + los días que faltan.
-        // Solo para conductores con asignación al cierre (Activo). Si está de baja o en pausa,
-        // la facturación ya se cortó y se cobra lo real. Si empezó a mitad de semana, solo se
-        // suman los días que faltan, no la semana entera.
+        // Proyectar alquiler hasta el fin de semana con el mismo proyectado de la grilla y del
+        // Preview Facturación (proyectado_alquiler): lo cobrado + los días que faltan. De baja o
+        // en pausa no se proyecta (la facturación ya se cortó); el que empezó a mitad de semana
+        // suma solo los días que le quedan.
         const diasCobrados = Number(f.turnos_cobrados) || 0
         let importeContrato = actualAlquiler
         let diasProyectados = diasCobrados
-        // Descuento de la promoción (10% del alquiler) por los días que faltan: si todos los
-        // días cobrados tuvieron la promo, los que faltan también, hasta que termine la promo.
+        // Descuento de la promoción (10% del alquiler) por los días proyectados
         let descuentoPromoProyectado = 0
-        if (necesitaProyeccionPeriodo && f.estado_billing === 'Activo' && actualAlquiler > 0) {
-          const diasRestantes = 7 - daysSoFarPeriodo
-          const precioDiario = precioDiarioByConductor.get(f.conductor_id)
-            || (diasCobrados > 0 ? actualAlquiler / diasCobrados : actualAlquiler / daysSoFarPeriodo)
-          diasProyectados = Math.min(diasCobrados + diasRestantes, 7)
-          importeContrato = Math.min(actualAlquiler + precioDiario * diasRestantes, precioDiario * 7)
-          const diasAgregados = Math.max(0, Math.round((importeContrato - actualAlquiler) / precioDiario))
-          const promoAlquiler = ((f as any)._detalles || [])
-            .filter((d: any) => d.referencia_tipo === REFERENCIA_PROMOCION)
-            .map((d: any) => leerCalculoPromocion(d.descripcion))
-            .find((c: any) => c?.tipo === 'alquiler')
-          if (promoAlquiler && (promoAlquiler.dias?.length || 0) >= Math.ceil(diasCobrados)) {
-            const diasConPromo = diasRestantesFechas
-              .slice(0, diasAgregados)
-              .filter(fecha => fecha <= promoAlquiler.promocion.hasta).length
-            descuentoPromoProyectado = Math.round(precioDiario * promoAlquiler.porcentaje * diasConPromo * 100) / 100
-          }
+        if (necesitaProyeccionPeriodo && f.estado_billing === 'Activo' && (f.proyectado_alquiler || 0) > actualAlquiler) {
+          importeContrato = f.proyectado_alquiler || actualAlquiler
+          diasProyectados = Number((f as any)._diasProyectados) || diasCobrados
+          descuentoPromoProyectado = proyectadoPromoAlquilerMap.get(f.conductor_id)?.extra || 0
         }
         importeContrato = Math.round(importeContrato)
 
@@ -11061,7 +11187,8 @@ export function ReporteFacturacionTab() {
 
       setCabifyPreviewData(previewRows)
       setShowCabifyPreview(true)
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo generar el preview de Cabify:', errorCapturado)
       showError('Error', 'No se pudo generar el preview de Cabify')
     } finally {
       setLoadingCabifyPreview(false)
@@ -11137,7 +11264,8 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Cabify Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudo exportar el reporte de Cabify:', errorCapturado)
       showError('Error', 'No se pudo exportar el reporte de Cabify')
     } finally {
       setExportingCabify(false)
@@ -11195,7 +11323,8 @@ export function ReporteFacturacionTab() {
       // Actualizar el estado local con los datos guardados
       setCabifyPreviewData(updatedData)
       return true
-    } catch {
+    } catch (errorCapturado) {
+      console.error('[Facturación] No se pudieron guardar los cambios:', errorCapturado)
       showError('Error', 'No se pudieron guardar los cambios')
       return false
     }
@@ -11412,13 +11541,51 @@ export function ReporteFacturacionTab() {
   // Info modal para stat cards
   function showStatInfo(stat: string) {
     const src = modoVistaPrevia ? vistaPreviaData : facturaciones
+    // Estilo común de los modales de las tarjetas: texto en color por significado, sin
+    // fondos resaltados ni pastillas; filas con una línea fina; nota final en gris.
+    const ui = {
+      etiqueta: 'font-size:11px;color:var(--text-secondary);',
+      monto: 'font-variant-numeric:tabular-nums;white-space:nowrap;',
+      seccion: (t: string) => `<div style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.4px;margin:20px 0 4px;">${t}</div>`,
+      fila: (nombre: string, valor: string, color = 'var(--text-primary)', sub = '') =>
+        `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--border-primary);">
+          <span style="color:var(--text-primary);min-width:0;">${nombre}${sub ? `<span style="display:block;font-size:11px;color:var(--text-tertiary);">${sub}</span>` : ''}</span>
+          <span style="font-variant-numeric:tabular-nums;white-space:nowrap;color:${color};">${valor}</span>
+        </div>`,
+      total: (nombre: string, valor: string, color = 'var(--text-primary)') =>
+        `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 0 0;">
+          <span style="font-weight:700;">${nombre}</span>
+          <span style="font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:${color};">${valor}</span>
+        </div>`,
+      principal: (etiqueta: string, valor: string, color = 'var(--text-primary)', sub = '') =>
+        `<div style="margin-bottom:6px;">
+          <div style="font-size:11px;color:var(--text-secondary);">${etiqueta}</div>
+          <div style="font-size:26px;font-weight:700;line-height:1.2;color:${color};font-variant-numeric:tabular-nums;">${valor}</div>
+          ${sub ? `<div style="font-size:11px;color:var(--text-tertiary);">${sub}</div>` : ''}
+        </div>`,
+      cifras: (items: Array<{ etiqueta: string; valor: string; color?: string; sub?: string }>) =>
+        `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-top:12px;">
+          ${items.map(i => `<div>
+            <div style="font-size:11px;color:var(--text-secondary);">${i.etiqueta}</div>
+            <div style="font-size:17px;font-weight:700;color:${i.color || 'var(--text-primary)'};font-variant-numeric:tabular-nums;white-space:nowrap;">${i.valor}</div>
+            ${i.sub ? `<div style="font-size:11px;color:var(--text-tertiary);">${i.sub}</div>` : ''}
+          </div>`).join('')}
+        </div>`,
+      barra: (pct: number, color: string) =>
+        `<div style="height:6px;border-radius:3px;background:var(--border-primary);overflow:hidden;margin:8px 0;" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+          <div style="height:100%;width:${Math.min(100, Math.max(0, pct))}%;background:${color};border-radius:3px;"></div>
+        </div>`,
+      nota: (t: string) => `<div style="margin-top:18px;font-size:11px;line-height:1.5;color:var(--text-tertiary);">${t}</div>`,
+      vacio: (t: string) => `<div style="padding:20px 0;text-align:center;font-size:12px;color:var(--text-tertiary);">${t}</div>`,
+      envolver: (contenido: string) => `<div style="text-align:left;font-size:13px;color:var(--text-primary);">${contenido}</div>`,
+    }
     const descriptions: Record<string, { title: string; html: string }> = {
       conductores: {
         title: 'Conductores',
-        html: `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-          <p style="color:var(--text-secondary);">Total de conductores incluidos en la facturación del período.</p>
-          <p><b style="color:var(--text-primary);">${src.length}</b> conductores</p>
-        </div>`
+        html: ui.envolver(`
+          ${ui.principal('Conductores en la facturación', String(src.length))}
+          ${ui.nota('Total de conductores incluidos en la facturación del período.')}
+        `)
       },
       proyectado: {
         title: 'Total Proyectado',
@@ -11438,69 +11605,30 @@ export function ReporteFacturacionTab() {
           const bajas = conductoresConProyectado.filter(f => f.estado_billing === 'De baja')
           const proyectadoActivos = activos.reduce((s, f) => s + proyectadoConductor(f), 0)
           const proyectadoBajas = bajas.reduce((s, f) => s + proyectadoConductor(f), 0)
-          // Barra: cap visual al 100% pero el % numérico puede pasar de 100
-          const pctClamped = Math.min(100, Math.max(0, porcentaje))
-          // Color: verde firme hasta 100%, azul cuando supera (positivo)
-          const barColor = porcentaje > 100 ? '#2563eb' : porcentaje >= 90 ? '#16a34a' : porcentaje >= 60 ? '#f59e0b' : '#dc2626'
-          // Iconos lucide inline (SVG)
-          const iconTarget = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`
-          const iconCheck = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
-          const iconAlert = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
-          const iconReceipt = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>`
-          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
-          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-            <div style="text-align:center;padding:18px 12px;background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:8px;margin-bottom:16px;">
-              <div style="display:flex;justify-content:center;margin-bottom:8px;">${iconTarget}</div>
-              <div style="font-size:clamp(20px, 6vw, 26px);font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;">${formatCurrency(totalProyectado)}</div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Si todos cumplieran sus días asignados</div>
-              <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-                <button type="button" id="btn-detalle-proyectado"
-                  style="padding:6px 12px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-primary);color:var(--text-primary);cursor:pointer;">
-                  Ver detalle
-                </button>
-              </div>
+          // Color por significado: verde 90%+, ámbar 60-89%, rojo menos; azul si supera el 100%
+          const barColor = porcentaje > 100 ? '#2563eb' : porcentaje >= 90 ? '#16a34a' : porcentaje >= 60 ? '#d97706' : '#dc2626'
+          const pendiente = Math.max(0, totalProyectado - totalCobroApp)
+          return ui.envolver(`
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              ${ui.principal('Total proyectado', formatCurrency(totalProyectado), 'var(--text-primary)', 'Si todos cumplieran sus días asignados')}
+              <button type="button" id="btn-detalle-proyectado"
+                style="flex-shrink:0;padding:6px 12px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-primary);color:var(--text-primary);cursor:pointer;">
+                Ver detalle
+              </button>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-              <div style="padding:12px;border-radius:8px;text-align:center;background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.35);">
-                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#22c55e;margin-bottom:6px;">${iconCheck}<span>Activos</span></div>
-                <div style="font-size:22px;font-weight:800;color:var(--text-primary);line-height:1;">${activos.length}<span style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-left:4px;">cond.</span></div>
-                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;color:var(--text-primary);">${formatCurrency(proyectadoActivos)}</div>
-                <div style="font-size:10px;color:var(--text-secondary);">7 días c/u</div>
-              </div>
-              <div style="padding:12px;border-radius:8px;text-align:center;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);">
-                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#f59e0b;margin-bottom:6px;">${iconAlert}<span>Baja en la semana</span></div>
-                <div style="font-size:22px;font-weight:800;color:var(--text-primary);line-height:1;">${bajas.length}<span style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-left:4px;">cond.</span></div>
-                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;color:var(--text-primary);">${formatCurrency(proyectadoBajas)}</div>
-                <div style="font-size:10px;color:var(--text-secondary);">Proyectado parcial</div>
-              </div>
+            ${ui.cifras([
+              { etiqueta: `Activos (${activos.length})`, valor: formatCurrency(proyectadoActivos), sub: '7 días cada uno' },
+              { etiqueta: `Baja en la semana (${bajas.length})`, valor: formatCurrency(proyectadoBajas), color: bajas.length > 0 ? '#d97706' : undefined, sub: 'Proyectado parcial' },
+            ])}
+            ${ui.seccion('Cobro app Cabify')}
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:6px;">
+              <span style="${ui.monto}font-weight:700;">${formatCurrency(totalCobroApp)}</span>
+              <span style="font-size:12px;font-weight:600;color:${barColor};">${porcentaje}% ${porcentaje > 100 ? '(supera el proyectado)' : 'de cobertura'}</span>
             </div>
-            <div style="background:var(--bg-secondary);border:1px solid var(--border-primary);padding:12px;border-radius:8px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13px;">
-                <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);">${iconReceipt}<span>Cobro app Cabify</span></span>
-                <span style="font-weight:700;color:var(--text-primary);">${formatCurrency(totalCobroApp)}</span>
-              </div>
-              <div style="height:10px;background:var(--bg-tertiary);border-radius:5px;overflow:hidden;margin:6px 0;">
-                <div style="height:100%;width:${pctClamped}%;background:${barColor};border-radius:5px;"></div>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;">
-                <span style="color:var(--text-secondary);">vs proyectado</span>
-                <span style="color:${barColor};">${porcentaje}% ${porcentaje > 100 ? '(sobrecubre)' : 'de cobertura'}</span>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg-secondary);border:1px solid var(--border-primary);border-left:3px solid #dc2626;padding:12px;border-radius:8px;margin-top:10px;">
-              <div>
-                <div style="font-size:13px;color:var(--text-secondary);">Pendiente por cobrar</div>
-                <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;">Proyectado − Cobro app Cabify</div>
-              </div>
-              <div style="text-align:right;">
-                <div style="font-size:18px;font-weight:800;color:#dc2626;">${formatCurrency(Math.max(0, totalProyectado - totalCobroApp))}</div>
-                <div style="font-size:11px;font-weight:600;color:var(--text-secondary);">${Math.max(0, 100 - porcentaje)}% del proyectado</div>
-              </div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.35);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#3b82f6;line-height:1.5;">
-              ${iconInfo}<span>Total Proyectado = alquiler proyectado + garantía. El Toshipass (tarifa nueva) no suma: para esos conductores cierra con el alquiler. El % compara lo que Cabify ya descontó (cobro app) vs ese objetivo. Por conductor, el cobro app cuenta como máximo hasta su proyectado (100%); lo cobrado de más no suma.</span>
-            </div>
-          </div>`
+            ${ui.barra(porcentaje, barColor)}
+            ${ui.fila('Pendiente por cobrar', formatCurrency(pendiente), pendiente > 0 ? '#dc2626' : '#16a34a', `Proyectado menos cobro app · ${Math.max(0, 100 - porcentaje)}% del proyectado`)}
+            ${ui.nota('Total proyectado = alquiler proyectado + garantía. El Toshipass (tarifa nueva) no suma: para esos conductores cierra con el alquiler. El porcentaje compara lo que Cabify ya descontó (cobro app) contra ese objetivo; por conductor, el cobro app cuenta como máximo hasta su proyectado.')}
+          `)
         })()
       },
       cargos: {
@@ -11521,16 +11649,13 @@ export function ReporteFacturacionTab() {
 
           // Si hay detalles por P-code, desglosar desde ahí (datos reales)
           // Si no (vista previa sin _detalles), usar campos del objeto
-          const alqConGnc = tieneDetalles
-            ? (codeMap['P001'] || 0) + (codeMap['P002'] || 0) + (codeMap['P013'] || 0)
-            : 0
-          const alqSinGnc = tieneDetalles
-            ? (codeMap['P014'] || 0) + (codeMap['P015'] || 0) + (codeMap['P016'] || 0)
-            : 0
+          // Alquiler: tarifa antigua (P001, P002, P013-P016) y nueva (P021-P026)
+          const CODIGOS_ALQUILER_CARGOS = ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']
           const alquiler = tieneDetalles
-            ? alqConGnc + alqSinGnc
+            ? CODIGOS_ALQUILER_CARGOS.reduce((s, c) => s + (codeMap[c] || 0), 0)
             : src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
           const garantia = tieneDetalles ? (codeMap['P003'] || 0) : src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
+          const toshipass = tieneDetalles ? (codeMap[CODIGO_TOSHIPASS] || 0) : src.reduce((s, f) => s + (f.monto_toshipass || 0), 0)
           const peajes = tieneDetalles ? (codeMap['P005'] || 0) : src.reduce((s, f) => s + (f.monto_peajes || 0), 0)
           const excesosKm = tieneDetalles ? (codeMap['P006'] || 0) : src.reduce((s, f) => s + (f.monto_excesos || 0), 0)
           const penalidades = tieneDetalles ? (codeMap['P007'] || 0) : src.reduce((s, f) => s + (f.monto_penalidades || 0), 0)
@@ -11540,51 +11665,28 @@ export function ReporteFacturacionTab() {
           const saldos = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
           const subtotalCargos = src.reduce((s, f) => s + (f.subtotal_cargos || 0), 0)
           const total = subtotalCargos + saldos
-          const rows: string[] = []
-          if (tieneDetalles && alqConGnc > 0) rows.push(`<tr><td>Alquiler con GNC (P001/P002/P013)</td><td style="text-align:right"><b>${formatCurrency(alqConGnc)}</b></td></tr>`)
-          if (tieneDetalles && alqSinGnc > 0) rows.push(`<tr><td>Alquiler sin GNC (P014/P015/P016)</td><td style="text-align:right"><b>${formatCurrency(alqSinGnc)}</b></td></tr>`)
-          if (!tieneDetalles && alquiler > 0) rows.push(`<tr><td>Alquiler</td><td style="text-align:right"><b>${formatCurrency(alquiler)}</b></td></tr>`)
-          if (garantia > 0) rows.push(`<tr><td>Garantía (P003)</td><td style="text-align:right"><b>${formatCurrency(garantia)}</b></td></tr>`)
-          if (peajes > 0) rows.push(`<tr><td>Peajes (P005)</td><td style="text-align:right"><b>${formatCurrency(peajes)}</b></td></tr>`)
-          if (excesosKm > 0) rows.push(`<tr><td>Exceso de KM (P006)</td><td style="text-align:right"><b>${formatCurrency(excesosKm)}</b></td></tr>`)
-          if (penalidades > 0) rows.push(`<tr><td>Penalidades (P007)</td><td style="text-align:right"><b>${formatCurrency(penalidades)}</b></td></tr>`)
-          if (multas > 0) rows.push(`<tr><td>Multas (P008)</td><td style="text-align:right"><b>${formatCurrency(multas)}</b></td></tr>`)
-          if (mora > 0) rows.push(`<tr><td>Mora (P009)</td><td style="text-align:right"><b>${formatCurrency(mora)}</b></td></tr>`)
-          if (repuestos > 0) rows.push(`<tr><td>Repuestos/Daños (P010)</td><td style="text-align:right"><b>${formatCurrency(repuestos)}</b></td></tr>`)
-          if (saldos > 0) rows.push(`<tr><td>Saldos pendientes (+)</td><td style="text-align:right"><b>${formatCurrency(saldos)}</b></td></tr>`)
-          // Nuevo modal: grid de pills agrupados por categoria
-          // Cada pill: dot color + nombre + monto grande + % del total
           const pct = (v: number) => total > 0 ? Math.round((v / total) * 100) : 0
-          const pills: { nombre: string; monto: number; color: string }[] = []
-          const alquilerTotal = alqConGnc + alqSinGnc + (tieneDetalles ? 0 : alquiler)
-          if (alquilerTotal > 0) pills.push({ nombre: 'Alquiler', monto: alquilerTotal, color: '#3b82f6' })
-          if (garantia > 0) pills.push({ nombre: 'Garantía', monto: garantia, color: '#8b5cf6' })
-          if (saldos > 0) pills.push({ nombre: 'Saldos pend.', monto: saldos, color: '#6b7280' })
-          if (penalidades > 0) pills.push({ nombre: 'Penalidades', monto: penalidades, color: '#dc2626' })
-          if (excesosKm > 0) pills.push({ nombre: 'Exceso KM', monto: excesosKm, color: '#ef4444' })
-          if (repuestos > 0) pills.push({ nombre: 'Repuestos', monto: repuestos, color: '#6366f1' })
-          if (peajes > 0) pills.push({ nombre: 'Peajes', monto: peajes, color: '#f59e0b' })
-          if (multas > 0) pills.push({ nombre: 'Multas', monto: multas, color: '#dc2626' })
-          if (mora > 0) pills.push({ nombre: 'Mora', monto: mora, color: '#b91c1c' })
-          const pillsHtml = pills.map(p => `
-            <div style="padding:12px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-                <span style="width:8px;height:8px;border-radius:50%;background:${p.color};display:inline-block;"></span>
-                <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--text-secondary);">${p.nombre}</span>
-              </div>
-              <div style="font-size:16px;font-weight:800;color:var(--text-primary);font-family:monospace;letter-spacing:-0.3px;">${formatCurrency(p.monto)}</div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">${pct(p.monto)}% del total</div>
-            </div>
-          `).join('')
-          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-              ${pillsHtml}
-            </div>
-            <div style="padding:14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;text-align:center;">
-              <div style="font-size:11px;color:#ef4444;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Cargos</div>
-              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:var(--text-primary);margin-top:6px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
-            </div>
-          </div>`
+          const items: { nombre: string; monto: number }[] = []
+          if (alquiler > 0) items.push({ nombre: 'Alquiler', monto: alquiler })
+          if (garantia > 0) items.push({ nombre: 'Garantía', monto: garantia })
+          if (toshipass > 0) items.push({ nombre: 'Toshipass', monto: toshipass })
+          if (saldos > 0) items.push({ nombre: 'Saldos pendientes', monto: saldos })
+          if (penalidades > 0) items.push({ nombre: 'Penalidades', monto: penalidades })
+          if (excesosKm > 0) items.push({ nombre: 'Exceso de km', monto: excesosKm })
+          if (repuestos > 0) items.push({ nombre: 'Repuestos', monto: repuestos })
+          if (peajes > 0) items.push({ nombre: 'Peajes', monto: peajes })
+          if (multas > 0) items.push({ nombre: 'Multas', monto: multas })
+          if (mora > 0) items.push({ nombre: 'Mora', monto: mora })
+          // Lo que no entra en ningún concepto conocido, para que la lista sume el total
+          const otros = total - items.reduce((acc, i) => acc + i.monto, 0)
+          if (otros >= 1) items.push({ nombre: 'Otros cargos', monto: otros })
+          return ui.envolver(`
+            ${ui.principal('Total cargos', formatCurrency(total))}
+            ${ui.seccion('Por concepto')}
+            ${items.length > 0
+              ? items.map(i => ui.fila(i.nombre, formatCurrency(i.monto), 'var(--text-primary)', `${pct(i.monto)}% del total`)).join('')
+              : ui.vacio('Sin cargos en la semana')}
+          `)
         })()
       },
       descuentos: {
@@ -11610,36 +11712,20 @@ export function ReporteFacturacionTab() {
           const descTotal = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
           const conocidos = tickets + pubCabify + pubTablet + devGarantia
           const otrosDesc = Math.max(0, descTotal - conocidos)
-          // Nuevo modal: hero verde + items destacados + nota
           const items: { codigo: string; nombre: string; subtitulo: string; monto: number }[] = []
           if (tickets > 0) items.push({ codigo: 'P004', nombre: 'Descuentos a favor', subtitulo: 'Tickets, ajustes manuales', monto: tickets })
           if (pubCabify > 0) items.push({ codigo: 'P011', nombre: 'Publicidad Cabify', subtitulo: 'Ingreso por publicidad', monto: pubCabify })
           if (pubTablet > 0) items.push({ codigo: 'P012', nombre: 'Publicidad Tablet', subtitulo: 'Ingreso por publicidad', monto: pubTablet })
           if (devGarantia > 0) items.push({ codigo: CODIGO_DEVOLUCION_GARANTIA, nombre: 'Devolución de garantía', subtitulo: 'Cambio de tarifa', monto: devGarantia })
-          if (otrosDesc > 0) items.push({ codigo: '—', nombre: 'Otros descuentos', subtitulo: 'Sin clasificar', monto: otrosDesc })
-          const itemsHtml = items.map(it => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:rgba(34,197,94,0.08);border-radius:8px;border-left:3px solid #16a34a;">
-              <div>
-                <div style="font-size:11px;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${it.nombre}</div>
-                <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;">${it.codigo} · ${it.subtitulo}</div>
-              </div>
-              <div style="font-size:16px;font-weight:800;color:#16a34a;font-family:monospace;">${formatCurrency(it.monto)}</div>
-            </div>
-          `).join('')
-          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
-          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-            <div style="text-align:center;padding:18px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;margin-bottom:14px;">
-              <div style="font-size:11px;color:#16a34a;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total Descuentos</div>
-              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#16a34a;letter-spacing:-0.5px;font-family:monospace;">${formatCurrency(descTotal)}</div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Descuentos aplicados esta semana</div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              ${itemsHtml || '<EmptyState size="sm" title="Sin descuentos aplicados" />'}
-            </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#3b82f6;line-height:1.5;">
-              ${iconInfo}<span>Los descuentos reducen el total a cobrar al conductor.</span>
-            </div>
-          </div>`
+          if (otrosDesc > 0) items.push({ codigo: '', nombre: 'Otros descuentos', subtitulo: 'Sin clasificar', monto: otrosDesc })
+          return ui.envolver(`
+            ${ui.principal('Total descuentos', formatCurrency(descTotal), '#16a34a', 'Descuentos aplicados esta semana')}
+            ${ui.seccion('Por concepto')}
+            ${items.length > 0
+              ? items.map(it => ui.fila(it.nombre, formatCurrency(it.monto), '#16a34a', it.codigo ? `${it.codigo} · ${it.subtitulo}` : it.subtitulo)).join('')
+              : ui.vacio('Sin descuentos aplicados')}
+            ${ui.nota('Los descuentos reducen el total a cobrar al conductor.')}
+          `)
         })()
       },
       neto: {
@@ -11648,23 +11734,13 @@ export function ReporteFacturacionTab() {
           const totalCargos = src.reduce((s, f) => s + f.subtotal_cargos + Math.max(0, f.saldo_anterior || 0), 0)
           const totalDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
           const neto = src.reduce((s, f) => s + (f.total_a_pagar || 0), 0)
-          // Nuevo modal: stack con conexion visual (cargos rojo, descuentos verde, neto azul destacado)
-          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <div style="padding:14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #ef4444;">
-                <span style="font-size:11px;color:#ef4444;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Cargos brutos</span>
-                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#ef4444;">+ ${formatCurrency(totalCargos)}</span>
-              </div>
-              <div style="padding:14px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #16a34a;">
-                <span style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Descuentos aplicados</span>
-                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#16a34a;">− ${formatCurrency(totalDesc)}</span>
-              </div>
-              <div style="padding:18px;background:rgba(59,130,246,0.10);border-radius:8px;border:2px solid #3b82f6;text-align:center;margin-top:6px;">
-                <div style="font-size:11px;color:#3b82f6;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
-                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#3b82f6;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
-              </div>
-            </div>
-          </div>`
+          return ui.envolver(`
+            ${ui.principal('A cobrar (neto)', formatCurrency(neto))}
+            ${ui.seccion('Cómo se llega')}
+            ${ui.fila('Cargos brutos', `+ ${formatCurrency(totalCargos)}`, '#dc2626')}
+            ${ui.fila('Descuentos aplicados', `− ${formatCurrency(totalDesc)}`, '#16a34a')}
+            ${ui.total('Neto a cobrar', formatCurrency(neto))}
+          `)
         })()
       },
       toshipass: {
@@ -11677,33 +11753,32 @@ export function ReporteFacturacionTab() {
             .map(f => ({ f, estado: coberturaToshipass(f as any) }))
             .filter((x): x is { f: typeof src[number]; estado: 'cubrio' | 'no_cubrio' | 'sin_datos' } => x.estado !== null)
             .sort((a, b) => orden[a.estado] - orden[b.estado])
-          const td = 'padding:6px 8px;border-bottom:1px solid var(--border-primary);'
+          const td = 'padding:8px 6px;border-bottom:1px solid var(--border-primary);'
+          const th = 'padding:6px;border-bottom:1px solid var(--border-primary);font-size:11px;font-weight:600;color:var(--text-secondary);'
           const cuerpo = filas.map(({ f, estado }) => {
             const cobroApp = (f as any).ganancia_cabify || 0
             const sobrante = Math.max(0, cobroApp - (f.subtotal_alquiler || 0))
             return `<tr>
               <td style="${td}">${esc(f.conductor_nombre)}</td>
-              <td style="${td}text-align:right;">${formatCurrency(f.monto_toshipass || 0)}</td>
-              <td style="${td}text-align:right;" title="Cobro app menos alquiler">${cobroApp > 0 ? formatCurrency(sobrante) : '-'}</td>
-              <td style="${td}font-weight:700;color:${etiqueta[estado][1]};">${etiqueta[estado][0]}</td>
+              <td style="${td}text-align:right;${ui.monto}">${formatCurrency(f.monto_toshipass || 0)}</td>
+              <td style="${td}text-align:right;${ui.monto}" title="Cobro app menos alquiler">${cobroApp > 0 ? formatCurrency(sobrante) : '-'}</td>
+              <td style="${td}font-weight:600;color:${etiqueta[estado][1]};">${etiqueta[estado][0]}</td>
             </tr>`
           }).join('')
-          return `<div style="text-align:left;font-size:12px;color:var(--text-primary);">
-            <div style="max-height:50vh;overflow:auto;border:1px solid var(--border-primary);border-radius:8px;">
-              <table style="display:table;width:100%;border-collapse:collapse;">
-                <thead><tr style="background:var(--bg-secondary);">
-                  <th style="${td}text-align:left;">Conductor</th>
-                  <th style="${td}text-align:right;">Toshipass</th>
-                  <th style="${td}text-align:right;">Disponible</th>
-                  <th style="${td}text-align:left;">Estado</th>
+          return ui.envolver(`
+            <div style="max-height:50vh;overflow:auto;">
+              <table style="display:table;width:100%;border-collapse:collapse;font-size:12px;">
+                <thead><tr>
+                  <th style="${th}text-align:left;">Conductor</th>
+                  <th style="${th}text-align:right;">Toshipass</th>
+                  <th style="${th}text-align:right;">Disponible</th>
+                  <th style="${th}text-align:left;">Estado</th>
                 </tr></thead>
                 <tbody>${cuerpo}</tbody>
               </table>
             </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
-              Disponible = cobro app de Cabify − alquiler. Cubrió si alcanza para el Toshipass.
-            </div>
-          </div>`
+            ${ui.nota('Disponible = cobro app de Cabify menos alquiler. Cubrió si alcanza para el Toshipass.')}
+          `)
         })()
       },
       deben: {
@@ -11714,39 +11789,16 @@ export function ReporteFacturacionTab() {
             .sort((a, b) => deudaDeben(b) - deudaDeben(a))
           const top5 = deben.slice(0, 5)
           const totalAdeudado = deben.reduce((s, f) => s + deudaDeben(f), 0)
-          // Formato compacto para el card de total adeudado (ej "2.37M")
-          const fmtCompacto = (v: number) => {
-            if (v >= 1_000_000) return `$ ${formatNumero(v / 1_000_000, 2)}M`
-            if (v >= 1000) return `$ ${(v / 1000).toFixed(0)}K`
-            return formatCurrency(v)
-          }
-          // Colores del ranking (1=rojo intenso, 2=naranja, 3=ambar, 4-5=gris)
-          const rankColors = ['#dc2626', '#ea580c', '#f59e0b', '#6b7280', '#6b7280']
-          const top5Html = top5.map((f, idx) => `
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:6px;">
-              <div style="width:22px;height:22px;border-radius:50%;background:${rankColors[idx]};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${idx + 1}</div>
-              <div style="flex:1;font-size:11px;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.conductor_nombre}</div>
-              <div style="font-size:16px;font-weight:800;color:#ef4444;font-family:monospace;">${formatCurrency(deudaDeben(f))}</div>
-            </div>
-          `).join('')
-          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-              <div style="padding:12px;text-align:center;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
-                <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">${esSemanaEnCurso ? 'Con saldo anterior' : (pagosCabifyMap.size > 0 ? 'Pendiente tras pagos Cabify/DiDi' : 'Con deuda')}</div>
-                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:var(--text-primary);line-height:1;font-family:monospace;">${deben.length}</div>
-              </div>
-              <div style="padding:12px;text-align:center;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
-                <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total adeudado</div>
-                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:var(--text-primary);line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
-              </div>
-            </div>
-            ${top5.length > 0 ? `
-              <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin:6px 0;">Top 5 deudores</div>
-              <div style="display:flex;flex-direction:column;gap:6px;">
-                ${top5Html}
-              </div>
-            ` : '<div style="text-align:center;color:var(--text-tertiary);font-size:12px;padding:20px;">Sin conductores con deuda</div>'}
-          </div>`
+          const etiquetaDeben = esSemanaEnCurso ? 'Con saldo anterior' : (pagosCabifyMap.size > 0 ? 'Pendiente tras pagos Cabify/DiDi' : 'Con deuda')
+          return ui.envolver(`
+            ${ui.cifras([
+              { etiqueta: etiquetaDeben, valor: `${deben.length} conductores` },
+              { etiqueta: 'Total adeudado', valor: formatCurrency(totalAdeudado), color: totalAdeudado > 0 ? '#dc2626' : undefined },
+            ])}
+            ${top5.length > 0
+              ? `${ui.seccion('Mayores deudas')}${top5.map((f, idx) => ui.fila(`<span style="color:var(--text-tertiary);margin-right:8px;${ui.monto}">${idx + 1}</span>${f.conductor_nombre}`, formatCurrency(deudaDeben(f)), '#dc2626')).join('')}`
+              : ui.vacio('Sin conductores con deuda')}
+          `)
         })()
       },
       favor: {
@@ -11755,13 +11807,12 @@ export function ReporteFacturacionTab() {
           const favor = src.filter(f => f.total_a_pagar <= 0)
             .sort((a, b) => a.total_a_pagar - b.total_a_pagar)
           const top5 = favor.slice(0, 5)
-          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-            <p><b>${favor.length}</b> conductores con saldo a favor o $0 (total_a_pagar &le; 0)</p>
-            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:var(--text-tertiary);">Top 5:</p>
-            <table style="width:100%;border-collapse:collapse;font-size:12px;">
-              ${top5.map(f => `<tr><td style="padding:2px 0;color:var(--text-primary);">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;color:#16a34a;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
-            </table>` : ''}
-          </div>`
+          return ui.envolver(`
+            ${ui.principal('Con saldo a favor o en $0', `${favor.length} conductores`)}
+            ${top5.length > 0
+              ? `${ui.seccion('Mayores saldos a favor')}${top5.map(f => ui.fila(f.conductor_nombre, formatCurrency(f.total_a_pagar), '#16a34a')).join('')}`
+              : ui.vacio('Ningún conductor con saldo a favor')}
+          `)
         })()
       },
       importe_generado: {
@@ -11786,18 +11837,13 @@ export function ReporteFacturacionTab() {
 
           const porcentaje = importeGenerado > 0 ? Math.round((totalCobroCabify / importeGenerado) * 100) : 0
           const pctClamped = Math.min(100, Math.max(0, porcentaje))
-          const dasharray = 2 * Math.PI * 55 // ≈ 345.575
-          const dashoffset = dasharray * (1 - pctClamped / 100)
-          // % incobrable = lo que falta para llegar al 100% cubierto (0 si sobre-cubre)
-          const incobrablePct = Math.max(0, 100 - pctClamped)
-          // Semaforo: arco cobrado SIEMPRE verde, anillo de fondo ROJO = lo que falta cobrar.
-          // Si sobre-cubre (>100%), el anillo de fondo queda verde suave (no falta nada).
-          const barColor = '#16a34a'
-          const ringBgColor = incobrablePct > 0 ? '#dc2626' : 'rgba(34,197,94,0.18)'
-          // Diferencia: + = falta cobrar (rojo) · - = Cabify cobro de mas, a favor (verde)
+          // Color por significado (solo texto y barra, sin fondos): verde cubierto, ámbar parcial, rojo deuda
+          const pctColor = porcentaje >= 100 ? '#16a34a' : porcentaje >= 50 ? '#d97706' : '#dc2626'
+          // Diferencia: + = falta cobrar (rojo) · - = Cabify cobró de más, a favor (verde)
           const diferencia = importeGenerado - totalCobroCabify
           const aFavor = diferencia < 0
-          const diffColor = aFavor ? '#16a34a' : (diferencia > 0 ? '#dc2626' : '#16a34a')
+          const diffColor = diferencia > 0 ? '#dc2626' : '#16a34a'
+          const diffLabel = aFavor ? 'A favor' : (diferencia > 0 ? 'Falta cobrar' : 'Cubierto')
 
           // Buckets por conductor
           const buckets = { ok: 0, mid: 0, low: 0 }
@@ -11813,80 +11859,60 @@ export function ReporteFacturacionTab() {
             else buckets.low++
           }
 
+          // Estilos compartidos (solo texto en color, sin pastillas ni fondos resaltados)
+          const etiqueta = 'font-size:11px;color:var(--text-secondary);'
+          const titulo = 'font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.4px;margin:22px 0 6px;'
+          const fila = 'display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--border-primary);'
+          const monto = 'font-variant-numeric:tabular-nums;white-space:nowrap;'
+          const componentes: Array<[string, number]> = [
+            ['Alquiler de la semana', totalAlquiler],
+            ['Garantía (cuota semanal)', totalGarantia],
+            ['Incidencias y cargos extra', totalCargosExtra],
+            ['Saldo pendiente de la semana anterior', totalSaldoPrevio],
+          ]
+          const nota = `<div style="margin-top:18px;font-size:11px;line-height:1.5;color:var(--text-tertiary);">
+              Importe generado: lo que se debió cobrar al cierre (alquiler + garantía + cargos + saldo previo),
+              comparado con los pagos cargados desde el Excel de Cabify de esa semana.
+            </div>`
+
           const placeholderHtml = `
-            <div style="padding:32px 20px;text-align:center;background:var(--bg-secondary);border:2px dashed var(--border-primary);border-radius:10px;">
-              <div style="opacity:0.4;margin-bottom:8px;color:var(--text-secondary);"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></div>
-              <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">
-                El indicador necesita el <strong>reporte Cabify</strong> de pagos cargado para esta semana cerrada.
+            <div style="padding:20px 0 4px;text-align:center;">
+              <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;">
+                Falta cargar el Excel de pagos de Cabify de esta semana.
               </div>
-              <div style="font-size:11px;color:var(--text-tertiary);">
-                Subí el Excel en la sección de pagos para activar este cálculo.
-              </div>
+              <div style="font-size:11px;color:var(--text-tertiary);">Con ese archivo se calcula cuánto se cobró.</div>
             </div>
-            <div style="margin-top:14px;padding:10px 12px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;border-radius:6px;font-size:11px;color:#92400e;line-height:1.5;">
-              <strong>Total que debería cobrarse</strong> ya calculado:<br>
-              Alquiler ${formatCurrency(totalAlquiler)} + Garantía ${formatCurrency(totalGarantia)} + Cargos ${formatCurrency(totalCargosExtra)} + Saldo previo ${formatCurrency(totalSaldoPrevio)}<br>
-              = <strong>${formatCurrency(importeGenerado)}</strong>
-            </div>
+            <div style="${titulo}">Total que debería cobrarse</div>
+            ${componentes.map(([nombre, valor]) => `<div style="${fila}"><span style="color:var(--text-primary);">${nombre}</span><span style="${monto}color:var(--text-primary);">${formatCurrency(valor)}</span></div>`).join('')}
+            <div style="${fila}border-bottom:none;border-top:2px solid var(--border-primary);margin-top:-1px;"><span style="font-weight:700;">Total</span><span style="${monto}font-weight:700;">${formatCurrency(importeGenerado)}</span></div>
+            ${nota}
           `
 
           const fullHtml = `
-            <div style="display:flex;gap:24px;align-items:center;padding:18px;background:linear-gradient(135deg,rgba(${aFavor ? '34,197,94' : '34,197,94'},0.06) 0%,var(--bg-secondary) 100%);border-radius:10px;border:1px solid var(--border-primary);">
-              <div style="width:130px;height:130px;flex-shrink:0;position:relative;">
-                <svg width="130" height="130" viewBox="0 0 130 130" style="transform:rotate(-90deg);">
-                  <circle cx="65" cy="65" r="55" fill="none" stroke="${ringBgColor}" stroke-width="14"/>
-                  <circle cx="65" cy="65" r="55" fill="none" stroke="${barColor}" stroke-width="14"
-                    stroke-dasharray="${dasharray.toFixed(2)}" stroke-dashoffset="${dashoffset.toFixed(2)}" stroke-linecap="butt"/>
-                </svg>
-                <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
-                  <div style="font-size:24px;font-weight:800;color:${barColor};line-height:1;">${porcentaje}%</div>
-                  <div style="font-size:9px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">cobrado</div>
-                  <div style="font-size:10px;font-weight:700;color:${incobrablePct > 0 ? '#dc2626' : '#15803d'};margin-top:5px;">${incobrablePct > 0 ? incobrablePct + '% sin cobrar' : 'sin pendientes'}</div>
-                </div>
-              </div>
-              <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-primary);">
-                  <span style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Total facturado</span>
-                  <span style="font-size:18px;font-weight:800;color:var(--text-primary);font-variant-numeric:tabular-nums;white-space:nowrap;">${formatCurrency(importeGenerado)}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-primary);">
-                  <span style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Cabify cobró</span>
-                  <span style="font-size:18px;font-weight:800;color:#15803d;font-variant-numeric:tabular-nums;white-space:nowrap;">${formatCurrency(totalCobroCabify)}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
-                  <span style="font-size:11px;color:${diffColor};text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">${aFavor ? 'A favor' : (diferencia > 0 ? 'Falta cobrar' : 'Cubierto 100%')}</span>
-                  <span style="font-size:18px;font-weight:800;color:${diffColor};font-variant-numeric:tabular-nums;white-space:nowrap;">${aFavor ? '+' : ''}${formatCurrency(Math.abs(diferencia))}</span>
-                </div>
-              </div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">
+              <span style="${etiqueta}">Cobrado</span>
+              <span style="font-size:26px;font-weight:700;line-height:1;color:${pctColor};${monto}">${porcentaje}%</span>
+            </div>
+            <div style="height:6px;border-radius:3px;background:var(--border-primary);overflow:hidden;margin:10px 0 16px;" role="progressbar" aria-valuenow="${pctClamped}" aria-valuemin="0" aria-valuemax="100">
+              <div style="height:100%;width:${pctClamped}%;background:${pctColor};border-radius:3px;"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
+              <div><div style="${etiqueta}">Total facturado</div><div style="font-size:17px;font-weight:700;color:var(--text-primary);${monto}">${formatCurrency(importeGenerado)}</div></div>
+              <div><div style="${etiqueta}">Cabify cobró</div><div style="font-size:17px;font-weight:700;color:var(--text-primary);${monto}">${formatCurrency(totalCobroCabify)}</div></div>
+              <div><div style="${etiqueta}">${diffLabel}</div><div style="font-size:17px;font-weight:700;color:${diffColor};${monto}">${formatCurrency(Math.abs(diferencia))}</div></div>
             </div>
 
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);margin:18px 0 8px;">Componentes del total</div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px;">
-              <thead>
-                <tr>
-                  <th style="background:var(--bg-secondary);padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);border-bottom:1px solid var(--border-primary);">Concepto</th>
-                  <th style="background:var(--bg-secondary);padding:8px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);border-bottom:1px solid var(--border-primary);">Monto</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Alquiler de la semana</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalAlquiler)}</td></tr>
-                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Garantía (cuota semanal)</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalGarantia)}</td></tr>
-                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Incidencias / Cargos extra</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalCargosExtra)}</td></tr>
-                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Saldo pendiente semana anterior</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalSaldoPrevio)}</td></tr>
-                <tr style="font-weight:800;background:var(--bg-secondary);"><td style="padding:10px;color:var(--text-primary);font-size:13px;">TOTAL FACTURADO</td><td style="padding:10px;text-align:right;color:var(--text-primary);font-size:13px;font-variant-numeric:tabular-nums;">${formatCurrency(importeGenerado)}</td></tr>
-              </tbody>
-            </table>
+            <div style="${titulo}">Componentes del total</div>
+            ${componentes.map(([nombre, valor]) => `<div style="${fila}"><span style="color:var(--text-primary);">${nombre}</span><span style="${monto}color:var(--text-primary);">${formatCurrency(valor)}</span></div>`).join('')}
+            <div style="${fila}border-bottom:none;"><span style="font-weight:700;">Total facturado</span><span style="${monto}font-weight:700;">${formatCurrency(importeGenerado)}</span></div>
 
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);margin:18px 0 8px;">Cobertura por conductor</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-              <div style="padding:10px 6px;border-radius:6px;text-align:center;background:rgba(34,197,94,0.10);color:#15803d;"><strong style="display:block;font-size:20px;line-height:1;margin-bottom:4px;">${buckets.ok}</strong><span style="font-size:10px;font-weight:700;">100%+ OK</span></div>
-              <div style="padding:10px 6px;border-radius:6px;text-align:center;background:rgba(245,158,11,0.10);color:#92400e;"><strong style="display:block;font-size:20px;line-height:1;margin-bottom:4px;">${buckets.mid}</strong><span style="font-size:10px;font-weight:700;">50-99% parcial</span></div>
-              <div style="padding:10px 6px;border-radius:6px;text-align:center;background:rgba(239,68,68,0.10);color:#991b1b;"><strong style="display:block;font-size:20px;line-height:1;margin-bottom:4px;">${buckets.low}</strong><span style="font-size:10px;font-weight:700;">&lt;50% deuda</span></div>
+            <div style="${titulo}">Cobertura por conductor</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#16a34a;">${buckets.ok}</div><div style="${etiqueta}">Cubrió 100% o más</div></div>
+              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#d97706;">${buckets.mid}</div><div style="${etiqueta}">Parcial (50 a 99%)</div></div>
+              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#dc2626;">${buckets.low}</div><div style="${etiqueta}">Menos del 50%</div></div>
             </div>
-
-            <div style="background:rgba(59,130,246,0.08);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:16px;font-size:11px;color:#3b82f6;line-height:1.5;">
-              <strong>Importe Generado</strong> = lo que se debió cobrar al cierre (alquiler + garantía + cargos + saldo previo). Se compara contra los pagos cargados desde el Excel formato Cabify de esa semana.
-            </div>
+            ${nota}
           `
 
           return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
@@ -12617,6 +12643,44 @@ export function ReporteFacturacionTab() {
     return m
   }, [facturaciones, vistaPreviaData, modoVistaPrevia])
 
+  // Descuento de la promoción (10% del alquiler) proyectado a la semana, por conductor_id.
+  // Si todos los días cobrados tuvieron la promo, los días proyectados también, mientras la
+  // promo siga vigente. Solo para conductores cuyo alquiler se proyecta.
+  const proyectadoPromoAlquilerMap = useMemo(() => {
+    const m = new Map<string, { total: number; extra: number }>()
+    const src = modoVistaPrevia ? vistaPreviaData : facturaciones
+    const finSemana = periodo ? parseISO(periodo.fecha_fin) : semanaActual.fin
+    src.forEach(f => {
+      const alquiler = f.subtotal_alquiler || 0
+      const proyectado = f.proyectado_alquiler || 0
+      if (alquiler <= 0 || proyectado <= alquiler) return
+      const calculo = modoVistaPrevia
+        ? (f.promo_lineas || []).find(l => l.calculo.tipo === 'alquiler')?.calculo
+        : ((f as any)._detalles || [])
+          .filter((d: any) => d.referencia_tipo === REFERENCIA_PROMOCION)
+          .map((d: any) => leerCalculoPromocion(d.descripcion))
+          .find((c: any) => c?.tipo === 'alquiler')
+      if (!calculo) return
+      // Días cobrados: en Vista Previa la suma por modalidad; en la facturación guardada, turnos_cobrados
+      const diasCobrados = modoVistaPrevia
+        ? (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)
+        : Number(f.turnos_cobrados) || 0
+      if (diasCobrados <= 0 || (calculo.dias?.length || 0) < Math.ceil(diasCobrados)) return
+      const precioDiario = alquiler / diasCobrados
+      const diasExtra = Math.round((proyectado - alquiler) / precioDiario)
+      let diasConPromo = 0
+      for (let i = 0; i < diasExtra; i++) {
+        const d = new Date(finSemana)
+        d.setDate(d.getDate() - i)
+        if (format(d, 'yyyy-MM-dd') <= calculo.promocion.hasta) diasConPromo++
+      }
+      const montoActual = Number(calculo.monto) || 0
+      const extra = Math.round(precioDiario * calculo.porcentaje * diasConPromo * 100) / 100
+      m.set(f.conductor_id, { total: Math.round((montoActual + extra) * 100) / 100, extra })
+    })
+    return m
+  }, [facturaciones, vistaPreviaData, modoVistaPrevia, periodo, semanaActual])
+
   // Si estamos en modo Preview Facturación, mostrar el componente de preview
   if (showSiFacturaPreview && siFacturaPreviewData.length > 0) {
     // Usar datos del período si existe, sino de semanaActual (Vista Previa)
@@ -12649,6 +12713,7 @@ export function ReporteFacturacionTab() {
         exporting={exportingSiFactura}
         onSync={undefined}
         proyectadoAlquilerMap={proyectadoAlquilerMap}
+        proyectadoPromoAlquilerMap={proyectadoPromoAlquilerMap}
       />
     )
   }
@@ -12681,7 +12746,7 @@ export function ReporteFacturacionTab() {
     const totalDidi = aRegistrar.reduce((s, d) => s + d.monto_didi, 0)
     const totalDeuda = aRegistrar.reduce((s, d) => s + d.total_a_pagar, 0)
     const totalYaCobrado = aRegistrar.reduce((s, d) => s + d.monto_cobrado, 0)
-    const totalSaldo = aRegistrar.reduce((s, d) => s + (d.total_a_pagar - d.monto_cobrado - d.monto_didi), 0)
+    const totalSaldo = aRegistrar.reduce((s, d) => s + (d.total_a_pagar - d.monto_cobrado - d.monto_didi - (d.posteriores || 0)), 0)
     const cerrar = () => { setShowDidiPagosPreview(false); setDidiPagosData([]); setDidiNoCruzados([]) }
 
     return (
@@ -12736,7 +12801,7 @@ export function ReporteFacturacionTab() {
             <tbody>
               {didiPagosData.map((row, idx) => {
                 const pendiente = row.total_a_pagar - row.monto_cobrado
-                const saldo = Math.round((pendiente - row.monto_didi) * 100) / 100
+                const saldo = Math.round((pendiente - row.monto_didi - (row.posteriores || 0)) * 100) / 100
                 return (
                   <tr key={row.facturacion_id} className={!row.ya_registrado && saldo > 0 ? 'cabify-pagos-saldo-row' : ''} style={row.ya_registrado ? { opacity: 0.5 } : undefined}>
                     <td className="col-center cabify-pagos-row-num">{idx + 1}</td>
@@ -12749,7 +12814,10 @@ export function ReporteFacturacionTab() {
                       {row.monto_cobrado > 0 ? formatCurrency(row.monto_cobrado) : '-'}
                     </td>
                     <td className="col-money cabify-pagos-col cabify-pagos-importe">{formatCurrency(row.monto_didi)}</td>
-                    <td className={`col-money ${row.ya_registrado ? 'cabify-pagos-muted' : saldo > 0 ? 'cabify-pagos-saldo' : 'cabify-pagos-pagado'}`}>
+                    <td
+                      className={`col-money ${row.ya_registrado ? 'cabify-pagos-muted' : saldo > 0 ? 'cabify-pagos-saldo' : 'cabify-pagos-pagado'}`}
+                      title={row.posteriores ? `Incluye ${formatCurrency(row.posteriores)} de pagos cargados después del cálculo de la factura` : undefined}
+                    >
                       {row.ya_registrado
                         ? 'YA REGISTRADO'
                         : saldo > 0 ? formatCurrency(saldo) : saldo < 0 ? `A favor ${formatCurrency(-saldo)}` : 'PAGADO'}
@@ -12816,7 +12884,7 @@ export function ReporteFacturacionTab() {
     const anioNum = periodo?.anio || infoSemana.anio
     const totalDescontar = cabifyPagosData.reduce((s, d) => s + d.importe_descontar, 0)
     const totalDeuda = cabifyPagosData.reduce((s, d) => s + d.total_a_pagar, 0)
-    const totalSaldo = cabifyPagosData.reduce((s, d) => s + (d.total_a_pagar - d.monto_cobrado - d.importe_descontar), 0)
+    const totalSaldo = cabifyPagosData.reduce((s, d) => s + (d.total_a_pagar - d.monto_cobrado - d.importe_descontar - (d.posteriores || 0)), 0)
     const totalYaCobrado = cabifyPagosData.reduce((s, d) => s + d.monto_cobrado, 0)
     const totalDisponible = cabifyPagosData.reduce((s, d) => s + d.disponible, 0)
 
@@ -12869,8 +12937,8 @@ export function ReporteFacturacionTab() {
             <tbody>
               {cabifyPagosData.map((row, idx) => {
                 const pendiente = row.total_a_pagar - row.monto_cobrado
-                const saldoRestante = Math.max(0, pendiente - row.importe_descontar)
-                const cubreTotal = row.importe_descontar >= pendiente
+                const saldoRestante = Math.max(0, pendiente - row.importe_descontar - (row.posteriores || 0))
+                const cubreTotal = pendiente - row.importe_descontar - (row.posteriores || 0) <= 0
 
                 return (
                   <tr key={row.facturacion_id} className={cubreTotal ? '' : 'cabify-pagos-saldo-row'}>
@@ -12884,7 +12952,10 @@ export function ReporteFacturacionTab() {
                     </td>
                     <td className="col-money">{formatCurrency(row.disponible)}</td>
                     <td className="col-money cabify-pagos-col cabify-pagos-importe">{formatCurrency(row.importe_descontar)}</td>
-                    <td className={`col-money ${cubreTotal ? 'cabify-pagos-pagado' : 'cabify-pagos-saldo'}`}>
+                    <td
+                      className={`col-money ${cubreTotal ? 'cabify-pagos-pagado' : 'cabify-pagos-saldo'}`}
+                      title={row.posteriores ? `Incluye ${formatCurrency(row.posteriores)} de pagos cargados después del cálculo de la factura` : undefined}
+                    >
                       {cubreTotal ? 'PAGADO' : formatCurrency(saldoRestante)}
                     </td>
                   </tr>
@@ -14350,81 +14421,56 @@ export function ReporteFacturacionTab() {
                     </div>
                   </div>
 
-                  {/* Info bar: Vehículo, Tipo, Turnos, Flota, Promo. Celdas del mismo ancho,
-                      etiqueta arriba y valor abajo, sin cortar los valores en varias líneas. */}
+                  {/* Datos del alquiler en una línea: etiqueta arriba y valor abajo, como texto
+                      (sin cajas ni pastillas). Envuelve en vez de cortar la flota. */}
                   {(() => {
-                    const chip = (bg: string, fg: string): React.CSSProperties => ({
-                      fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-xs)',
-                      background: bg, color: fg, whiteSpace: 'nowrap',
-                    })
                     const celdas: Array<{ etiqueta: string; valor: React.ReactNode }> = [
                       { etiqueta: 'Vehículo', valor: <PatenteBadge patente={detalleFacturacion.vehiculo_patente} size="sm" /> },
                       {
                         etiqueta: 'Tipo',
                         valor: (
-                          <span style={detalleFacturacion.tipo_alquiler === 'CARGO'
-                            ? chip('rgba(59,130,246,0.1)', '#2563eb')
-                            : chip('rgba(107,114,128,0.1)', '#6b7280')}>
-                            {detalleFacturacion.tipo_alquiler}
+                          <span style={{ color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : 'var(--text-primary)' }}>
+                            {detalleFacturacion.tipo_alquiler === 'CARGO' ? 'A cargo' : 'Turno'}
                           </span>
                         ),
                       },
                       {
                         etiqueta: 'Turnos',
                         valor: (
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          <span>
                             {detalleFacturacion.turnos_cobrados}
-                            <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>/{detalleFacturacion.turnos_base}</span>
+                            <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}> de {detalleFacturacion.turnos_base}</span>
                           </span>
                         ),
                       },
                     ]
                     if (detalleFacturacion.grupo_flota) {
-                      celdas.push({
-                        etiqueta: 'Flota',
-                        valor: (
-                          <span title={detalleFacturacion.grupo_flota} style={{
-                            ...chip('#dbeafe', '#1e40af'), maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
-                          }}>
-                            {detalleFacturacion.grupo_flota}
-                          </span>
-                        ),
-                      })
+                      celdas.push({ etiqueta: 'Flota', valor: <span style={{ color: '#1e40af' }}>{detalleFacturacion.grupo_flota}</span> })
                     }
                     if (detallePromociones.codigos.length > 0) {
                       celdas.push({
                         etiqueta: 'Promo',
-                        valor: (
-                          <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            {detallePromociones.codigos.map(codigo => (
-                              <span key={codigo} style={chip('rgba(220, 38, 38, 0.12)', '#b91c1c')}>{codigo}</span>
-                            ))}
-                          </span>
-                        ),
+                        valor: <span style={{ color: '#b91c1c' }}>{detallePromociones.codigos.join(' · ')}</span>,
                       })
                     }
                     return (
-                      <div style={{
-                        display: 'grid', gridTemplateColumns: `repeat(${celdas.length}, minmax(0, 1fr))`,
-                        marginBottom: '16px', borderRadius: 'var(--radius-sm)',
-                        background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                      <dl style={{
+                        display: 'flex', flexWrap: 'wrap', columnGap: '28px', rowGap: '10px',
+                        margin: '0 0 18px', paddingBottom: '14px', borderBottom: '1px solid var(--border-primary)',
                       }}>
-                        {celdas.map((celda, idx) => (
-                          <div key={celda.etiqueta} style={{
-                            display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center',
-                            gap: '4px', padding: '8px 12px', minWidth: 0,
-                            borderLeft: idx > 0 ? '1px solid var(--border-primary)' : 'none',
-                          }}>
-                            <span style={{
-                              fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)',
-                              textTransform: 'uppercase', letterSpacing: '0.4px',
+                        {celdas.map(celda => (
+                          <div key={celda.etiqueta} style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                            <dt className="fact-det-label" style={{
+                              fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.4px',
                             }}>
                               {celda.etiqueta}
-                            </span>
-                            {celda.valor}
+                            </dt>
+                            <dd style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', minHeight: '20px' }}>
+                              {celda.valor}
+                            </dd>
                           </div>
                         ))}
-                      </div>
+                      </dl>
                     )
                   })()}
 
@@ -14756,8 +14802,8 @@ export function ReporteFacturacionTab() {
                     <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
                       Total a Pagar
                     </span>
-                    <span style={{
-                      fontSize: '28px', fontWeight: 700, fontFamily: 'var(--font-mono)', lineHeight: 1,
+                    <span className="modal-monto-total" style={{
+                      fontWeight: 700, fontFamily: 'var(--font-mono)', lineHeight: 1,
                       margin: '6px 0',
                       color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
                     }}>
@@ -14772,7 +14818,7 @@ export function ReporteFacturacionTab() {
                   {/* Cobrado */}
                   {!modoVistaPrevia && (detalleFacturacion.monto_cobrado || 0) > 0 && (() => {
                     const cobrado = detalleFacturacion.monto_cobrado || 0;
-                    const totalAbs = Math.abs(detalleFacturacion.total_a_pagar);
+                    const totalAbs = Number(detalleFacturacion.total_a_pagar) || 0;
                     const completo = cobrado >= totalAbs;
                     return (
                       <div style={{

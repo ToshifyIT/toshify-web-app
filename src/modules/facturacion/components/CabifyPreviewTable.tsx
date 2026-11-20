@@ -38,6 +38,17 @@ export interface CabifyPreviewRowDetalle {
   totalAPagar: number
 }
 
+/**
+ * Fecha del período como "YYYY-MM-DD", sin pasar por la hora. Con toISOString() la
+ * medianoche local se convierte a UTC y, si la compu no está en hora Argentina (por ejemplo
+ * Europa), la tabla mostraba un día antes (15/11 en vez de 16/11).
+ */
+function fechaLocal(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
 // Explicación de las columnas (ícono (i) del encabezado)
 const INFO_IMPORTE_CONTRATO = 'Alquiler de la semana completa (7 días). Si la semana está en curso, se proyecta a los días que faltan. Se muestra redondeado a peso. No incluye garantía, Toshipass ni otros cargos.'
 const INFO_EXCEDENTES = 'Todo lo que no es alquiler: Garantía o Toshipass (nunca los dos) + Peajes + Excesos de KM + Penalidades − Tickets a favor + Saldo anterior (deuda suma, saldo a favor resta).'
@@ -976,8 +987,8 @@ export function CabifyPreviewTable({
                   </td>
                   <td className="col-center">{row.anio}</td>
                   <td className="col-center">{row.semana}</td>
-                  <td className="col-center">{formatFecha(row.fechaInicial.toISOString())}</td>
-                  <td className="col-center">{formatFecha(row.fechaFinal.toISOString())}</td>
+                  <td className="col-center">{formatFecha(fechaLocal(row.fechaInicial))}</td>
+                  <td className="col-center">{formatFecha(fechaLocal(row.fechaFinal))}</td>
                   <td className="col-nombre">{row.conductor}</td>
                   <td className="col-email">{row.email || '-'}</td>
                   <td className="col-center">{renderEditableTextCell(row, realIdx, 'patente', row.patente)}</td>
