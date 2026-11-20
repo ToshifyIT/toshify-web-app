@@ -21,6 +21,8 @@ import { cabifyRouter, obtenerTokenCabifyParaCompany, requireUsuario } from './s
 import { cresiumRouter, iniciarSyncAutomaticoCresium } from './server-cresium.js'
 // Integraciones > Alegra: Excel de ARCA (comprobantes recibidos) -> Alegra (token solo en el servidor)
 import { alegraRouter } from './server-alegra.js'
+// Leads: consulta automática a la Central de Deudores del BCRA (API pública, sin clave)
+import { iniciarConsultaAutomaticaBcra } from './server-bcra.js'
 // Administración > Integraciones & Tokens: credenciales y monitor de edge functions
 import { adminIntegracionesRouter } from './server-admin-integraciones.js'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
@@ -64,6 +66,8 @@ app.use('/api/cresium', cresiumRouter)
 // Movimientos de Cresium (44 Dreams y Grupo CG) cada 10 minutos, las 24 h. Solo la tabla
 // cresium_movimientos: no toca Alegra. CRESIUM_SYNC_AUTO=0 la apaga.
 iniciarSyncAutomaticoCresium()
+// Leads nuevos con CUIT: situación en el BCRA cada 5 minutos. BCRA_CONSULTA_AUTO=0 la apaga.
+iniciarConsultaAutomaticaBcra()
 
 // Google Drive service
 function getDriveService(writeAccess = false) {
@@ -117,6 +121,66 @@ function extractFolderId(input) {
   const match = input.match(/folders\/([a-zA-Z0-9_-]+)/)
   return match ? match[1] : null
 }
+
+// API: Prueba carga — sube una foto a una carpeta fija de Drive.
+// La foto llega como cuerpo binario (no JSON) y el nombre en el header X-Nombre-Archivo.
+// La credencial de Google queda solo en el servidor.
+const PRUEBA_CARGA_FOLDER_ID = process.env.GOOGLE_DRIVE_PRUEBA_CARGA_FOLDER_ID || '1vmB3RbGsKG1w5G9B7K3naMVvXHWheCEB'
+const PRUEBA_CARGA_MAX_BYTES = 25 * 1024 * 1024
+
+app.post(
+  '/api/prueba-carga/subir-foto',
+  express.raw({ type: 'image/*', limit: PRUEBA_CARGA_MAX_BYTES }),
+  async (req, res) => {
+    try {
+      const usuario = await requireUsuario(req, res)
+      if (!usuario) return
+
+      const tipo = String(req.headers['content-type'] || '')
+      if (!tipo.startsWith('image/') || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: 'Adjuntá una foto (imagen)' })
+      }
+
+      let nombre = 'foto'
+      try {
+        nombre = decodeURIComponent(String(req.headers['x-nombre-archivo'] || 'foto'))
+      } catch {
+        // nombre mal codificado: se usa el genérico
+      }
+      nombre = nombre.replace(/[\\/:*?"<>|\r\n]/g, '_').slice(0, 120) || 'foto'
+      const sello = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+
+      const drive = getDriveServiceFull()
+      const archivo = await drive.files.create({
+        requestBody: {
+          name: `${sello} ${nombre}`,
+          parents: [PRUEBA_CARGA_FOLDER_ID],
+          description: `Subida desde Toshibase (Prueba carga) por ${usuario.email || usuario.id}`,
+        },
+        media: { mimeType: tipo, body: Readable.from(req.body) },
+        fields: 'id, name, webViewLink',
+        supportsAllDrives: true,
+      })
+      res.json({ id: archivo.data.id, nombre: archivo.data.name, url: archivo.data.webViewLink })
+    } catch (error) {
+      console.error('[prueba-carga] Error subiendo foto:', error.message)
+      const sinAcceso = /not found|insufficient|permission/i.test(error.message || '')
+      res.status(sinAcceso ? 403 : 500).json({
+        error: sinAcceso
+          ? 'El servidor no tiene acceso a la carpeta de Drive'
+          : 'No se pudo subir la foto a Drive',
+      })
+    }
+  }
+)
+
+// Foto demasiado pesada (límite de express.raw)
+app.use('/api/prueba-carga', (err, _req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'La foto pesa más de 25 MB' })
+  }
+  next(err)
+})
 
 // API: List Drive files
 app.post('/api/list-drive-files', async (req, res) => {

@@ -1,0 +1,102 @@
+.riesgo-bcra {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+}
+
+.riesgo-bcra-conteo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.riesgo-bcra-conteo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  background: var(--bg-primary);
+}
+
+.riesgo-bcra-conteo-valor {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.riesgo-bcra-conteo-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.riesgo-bcra-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  background: var(--bg-primary);
+}
+
+.riesgo-bcra-card h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.riesgo-bcra-ayuda {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Los controles tienen alto fijo (--alto-control): sin relleno vertical para que el texto entre */
+.riesgo-bcra .form-group .form-input {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.riesgo-bcra-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.riesgo-bcra-reglas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.riesgo-bcra-reglas span {
+  font-weight: 600;
+}
+
+.riesgo-bcra-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .riesgo-bcra-conteo {
+    grid-template-columns: 1fr;
+  }
+
+  .riesgo-bcra .form-row {
+    flex-direction: column;
+  }
+}

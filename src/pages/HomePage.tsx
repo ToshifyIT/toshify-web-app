@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase, Calculator, UserCheck, Tag
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel, Phone, Landmark, LogOut, Briefcase, Calculator, UserCheck, Tag, Camera
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -79,6 +79,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'rango-seguimiento-guias': Target,
   'parametros-sistema': Settings,
   'promociones': Tag,
+  'riesgo-bcra': Landmark,
   'gestion-vehiculos': Car,
   'registro-vencimientos': FileWarning,
   'alertas-mantenimiento': Wrench,
@@ -87,6 +88,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'integraciones-tokens': Link2,
   'leads': UserPlus,
   'oferta-locacion': FileText,
+  'prueba-carga': Camera,
 }
 
 // Función para obtener icono de un menú
@@ -308,11 +310,13 @@ const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPag
 const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').then(m => ({ default: m.ParametrosUssPage })))
 const ParametrosAsignacionesPage = lazy(() => import('./parametros/ParametrosAsignacionesPage').then(m => ({ default: m.ParametrosAsignacionesPage })))
 const GruposFlotaPage = lazy(() => import('./parametros/GruposFlotaPage').then(m => ({ default: m.GruposFlotaPage })))
+const RiesgoBcraPage = lazy(() => import('./parametros/RiesgoBcraPage').then(m => ({ default: m.RiesgoBcraPage })))
 const PromocionesPage = lazy(() => import('./parametros/PromocionesPage').then(m => ({ default: m.PromocionesPage })))
 const IntegracionesTokensPage = lazy(() => import('./administracion/IntegracionesTokensPage').then(m => ({ default: m.IntegracionesTokensPage })))
 const PromptChatbotPage = lazy(() => import('./administracion/PromptChatbotPage').then(m => ({ default: m.PromptChatbotPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
+const PruebaCargaModule = lazy(() => import('../modules/prueba-carga/PruebaCargaModule').then(m => ({ default: m.PruebaCargaModule })))
 import type { Guia } from '../modules/guias/guiasService'
 
 // Tipo para submenús con jerarquía
@@ -2385,6 +2389,11 @@ export function HomePage() {
                   <LazyPage><GruposFlotaPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              <Route path="/parametros/riesgo-bcra" element={
+                <ProtectedRoute submenuName="riesgo-bcra" action="view">
+                  <LazyPage><RiesgoBcraPage /></LazyPage>
+                </ProtectedRoute>
+              } />
               <Route path="/parametros/promociones" element={
                 <ProtectedRoute submenuName="promociones" action="view">
                   <LazyPage><PromocionesPage /></LazyPage>
@@ -2405,6 +2414,13 @@ export function HomePage() {
               <Route path="/seguimiento-conductores/escuela" element={
                 <ProtectedRoute menuName="seguimiento-conductores" submenuName="escuela-conductores" action="view">
                   <LazyPage><EscuelaPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+
+              {/* Prueba carga: subir una foto a Drive (módulo de prueba) */}
+              <Route path="/prueba-carga" element={
+                <ProtectedRoute menuName="prueba-carga" action="view">
+                  <LazyPage><PruebaCargaModule /></LazyPage>
                 </ProtectedRoute>
               } />
 

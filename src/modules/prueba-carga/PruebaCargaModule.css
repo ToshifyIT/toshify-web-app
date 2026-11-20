@@ -1,0 +1,81 @@
+.prueba-carga {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.prueba-carga-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  background: var(--bg-primary);
+}
+
+.prueba-carga-card h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.prueba-carga-ayuda {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.prueba-carga-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prueba-carga-vista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prueba-carga-vista img {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.prueba-carga-vista-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prueba-carga-lista {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.prueba-carga-lista a {
+  color: var(--color-primary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .prueba-carga-card {
+    padding: 16px;
+  }
+
+  .prueba-carga-botones > button {
+    flex: 1 1 auto;
+  }
+}
