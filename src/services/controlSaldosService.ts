@@ -108,17 +108,24 @@ export async function insertControlSaldo(params: {
     throw new Error(`Error registrando movimiento en kardex: ${error.message || 'desconocido'}`)
   }
 
-  // FIX 2026-05-27: sincronizar saldos_conductores.saldo_actual con el kardex
-  // para que el campo resumen siempre refleje el último movimiento registrado.
-  // Los flujos de pago ya llaman a upsertSaldoConductor antes, pero el doble
-  // update al mismo valor es inocuo y garantiza consistencia en todos los flujos.
+  // El saldo (saldos_conductores.saldo_actual) lo actualiza cada flujo ANTES de registrar el
+  // movimiento (aplicarMovimientoSaldo, upsertSaldoConductor o un update propio). Antes se
+  // volvía a escribir acá con saldoPendiente sin control: si otro usuario había cambiado el
+  // saldo en el medio, se pisaba el valor nuevo con uno viejo (y el error se ignoraba).
+  // Ahora solo se verifica que coincidan y, si no, se avisa en la consola.
   if (saldo) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from('saldos_conductores') as any)
-      .update({
-        saldo_actual: saldoPendiente,
-        ultima_actualizacion: new Date().toISOString(),
-      })
-      .eq('conductor_id', conductorId);
+    const { data: actual, error: errorLectura } = await (supabase.from('saldos_conductores') as any)
+      .select('saldo_actual')
+      .eq('conductor_id', conductorId)
+      .maybeSingle();
+    if (errorLectura) {
+      console.error('Error verificando saldo tras registrar el movimiento:', errorLectura);
+    } else if (actual && Math.abs((Number(actual.saldo_actual) || 0) - saldoPendiente) >= 0.01) {
+      console.warn(
+        `[Saldos] El saldo del conductor ${conductorId} (${actual.saldo_actual}) no coincide con el ` +
+        `movimiento recién registrado (${saldoPendiente}). Puede haber otro movimiento cargado al mismo tiempo.`
+      );
+    }
   }
 }

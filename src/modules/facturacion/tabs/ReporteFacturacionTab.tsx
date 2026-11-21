@@ -50,6 +50,7 @@ import {
   ZapOff,
   Ticket,
   Tag,
+  GitCompare,
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -105,7 +106,7 @@ import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyP
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 
-import { fechaLocalISO, hoyART } from '../../../utils/fechaArgentina'
+import { hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 import { cargarAppsPagoSemana, type AppsPago } from '../../../services/appsPagoService'
 import { quitarDiasPromocion } from '../../../utils/conceptoLabels'
@@ -211,6 +212,16 @@ function asignacionCuentaParaSemana(asig: { estado?: string | null; fecha_fin?: 
   if (['programado', 'programada'].includes(estado)) return false
   if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estado) && !asig.fecha_fin) return false
   return true
+}
+
+/** Lo calculado de un conductor: la fila de facturacion_conductores y sus líneas. */
+interface PendienteGuardar {
+  nombre: string
+  fila: { conductor_id: string } & Record<string, unknown>
+  detalles: any[]
+  ticketIds: string[]
+  excesoIds: string[]
+  cobroIds: string[]
 }
 
 /** Cuota semanal de garantía si no hay precio configurado. */
@@ -428,7 +439,7 @@ function getSemanaArgentina(date: Date) {
  * devoluciones sin importar el signo.
  * Devuelve el monto a sumar al saldo (positivo = a favor del conductor).
  */
-const MOVIMIENTOS_DE_LA_FACTURA = ['pago', 'pago_cabify', 'pago_didi', 'eliminacion_pago', 'edicion_pago']
+const MOVIMIENTOS_DE_LA_FACTURA = ['pago', 'pago_cabify', 'pago_didi', 'eliminacion_pago', 'edicion_pago', 'cierre_sin_pago']
 async function movimientosPosterioresALaFactura(conductorId: string, facturacionId: string): Promise<number> {
   if (!facturacionId || facturacionId.startsWith('preview')) return 0
   const { data: fact, error: errFact } = await (supabase.from('facturacion_conductores') as any)
@@ -1856,20 +1867,47 @@ export function ReporteFacturacionTab() {
         .eq('semana', semana)
         .eq('anio', anio)
       if (sedeActualId) qPeriodo = qPeriodo.eq('sede_id', sedeActualId)
-      const { data: periodoData, error: errPeriodo } = await qPeriodo.single()
+      const { data: periodoDataDb, error: errPeriodo } = await qPeriodo.single()
 
       if (errPeriodo && errPeriodo.code !== 'PGRST116') {
         throw errPeriodo
       }
 
+      // Sin período generado: VISTA PREVIA = el mismo cálculo del recálculo, sin guardar nada
+      // (calcularFacturacionSemana con simular). Se arma un período "en memoria" y la pantalla
+      // se carga igual que una semana guardada, así lo que se ve es lo que se va a facturar.
+      let periodoData: any = periodoDataDb
+      let simulacion: { filas: any[]; detalles: any[] } | null = null
       if (!periodoData) {
-        // No hay período generado - cargar vista previa automáticamente
         setPeriodo(null)
         setFacturaciones([])
-        setLoading(false)
-        // Cargar vista previa automática
-        cargarVistaPreviaInterno()
-        return
+        setModoVistaPrevia(true)
+        setLoadingVistaPrevia(true)
+        const fechaInicioVP = format(semanaActual.inicio, 'yyyy-MM-dd')
+        const fechaFinVP = format(semanaActual.fin, 'yyyy-MM-dd')
+        const sedeVP = sedeActualId || sedeUsuario?.id || null
+        const calculo = await calcularFacturacionSemana({
+          periodoId: null, fechaInicio: fechaInicioVP, fechaFin: fechaFinVP,
+          semanaNum: semana, anioNum: anio, sedeDelPeriodo: sedeVP,
+          simular: true, latido: () => {},
+        })
+        const pendientes = calculo.sinConductores ? [] : calculo.pendientesGuardar
+        const ahora = new Date().toISOString()
+        const filas = pendientes.map(pg => ({
+          ...pg.fila,
+          id: `preview-${pg.fila.conductor_id}`,
+          periodo_id: null,
+          created_at: ahora,
+          updated_at: ahora,
+        }))
+        const detalles = pendientes.flatMap((pg, idx) =>
+          pg.detalles.map((d: any, j: number) => ({ ...d, id: `preview-${pg.fila.conductor_id}-${j}`, facturacion_id: filas[idx].id }))
+        )
+        simulacion = { filas, detalles }
+        periodoData = {
+          id: null, semana, anio, fecha_inicio: fechaInicioVP, fecha_fin: fechaFinVP,
+          sede_id: sedeVP, estado: 'abierto', updated_at: null,
+        }
       }
 
       // ═══ AUTO-CURACIÓN DE CANDADOS HUÉRFANOS ═══
@@ -1877,7 +1915,7 @@ export function ReporteFacturacionTab() {
       // (F5, cierre de pestaña, suspensión del equipo, corte de red) nadie
       // lo va a liberar. Pasado el TTL lo devolvemos a 'abierto' solo.
       // Ojo: si el candado es de ESTA pestaña y sigue corriendo, no se toca.
-      if (lockHuerfano(periodoData as any) && (periodoData as any).lock_token !== lockTokenRef.current) {
+      if (!simulacion && lockHuerfano(periodoData as any) && (periodoData as any).lock_token !== lockTokenRef.current) {
         const { data: liberado } = await (supabase.from('periodos_facturacion') as any)
           .update({
             estado: 'abierto',
@@ -1901,21 +1939,38 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      setPeriodo(periodoData as PeriodoFacturacion)
-      periodoUpdatedAtCargaRef.current = (periodoData as any).updated_at ?? null
-      setModoVistaPrevia(false) // Hay período generado, no mostrar vista previa
+      if (!simulacion) {
+        setPeriodo(periodoData as PeriodoFacturacion)
+        periodoUpdatedAtCargaRef.current = (periodoData as any).updated_at ?? null
+        setModoVistaPrevia(false) // Hay período generado, no mostrar vista previa
+      }
 
       // 2. Cargar facturaciones de conductores para este período
       // JOIN con tabla conductores para obtener nombre actualizado
-      const { data: facturacionesData, error: errFact } = await (supabase
-        .from('facturacion_conductores') as any)
-         .select(`
-          *,
-          conductor:conductores!conductor_id(nombres, apellidos, estado_id, fecha_terminacion)
-        `)
-        .eq('periodo_id', (periodoData as any).id)
-
-      if (errFact) throw errFact
+      let facturacionesData: any[] | null
+      if (simulacion) {
+        // Vista Previa: las filas calculadas en memoria + los datos actuales del conductor
+        const idsSim = simulacion.filas.map((f: any) => f.conductor_id)
+        const conductoresSim = new Map<string, any>()
+        for (let i = 0; i < idsSim.length; i += 200) {
+          const { data, error } = await (supabase.from('conductores') as any)
+            .select('id, nombres, apellidos, estado_id, fecha_terminacion')
+            .in('id', idsSim.slice(i, i + 200))
+          if (error) throw error
+          for (const c of (data || []) as any[]) conductoresSim.set(c.id, c)
+        }
+        facturacionesData = simulacion.filas.map((f: any) => ({ ...f, conductor: conductoresSim.get(f.conductor_id) || null }))
+      } else {
+        const { data, error: errFact } = await (supabase
+          .from('facturacion_conductores') as any)
+           .select(`
+            *,
+            conductor:conductores!conductor_id(nombres, apellidos, estado_id, fecha_terminacion)
+          `)
+          .eq('periodo_id', (periodoData as any).id)
+        if (errFact) throw errFact
+        facturacionesData = data
+      }
 
       // ID del estado "Activo" para conductores
       const ESTADO_ACTIVO_ID_LOAD = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
@@ -2317,22 +2372,40 @@ export function ReporteFacturacionTab() {
         { data: detallesData },
         { data: excesosData },
         { data: alquilerDetalleData },
-      ] = await Promise.all([
-        (supabase.from('pagos_conductores') as any)
-          .select('referencia_id, monto, fecha_pago')
-          .eq('tipo_cobro', 'facturacion_semanal')
-          .in('referencia_id', facIds),
-        (supabase.from('facturacion_detalle') as any)
-          .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento, referencia_tipo, descripcion')
-          .in('facturacion_id', facIds),
-        (supabase.from('excesos_kilometraje') as any)
-          .select('id, conductor_id, km_exceso, monto_total, aplicado')
-          .eq('periodo_id', (periodoData as any).id),
-        (supabase.from('facturacion_detalle') as any)
-          .select('facturacion_id, precio_unitario, concepto_codigo')
-          .in('facturacion_id', facIds)
-          .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
-      ])
+      ] = simulacion
+        // Vista Previa: el detalle es el calculado en memoria; todavía no hay pagos
+        ? await (async () => {
+          const conductorIdsSim = facturacionesTransformadas.map((f: any) => f.conductor_id).filter(Boolean)
+          const { data: excesosSim } = conductorIdsSim.length > 0
+            ? await (supabase.from('excesos_kilometraje') as any)
+              .select('id, conductor_id, km_exceso, monto_total, aplicado')
+              .in('conductor_id', conductorIdsSim)
+              .eq('aplicado', false)
+            : { data: [] }
+          const codigosAlquilerSim = ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']
+          return [
+            { data: [] },
+            { data: simulacion.detalles },
+            { data: excesosSim || [] },
+            { data: simulacion.detalles.filter((d: any) => codigosAlquilerSim.includes(d.concepto_codigo)) },
+          ]
+        })()
+        : await Promise.all([
+          (supabase.from('pagos_conductores') as any)
+            .select('referencia_id, monto, fecha_pago')
+            .eq('tipo_cobro', 'facturacion_semanal')
+            .in('referencia_id', facIds),
+          (supabase.from('facturacion_detalle') as any)
+            .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento, referencia_tipo, descripcion')
+            .in('facturacion_id', facIds),
+          (supabase.from('excesos_kilometraje') as any)
+            .select('id, conductor_id, km_exceso, monto_total, aplicado')
+            .eq('periodo_id', (periodoData as any).id),
+          (supabase.from('facturacion_detalle') as any)
+            .select('facturacion_id, precio_unitario, concepto_codigo')
+            .in('facturacion_id', facIds)
+            .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
+        ])
 
       // Agrupar pagos por referencia_id (puede haber pagos parciales)
       const pagosMap = new Map<string, { monto: number; fecha_pago: string | null }>()
@@ -2539,8 +2612,18 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
       setExcesos((excesosData || []) as ExcesoKm[])
+      if (simulacion) {
+        // Vista Previa: se muestra lo calculado; no hay pagos ni pagos sin vincular todavía
+        grupoFlotaGanadorVPRef.current = new Map(
+          (facturacionesTransformadas as any[]).map((f: any) => [f.conductor_dni, f.grupo_flota || null])
+        )
+        setVistaPreviaData(facturacionesTransformadas as FacturacionConductor[])
+        setPagosCabifyMap(new Map())
+        setPagosSinVincular([])
+        return
+      }
+      setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
 
       // Si el período está cerrado, cargar los pagos Cabify del Excel (tabla pagos_conductores)
       // para alimentar el nuevo indicador "Importe Generado"
@@ -2604,1349 +2687,156 @@ export function ReporteFacturacionTab() {
       showError('Error', 'No se pudo cargar la facturación')
     } finally {
       setLoading(false)
+      setLoadingVistaPrevia(false)
     }
   }
 
-  // VISTA PREVIA: Calcular facturación on-the-fly sin guardar en BD
-  async function cargarVistaPreviaInterno(showError = false) {
-    setLoadingVistaPrevia(true)
-    setModoVistaPrevia(true)
-
+  // ═══════════════════════════════════════════════════════════════════
+  // COMPARADOR DE CÁLCULO (solo desarrollo, solo lectura)
+  // Calcula la semana del período con la Vista Previa y la compara, conductor por conductor
+  // y concepto por concepto, con lo que guardó el recálculo. No escribe nada. Sirve para ver
+  // dónde se separan las dos copias del cálculo antes y después de unificarlas.
+  // ═══════════════════════════════════════════════════════════════════
+  const [comparandoCalculo, setComparandoCalculo] = useState(false)
+  async function compararCalculo() {
+    if (!periodo || modoVistaPrevia) return
+    setComparandoCalculo(true)
     try {
-      const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
-      // Facturación siempre cobra la semana completa (lunes a domingo)
-      // Las deducciones se hacen vía incidencias/bajas, no por días transcurridos
-      const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
-      // Semana y año del período (para queries)
-      const semanaDelPeriodo = getISOWeek(parseISO(fechaInicio))
-      const anioDelPeriodo = getISOWeekYear(parseISO(fechaInicio))
-
-      // 1. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
-      const sedeParaVP = sedeActualId || sedeUsuario?.id
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean; tiene_telepase: boolean }[] = []
-      const dnisAgregadosVP = new Set<string>()
-
-      // 1a + 1b + 1c en paralelo (son independientes entre sí)
-      const [{ data: asignacionesSemanaVP }, { data: penalidadesPendientesVP }, { data: penalidadesAplicadasSemanaVP }] = await Promise.all([
-        (supabase.from('asignaciones_conductores') as any)
-          .select(`
-            conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, fecha_inicio, vehiculo_id, vehiculos(patente, gnc, telepase, grupo_flota, updated_at)),
-            conductores!inner(numero_dni, sede_id)
-          `)
-          .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
-          .order('fecha_inicio', { ascending: false }),
-        (supabase.from('penalidades') as any)
-          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
-          .gte('fecha', fechaInicio)
-          .lte('fecha', format(semanaActual.fin, 'yyyy-MM-dd'))
-          .eq('aplicado', false)
-          .neq('rechazado', true),
-        // 1c: penalidades ya aplicadas a ESTA semana (para incluir conductores con cobros ya cerrados)
-        (supabase.from('penalidades') as any)
-          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
-          .eq('semana_aplicacion', semanaDelPeriodo)
-          .eq('anio_aplicacion', anioDelPeriodo)
-          .eq('aplicado', true),
-      ])
-
-      // Calcular grupo_flota GANADOR por DNI para vista previa
-      // Regla: GRUPO CG es el grupo "base", cualquier otro tiene prioridad.
-      // Descartar GRUPO CG si hay otros grupos, y entre los restantes tomar el más reciente por fecha.
-      const esGrupoCGVP = (g: string) => g.includes('GRUPO CG')
-      const grupoFlotaCandidatosVP = new Map<string, Array<{ grupo: string; fechaInicio: Date }>>()
-      {
-        const semInicioGrupo = parseISO(fechaInicio)
-        const semFinGrupo = parseISO(fechaFin)
-        for (const ac of (asignacionesSemanaVP || []) as any[]) {
-          const cond = ac.conductores
-          const asig = ac.asignaciones
-          if (!cond || !asig || !asignacionCuentaParaSemana(asig)) continue
-          if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
-          const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : (asig.fecha_inicio ? parseISO(toArgDate(asig.fecha_inicio)) : null)
-          const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
-          if (!acInicio) continue
-          if (acFin < semInicioGrupo || acInicio > semFinGrupo) continue
-          const grupo = asig.vehiculos?.grupo_flota || null
-          if (!grupo) continue
-          // DNI normalizado: el mapa se consulta con conductor_dni ya normalizado
-          const dni = normalizeDni(cond.numero_dni)
-          if (!grupoFlotaCandidatosVP.has(dni)) grupoFlotaCandidatosVP.set(dni, [])
-          grupoFlotaCandidatosVP.get(dni)!.push({ grupo, fechaInicio: acInicio })
-        }
-      }
-      const grupoFlotaGanadorVPMap = new Map<string, string | null>()
-      for (const [dni, candidatos] of grupoFlotaCandidatosVP) {
-        const noGrupoCG = candidatos.filter(c => !esGrupoCGVP(c.grupo))
-        const lista = noGrupoCG.length > 0 ? noGrupoCG : candidatos
-        lista.sort((a, b) => b.fechaInicio.getTime() - a.fechaInicio.getTime())
-        grupoFlotaGanadorVPMap.set(dni, lista[0].grupo)
-      }
-      // Guardar en ref para que prepararCabifyPreview pueda usarlo
-      grupoFlotaGanadorVPRef.current = grupoFlotaGanadorVPMap
-
-      // Procesar 1a: asignaciones
-      {
-        const semInicioVP = parseISO(fechaInicio)
-        const semFinVP = parseISO(fechaFin)
-
-        for (const ac of (asignacionesSemanaVP || []) as any[]) {
-          const cond = ac.conductores
-          const asig = ac.asignaciones
-          if (!cond || !asig) continue
-          if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
-
-          // Skip PROGRAMADO y huérfanos
-          const estadoPadreVPExtra = (asig.estado || '').toLowerCase()
-          if (['programado', 'programada'].includes(estadoPadreVPExtra)) continue
-          if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVPExtra) && !asig.fecha_fin) continue
-          if (!ac.fecha_inicio && !asig.fecha_inicio) continue
-
-          // Verificar solapamiento con la semana (normalizar sin hora)
-          const acInicioExtra = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
-          const acFinExtra = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
-            : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
-          if (acFinExtra < semInicioVP || acInicioExtra > semFinVP) continue
-
-          if (!dnisAgregadosVP.has(cond.numero_dni)) {
-            dnisAgregadosVP.add(cond.numero_dni)
-            const modalidad = (asig.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
-            conductoresControl.push({
-              numero_dni: cond.numero_dni,
-              estado: 'Activo',
-              patente: asig.vehiculos?.patente || '',
-              modalidad,
-              valor_alquiler: null,
-              tiene_gnc: asig.vehiculos?.gnc === true,
-              tiene_telepase: asig.vehiculos?.telepase === true,
-            })
-          }
-        }
-      }
-
-      // Procesar 1b + 1c: penalidades pendientes + aplicadas a esta semana
-      const dnisConPenalidadesVP = new Set<string>()
-      {
-        // Combinar pendientes + aplicadas a esta semana (sin duplicados)
-        const todasPenalidadesVP = [
-          ...(penalidadesPendientesVP || []),
-          ...(penalidadesAplicadasSemanaVP || []),
-        ]
-        for (const p of todasPenalidadesVP as any[]) {
-          const cond = p.conductores
-          if (!cond || !cond.numero_dni) continue
-          if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
-          dnisConPenalidadesVP.add(cond.numero_dni)
-          if (dnisAgregadosVP.has(cond.numero_dni)) continue
-          dnisAgregadosVP.add(cond.numero_dni)
-            conductoresControl.push({
-              numero_dni: cond.numero_dni,
-              estado: 'Activo',
-              patente: '',
-              modalidad: 'TURNO',
-              valor_alquiler: null,
-              tiene_gnc: true,
-              tiene_telepase: false,
-            })
-        }
-      }
-
-      // Obtener datos de conductores desde tabla conductores
-      // FILTRAR por sede para obtener solo conductores de esta sede
-      const dnisControl = (conductoresControl || []).map((c: any) => c.numero_dni)
-      let qConductoresVP = supabase
-        .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id, fecha_terminacion')
-        .in('numero_dni', dnisControl)
-      if (sedeParaVP) qConductoresVP = qConductoresVP.eq('sede_id', sedeParaVP)
-      const { data: conductoresData } = await qConductoresVP
-
-      const conductoresDataMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
-      // ID del estado "Activo" para conductores
-      const ESTADO_ACTIVO_ID = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
-
-      // 1.1 Cargar asignaciones_conductores para calcular prorrateo por días/modalidad/horario
-      const conductorIds = (conductoresData || []).map((c: any) => c.id)
-      // Régimen Toshipass (tarifa nueva desde el corte): pagan Toshipass en lugar de garantía.
-      // Incluye conductores nuevos y cambios de tarifa (desde la semana del cambio).
-      const reglaToshipassVP = await cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin })
-      // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
-      const devolucionesGarantiaVP = await cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin })
-      // Referidos: días de esta semana dentro de su primera semana (descuento 5%)
-      const diasDescuentoReferidoVP = await cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin })
-      // Promociones activas (Parámetros > Promociones): días con 10% y días con B1
-      const promocionesVP = await cargarPromocionesSemana(conductorIds, { inicio: fechaInicio, fin: fechaFin })
-      const { data: asignacionesConductores } = await (supabase
-        .from('asignaciones_conductores') as any)
-        .select(`
-          id,
-          conductor_id,
-          horario,
-          fecha_inicio,
-          fecha_fin,
-          estado,
-          asignacion_id,
-          tipo_tarifa,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(gnc, updated_at))
-        `)
-        .in('conductor_id', conductorIds)
-        .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
-
-      // Cargar historial GNC de vehículos para evaluar por fecha
-      const vehiculoIdsVP = new Set<string>()
-      for (const ac of (asignacionesConductores || []) as any[]) {
-        const vid = ac.asignaciones?.vehiculo_id
-        if (vid) vehiculoIdsVP.add(vid)
-      }
-      const { data: gncHistorialVP } = vehiculoIdsVP.size > 0
-        ? await (supabase.from('vehiculos_gnc_historial') as any)
-            .select('vehiculo_id, accion, fecha')
-            .in('vehiculo_id', [...vehiculoIdsVP])
-            .order('fecha', { ascending: false })
-        : { data: [] }
-      const gncHistorialMapVP = new Map<string, GncHistorialEntry[]>()
-      for (const h of (gncHistorialVP || []) as GncHistorialEntry[]) {
-        if (!gncHistorialMapVP.has(h.vehiculo_id)) gncHistorialMapVP.set(h.vehiculo_id, [])
-        gncHistorialMapVP.get(h.vehiculo_id)!.push(h)
-      }
-
-      // Crear mapa de prorrateo con días y montos para precios históricos
-      interface ProrrateoVistaPrevia {
-        CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
-        monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number;
-        proyectado_raw: number;
-      }
-      const prorrateoMap = new Map<string, ProrrateoVistaPrevia>()
-
-      // Inicializar todos los conductores con 0 días
-      conductorIds.forEach((id: string) => {
-        prorrateoMap.set(id, {
-          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
-          proyectado_raw: 0,
-        })
+      // Recálculo simulado (mismo cálculo que guarda) contra lo guardado en la base
+      const calc = await calcularFacturacionSemana({
+        periodoId: periodo.id,
+        fechaInicio: periodo.fecha_inicio,
+        fechaFin: periodo.fecha_fin,
+        semanaNum: periodo.semana,
+        anioNum: periodo.anio,
+        sedeDelPeriodo: periodo.sede_id || sedeActualId,
+        simular: true,
+        latido: () => {},
       })
-
-      // Calcular días por modalidad/horario para cada conductor
-      const fechaInicioSemana = semanaActual.inicio
-      // Vista Previa capa los días hasta HOY (no proyecta). El Preview Cabify sí proyecta semana completa.
-      // Hoy en timezone Argentina (no del navegador) para capar días correctamente
-      const hoyVP = parseISO(argDateFmt.format(new Date()) + 'T00:00:00')
-      const fechaFinSemana = hoyVP < semanaActual.fin ? hoyVP : semanaActual.fin
-
-      // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
-      const fechaTermMapVP = new Map<string, Date>()
-      for (const c of (conductoresData || []) as any[]) {
-        if (c.fecha_terminacion) fechaTermMapVP.set(c.id, parseISO(c.fecha_terminacion))
-      }
-
-      // Cargar devoluciones con fecha_baja (requiere fecha_terminacion) y sin_cobro (independiente)
-      const conductoresConFechaBajaVP = new Set<string>()
-      const conductoresSinCobroVP = new Set<string>()
-      const conductoresConTerminacion = [...fechaTermMapVP.keys()]
-      // fecha_baja: solo aplica a conductores con fecha_terminacion
-      if (conductoresConTerminacion.length > 0) {
-        const { data: devolucionesFechaBajaVP } = await (supabase as any)
-          .from('programaciones_onboarding')
-          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
-          .eq('devolucion_vehiculo', true)
-          .eq('ultimo_dia_cobro', 'fecha_baja')
-        for (const d of (devolucionesFechaBajaVP || []) as any[]) {
-          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
-          for (const id of ids) {
-            if (conductoresConTerminacion.includes(id)) conductoresConFechaBajaVP.add(id)
-          }
+      const pendientes = calc.sinConductores ? [] : calc.pendientesGuardar
+      const conCodigos = (fila: any, detalles: any[]) => {
+        const porCodigo: Record<string, number> = {}
+        for (const d of detalles) {
+          const k = String(d.concepto_codigo || 'OTRO')
+          porCodigo[k] = (porCodigo[k] || 0) + (Number(d.total) || 0) * (d.es_descuento ? -1 : 1)
         }
+        return { ...fila, _porCodigo: porCodigo }
       }
-      // sin_cobro: buscar para TODOS los conductores del periodo, no solo los que tienen fecha_terminacion
-      if (conductorIds.length > 0) {
-        const { data: devolucionesSinCobroVP } = await (supabase as any)
-          .from('programaciones_onboarding')
-          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
-          .eq('devolucion_vehiculo', true)
-          .eq('ultimo_dia_cobro', 'sin_cobro')
-        for (const d of (devolucionesSinCobroVP || []) as any[]) {
-          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
-          for (const id of ids) {
-            if (conductorIds.includes(id)) conductoresSinCobroVP.add(id)
-          }
-        }
+      const calculado = pendientes.map(pg => conCodigos(pg.fila, pg.detalles))
+      const { data: filasGuardadas, error: errGuardadas } = await (supabase.from('facturacion_conductores') as any)
+        .select('*').eq('periodo_id', periodo.id)
+      if (errGuardadas) throw errGuardadas
+      const idsGuardadas = ((filasGuardadas || []) as any[]).map(f => f.id)
+      const detallesGuardados: any[] = []
+      for (let i = 0; i < idsGuardadas.length; i += 200) {
+        const { data, error } = await (supabase.from('facturacion_detalle') as any)
+          .select('facturacion_id, concepto_codigo, total, es_descuento').in('facturacion_id', idsGuardadas.slice(i, i + 200))
+        if (error) throw error
+        detallesGuardados.push(...(data || []))
       }
-
-      // Guardar asignaciones por conductor para cálculo de montos con precios históricos
-      const asignacionesPorConductorVP = new Map<string, Array<{
-        modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO';
-        fechaInicio: Date;
-        fechaFin: Date;
-        tieneGnc: boolean;
-        vehiculoId: string;
-        tipoTarifa: 'antigua' | 'nueva';
-      }>>()
-      conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
-
-      // Rastrear la fecha_fin más tardía de asignaciones por conductor (para comparar con fecha_terminacion)
-      const maxAsigFinVP = new Map<string, string>()
-
-      // Set de fechas ya contadas por conductor para deduplicar registros duplicados
-      const diasContadosVP = new Map<string, Set<string>>()
-      conductorIds.forEach((id: string) => diasContadosVP.set(id, new Set()))
-
-      // Alertas de prorrateo por ingreso: conductor diurno con entrega nueva en la semana
-      //const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number }>()
-      const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number; modalidad: 'TURNO_DIURNO' | 'CARGO' }>()
-      // Vehículo fuera de servicio (utils/cierreAsignacion.ts): descuentos de diurno / a cargo.
-      // Se juntan durante el recorrido y se aplican al final, solo si ese día se cobra.
-      const pendientesCierreVP = new Map<string, { conductorId: string; fecha: string; modalidad: 'TURNO_DIURNO' | 'CARGO'; descuento: number }>()
-      const descuentosCierreVP = new Map<string, { TURNO_DIURNO: number; CARGO: number }>()
-
-      // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
-      // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
-      const conductoresConAsignacionPreviaVP = new Set<string>()
-      // Set de fechas_inicio de asignaciones por conductor — para resolver overlap en día de entrega
-      // Regla: si asig A termina el día X y asig B empieza el día X (del mismo conductor), el día X cuenta para B
-      const fechasInicioAsigPorConductor = new Map<string, Set<string>>()
-      for (const ac of (asignacionesConductores || []) as any[]) {
-        const asignacion = ac.asignaciones
-        if (!asignacion) continue
-        const estadoPadre = (asignacion.estado || '').toLowerCase()
-        if (['programado', 'programada'].includes(estadoPadre)) continue
-        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
-        if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
-        const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
-        const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
-        const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
-        // Un tramo cuenta como "asignación previa" (y exime del descuento por hora de entrega)
-        // si empezo antes de la semana y llega HASTA el primer dia o mas alla. El caso limite
-        // es el turno seguido: entrega el auto viejo y recibe el nuevo el mismo dia, el lunes.
-        // Ahi el conductor no perdio medio turno, solo cambio de vehiculo -> no corresponde
-        // descontar. Por eso la comparacion es >= y no > (antes el empalme del primer dia de
-        // semana quedaba fuera y se le cobraba el descuento igual).
-        const cFinPrevVP = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
-        const pFinPrevVP = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const finEfectivoPrevVP = cFinPrevVP && pFinPrevVP ? (cFinPrevVP < pFinPrevVP ? cFinPrevVP : pFinPrevVP) : (cFinPrevVP || pFinPrevVP)
-        if (inicioEfectivo && inicioEfectivo < fechaInicioSemana && (!finEfectivoPrevVP || finEfectivoPrevVP >= fechaInicioSemana)) {
-          conductoresConAsignacionPreviaVP.add(ac.conductor_id)
+      const guardado = ((filasGuardadas || []) as any[]).map(f => conCodigos(f, detallesGuardados.filter(d => d.facturacion_id === f.id)))
+      const n = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100
+      const dias = (f: any) => n(f.turnos_cobrados)
+      // info: no cuenta como diferencia de cálculo. El saldo anterior cambia con los pagos
+      // cargados después de guardar la semana (ej. Pago Cabify de esa semana), no por el cálculo.
+      const campos: Array<{ nombre: string; vp: (f: any) => number; rec: (f: any) => number; info?: boolean }> = [
+        { nombre: 'Días', vp: dias, rec: f => n(f.turnos_cobrados) },
+        { nombre: 'Alquiler', vp: f => n(f.subtotal_alquiler), rec: f => n(f.subtotal_alquiler) },
+        { nombre: 'Garantía', vp: f => n(f.subtotal_garantia), rec: f => n(f.subtotal_garantia) },
+        { nombre: 'Toshipass', vp: f => n(f.monto_toshipass), rec: f => n(f.monto_toshipass) },
+        { nombre: 'Peajes', vp: f => n(f.monto_peajes), rec: f => n(f.monto_peajes) },
+        { nombre: 'Penalidades', vp: f => n(f.monto_penalidades), rec: f => n(f.monto_penalidades) },
+        { nombre: 'Cargos', vp: f => n(f.subtotal_cargos), rec: f => n(f.subtotal_cargos) },
+        { nombre: 'Descuentos', vp: f => n(f.subtotal_descuentos), rec: f => n(f.subtotal_descuentos) },
+        { nombre: 'Total sin saldo anterior', vp: f => n((f.total_a_pagar || 0) - (f.saldo_anterior || 0)), rec: f => n((f.total_a_pagar || 0) - (f.saldo_anterior || 0)) },
+        { nombre: 'Saldo anterior', vp: f => n(f.saldo_anterior), rec: f => n(f.saldo_anterior), info: true },
+      ]
+      // Además de los totales, cada concepto (código) por separado
+      const codigos = [...new Set([...calculado, ...guardado].flatMap((f: any) => Object.keys(f._porCodigo || {})))].sort()
+      for (const codigo of codigos) {
+        campos.push({ nombre: `Concepto ${codigo}`, vp: (f: any) => n(f._porCodigo?.[codigo]), rec: (f: any) => n(f._porCodigo?.[codigo]) })
+      }
+      const porIdVp = new Map(calculado.map(f => [f.conductor_id, f]))
+      const porIdRec = new Map(guardado.map(f => [f.conductor_id, f]))
+      const ids = [...new Set([...porIdVp.keys(), ...porIdRec.keys()])]
+      const filas: Array<{ nombre: string; concepto: string; vp: string; rec: string; info?: boolean }> = []
+      const conteoPorConcepto = new Map<string, number>()
+      let soloVp = 0
+      let soloRec = 0
+      for (const id of ids) {
+        const a = porIdVp.get(id)
+        const b = porIdRec.get(id)
+        const nombre = (a || b)?.conductor_nombre || id
+        if (!a || !b) {
+          if (a) soloVp++
+          else soloRec++
+          filas.push({ nombre, concepto: a ? 'Solo en el cálculo' : 'Solo en lo guardado', vp: a ? formatCurrency(n(a.total_a_pagar)) : '-', rec: b ? formatCurrency(n(b.total_a_pagar)) : '-' })
+          continue
         }
-        if (inicioEfectivo) {
-          const setFechas = fechasInicioAsigPorConductor.get(ac.conductor_id) || new Set<string>()
-          setFechas.add(format(inicioEfectivo, 'yyyy-MM-dd'))
-          fechasInicioAsigPorConductor.set(ac.conductor_id, setFechas)
+        for (const c of campos) {
+          const va = c.vp(a)
+          const vb = c.rec(b)
+          const tolerancia = c.nombre === 'Días' ? 0.01 : TOLERANCIA_PESOS
+          if (Math.abs(va - vb) < tolerancia) continue
+          const fmt = (v: number) => c.nombre === 'Días' ? String(v) : formatCurrency(v)
+          if (!c.info) conteoPorConcepto.set(c.nombre, (conteoPorConcepto.get(c.nombre) || 0) + 1)
+          filas.push({ nombre, concepto: c.nombre, vp: fmt(va), rec: fmt(vb), info: c.info })
         }
       }
-
-      ;(asignacionesConductores || []).forEach((ac: any) => {
-        const asignacion = ac.asignaciones
-        if (!asignacion) return
-
-        const modalidadAsignacion = asignacion.horario // 'turno' o 'todo_dia'
-        const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
-
-        // Si la asignación padre está programada → no ha iniciado, no cuenta para facturación
-        const estadoPadreVP = (asignacion.estado || '').toLowerCase()
-        if (['programado', 'programada'].includes(estadoPadreVP)) return
-        // Si la asignación padre está finalizada/cancelada sin fecha_fin → registro huérfano
-        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVP) && !asignacion.fecha_fin) return
-        // Skip huérfano sin fecha_inicio
-        if (!ac.fecha_inicio && !asignacion.fecha_inicio) return
-
-        // Calcular días que este registro se solapa con la semana
-        // Normalizar a solo fecha (sin hora) — timestamps de asignaciones tienen hora que rompe el conteo
-        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
-        // para no cobrar antes de que el vehículo fuera realmente entregado
-        const conductorInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
-        const padreInicio = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
-        const acInicio = conductorInicio && padreInicio
-          ? (conductorInicio > padreInicio ? conductorInicio : padreInicio)
-          : (conductorInicio || padreInicio || fechaInicioSemana)
-        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
-        const conductorFinVP = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
-        const padreFinVP = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const acFin = conductorFinVP && padreFinVP
-          ? (conductorFinVP < padreFinVP ? conductorFinVP : padreFinVP)
-          : (conductorFinVP || padreFinVP || fechaFinSemana)
-
-        // Rango efectivo dentro de la semana
-        const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
-        let efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
-
-        // Regla: si otra asignación del mismo conductor EMPIEZA el día en que esta TERMINA,
-        // ese día cuenta para la nueva. Recortamos efectivoFin en 1 día.
-        const fechasInicioSet = fechasInicioAsigPorConductor.get(ac.conductor_id)
-        if (fechasInicioSet) {
-          const finKey = format(efectivoFin, 'yyyy-MM-dd')
-          // FIX: comparar contra el inicio REAL (acInicio), no contra efectivoInicio.
-          // efectivoInicio viene recortado al inicio de semana, asi que una asignacion
-          // que empezo dias antes y termina el lunes se veia como "de un solo dia" y la
-          // guarda cancelaba el recorte: el dia del empalme quedaba en disputa y lo ganaba
-          // la fila que Postgres devolviera primero (orden no definido). La guarda debe
-          // proteger solo a las asignaciones que REALMENTE duran un dia.
-          const inicioKey = format(acInicio, 'yyyy-MM-dd')
-          // Solo recortar si finKey es inicio de otra asig Y no es el inicio de esta misma asig
-          if (fechasInicioSet.has(finKey) && finKey !== inicioKey) {
-            const nuevoFin = new Date(efectivoFin)
-            nuevoFin.setDate(nuevoFin.getDate() - 1)
-            efectivoFin = nuevoFin
-          }
-        }
-
-        const esSinCobroVP = conductoresSinCobroVP.has(ac.conductor_id)
-
-        // Aplicar fecha_terminacion como tope si:
-        // - La asignación NO tiene fecha_fin propia, O
-        // - El conductor tiene devolución con ultimo_dia_cobro='fecha_baja' (siempre aplica)
-        const tieneFinPropioVP = ac.fecha_fin || asignacion.fecha_fin
-        const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
-        const usarFechaBajaVP = conductoresConFechaBajaVP.has(ac.conductor_id)
-        if (fechaTermVP && (!tieneFinPropioVP || usarFechaBajaVP) && efectivoFin > fechaTermVP && acInicio <= fechaTermVP) efectivoFin = fechaTermVP
-
-        const prorrateo = prorrateoMap.get(ac.conductor_id)
-        if (!prorrateo) return
-
-        // Determinar modalidad basándose en asignaciones.horario + asignaciones_conductores.horario
-        let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
-        const horarioLowerVP = (horarioConductor || '').toLowerCase().trim()
-        if (modalidadAsignacion === 'todo_dia' || horarioLowerVP === 'todo_dia') {
-          modalidad = 'CARGO'
-        } else if (modalidadAsignacion === 'turno') {
-          if (horarioLowerVP === 'nocturno' || horarioLowerVP === 'n') {
-            modalidad = 'TURNO_NOCTURNO'
-          } else {
-            modalidad = 'TURNO_DIURNO'
-          }
-        }
-
-        // Vehículo fuera de servicio (utils/cierreAsignacion.ts)
-        const cierreVP = evaluarCierre(timestampCierre(ac.fecha_fin, asignacion.fecha_fin), asignacion.notas)
-        if (cierreVP) {
-          if (modalidad === 'TURNO_NOCTURNO') {
-            // Sin auto para su turno: no se cobra ese día. Si recibió otro auto ese día, el
-            // empalme ya movió el día a la asignación nueva y efectivoFin no es el cierre.
-            if (format(efectivoFin, 'yyyy-MM-dd') === cierreVP.fecha) {
-              const finSinCierre = new Date(efectivoFin)
-              finSinCierre.setDate(finSinCierre.getDate() - 1)
-              efectivoFin = finSinCierre
-            }
-          } else {
-            const descVP = descuentoCierre(modalidad, cierreVP, paramsCierre)
-            if (descVP > 0) pendientesCierreVP.set(`${ac.conductor_id}|${cierreVP.fecha}|${modalidad}`, { conductorId: ac.conductor_id, fecha: cierreVP.fecha, modalidad, descuento: descVP })
-          }
-        }
-
-        // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
-        // Si es sin_cobro, no contar ningún día pero dejar pasar al conductor
-        const fechasContadas = diasContadosVP.get(ac.conductor_id)!
-        let diasReales = 0
-        if (!esSinCobroVP) {
-          const cursorVP = new Date(efectivoInicio)
-          while (cursorVP <= efectivoFin) {
-            const key = format(cursorVP, 'yyyy-MM-dd')
-            if (!fechasContadas.has(key)) {
-              fechasContadas.add(key)
-              diasReales++
-              if (modalidad === 'CARGO') prorrateo.CARGO++
-              else if (modalidad === 'TURNO_NOCTURNO') prorrateo.TURNO_NOCTURNO++
-              else prorrateo.TURNO_DIURNO++
-            }
-            cursorVP.setDate(cursorVP.getDate() + 1)
-          }
-        }
-
-        if (diasReales <= 0 && !esSinCobroVP) return
-
-        // Detectar prorrateo de ingreso por hora de entrega real
-        // Solo aplica si la asignación es NUEVA en esta semana (acInicio >= inicio de semana)
-        // Reglas (configurables via parametros_sistema):
-        //   DIURNO:   entrega antes de hora_corte_diurno → descuento medio turno
-        //             entrega después de hora_corte_diurno → descuento turno completo
-        //   CARGO:    entrega después de hora_corte_cargo → descuento medio turno
-        //   NOCTURNO: sin descuento
-        if ((modalidad === 'TURNO_DIURNO' || modalidad === 'CARGO') && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id) && !conductoresConAsignacionPreviaVP.has(ac.conductor_id)) {
-          // Solo usar fecha_inicio del padre (entrega real) — no el fallback del conductor
-          const rawTimestamp = asignacion.fecha_inicio
-          if (rawTimestamp) {
-            const hora = getArgHour(rawTimestamp)
-            const horaStr = toArgTime(rawTimestamp)
-            const fechaStr = displayArgDate(toArgDate(rawTimestamp))
-
-            if (modalidad === 'TURNO_DIURNO') {
-              if (hora >= horasCorteTurno.diurno) {
-                // Entrega después del corte → descuento 1 turno
-                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoDespues, modalidad: 'TURNO_DIURNO' })
-              } else {
-                // Entrega antes del corte → descuento medio turno
-                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoAntes, modalidad: 'TURNO_DIURNO' })
-              }
-            } else if (modalidad === 'CARGO') {
-              if (hora >= horasCorteTurno.cargo) {
-                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descCargoDespues, modalidad: 'CARGO' })
-              }
-              // Si entrega antes del corte cargo → sin descuento
-            }
-          }
-        }
-
-        // Guardar asignación para cálculo de montos
-        const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
-        if (asigs) {
-          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true, vehiculoId: asignacion.vehiculo_id, tipoTarifa: (((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') ? 'nueva' : 'antigua') })
-        }
-
-        // Rastrear la fecha_fin más tardía de la asignación (no la efectiva, la real del registro)
-        const finRealStr = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
-        if (finRealStr && finRealStr > (maxAsigFinVP.get(ac.conductor_id) || '')) {
-          maxAsigFinVP.set(ac.conductor_id, finRealStr)
-        }
+      const esc = (t: string) => t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
+      const difCalculo = filas.filter(f => !f.info)
+      const difInfo = filas.filter(f => f.info)
+      const conductoresConDif = new Set(difCalculo.map(f => f.nombre)).size
+      const resumen = [...conteoPorConcepto.entries()].map(([k, v]) => `${k}: ${v}`).join(' · ')
+      const td = 'padding:6px;border-bottom:1px solid var(--border-primary);'
+      const th = 'padding:6px;border-bottom:1px solid var(--border-primary);font-size:11px;font-weight:600;color:var(--text-secondary);'
+      console.table(filas)
+      await Alerta.fire({
+        title: `Comparar cálculo · S${periodo.semana}/${periodo.anio}`,
+        width: 'min(96vw, 760px)',
+        confirmButtonText: 'Cerrar',
+        html: `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
+          <div style="font-size:11px;color:var(--text-secondary);">Recálculo simulado ahora (sin guardar) contra lo guardado en la base</div>
+          <div style="font-size:22px;font-weight:700;margin:4px 0;color:${difCalculo.length === 0 ? '#16a34a' : '#d97706'};">
+            ${difCalculo.length === 0 ? 'Sin diferencias de cálculo' : `${conductoresConDif} de ${ids.length} conductores con diferencias`}
+          </div>
+          ${resumen ? `<div style="font-size:12px;color:var(--text-secondary);">${esc(resumen)}${soloVp || soloRec ? ` · Solo en el cálculo: ${soloVp} · Solo guardados: ${soloRec}` : ''}</div>` : ''}
+          ${difInfo.length > 0 ? `<div style="font-size:12px;color:var(--text-tertiary);margin-top:4px;">Saldo anterior distinto en ${difInfo.length} conductores (informativo: suele ser por pagos cargados después de guardar la semana).</div>` : ''}
+          ${filas.length > 0 ? `<div style="max-height:55vh;overflow:auto;margin-top:14px;">
+            <table style="display:table;width:100%;border-collapse:collapse;font-size:12px;">
+              <thead><tr>
+                <th style="${th}text-align:left;">Conductor</th>
+                <th style="${th}text-align:left;">Concepto</th>
+                <th style="${th}text-align:right;">Calculado ahora</th>
+                <th style="${th}text-align:right;">Guardado</th>
+              </tr></thead>
+              <tbody>${[...difCalculo, ...difInfo].map(f => `<tr style="${f.info ? 'color:var(--text-tertiary);' : ''}">
+                <td style="${td}">${esc(f.nombre)}</td>
+                <td style="${td}">${esc(f.concepto)}</td>
+                <td style="${td}text-align:right;font-variant-numeric:tabular-nums;">${f.vp}</td>
+                <td style="${td}text-align:right;font-variant-numeric:tabular-nums;">${f.rec}</td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </div>` : ''}
+          <div style="margin-top:14px;font-size:11px;line-height:1.5;color:var(--text-tertiary);">
+            Solo lectura: no se guarda nada. En una semana abierta los días se cuentan hasta hoy, así
+            que compará contra un recálculo hecho hoy. En una semana cerrada las diferencias pueden venir
+            de cambios posteriores (pagos, garantías completadas, asignaciones editadas). Detalle en la consola.
+          </div>
+        </div>`,
       })
-
-      // Vehículo fuera de servicio: descuento solo si ese día se cobra (con esta asignación o la
-      // de reemplazo), con tope de 1 turno por día sumando el descuento por hora de entrega.
-      const descontadoPorDiaVP = new Map<string, number>()
-      for (const p of pendientesCierreVP.values()) {
-        if (!diasContadosVP.get(p.conductorId)?.has(p.fecha)) continue
-        const claveDia = `${p.conductorId}|${p.fecha}`
-        let yaDescontado = descontadoPorDiaVP.get(claveDia)
-        if (yaDescontado === undefined) {
-          const entrega = alertasProrrateoVP.get(p.conductorId)
-          yaDescontado = entrega && entrega.fecha.split('/').reverse().join('-') === p.fecha ? entrega.descuento : 0
-        }
-        const aplicado = Math.min(p.descuento, Math.max(0, 1 - yaDescontado))
-        descontadoPorDiaVP.set(claveDia, yaDescontado + aplicado)
-        if (aplicado <= 0) continue
-        const acumulado = descuentosCierreVP.get(p.conductorId) || { TURNO_DIURNO: 0, CARGO: 0 }
-        acumulado[p.modalidad] += aplicado
-        descuentosCierreVP.set(p.conductorId, acumulado)
-      }
-
-      // Determinar conductores con asignación activa al cierre de la semana
-      // Si tiene asignación sin fecha_fin o con fecha_fin >= fin de semana → Activo
-      const conductoresConAsignacionAlCierreVP = new Set<string>()
-      // Toshipass: con alguna asignación sin fecha de fin = no devolvió el auto
-      const conductoresConAsignacionAbiertaVP = new Set<string>()
-      ;(asignacionesConductores || []).forEach((ac: any) => {
-        const asignacion = ac.asignaciones
-        if (!asignacion) return
-        const estadoPadre = (asignacion.estado || '').toLowerCase()
-        if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
-        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
-        const asigFin = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        if (!acFin && !asigFin) conductoresConAsignacionAbiertaVP.add(ac.conductor_id)
-        const finEfectivo = acFin || asigFin
-        if (!finEfectivo || finEfectivo >= semanaActual.fin) {
-          conductoresConAsignacionAlCierreVP.add(ac.conductor_id)
-        }
-      })
-
-      // Cargar historial de precios y conceptos nomina en paralelo
-      const [{ data: historialPreciosVP }, { data: conceptosNominaVP }] = await Promise.all([
-        (supabase.from('conceptos_facturacion_historial') as any)
-          .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
-          .lte('fecha_vigencia_desde', fechaFin)
-          .gte('fecha_vigencia_hasta', fechaInicio),
-        supabase
-          .from('conceptos_nomina')
-          .select('codigo, precio_base, precio_final, precio_semanal, iva_porcentaje')
-          .eq('activo', true)
-          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
-      ])
-      const preciosBaseVP = new Map<string, number>()
-      ;(conceptosNominaVP || []).forEach((c: any) => {
-        preciosBaseVP.set(c.codigo, c.precio_final ?? c.precio_base ?? 0)
-      })
-
-      // Pre-indexar historial de precios por código -- O(1) lookup por código, O(k) por rango
-      const historialPorCodigo = new Map<string, any[]>()
-      for (const h of (historialPreciosVP || [])) {
-        const arr = historialPorCodigo.get(h.codigo) || []
-        arr.push(h)
-        historialPorCodigo.set(h.codigo, arr)
-      }
-      // Función helper para obtener precio FINAL en una fecha específica (precio real ingresado)
-      const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
-        const fechaStr = fechaLocalISO(fecha)
-        const registros = historialPorCodigo.get(codigo)
-        if (registros) {
-          for (const h of registros) {
-            if (h.fecha_vigencia_desde <= fechaStr && h.fecha_vigencia_hasta >= fechaStr) {
-              return h.precio_final ?? h.precio_base
-            }
-          }
-        }
-        return preciosBaseVP.get(codigo) || 0
-      }
-
-      // Mapa por conductor para saber si su vehículo tiene GNC
-      const controlPorDniVP = new Map<string, { tiene_gnc: boolean }>()
-      ;(conductoresControl || []).forEach((c: any) => {
-        controlPorDniVP.set(normalizeDni(c.numero_dni), { tiene_gnc: c.tiene_gnc === true })
-      })
-      const conductorTieneGncVP = new Map<string, boolean>()
-      ;((conductoresData || []) as any[]).forEach((c: any) => {
-        const ctrl = controlPorDniVP.get(normalizeDni(c.numero_dni))
-        // Default true para no romper casos sin patente/asignación
-        conductorTieneGncVP.set(c.id, ctrl ? ctrl.tiene_gnc : true)
-      })
-
-      // Mapa de código de concepto por modalidad y GNC
-      const getCodigoPorModalidadVP = (
-        modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO',
-        tieneGnc: boolean,
-        tipoTarifa: 'antigua' | 'nueva' = 'antigua',
-      ): string => {
-        // Tarifa dual: las asignaciones con tarifa nueva cobran P021-P026
-        const codigosTarifaNuevaVP: Record<string, string> = {
-          P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026'
-        }
-        let codigo: string
-        if (modalidad === 'CARGO') codigo = tieneGnc ? 'P002' : 'P016'
-        else if (modalidad === 'TURNO_NOCTURNO') codigo = tieneGnc ? 'P013' : 'P015'
-        else codigo = tieneGnc ? 'P001' : 'P014'
-        return tipoTarifa === 'nueva' ? codigosTarifaNuevaVP[codigo] : codigo
-      }
-
-      // Calcular montos por día usando precios históricos
-      // También rastrear la fecha de inicio más temprana por conductor para el proyectado
-      const primeraFechaPorConductor = new Map<string, Date>()
-      // Referido: 5% del alquiler de cada día de su primera semana (utils/descuentoReferido.ts)
-      const descuentoReferidoVP = new Map<string, { monto: number; dias: number }>()
-      // Promoción del 10%: 10% del alquiler de cada día con promoción (utils/promocionesFacturacion.ts)
-      const descuentoPromoAlquilerVP = new Map<string, ReturnType<typeof descuentoPromoAlquiler>>()
-
-      for (const [conductorId, asignaciones] of asignacionesPorConductorVP.entries()) {
-        const prorrateo = prorrateoMap.get(conductorId)
-        if (!prorrateo) continue
-
-        // Deduplicar montos por fecha (evitar cobro doble si 2 asignaciones cubren el mismo día)
-        const montosContados = new Set<string>()
-        const diasReferido = diasDescuentoReferidoVP.get(conductorId)
-        const preciosDiaReferido = new Map<string, number>()
-        const diasPromo10 = promocionesVP.diasDescuento10.get(conductorId)
-        const preciosDiaPromo = new Map<string, { precio: number; codigo: string }>()
-
-        for (const asig of asignaciones) {
-          const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
-
-          // Rastrear fecha de inicio más temprana para este conductor
-          const existing = primeraFechaPorConductor.get(conductorId)
-          if (!existing || asig.fechaInicio < existing) {
-            primeraFechaPorConductor.set(conductorId, asig.fechaInicio)
-          }
-
-          const currentDate = new Date(asig.fechaInicio)
-          while (currentDate <= asig.fechaFin) {
-            const dateKey = format(currentDate, 'yyyy-MM-dd')
-            if (!montosContados.has(dateKey)) {
-              montosContados.add(dateKey)
-              // Evaluar GNC por fecha usando historial (regla: CARGO/DIURNO día siguiente, NOCTURNO mismo día)
-              const gncEsteDia = tieneGncEnFecha(asig.vehiculoId, dateKey, asig.modalidad, gncHistorialMapVP, asig.tieneGnc)
-              const codigo = getCodigoPorModalidadVP(asig.modalidad, gncEsteDia, asig.tipoTarifa)
-              const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
-              ;(prorrateo as any)[montoKey] += precioDiario
-              if (diasReferido?.has(dateKey)) preciosDiaReferido.set(dateKey, precioDiario)
-              if (diasPromo10?.has(dateKey)) preciosDiaPromo.set(dateKey, { precio: precioDiario, codigo })
-            }
-            currentDate.setDate(currentDate.getDate() + 1)
-          }
-        }
-
-        // Calcular proyectado: desde el día que tomó el vehículo hasta el domingo (fin de semana)
-        // Restar descuento por hora de entrega
-        const alertaVP = alertasProrrateoVP.get(conductorId)
-        const descuentoVP = alertaVP?.descuento || 0
-
-        // Descuento del referido sobre lo que se cobró cada día (medio turno = sobre la mitad)
-        if (preciosDiaReferido.size > 0) {
-          const fechaEntregaVP = alertaVP ? alertaVP.fecha.split('/').reverse().join('-') : null
-          let montoRef = 0
-          let diasRef = 0
-          for (const [fecha, precio] of preciosDiaReferido) {
-            const descontadoDia = descontadoPorDiaVP.get(`${conductorId}|${fecha}`)
-              ?? (fechaEntregaVP === fecha ? descuentoVP : 0)
-            const fraccionCobrada = Math.max(0, 1 - descontadoDia)
-            if (fraccionCobrada <= 0) continue
-            montoRef += precio * fraccionCobrada * DESCUENTO_REFERIDO_PORCENTAJE
-            diasRef++
-          }
-          if (diasRef > 0) descuentoReferidoVP.set(conductorId, { monto: Math.round(montoRef * 100) / 100, dias: diasRef })
-        }
-        // Promoción del 10%, misma base que el referido (lo cobrado cada día)
-        if (preciosDiaPromo.size > 0) {
-          const fechaEntregaPromoVP = alertaVP ? alertaVP.fecha.split('/').reverse().join('-') : null
-          const diasPromoVP: DiaPromocion[] = []
-          for (const [fecha, { precio, codigo }] of preciosDiaPromo) {
-            const descontadoDia = descontadoPorDiaVP.get(`${conductorId}|${fecha}`)
-              ?? (fechaEntregaPromoVP === fecha ? descuentoVP : 0)
-            diasPromoVP.push({ fecha, codigo, precio, fraccion: Math.max(0, 1 - descontadoDia) })
-          }
-          const promoAlquiler = descuentoPromoAlquiler(diasPromoVP)
-          if (promoAlquiler.dias > 0) descuentoPromoAlquilerVP.set(conductorId, promoAlquiler)
-        }
-        const descCierreVP = descuentosCierreVP.get(conductorId)
-        const descuentoCierreVP = (descCierreVP?.TURNO_DIURNO || 0) + (descCierreVP?.CARGO || 0)
-        const diasRaw = Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO - descuentoVP - descuentoCierreVP)
-        const subtotalRaw = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
-
-        // Ajustar montos y días del prorrateo restando el descuento de la modalidad correspondiente
-        if (alertaVP && descuentoVP > 0) {
-          if (alertaVP.modalidad === 'TURNO_DIURNO' && prorrateo.TURNO_DIURNO > 0) {
-            const precioPorDia = prorrateo.monto_TURNO_DIURNO / prorrateo.TURNO_DIURNO
-            prorrateo.monto_TURNO_DIURNO -= precioPorDia * descuentoVP
-            prorrateo.TURNO_DIURNO = Math.max(0, prorrateo.TURNO_DIURNO - descuentoVP)
-          } else if (alertaVP.modalidad === 'CARGO' && prorrateo.CARGO > 0) {
-            const precioPorDia = prorrateo.monto_CARGO / prorrateo.CARGO
-            prorrateo.monto_CARGO -= precioPorDia * descuentoVP
-            prorrateo.CARGO = Math.max(0, prorrateo.CARGO - descuentoVP)
-          }
-        }
-        // Vehículo fuera de servicio: medio turno al diurno (antes del corte) y al de a cargo
-        if (descCierreVP?.TURNO_DIURNO && prorrateo.TURNO_DIURNO > 0) {
-          const descAplicable = Math.min(descCierreVP.TURNO_DIURNO, prorrateo.TURNO_DIURNO)
-          const precioPorDia = prorrateo.monto_TURNO_DIURNO / prorrateo.TURNO_DIURNO
-          prorrateo.monto_TURNO_DIURNO -= precioPorDia * descAplicable
-          prorrateo.TURNO_DIURNO = Math.max(0, prorrateo.TURNO_DIURNO - descAplicable)
-        }
-        if (descCierreVP?.CARGO && prorrateo.CARGO > 0) {
-          const descAplicable = Math.min(descCierreVP.CARGO, prorrateo.CARGO)
-          const precioPorDia = prorrateo.monto_CARGO / prorrateo.CARGO
-          prorrateo.monto_CARGO -= precioPorDia * descAplicable
-          prorrateo.CARGO = Math.max(0, prorrateo.CARGO - descAplicable)
-        }
-
-        // Calcular días desde inicio de asignación hasta fin de semana (domingo)
-        const primeraFecha = primeraFechaPorConductor.get(conductorId)
-        const finSemanaCompleta = semanaActual.fin // domingo
-        const diasDesdePrimeraFecha = primeraFecha
-          ? Math.round((finSemanaCompleta.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1
-          : 7
-        const diasProyectados = Math.min(7, Math.max(1, diasDesdePrimeraFecha))
-
-        prorrateo.proyectado_raw = diasRaw > 0 && diasRaw < diasProyectados
-          ? Math.round((subtotalRaw / diasRaw) * diasProyectados)
-          : Math.round(subtotalRaw)
-
-        prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO * 100) / 100
-        prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO * 100) / 100
-        prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO * 100) / 100
-      }
-
-      // 2 + 3 + 3.1 + 4 + 5. Cargar saldos, garantías, cabify, tickets y excesos en paralelo
-      // Se filtran por conductorIds para evitar traer toda la tabla
-      const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
-      const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
-      const [
-        { data: saldos },
-        { data: garantias },
-        [{ data: cabifyData }, { data: cabifyPeajesData }],
-        { data: tickets },
-        { data: excesosData },
-        { data: dniMapeoData },
-        { data: garantiaHistorialVP },
-        { data: cobrosFraccionadosVP },
-      ] = await Promise.all([
-        // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
-        // Si hay pagos manuales/efectivo dentro de la semana, se reflejan en el saldo
-        (supabase.from('control_saldos') as any)
-          .select('conductor_id, saldo_pendiente, semana, anio, tipo_movimiento, created_at')
-          .in('conductor_id', conductorIds)
-          .or(`anio.lt.${anioDelPeriodo},and(anio.eq.${anioDelPeriodo},semana.lte.${semanaDelPeriodo})`)
-          // El saldo es el del ÚLTIMO movimiento cargado (por fecha de carga), no el de la semana
-          // más alta: un Pago Cabify de la semana anterior importado después de un pago en
-          // efectivo de esta semana es el saldo vigente (ya incluye ese efectivo).
-          .order('created_at', { ascending: false }),
-        (supabase.from('garantias_conductores') as any)
-          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total, monto_realmente_pagado')
-          .in('conductor_id', conductorIds),
-        Promise.all([
-          supabase.from(getCabifyTable(sedeParaVP))
-            .select('dni, cobro_app, cobro_efectivo, permiso_efectivo, cabify_driver_id, cabify_company_id, fecha_inicio, viajes_finalizados, horas_conectadas')
-            .gte('fecha_inicio', fechaInicio + 'T00:00:00')
-            .lte('fecha_inicio', fechaFin + 'T23:59:59'),
-          supabase.from(getCabifyTable(sedeParaVP))
-            .select('dni, peajes')
-            .gte('fecha_inicio', peajesInicio + 'T00:00:00')
-            .lte('fecha_inicio', peajesFin + 'T23:59:59'),
-        ]),
-        (supabase.from('tickets_favor') as any)
-          .select('conductor_id, monto, estado, detalle')
-          .eq('estado', 'aprobado')
-          .in('conductor_id', conductorIds),
-        (supabase.from('excesos_kilometraje') as any)
-          .select('conductor_id, km_exceso, monto_total, aplicado')
-          .eq('aplicado', false)
-          .in('conductor_id', conductorIds),
-        supabase.from('cabify_dni_mapeo')
-          .select('cabify_hash, dni_real'),
-        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing).
-        // Solo períodos ANTERIORES a esta semana: la cuota de esta semana se suma aparte, y los
-        // períodos posteriores (si se recalcula una semana vieja) no deben bajar esta cuota.
-        (supabase.from('facturacion_conductores') as any)
-          .select('conductor_id, subtotal_garantia, periodo:periodos_facturacion!inner(fecha_fin)')
-          .in('conductor_id', conductorIds)
-          .gt('subtotal_garantia', 0)
-          .lt('periodo.fecha_fin', fechaInicio),
-        // Fraccionamientos hasta esta semana: para no arrastrar como saldo la deuda ya fraccionada
-        (supabase.from('cobros_fraccionados') as any)
-          .select('conductor_id, descripcion, created_at')
-          .in('conductor_id', conductorIds)
-          .or(hastaSemana(semanaDelPeriodo, anioDelPeriodo))
-          .neq('estado', 'cancelada_por_baja'),
-      ])
-
-      // Mapa acumulado de garantía facturada por conductor (suma histórica de subtotal_garantia)
-      const garantiaAcumuladaVP = new Map<string, number>()
-      for (const f of (garantiaHistorialVP || []) as any[]) {
-        garantiaAcumuladaVP.set(f.conductor_id, (garantiaAcumuladaVP.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
-      }
-
-      // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
-      const cabifyHashMap = new Map<string, string>(
-        (dniMapeoData || []).map((m: any) => [m.cabify_hash, m.dni_real])
-      )
-
-      // Construir mapas
-      // Tomar el saldo más reciente (pre-pagos) por conductor.
-      // Ignora la deuda que ya pasó a un fraccionamiento de saldo (ver utils/saldoAnterior).
-      const saldosMap = construirSaldosAnteriores((saldos || []) as any[], (cobrosFraccionadosVP || []) as any[])
-
-      const garantiasMap = new Map<string, {
-        conductor_id: string | null;
-        conductor_nombre: string;
-        estado: string;
-        cuotas_pagadas: number;
-        cuotas_totales: number;
-        tipo_alquiler: string;
-        monto_cuota_semanal: number | null;
-        monto_pagado: number;
-        monto_total: number;
-        monto_realmente_pagado: number | null;
-      }>((garantias || []).filter((g: any) => g.conductor_id).map((g: any) => [g.conductor_id, g]))
-
-      // Crear mapa de cobro_app Cabify por DNI + trackear raw para discrepancias
-      const cabifyMap = new Map<string, number>()
-      const cabifyRawDniMap = new Map<string, string>() // normalized -> raw cabify DNI
-      // Cuentas Cabify por DNI: si hay más de una, se usa la que está funcionando (utils/cuentaCabify)
-      const cuentasCabifyVP: CuentasCabifyPorConductor = new Map()
-      ;(cabifyData || []).forEach((record: any) => {
-        if (record.dni) {
-          let dniKey = String(record.dni)
-          if (dniKey.startsWith('CABIFY_')) {
-            const resolved = cabifyHashMap.get(dniKey)
-            if (resolved) dniKey = resolved
-            else return // Hash desconocido, skip
-          }
-          const dniNorm = normalizeDni(dniKey)
-          const actual = cabifyMap.get(dniNorm) || 0
-          const cobroApp = parseFloat(String(record.cobro_app)) || 0
-          cabifyMap.set(dniNorm, actual + cobroApp)
-          if (!cabifyRawDniMap.has(dniNorm)) cabifyRawDniMap.set(dniNorm, String(record.dni))
-          acumularCuentaCabify(cuentasCabifyVP, dniNorm, record, !String(record.dni).startsWith('CABIFY_'))
-        }
-      })
-      const cabifyEfectivoMap = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
-      cuentasCabifyVP.forEach((cuentas, dniNorm) => {
-        const cuenta = elegirCuentaCabify(cuentas)
-        if (cuenta) cabifyEfectivoMap.set(dniNorm, cuenta)
-      })
-      // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
-      const peajesMap = new Map<string, number>()
-      const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
-      ;(cabifyPeajesData || []).forEach((record: any) => {
-        if (!record.dni) return
-        let dniKey = String(record.dni)
-        if (dniKey.startsWith('CABIFY_')) {
-          const resolved = cabifyHashMap.get(dniKey)
-          if (resolved) dniKey = resolved
-          else return // Hash desconocido, skip
-        }
-        const dniNorm = normalizeDni(dniKey)
-        const peajes = parseFloat(String(record.peajes)) || 0
-        if (peajes > 0) {
-          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + peajes)
-        }
-        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
-        const fecha = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : 's/f'
-        if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
-        peajesDetalleMap.get(dniNorm)!.push({ fecha, monto: peajes })
-      })
-
-      const ticketsMap = new Map<string, number>()
-      const ticketsDetalleMap = new Map<string, Array<{ monto: number; detalle: string }>>()
-      ;(tickets || []).forEach((t: any) => {
-        const actual = ticketsMap.get(t.conductor_id) || 0
-        ticketsMap.set(t.conductor_id, actual + t.monto)
-
-        if (!ticketsDetalleMap.has(t.conductor_id)) ticketsDetalleMap.set(t.conductor_id, [])
-        ticketsDetalleMap.get(t.conductor_id)!.push({ monto: t.monto, detalle: t.detalle || 'Ticket' })
-      })
-
-      const excesosMap = new Map<string, { kmExceso: number; monto: number }>()
-      ;(excesosData || []).forEach((e: any) => {
-        const actual = excesosMap.get(e.conductor_id) || { kmExceso: 0, monto: 0 }
-        excesosMap.set(e.conductor_id, {
-          kmExceso: actual.kmExceso + e.km_exceso,
-          monto: actual.monto + e.monto_total
-        })
-      })
-
-      setExcesos((excesosData || []) as ExcesoKm[])
-
-      // 5.1 Cargar penalidades/cobros para la semana (P007)
-      // Incluye:
-      //   a) Penalidades aplicadas completas (no fraccionadas) para esta semana
-      //   b) Cuotas de penalidades fraccionadas que corresponden a esta semana
-
-      // a) Penalidades aplicadas completas en esta semana
-      const { data: penalidadesCompletas } = await (supabase
-        .from('penalidades') as any)
-        .select('id, conductor_id, monto, detalle, observaciones, incidencia_id, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)')
-        .eq('aplicado', true)
-        .eq('fraccionado', false)
-        .neq('rechazado', true)
-        .eq('semana_aplicacion', semanaDelPeriodo)
-        .eq('anio_aplicacion', anioDelPeriodo)
-
-      // b) Cuotas fraccionadas hasta esta semana + pagos para cruzar
-      const [cuotasSemanaRes, pagosCuotasPreviewRes, todasCuotasPenIdsPreviewRes] = await Promise.all([
-        (supabase
-          .from('penalidades_cuotas') as any)
-          .select('id, penalidad_id, monto_cuota, numero_cuota, anio, semana, penalidades!inner(aplicado)')
-          .eq('semana', semanaDelPeriodo)
-          .eq('anio', anioDelPeriodo)
-          .eq('penalidades.aplicado', true)
-          .neq('estado', 'cancelada_por_baja'),
-        // Pagos registrados en pagos_conductores para cruzar
-        (supabase
-          .from('pagos_conductores') as any)
-          .select('referencia_id')
-          .eq('tipo_cobro', 'penalidad_cuota'),
-        // TODOS los penalidad_id que tienen cuotas — para excluir de penalidades completas
-        (supabase
-          .from('penalidades_cuotas') as any)
-          .select('penalidad_id')
-          .neq('estado', 'cancelada_por_baja')
-      ])
-
-      const cuotasPagadasPreviewIds = new Set(
-        (pagosCuotasPreviewRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
-      )
-
-      // Filtrar: año correcto o sin año, y excluir cuotas pagadas (aplicado=true O en pagos_conductores)
-      const cuotasFiltradas = (cuotasSemanaRes.data || []).filter((c: any) =>
-        (!c.anio || c.anio <= anioDelPeriodo) && c.aplicado !== true && !cuotasPagadasPreviewIds.has(c.id)
-      )
-
-      // Obtener los conductor_id de las penalidades asociadas a las cuotas
-      const penalidadIds = [...new Set((cuotasFiltradas || []).map((c: any) => c.penalidad_id).filter(Boolean))]
-
-      let penalidadesPadre: any[] = []
-      if (penalidadIds.length > 0) {
-        const { data: penData } = await (supabase
-          .from('penalidades') as any)
-          .select('id, conductor_id, cantidad_cuotas, observaciones, fraccionado')
-          .in('id', penalidadIds)
-        penalidadesPadre = penData || []
-      }
-
-      const penalidadConductorMap = new Map<string, string>(
-        penalidadesPadre.map((p: any) => [p.id, p.conductor_id])
-      )
-
-      // Map para cantidad de cuotas de cada penalidad fraccionada
-      const penalidadCuotasMap = new Map<string, number>(
-        penalidadesPadre.map((p: any) => [p.id, p.cantidad_cuotas || 1])
-      )
-
-      // TODAS las penalidades que tienen cuotas (pagadas o pendientes) — excluir de penalidades completas
-      // Si una penalidad tiene cuotas, SOLO se cobra por cuotas, NUNCA el monto completo
-      const penIdsConCuotasPreview = new Set(
-        (todasCuotasPenIdsPreviewRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
-      )
-
-      const penalidadesMap = new Map<string, number>() // P006 + P007 (cargos)
-      const penalidadesDescuentoMap = new Map<string, number>() // P004 (descuentos)
-      // Map para guardar el detalle de penalidades por conductor
-      const detalleMap = new Map<string, Array<{
-        monto: number
-        detalle: string
-        tipo: 'completa' | 'cuota'
-        cuotaNum?: number
-        totalCuotas?: number
-        categoria?: string
-      }>>()
-
-      // Sumar penalidades completas - segmentadas por categoría
-      // Excluir fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
-      ;(penalidadesCompletas || []).forEach((p: any) => {
-        if (p.conductor_id && !penIdsConCuotasPreview.has(p.id) && !(p.cantidad_cuotas && p.cantidad_cuotas > 1)) {
-          const categoria = p.tipos_cobro_descuento?.categoria
-          // NULL categoria = pendiente, excluir del cálculo
-          if (!categoria) return
-
-          if (categoria === 'P004') {
-            const actual = penalidadesDescuentoMap.get(p.conductor_id) || 0
-            penalidadesDescuentoMap.set(p.conductor_id, actual + (p.monto || 0))
-          } else {
-            // P006, P007 → cargo
-            const actual = penalidadesMap.get(p.conductor_id) || 0
-            penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
-          }
-
-          // Guardar detalle (incluir descripción de incidencia si existe)
-          const detalles = detalleMap.get(p.conductor_id) || []
-          const incDesc = (p as any).incidencias?.descripcion
-          const tipoNombre = p.tipos_cobro_descuento?.nombre || ''
-          const fallbackDetalle = categoria === 'P004' ? 'Descuento a favor' : 'Cargo por incidencia'
-          let detalleTexto = tipoNombre || p.detalle || p.observaciones || fallbackDetalle
-          if (incDesc) detalleTexto += ` - ${incDesc}`
-          detalles.push({
-            monto: p.monto || 0,
-            detalle: detalleTexto,
-            tipo: 'completa',
-            categoria,
-          })
-          detalleMap.set(p.conductor_id, detalles)
-        }
-      })
-
-      // Pre-indexar penalidades padre por id -- O(1) lookup en vez de .find() O(n) por cuota
-      const penalidadesPadreMap = new Map<string, any>()
-      for (const p of (penalidadesPadre || [])) {
-        penalidadesPadreMap.set(p.id, p)
-      }
-      // Sumar cuotas fraccionadas (solo de penalidades con fraccionado=true)
-      ;(cuotasFiltradas || []).forEach((c: any) => {
-        const conductorId = penalidadConductorMap.get(c.penalidad_id)
-        if (conductorId) {
-          const actual = penalidadesMap.get(conductorId) || 0
-          penalidadesMap.set(conductorId, actual + (c.monto_cuota || 0))
-
-          // Guardar detalle de cuota
-          const penPadre = penalidadesPadreMap.get(c.penalidad_id)
-          const detalles = detalleMap.get(conductorId) || []
-          detalles.push({
-            monto: c.monto_cuota || 0,
-            detalle: penPadre?.observaciones || 'Cobro fraccionado',
-            tipo: 'cuota',
-            cuotaNum: c.numero_cuota,
-            totalCuotas: penalidadCuotasMap.get(c.penalidad_id) || 1,
-            categoria: 'P007',
-          })
-          detalleMap.set(conductorId, detalles)
-        }
-      })
-
-      // Cuota de garantía semanal: precio diario de conceptos_nomina × 7
-      const cuotaGarantiaSemanalVP = cuotaSemanalGarantia((conceptosNominaVP || []).find((c: any) => c.codigo === 'P003'))
-
-      // 6. Calcular facturación proyectada para cada conductor
-      const facturacionesProyectadas: FacturacionConductor[] = []
-
-      // Deduplicar por DNI (en caso de duplicados en asignaciones)
-      const dnisYaProcesados = new Set<string>()
-
-      for (const control of (conductoresControl || [])) {
-        if (dnisYaProcesados.has(control.numero_dni)) continue
-        dnisYaProcesados.add(control.numero_dni)
-
-        const conductor = conductoresDataMap.get(control.numero_dni)
-        if (!conductor) continue
-
-        const conductorId = conductor.id
-
-        // Obtener prorrateo de días y montos por modalidad/horario (con precios históricos)
-        const prorrateo = prorrateoMap.get(conductorId) || {
-          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
-          proyectado_raw: 0,
-        }
-        // prorrateo.CARGO/TURNO_DIURNO/TURNO_NOCTURNO ya tienen el descuento por hora de entrega aplicado
-        const diasTotales = Math.min(7, Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO))
-
-        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes o sean sin_cobro
-        if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni) && !conductoresSinCobroVP.has(conductorId)) continue
-
-        // Calcular alquiler usando montos pre-calculados con precios (precio_final ya incluye IVA)
-        const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
-        // precio_final ya incluye IVA - no se agrega de nuevo
-
-        // Determinar tipo de alquiler predominante para garantía
-        const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
-          ? 'CARGO'
-          : 'TURNO'
-
-        // Factor proporcional para garantía (basado en días trabajados)
-        const factorProporcional = diasTotales > 0 ? Math.min(1, diasTotales / 7) : 0
-
-        // Garantía (matchear por conductor_id, no por nombre)
-        const garantia = garantiasMap.get(conductorId)
-        let subtotalGarantia = 0
-        let cuotaGarantiaNumero = ''
-        if (garantia) {
-          const montoTotal = garantia.monto_total || 1000000
-          // Acumulado real: incluye la base histórica ya pagada ANTES de que facturación
-          // tomara el control (monto_realmente_pagado). Antes solo se sumaba lo facturado por
-          // este módulo, lo que hacía que se siguiera cobrando más allá del objetivo.
-          const acumuladoFacturado = garantiaAcumuladaVP.get(conductorId) || 0
-          const acumuladoReal = Math.max(acumuladoFacturado, garantia.monto_realmente_pagado || 0)
-          const garantiaCompletadaVP = garantia.estado === 'completada' || acumuladoReal >= montoTotal
-          if (garantiaCompletadaVP) {
-            subtotalGarantia = 0
-            cuotaGarantiaNumero = 'NA'
-          } else {
-            const cuotaNormal = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
-            const pendiente = montoTotal - acumuladoReal
-            // Si el pendiente es menor que la cuota normal, cobrar solo el restante
-            subtotalGarantia = Math.round(Math.min(cuotaNormal, pendiente) * 100) / 100
-            const cuotaActual = garantia.cuotas_pagadas + 1
-            cuotaGarantiaNumero = `${cuotaActual}`
-          }
-        } else {
-          subtotalGarantia = cuotaGarantiaSemanalVP
-          cuotaGarantiaNumero = `1`
-        }
-
-        // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
-        if (diasTotales === 0) {
-          subtotalGarantia = 0
-          cuotaGarantiaNumero = 'NA'
-        }
-
-        // Toshipass (conductor nuevo): reemplaza a la garantía. Monto semanal fijo si trabajó
-        // al menos un día (el día de la devolución final no cuenta). Ver utils/toshipass.ts
-        const esToshipass = reglaToshipassVP.conductores.has(conductorId)
-        let montoToshipass = 0
-        if (esToshipass) {
-          subtotalGarantia = 0
-          cuotaGarantiaNumero = 'NA'
-          const diasTrabajadosTP = diasTrabajadosToshipass(
-            diasContadosVP.get(conductorId),
-            maxAsigFinVP.get(conductorId),
-            conductoresConAsignacionAbiertaVP.has(conductorId),
-          )
-          montoToshipass = diasTrabajadosTP > 0 ? reglaToshipassVP.cuotaSemanal : 0
-        }
-
-        // Datos por DNI del conductor (normalizado)
-        const dniConductor = normalizeDni(conductor.numero_dni)
-
-        // Excesos de KM (P006) - no aplica si tiene 0 días
-        const exceso = excesosMap.get(conductorId)
-        const montoExcesos = diasTotales === 0 ? 0 : (exceso?.monto || 0)
-        const kmExceso = exceso?.kmExceso || 0
-
-        // Peajes de Cabify (P005)
-        // Si el vehículo tiene telepase habilitado, NO cobrar P005.
-        // Si Cabify reporta peajes para el conductor, se cobran sin importar los días del período
-        // (un conductor puede tener 0 turnos en la semana pero sí haber generado peajes en Cabify).
-        const montoPeajes = control.tiene_telepase ? 0 : (peajesMap.get(dniConductor) || 0)
-
-        // Penalidades (P006 + P007 como cargos) - siempre aplica
-        const montoPenalidades = penalidadesMap.get(conductorId) || 0
-        // Penalidades P004 como descuentos
-        const montoPenalidadesDescuento = penalidadesDescuentoMap.get(conductorId) || 0
-
-        // Subtotal cargos (incluye P005, P006, P007)
-        const subtotalCargos = subtotalAlquiler + subtotalGarantia + montoToshipass + montoExcesos + montoPeajes + montoPenalidades
-
-        // Tickets a favor (descuentos) + P004 de penalidades
-        // + Devolución de garantía por cambio de tarifa (P028): crédito que resta del total
-        const montoDevolucionGarantia = devolucionesGarantiaVP.get(conductorId) || 0
-        // Referido: 5% de su primera semana (P004)
-        const descuentoReferido = descuentoReferidoVP.get(conductorId)
-        // Promociones (código visible de Parámetros > Promociones)
-        const promoDescuentosVP = lineasPromocionConductor(
-          promocionesVP, conductorId, descuentoPromoAlquilerVP.get(conductorId),
-          descuentoPromoToshipass(montoToshipass, promocionesVP.diasDescuento10.get(conductorId), diasContadosVP.get(conductorId)),
-        )
-        const montoDescuentoPromoVP = promoDescuentosVP.lineas.reduce((sum, l) => sum + l.monto, 0)
-        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento + montoDevolucionGarantia + (descuentoReferido?.monto || 0) + montoDescuentoPromoVP
-
-        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
-        // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
-        // de la semana. Antes se forzaba a 0 con "diasTotales === 0 ? 0 :", lo que hacía
-        // que los conductores de baja (0 días) perdieran la deuda arrastrada.
-        const saldo = saldosMap.get(conductorId)
-        const saldoAnteriorRaw = -(saldo?.saldo_actual || 0)
-        const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
-        const diasMora = 0
-        const montoMora = 0
-
-        // Total a pagar
-        const subtotalNeto = subtotalCargos - subtotalDescuentos
-        const totalAPagarRaw = subtotalNeto + saldoAnterior
-        const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
-
-        // Detectar discrepancia de formato DNI (conductor vs cabify)
-        const cabifyRawDni = cabifyRawDniMap.get(dniConductor) || ''
-        const conductorRawDni = String(conductor.numero_dni || '').trim()
-        const dniDiscrepancy = cabifyRawDni && conductorRawDni && cabifyRawDni !== conductorRawDni
-
-        // Datos de Cabify - cobro_app semanal del conductor (para barras de cobertura)
-        const cobroAppCabify = cabifyMap.get(dniConductor) || 0
-        const cuotaFijaSemanal = subtotalAlquiler + subtotalGarantia + montoToshipass
-        const cubreCuota = cobroAppCabify >= cuotaFijaSemanal
-
-        // Estado: De baja si no está activo; Activo si tiene 7 días o asignación al cierre
-        const estadoBillingVP: 'Activo' | 'Pausa' | 'De baja' = (() => {
-          // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
-          if (conductor.estado_id !== ESTADO_ACTIVO_ID) return 'De baja'
-          const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
-          return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
-        })()
-
-        facturacionesProyectadas.push({
-          id: `preview-${conductorId}`,
-          periodo_id: 'preview',
-          conductor_id: conductorId,
-          conductor_nombre: `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim(),
-          conductor_dni: dniConductor,
-          conductor_cuit: conductor.numero_cuit || null,
-          vehiculo_id: null,
-          vehiculo_patente: control.patente || null,
-          tipo_alquiler: tipoAlquiler,
-          turnos_base: 7,
-          turnos_cobrados: Math.round(factorProporcional * 7),
-          factor_proporcional: factorProporcional,
-           subtotal_alquiler: subtotalAlquiler,
-           // De baja o en pausa no se proyecta: la facturación ya se cortó
-           proyectado_alquiler: estadoBillingVP === 'Activo' ? (prorrateo.proyectado_raw || subtotalAlquiler) : subtotalAlquiler,
-          subtotal_garantia: subtotalGarantia,
-          subtotal_cargos: subtotalCargos,
-          subtotal_descuentos: subtotalDescuentos,
-          subtotal_neto: subtotalNeto,
-          saldo_anterior: saldoAnterior,
-          dias_mora: diasMora,
-          monto_mora: montoMora,
-          total_a_pagar: totalAPagar,
-          estado: 'borrador',
-          created_at: new Date().toISOString(),
-          // Datos de Cabify - cobro_app (Vista Previa)
-          ganancia_cabify: cobroAppCabify,
-          cabify_tiene_registros: cabifyRawDniMap.has(dniConductor),
-          cubre_cuota: cubreCuota,
-          cuota_garantia_numero: cuotaGarantiaNumero,
-          garantia_estado: garantia?.estado || undefined, // estado real para distinguir COMPLETADA de N/A
-          garantia_acumulada: (garantiaAcumuladaVP.get(conductorId) || 0) + subtotalGarantia, // incluye la cuota de esta semana
-          garantia_monto_total: Number(garantia?.monto_total) || 1_000_000,
-          garantia_ultima_cobro: null, // en VP no se usa para esPeriodoCompletado
-          garantia_es_periodo_completado: false, // en preview (período abierto) nunca es el período de completado
-          // Datos detallados para RIT export
-            monto_peajes: montoPeajes,       // P005
-            peajes_detalle: peajesDetalleMap.get(dniConductor) || [],
-            monto_excesos: montoExcesos,     // P006
-            km_exceso: kmExceso,
-            monto_penalidades: montoPenalidades,  // P007
-            monto_toshipass: montoToshipass,  // P027
-            monto_devolucion_garantia: montoDevolucionGarantia,  // P028 (descuento)
-            monto_descuento_referido: descuentoReferido?.monto || 0,  // P004 (descuento)
-            dias_descuento_referido: descuentoReferido?.dias || 0,
-            promo_lineas: promoDescuentosVP.lineas,  // descuentos por promoción (código PRM...)
-            promo_b1: promoDescuentosVP.b1,
-            // Chips: sin el código de los pagos diarios B1 (PRM02), solo visual
-            _codigosPromocion: [...new Set(promoDescuentosVP.lineas.filter(l => l.calculo.tipo !== 'b1').map(l => l.codigo))],
-            monto_tickets_favor: ticketsMap.get(conductorId) || 0,  // Tickets a favor
-           // Prorrateo desglosado por modalidad
-           prorrateo_cargo_dias: prorrateo.CARGO,
-           prorrateo_cargo_monto: prorrateo.monto_CARGO,
-           prorrateo_diurno_dias: prorrateo.TURNO_DIURNO,
-           prorrateo_diurno_monto: prorrateo.monto_TURNO_DIURNO,
-           prorrateo_nocturno_dias: prorrateo.TURNO_NOCTURNO,
-           prorrateo_nocturno_monto: prorrateo.monto_TURNO_NOCTURNO,
-            // Detalle de penalidades para el modal
-            penalidades_detalle: detalleMap.get(conductorId) || [],
-            // Detalle de tickets a favor para el modal
-            tickets_detalle: ticketsDetalleMap.get(conductorId) || [],
-            // Estado: De baja si tiene fecha_terminacion o no está activo
-           // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
-            estado_billing: estadoBillingVP,
-             // GNC del vehículo (leído de tabla vehiculos)
-             tiene_gnc: control.tiene_gnc,
-             // Permiso de efectivo Cabify
-             permiso_efectivo: (cabifyEfectivoMap.get(dniConductor)?.permiso_efectivo as 'Activado' | 'Desactivado') || null,
-             cabify_driver_id: cabifyEfectivoMap.get(dniConductor)?.cabify_driver_id || null,
-             cabify_company_id: cabifyEfectivoMap.get(dniConductor)?.cabify_company_id || null,
-             // Discrepancia de formato DNI
-            dni_discrepancy: dniDiscrepancy ? { conductorRaw: conductorRawDni, cabifyRaw: cabifyRawDni } : null,
-            // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
-            // Solo aplica si el conductor está de baja — si está ACTIVO, fecha_terminacion es residuo.
-            fecha_baja_no_coincide: (() => {
-              if (conductor.estado_id === ESTADO_ACTIVO_ID) return false
-              if (!conductor.fecha_terminacion) return false
-              const ftStr = conductor.fecha_terminacion.substring(0, 10)
-              const maxFinAsig = maxAsigFinVP.get(conductorId)
-              if (!maxFinAsig) return false
-              return ftStr !== maxFinAsig
-            })(),
-            // Alerta de prorrateo por ingreso diurno
-            alerta_prorrateo_ingreso: (() => {
-              const alerta = alertasProrrateoVP.get(conductorId)
-              if (!alerta) return null
-              return {
-                tipo: alerta.tipo,
-                hora_entrega: alerta.hora,
-                fecha_entrega: alerta.fecha,
-                descuento_turnos: alerta.descuento,
-              }
-            })(),
-          })
-       }
-
-       // Ordenar por nombre
-       facturacionesProyectadas.sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
-
-      // Cruzar patentes con tabla vehiculos para obtener flags actuales en tiempo real
-      const patentesUnicas = [...new Set(facturacionesProyectadas.map(f => f.vehiculo_patente).filter(Boolean))]
-      let facturacionesConGnc: FacturacionConductor[] = facturacionesProyectadas
-      if (patentesUnicas.length > 0) {
-        const { data: vehiculosFlags } = await supabase
-          .from('vehiculos')
-          .select('patente, gnc, telepase, grupo_flota')
-          .in('patente', patentesUnicas)
-        if (vehiculosFlags) {
-          const flagsMap = new Map(
-            vehiculosFlags.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true, grupo_flota: v.grupo_flota || null }]),
-          )
-          facturacionesConGnc = facturacionesProyectadas.map((f) => {
-            if (!f.vehiculo_patente || !flagsMap.has(f.vehiculo_patente)) {
-              // Aun sin patente actual, podemos asignar el grupo ganador por DNI
-              const grupoGanadorSinPat = f.conductor_dni ? grupoFlotaGanadorVPMap.get(f.conductor_dni) : null
-              return grupoGanadorSinPat ? { ...f, grupo_flota: grupoGanadorSinPat } : f
-            }
-            const flags = flagsMap.get(f.vehiculo_patente)!
-            const montoPeajesAjustado = flags.telepase ? 0 : (f.monto_peajes || 0)
-            const subtotalCargosAjustado = (f.subtotal_cargos || 0) - ((f.monto_peajes || 0) - montoPeajesAjustado)
-            const subtotalNetoAjustado = subtotalCargosAjustado - (f.subtotal_descuentos || 0)
-            const totalAPagarAjustado = subtotalNetoAjustado + (f.saldo_anterior || 0)
-            // Aplicar regla "44 DREAMS gana siempre" basado en map por DNI
-            const grupoFinal = (f.conductor_dni ? grupoFlotaGanadorVPMap.get(f.conductor_dni) : null) || flags.grupo_flota
-            return {
-              ...f,
-              tiene_gnc: flags.gnc,
-              tiene_telepase: flags.telepase,
-              grupo_flota: grupoFinal,
-              monto_peajes: montoPeajesAjustado,
-              subtotal_cargos: subtotalCargosAjustado,
-              subtotal_neto: subtotalNetoAjustado,
-              total_a_pagar: totalAPagarAjustado,
-            }
-          })
-        }
-      }
-
-      setVistaPreviaData(facturacionesConGnc)
-
     } catch (error) {
-      if (showError) {
-        Alerta.fire('Error', 'No se pudo cargar la vista previa', 'error')
-      }
+      console.error('[Facturación] No se pudo comparar el cálculo:', error)
+      showError('Error', 'No se pudo comparar el cálculo')
     } finally {
-      setLoadingVistaPrevia(false)
+      setComparandoCalculo(false)
     }
   }
 
   // Función pública para recalcular
   function cargarVistaPrevia() {
-    cargarVistaPreviaInterno(true)
+    // Vista Previa = recálculo simulado + la misma carga que una semana guardada
+    cargarFacturacion()
   }
 
   // Generar nuevo período (crea el registro en BD y luego recalcula automáticamente)
@@ -4122,6 +3012,1378 @@ export function ReporteFacturacionTab() {
   }, [])
 
   // Recalcular período abierto - REGENERACIÓN COMPLETA desde cero (misma lógica que PeriodosTab)
+  /**
+   * Cálculo de la facturación de una semana (el mismo para el recálculo y para la Vista
+   * Previa). Devuelve, por conductor, la fila de facturacion_conductores y sus líneas de
+   * detalle, sin guardar nada. Con simular = true no escribe NADA en la base (Vista Previa):
+   * no limpia el kardex ni crea garantías.
+   */
+  async function calcularFacturacionSemana(ctx: {
+    periodoId: string | null
+    fechaInicio: string
+    fechaFin: string
+    semanaNum: number
+    anioNum: number
+    sedeDelPeriodo: string | null | undefined
+    simular: boolean
+    latido: (actual: number, total: number) => void
+  }): Promise<
+    | { sinConductores: true }
+    | { sinConductores: false; pendientesGuardar: PendienteGuardar[]; totalCargosGlobal: number; totalDescuentosGlobal: number }
+  > {
+    const { periodoId, fechaInicio, fechaFin, semanaNum, anioNum, sedeDelPeriodo, simular, latido } = ctx
+    // 3. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
+    const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean; tiene_telepase: boolean }[] = []
+    const dnisAgregadosRecalc = new Set<string>()
+    const dnisConPenalidadesRecalc = new Set<string>()
+
+    // 3a. Conductores con asignaciones activas/finalizadas que se solapan con la semana
+    {
+      const { data: asignacionesSemanaRecalc } = await (supabase
+        .from('asignaciones_conductores') as any)
+        .select(`
+          conductor_id, horario, fecha_inicio, fecha_fin, estado,
+          asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc, telepase, updated_at)),
+          conductores!inner(numero_dni, sede_id)
+        `)
+        .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
+        .order('fecha_inicio', { ascending: false })
+
+      const semInicioRecalc = parseISO(fechaInicio)
+      const semFinRecalc = parseISO(fechaFin)
+
+      for (const ac of (asignacionesSemanaRecalc || []) as any[]) {
+        const cond = ac.conductores
+        const asig = ac.asignaciones
+        if (!cond || !asig) continue
+        if (sedeDelPeriodo && cond.sede_id !== sedeDelPeriodo) continue
+
+        // Skip PROGRAMADO y huérfanos
+        const estadoPadreRecExtra = (asig.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadreRecExtra)) continue
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreRecExtra) && !asig.fecha_fin) continue
+        if (!ac.fecha_inicio && !asig.fecha_inicio) continue
+
+        // Verificar solapamiento con la semana (normalizar sin hora)
+        const acInicioRecExtra = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
+        const acFinRecExtra = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
+          : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
+        if (acFinRecExtra < semInicioRecalc || acInicioRecExtra > semFinRecalc) continue
+
+        if (!dnisAgregadosRecalc.has(cond.numero_dni)) {
+          dnisAgregadosRecalc.add(cond.numero_dni)
+          const modalidad = (asig.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
+          conductoresControl.push({
+            numero_dni: cond.numero_dni,
+            estado: 'Activo',
+            patente: asig.vehiculos?.patente || '',
+            modalidad,
+            valor_alquiler: null,
+            tiene_gnc: asig.vehiculos?.gnc === true,
+            tiene_telepase: asig.vehiculos?.telepase === true,
+          })
+        }
+      }
+    }
+
+    // 3b. Conductores con penalidades aplicadas (aprobadas desde incidencias) en la semana
+    {
+      const { data: penalidadesPendientesRecalc } = await (supabase
+        .from('penalidades') as any)
+        .select('conductor_id, conductores!inner(id, numero_dni, sede_id)')
+        .eq('semana_aplicacion', semanaNum)
+        .eq('anio_aplicacion', anioNum)
+        .eq('aplicado', true)
+        .neq('rechazado', true)
+
+      // Para conductores SIN asignacion en la semana (ej. de baja con multa pendiente),
+      // tomamos patente + grupo de flota + modalidad de su ULTIMA asignacion, para que
+      // la fila muestre de que auto/grupo venia (informativo; no afecta el cobro).
+      const condIdsPenalidad = [...new Set(
+        (penalidadesPendientesRecalc || [])
+          .map((p: any) => p.conductores?.id)
+          .filter(Boolean)
+      )] as string[]
+
+      const ultimaAsigPorConductor = new Map<string, { patente: string; modalidad: string }>()
+      if (condIdsPenalidad.length > 0) {
+        const { data: asigsPenalidad } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .select('conductor_id, fecha_inicio, fecha_fin, asignaciones!inner(horario, vehiculos(patente))')
+          .in('conductor_id', condIdsPenalidad)
+          .order('fecha_inicio', { ascending: false })
+        // Primera por conductor = la mas reciente (ya viene ordenado desc)
+        for (const ac of (asigsPenalidad || []) as any[]) {
+          if (ultimaAsigPorConductor.has(ac.conductor_id)) continue
+          const patente = ac.asignaciones?.vehiculos?.patente || ''
+          const modalidad = (ac.asignaciones?.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
+          ultimaAsigPorConductor.set(ac.conductor_id, { patente, modalidad })
+        }
+      }
+
+      for (const p of (penalidadesPendientesRecalc || []) as any[]) {
+        const cond = p.conductores
+        if (!cond || !cond.numero_dni) continue
+        if (sedeDelPeriodo && cond.sede_id !== sedeDelPeriodo) continue
+        if (dnisAgregadosRecalc.has(cond.numero_dni)) continue
+        dnisAgregadosRecalc.add(cond.numero_dni)
+        dnisConPenalidadesRecalc.add(cond.numero_dni)
+          // Patente + modalidad de la ultima asignacion (grupo_flota se resuelve por patente)
+          const ultima = ultimaAsigPorConductor.get(cond.id)
+          conductoresControl.push({
+            numero_dni: cond.numero_dni,
+            estado: 'Activo',
+            patente: ultima?.patente || '',
+            modalidad: ultima?.modalidad || 'TURNO',
+            valor_alquiler: null,
+            tiene_gnc: true,
+            tiene_telepase: false,
+          })
+      }
+    }
+
+    if (!conductoresControl || conductoresControl.length === 0) {
+      return { sinConductores: true as const }
+    }
+
+    // Obtener datos de conductores desde tabla conductores
+    // FILTRAR por sede del período para obtener solo conductores de esta sede
+    const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
+    let qConductoresRecalc = supabase
+      .from('conductores')
+      .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id, fecha_terminacion')
+      .in('numero_dni', dnisControl)
+    if (sedeDelPeriodo) qConductoresRecalc = qConductoresRecalc.eq('sede_id', sedeDelPeriodo)
+    const { data: conductoresData } = await qConductoresRecalc
+
+    const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
+    const conductorIdsTemp = (conductoresData || []).map((c: any) => c.id)
+
+    // Cargar asignaciones_conductores para calcular días reales por modalidad
+    const { data: asignacionesConductoresRecalc } = await (supabase
+      .from('asignaciones_conductores') as any)
+      .select(`
+        id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
+        asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(gnc, updated_at))
+      `)
+      .in('conductor_id', conductorIdsTemp)
+      .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
+
+    // Cargar historial GNC de vehículos para evaluar por fecha
+    const vehiculoIdsRecalc = new Set<string>()
+    for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
+      const vid = ac.asignaciones?.vehiculo_id
+      if (vid) vehiculoIdsRecalc.add(vid)
+    }
+    const { data: gncHistorialRecalc } = vehiculoIdsRecalc.size > 0
+      ? await (supabase.from('vehiculos_gnc_historial') as any)
+          .select('vehiculo_id, accion, fecha')
+          .in('vehiculo_id', [...vehiculoIdsRecalc])
+          .order('fecha', { ascending: false })
+      : { data: [] }
+    const gncHistorialMapRecalc = new Map<string, GncHistorialEntry[]>()
+    for (const h of (gncHistorialRecalc || []) as GncHistorialEntry[]) {
+      if (!gncHistorialMapRecalc.has(h.vehiculo_id)) gncHistorialMapRecalc.set(h.vehiculo_id, [])
+      gncHistorialMapRecalc.get(h.vehiculo_id)!.push(h)
+    }
+
+    // Rastrear la fecha_fin más tardía de asignaciones por conductor
+    const maxAsigFinRecalc = new Map<string, string>()
+    // Rastrear primera fecha efectiva de asignación por conductor (para proyectado)
+    const primeraFechaRecalc = new Map<string, Date>()
+
+    // Calcular días reales por conductor por modalidad+GNC
+    // Cada combinación modalidad+GNC genera una línea de alquiler separada
+    interface ProrrateoRecalc {
+      CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
+      CARGO_SIN_GNC: number; TURNO_DIURNO_SIN_GNC: number; TURNO_NOCTURNO_SIN_GNC: number;
+    }
+    const prorrateoRecalcMap = new Map<string, ProrrateoRecalc>()
+    // Tarifa dual: contador paralelo con los dias que pertenecen a asignaciones
+    // con tipo_tarifa='nueva' (subconjunto de los contadores principales).
+    const diasTarifaNuevaRecalcMap = new Map<string, ProrrateoRecalc>()
+    conductorIdsTemp.forEach((id: string) => {
+      prorrateoRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 })
+      diasTarifaNuevaRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 })
+    })
+
+    // Set de fechas ya contadas por conductor para deduplicar registros duplicados
+    const diasContadosRecalc = new Map<string, Set<string>>()
+    conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
+    // Tarifa de cada día contado (para el descuento del referido, utils/descuentoReferido.ts)
+    const tarifaDiaRecalc = new Map<string, Map<string, { modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO'; gnc: boolean; tarifa: 'antigua' | 'nueva' }>>()
+
+    const fechaInicioSemanaRecalc = parseISO(fechaInicio)
+    // Recalcular capa los días hasta HOY en timezone Argentina (no del navegador)
+    const hoyRecalc = parseISO(argDateFmt.format(new Date()) + 'T00:00:00')
+    const finSemanaRecalc = parseISO(fechaFin)
+    const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalc ? hoyRecalc : finSemanaRecalc
+
+    // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
+    const fechaTerminacionMap = new Map<string, Date>()
+    for (const [, c] of conductoresMap) {
+      if (c.fecha_terminacion) {
+        fechaTerminacionMap.set(c.id, parseISO(c.fecha_terminacion))
+      }
+    }
+
+    // Cargar devoluciones con fecha_baja (requiere fecha_terminacion) y sin_cobro (independiente)
+    const conductoresConFechaBajaRecalc = new Set<string>()
+    const conductoresSinCobroRecalc = new Set<string>()
+    const conductoresConTermRecalc = [...fechaTerminacionMap.keys()]
+    // fecha_baja: solo aplica a conductores con fecha_terminacion
+    if (conductoresConTermRecalc.length > 0) {
+      const { data: devolucionesFechaBajaRecalc } = await (supabase as any)
+        .from('programaciones_onboarding')
+        .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
+        .eq('devolucion_vehiculo', true)
+        .eq('ultimo_dia_cobro', 'fecha_baja')
+      for (const d of (devolucionesFechaBajaRecalc || []) as any[]) {
+        const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
+        for (const id of ids) {
+          if (conductoresConTermRecalc.includes(id)) conductoresConFechaBajaRecalc.add(id)
+        }
+      }
+    }
+    // sin_cobro: buscar para TODOS los conductores del periodo
+    const conductorIdsRecalc = [...conductoresMap.values()].map((c: any) => c.id)
+    if (conductorIdsRecalc.length > 0) {
+      const { data: devolucionesSinCobroRecalc } = await (supabase as any)
+        .from('programaciones_onboarding')
+        .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
+        .eq('devolucion_vehiculo', true)
+        .eq('ultimo_dia_cobro', 'sin_cobro')
+      for (const d of (devolucionesSinCobroRecalc || []) as any[]) {
+        const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
+        for (const id of ids) {
+          if (conductorIdsRecalc.includes(id)) conductoresSinCobroRecalc.add(id)
+        }
+      }
+    }
+
+    // Descuentos por hora de entrega (misma lógica que Vista Previa)
+    const descuentosPorHoraRecalc = new Map<string, { descuento: number; modalidad: string }>()
+    // Aviso de "ingreso con descuento por hora de entrega" (se muestra en la grilla)
+    const alertaIngresoRecalc = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora_entrega: string; fecha_entrega: string; descuento_turnos: number }>()
+    // Vehículo fuera de servicio (utils/cierreAsignacion.ts): descuentos de diurno / a cargo.
+    // Se juntan durante el recorrido y se aplican al final, solo si ese día se cobra.
+    const pendientesCierreRecalc = new Map<string, { conductorId: string; fecha: string; modalidad: 'TURNO_DIURNO' | 'CARGO'; descuento: number }>()
+    const descuentosCierreRecalc = new Map<string, { TURNO_DIURNO: number; CARGO: number }>()
+    // Fecha (yyyy-MM-dd) del descuento por hora de entrega, para el tope de 1 turno por día
+    const fechaDescEntregaRecalc = new Map<string, string>()
+
+    // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
+    // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
+    const conductoresConAsignacionPreviaRecalc = new Set<string>()
+    // Set de fechas_inicio de asignaciones por conductor — para resolver overlap en día de entrega
+    // Regla: si asig A termina el día X y asig B empieza el día X (del mismo conductor), el día X cuenta para B
+    const fechasInicioAsigRecalc = new Map<string, Set<string>>()
+    for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
+      const asignacion = ac.asignaciones
+      if (!asignacion) continue
+      const estadoPadre = (asignacion.estado || '').toLowerCase()
+      if (['programado', 'programada'].includes(estadoPadre)) continue
+      if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
+      if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
+      const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+      const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+      const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
+      // Un tramo cuenta como "asignación previa" (y exime del descuento por hora de entrega)
+      // si empezo antes de la semana y llega HASTA el primer dia o mas alla. Mismo criterio
+      // que en Vista Previa: en el turno seguido (entrega y recibe el mismo lunes) el
+      // conductor no perdio medio turno, solo cambio de vehiculo -> no corresponde descontar.
+      const cFinPrev = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+      const pFinPrev = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+      const finEfectivoPrev = cFinPrev && pFinPrev ? (cFinPrev < pFinPrev ? cFinPrev : pFinPrev) : (cFinPrev || pFinPrev)
+      if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc && (!finEfectivoPrev || finEfectivoPrev >= fechaInicioSemanaRecalc)) {
+        conductoresConAsignacionPreviaRecalc.add(ac.conductor_id)
+      }
+      if (inicioEfectivo) {
+        const setFechas = fechasInicioAsigRecalc.get(ac.conductor_id) || new Set<string>()
+        setFechas.add(format(inicioEfectivo, 'yyyy-MM-dd'))
+        fechasInicioAsigRecalc.set(ac.conductor_id, setFechas)
+      }
+    }
+
+    for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
+      const asignacion = ac.asignaciones
+      if (!asignacion) continue
+
+      // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
+      const estadoPadre = (asignacion.estado || '').toLowerCase()
+      if (['programado', 'programada'].includes(estadoPadre)) continue
+      // Skip orphan: padre finalizado/cancelado sin fecha_fin
+      if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
+      // Skip huérfano sin fecha_inicio (ni conductor ni padre)
+      if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
+
+      // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+      // para no cobrar antes de que el vehículo fuera realmente entregado
+      const conductorInicioR = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+      const padreInicioR = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+      const acInicio = conductorInicioR && padreInicioR
+        ? (conductorInicioR > padreInicioR ? conductorInicioR : padreInicioR)
+        : (conductorInicioR || padreInicioR || fechaInicioSemanaRecalc)
+      // Fin: usar el MENOR entre fecha_fin del conductor y fecha_fin del padre
+      const conductorFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+      const padreFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+      const acFin = conductorFinR && padreFinR
+        ? (conductorFinR < padreFinR ? conductorFinR : padreFinR)
+        : (conductorFinR || padreFinR || fechaFinSemanaRecalc)
+
+      if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
+
+      const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
+      let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
+
+      // Rastrear primera fecha efectiva (para proyectado)
+      const existingPF = primeraFechaRecalc.get(ac.conductor_id)
+      if (!existingPF || efectivoInicio < existingPF) {
+        primeraFechaRecalc.set(ac.conductor_id, efectivoInicio)
+      }
+
+      // Regla: si otra asignación del mismo conductor EMPIEZA el día en que esta TERMINA,
+      // ese día cuenta para la nueva. Recortamos efectivoFin en 1 día.
+      const fechasInicioSetR = fechasInicioAsigRecalc.get(ac.conductor_id)
+      if (fechasInicioSetR) {
+        const finKeyR = format(efectivoFin, 'yyyy-MM-dd')
+        // FIX: mismo criterio que en Vista Previa — comparar contra el inicio REAL
+        // (acInicio), no contra efectivoInicio (recortado al inicio de semana).
+        const inicioKeyR = format(acInicio, 'yyyy-MM-dd')
+        if (fechasInicioSetR.has(finKeyR) && finKeyR !== inicioKeyR) {
+          const nuevoFinR = new Date(efectivoFin)
+          nuevoFinR.setDate(nuevoFinR.getDate() - 1)
+          efectivoFin = nuevoFinR
+        }
+      }
+
+      const esSinCobroRecalc = conductoresSinCobroRecalc.has(ac.conductor_id)
+
+      // Aplicar fecha_terminacion como tope si el conductor tiene devolución con ultimo_dia_cobro='fecha_baja'
+      const fechaTermRecalc = fechaTerminacionMap.get(ac.conductor_id)
+      if (fechaTermRecalc && conductoresConFechaBajaRecalc.has(ac.conductor_id) && efectivoFin > fechaTermRecalc && acInicio <= fechaTermRecalc) {
+        efectivoFin = fechaTermRecalc
+      }
+      const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
+      if (!prorrateo) continue
+
+      const modalidadAsignacion = asignacion.horario
+      const horarioLower = (ac.horario || '').toLowerCase().trim()
+      const vehiculoGncActual = asignacion.vehiculos?.gnc === true
+      const vehiculoIdR = asignacion.vehiculo_id
+
+      // Determinar modalidad para regla GNC
+      const modalidadGnc: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' =
+        (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') ? 'CARGO'
+        : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n')) ? 'TURNO_NOCTURNO'
+        : 'TURNO_DIURNO'
+
+      // Vehículo fuera de servicio (utils/cierreAsignacion.ts), mismo criterio que Vista Previa
+      const cierreR = evaluarCierre(timestampCierre(ac.fecha_fin, asignacion.fecha_fin), asignacion.notas)
+      if (cierreR) {
+        if (modalidadGnc === 'TURNO_NOCTURNO') {
+          if (format(efectivoFin, 'yyyy-MM-dd') === cierreR.fecha) {
+            const finSinCierreR = new Date(efectivoFin)
+            finSinCierreR.setDate(finSinCierreR.getDate() - 1)
+            efectivoFin = finSinCierreR
+          }
+        } else {
+          const descR = descuentoCierre(modalidadGnc, cierreR, paramsCierre)
+          if (descR > 0) pendientesCierreRecalc.set(`${ac.conductor_id}|${cierreR.fecha}|${modalidadGnc}`, { conductorId: ac.conductor_id, fecha: cierreR.fecha, modalidad: modalidadGnc, descuento: descR })
+        }
+      }
+
+      // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
+      // Si es sin_cobro, no contar ningún día pero dejar pasar al conductor
+      const fechasContadasR = diasContadosRecalc.get(ac.conductor_id)!
+      if (!esSinCobroRecalc) {
+        const cursorR = new Date(efectivoInicio)
+        while (cursorR <= efectivoFin) {
+          const key = format(cursorR, 'yyyy-MM-dd')
+          if (!fechasContadasR.has(key)) {
+            fechasContadasR.add(key)
+            // Evaluar GNC por fecha usando historial
+            const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual)
+            // Tarifa dual: si la asignacion es tarifa nueva, contar tambien en el mapa paralelo
+            const bucketNuevaR = ((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') ? diasTarifaNuevaRecalcMap.get(ac.conductor_id) : undefined
+            if (modalidadGnc === 'CARGO') {
+              if (gncEsteDia) { prorrateo.CARGO++; if (bucketNuevaR) bucketNuevaR.CARGO++ } else { prorrateo.CARGO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.CARGO_SIN_GNC++ }
+            } else if (modalidadGnc === 'TURNO_NOCTURNO') {
+              if (gncEsteDia) { prorrateo.TURNO_NOCTURNO++; if (bucketNuevaR) bucketNuevaR.TURNO_NOCTURNO++ } else { prorrateo.TURNO_NOCTURNO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.TURNO_NOCTURNO_SIN_GNC++ }
+            } else {
+              if (gncEsteDia) { prorrateo.TURNO_DIURNO++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO++ } else { prorrateo.TURNO_DIURNO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO_SIN_GNC++ }
+            }
+            const tarifasDia = tarifaDiaRecalc.get(ac.conductor_id) || new Map()
+            tarifasDia.set(key, {
+              modalidad: modalidadGnc === 'CARGO' ? 'CARGO' : modalidadGnc === 'TURNO_NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
+              gnc: gncEsteDia,
+              tarifa: bucketNuevaR ? 'nueva' : 'antigua',
+            })
+            tarifaDiaRecalc.set(ac.conductor_id, tarifasDia)
+          }
+          cursorR.setDate(cursorR.getDate() + 1)
+        }
+      }
+
+      const teniaDescEntregaR = descuentosPorHoraRecalc.has(ac.conductor_id)
+
+      // Detectar descuento por hora de entrega (mismas reglas que Vista Previa)
+      const modalidadDescR = (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia')
+        ? 'CARGO'
+        : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n'))
+          ? 'TURNO_NOCTURNO'
+          : 'TURNO_DIURNO'
+      if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id) && !conductoresConAsignacionPreviaRecalc.has(ac.conductor_id)) {
+        // Solo usar fecha_inicio del padre (entrega real) — no el fallback del conductor
+        const rawTs = asignacion.fecha_inicio
+        if (rawTs) {
+          const horaR = getArgHour(rawTs)
+          const avisoIngreso = (tipo: 'medio_turno' | 'dia_completo', descuento: number) =>
+            alertaIngresoRecalc.set(ac.conductor_id, { tipo, hora_entrega: toArgTime(rawTs), fecha_entrega: displayArgDate(toArgDate(rawTs)), descuento_turnos: descuento })
+          if (modalidadDescR === 'TURNO_DIURNO') {
+            if (horaR >= horasCorteTurno.diurno) {
+              descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descDiurnoDespues, modalidad: 'TURNO_DIURNO' })
+              avisoIngreso('dia_completo', horasCorteTurno.descDiurnoDespues)
+            } else {
+              descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descDiurnoAntes, modalidad: 'TURNO_DIURNO' })
+              avisoIngreso('medio_turno', horasCorteTurno.descDiurnoAntes)
+            }
+          } else if (modalidadDescR === 'CARGO' && horaR >= horasCorteTurno.cargo) {
+            descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descCargoDespues, modalidad: 'CARGO' })
+            avisoIngreso('medio_turno', horasCorteTurno.descCargoDespues)
+          }
+        }
+      }
+
+      if (!teniaDescEntregaR && descuentosPorHoraRecalc.has(ac.conductor_id) && asignacion.fecha_inicio) {
+        fechaDescEntregaRecalc.set(ac.conductor_id, toArgDate(asignacion.fecha_inicio))
+      }
+
+      // Rastrear fecha_fin más tardía de asignación
+      const finRealStrR = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
+      if (finRealStrR && finRealStrR > (maxAsigFinRecalc.get(ac.conductor_id) || '')) {
+        maxAsigFinRecalc.set(ac.conductor_id, finRealStrR)
+      }
+    }
+
+    // Vehículo fuera de servicio: descuento solo si ese día se cobra (con esta asignación o la
+    // de reemplazo), con tope de 1 turno por día sumando el descuento por hora de entrega.
+    const descontadoPorDiaR = new Map<string, number>()
+    for (const p of pendientesCierreRecalc.values()) {
+      if (!diasContadosRecalc.get(p.conductorId)?.has(p.fecha)) continue
+      const claveDia = `${p.conductorId}|${p.fecha}`
+      let yaDescontado = descontadoPorDiaR.get(claveDia)
+      if (yaDescontado === undefined) {
+        yaDescontado = fechaDescEntregaRecalc.get(p.conductorId) === p.fecha ? (descuentosPorHoraRecalc.get(p.conductorId)?.descuento || 0) : 0
+      }
+      const aplicado = Math.min(p.descuento, Math.max(0, 1 - yaDescontado))
+      descontadoPorDiaR.set(claveDia, yaDescontado + aplicado)
+      if (aplicado <= 0) continue
+      const acumulado = descuentosCierreRecalc.get(p.conductorId) || { TURNO_DIURNO: 0, CARGO: 0 }
+      acumulado[p.modalidad] += aplicado
+      descuentosCierreRecalc.set(p.conductorId, acumulado)
+    }
+
+    // Determinar conductores con asignación activa al cierre de la semana
+    const conductoresConAsignacionAlCierreRecalc = new Set<string>()
+    // Toshipass: con alguna asignación sin fecha de fin = no devolvió el auto
+    const conductoresConAsignacionAbiertaRecalc = new Set<string>()
+    ;(asignacionesConductoresRecalc || []).forEach((ac: any) => {
+      const asignacion = ac.asignaciones
+      if (!asignacion) return
+      const estadoPadreR = (asignacion.estado || '').toLowerCase()
+      if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadreR)) return
+      const acFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+      const asigFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+      if (!acFinR && !asigFinR) conductoresConAsignacionAbiertaRecalc.add(ac.conductor_id)
+      const finEfectivoR = acFinR || asigFinR
+      if (!finEfectivoR || finEfectivoR >= fechaFinSemanaRecalc) {
+        conductoresConAsignacionAlCierreRecalc.add(ac.conductor_id)
+      }
+    })
+
+    // Procesar conductores: solo los que tienen al menos 1 día real en la semana
+    const ESTADO_ACTIVO_ID_RECALC = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
+    const conductoresProcesados: {
+      conductor_id: string; conductor_nombre: string; conductor_dni: string | null;
+      conductor_cuit: string | null; vehiculo_patente: string | null;
+      tiene_gnc: boolean;
+      tiene_telepase: boolean;
+      dias_turno_diurno: number; dias_turno_diurno_sin_gnc: number;
+      dias_turno_nocturno: number; dias_turno_nocturno_sin_gnc: number;
+      dias_cargo: number; dias_cargo_sin_gnc: number;
+      tarifa_nueva_dias: { CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number; CARGO_SIN_GNC: number; TURNO_DIURNO_SIN_GNC: number; TURNO_NOCTURNO_SIN_GNC: number };
+      total_dias: number;
+      estado_billing: 'Activo' | 'Pausa' | 'De baja';
+      fecha_baja_no_coincide?: boolean;
+    }[] = []
+    const dnisYaProcesados = new Set<string>()
+
+    for (const control of conductoresControl) {
+      if (dnisYaProcesados.has(control.numero_dni)) continue
+      dnisYaProcesados.add(control.numero_dni)
+
+      const conductorData = conductoresMap.get(control.numero_dni)
+      if (!conductorData) continue
+
+      const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 }
+      const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO + prorrateo.CARGO_SIN_GNC + prorrateo.TURNO_DIURNO_SIN_GNC + prorrateo.TURNO_NOCTURNO_SIN_GNC)
+      // Descuento por hora de entrega: restar turnos descontados
+      const descInfoRecalc = descuentosPorHoraRecalc.get(conductorData.id)
+      const descuentoRecalc = descInfoRecalc?.descuento || 0
+      // Vehículo fuera de servicio: medio turno al diurno / a cargo (no puede superar los días contados)
+      const descCierreInfoR = descuentosCierreRecalc.get(conductorData.id)
+      const descCierreDiurnoR = Math.min(descCierreInfoR?.TURNO_DIURNO || 0, prorrateo.TURNO_DIURNO + prorrateo.TURNO_DIURNO_SIN_GNC)
+      const descCierreCargoR = Math.min(descCierreInfoR?.CARGO || 0, prorrateo.CARGO + prorrateo.CARGO_SIN_GNC)
+      const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc - descCierreDiurnoR - descCierreCargoR)
+
+      // Ajustar días por modalidad restando el descuento de la modalidad correspondiente
+      // El descuento se aplica a la variante con GNC primero, luego sin GNC
+      let diasDiurnoAjustados = prorrateo.TURNO_DIURNO
+      let diasDiurnoSinGncAjustados = prorrateo.TURNO_DIURNO_SIN_GNC
+      const diasNocturnoAjustados = prorrateo.TURNO_NOCTURNO
+      const diasNocturnoSinGncAjustados = prorrateo.TURNO_NOCTURNO_SIN_GNC
+      let diasCargoAjustados = prorrateo.CARGO
+      let diasCargoSinGncAjustados = prorrateo.CARGO_SIN_GNC
+      if (descInfoRecalc) {
+        let descRestante = descInfoRecalc.descuento
+        if (descInfoRecalc.modalidad === 'TURNO_DIURNO') {
+          const descGnc = Math.min(descRestante, diasDiurnoAjustados)
+          diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - descGnc)
+          descRestante -= descGnc
+          if (descRestante > 0) diasDiurnoSinGncAjustados = Math.max(0, diasDiurnoSinGncAjustados - descRestante)
+        } else if (descInfoRecalc.modalidad === 'CARGO') {
+          const descGnc = Math.min(descRestante, diasCargoAjustados)
+          diasCargoAjustados = Math.max(0, diasCargoAjustados - descGnc)
+          descRestante -= descGnc
+          if (descRestante > 0) diasCargoSinGncAjustados = Math.max(0, diasCargoSinGncAjustados - descRestante)
+        }
+      }
+      // Igual que el descuento por hora de entrega: primero la variante con GNC, luego sin GNC
+      if (descCierreDiurnoR > 0) {
+        let restante = descCierreDiurnoR
+        const conGnc = Math.min(restante, diasDiurnoAjustados)
+        diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - conGnc)
+        restante -= conGnc
+        if (restante > 0) diasDiurnoSinGncAjustados = Math.max(0, diasDiurnoSinGncAjustados - restante)
+      }
+      if (descCierreCargoR > 0) {
+        let restante = descCierreCargoR
+        const conGnc = Math.min(restante, diasCargoAjustados)
+        diasCargoAjustados = Math.max(0, diasCargoAjustados - conGnc)
+        restante -= conGnc
+        if (restante > 0) diasCargoSinGncAjustados = Math.max(0, diasCargoSinGncAjustados - restante)
+      }
+
+      // Excluir solo a los que NO tuvieron ningún día en la semana (nunca asignados).
+      // Si tuvo días brutos pero el neto quedó en 0 por descuento (ej. entrega fuera de
+      // turno), se mantiene visible con total_dias = 0. SALVO regla previa: penalidades
+      // pendientes o devolución sin_cobro también quedan.
+      if (totalDiasBrutos === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni) && !conductoresSinCobroRecalc.has(conductorData.id)) continue
+
+      // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
+      const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
+      const tieneAsignacionCierreRecalc = conductoresConAsignacionAlCierreRecalc.has(conductorData.id)
+      const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = esDeBaja
+        ? 'De baja'
+        : ((totalDias >= 7 || tieneAsignacionCierreRecalc) ? 'Activo' : 'Pausa')
+
+      // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
+      // Solo aplica si el conductor está de baja — si está ACTIVO, fecha_terminacion es residuo.
+      const maxFinAsigR = maxAsigFinRecalc.get(conductorData.id)
+      const ftStrR = conductorData.fecha_terminacion ? conductorData.fecha_terminacion.substring(0, 10) : null
+      const fechaBajaNoCoincide = esDeBaja && !!(ftStrR && maxFinAsigR && ftStrR !== maxFinAsigR)
+
+      conductoresProcesados.push({
+        conductor_id: conductorData.id,
+        conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
+        conductor_dni: conductorData.numero_dni,
+        conductor_cuit: conductorData.numero_cuit,
+        vehiculo_patente: control.patente || null,
+        tiene_gnc: control.tiene_gnc === true,
+        tiene_telepase: control.tiene_telepase,
+        dias_turno_diurno: diasDiurnoAjustados,
+        dias_turno_diurno_sin_gnc: diasDiurnoSinGncAjustados,
+        dias_turno_nocturno: diasNocturnoAjustados,
+        dias_turno_nocturno_sin_gnc: diasNocturnoSinGncAjustados,
+        dias_cargo: diasCargoAjustados,
+        dias_cargo_sin_gnc: diasCargoSinGncAjustados,
+        tarifa_nueva_dias: diasTarifaNuevaRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 },
+        total_dias: totalDias,
+        estado_billing: estadoBilling,
+        fecha_baja_no_coincide: fechaBajaNoCoincide,
+      })
+    }
+
+    const conductorIds = conductoresProcesados.map(c => c.conductor_id)
+    // Régimen Toshipass (tarifa nueva desde el corte): pagan Toshipass en lugar de garantía.
+    // Incluye conductores nuevos y cambios de tarifa (desde la semana del cambio).
+    // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
+    // Referidos: días de esta semana dentro de su primera semana (descuento 5%)
+    // 4. Conceptos (precios actuales) y flags de vehículo por patente (snapshot al recalcular)
+    // Son independientes entre sí: se piden juntas.
+    const patentesRecalc = [...new Set(conductoresProcesados.map(c => c.vehiculo_patente).filter(Boolean))] as string[]
+    // Promociones activas (Parámetros > Promociones): días con 10% y días con B1
+    const [reglaToshipass, devolucionesGarantia, diasDescuentoReferido, promocionesRecalc, { data: conceptos }, { data: vehiculosFlagsRecalc }] = await Promise.all([
+      cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+      cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+      cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+      cargarPromocionesSemana(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
+      supabase.from('conceptos_nomina').select('*').eq('activo', true),
+      patentesRecalc.length > 0
+        ? supabase.from('vehiculos').select('patente, gnc, telepase').in('patente', patentesRecalc)
+        : Promise.resolve({ data: [] as Array<{ patente: string; gnc: boolean | null; telepase: boolean | null }> }),
+    ])
+
+    // Precios DIARIOS (precio_final con IVA = precio real ingresado)
+    const conceptosPorCodigo = new Map<string, any>()
+    for (const c of ((conceptos || []) as any[])) {
+      if (c.codigo) conceptosPorCodigo.set(c.codigo, c)
+    }
+    const preciosActuales: Record<string, number> = {
+      'P001': conceptosPorCodigo.get('P001')?.precio_final || 42714,
+      'P002': conceptosPorCodigo.get('P002')?.precio_final || 75429,
+      'P003': conceptosPorCodigo.get('P003')?.precio_final || 7143,
+      'P013': conceptosPorCodigo.get('P013')?.precio_final || 32714,
+      'P014': conceptosPorCodigo.get('P014')?.precio_final || 35571,
+      'P015': conceptosPorCodigo.get('P015')?.precio_final || 27000,
+      'P016': conceptosPorCodigo.get('P016')?.precio_final || 62571,
+      // Tarifa dual: espejos de tarifa nueva. Fallback = precio del codigo antiguo
+      // equivalente para nunca facturar $0 si el concepto nuevo aun no esta cargado.
+      'P021': conceptosPorCodigo.get('P021')?.precio_final || conceptosPorCodigo.get('P001')?.precio_final || 42714,
+      'P022': conceptosPorCodigo.get('P022')?.precio_final || conceptosPorCodigo.get('P002')?.precio_final || 75429,
+      'P023': conceptosPorCodigo.get('P023')?.precio_final || conceptosPorCodigo.get('P013')?.precio_final || 32714,
+      'P024': conceptosPorCodigo.get('P024')?.precio_final || conceptosPorCodigo.get('P014')?.precio_final || 35571,
+      'P025': conceptosPorCodigo.get('P025')?.precio_final || conceptosPorCodigo.get('P015')?.precio_final || 27000,
+      'P026': conceptosPorCodigo.get('P026')?.precio_final || conceptosPorCodigo.get('P016')?.precio_final || 62571,
+    }
+
+    // Flags de vehículo por patente (snapshot al momento de recalcular)
+    const flagsVehiculoMap = new Map<string, { gnc: boolean; telepase: boolean }>()
+    ;(vehiculosFlagsRecalc || []).forEach((v: any) => {
+      flagsVehiculoMap.set(v.patente, { gnc: v.gnc === true, telepase: v.telepase === true })
+    })
+
+    // Precios diarios para alquiler por modalidad + GNC
+    const getCodigoAlquiler = (modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO', tieneGnc: boolean, tipoTarifa: 'antigua' | 'nueva' = 'antigua'): string => {
+      const codigosTarifaNueva: Record<string, string> = {
+        P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026'
+      }
+      let codigo: string
+      if (modalidad === 'CARGO') codigo = tieneGnc ? 'P002' : 'P016'
+      else if (modalidad === 'NOCTURNO') codigo = tieneGnc ? 'P013' : 'P015'
+      else codigo = tieneGnc ? 'P001' : 'P014'
+      return tipoTarifa === 'nueva' ? codigosTarifaNueva[codigo] : codigo
+    }
+    // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
+    const cuotaGarantia = cuotaSemanalGarantia(conceptosPorCodigo.get('P003'))
+
+    // 4b. Limpiar entradas regularizado anteriores de este período (idempotencia del recálculo)
+    // Esto evita que un recálculo previo deje una entrada regularizado que infle el saldo_anterior
+    if (!simular && conductorIds.length > 0) {
+      await (supabase.from('control_saldos') as any)
+        .delete()
+        .in('conductor_id', conductorIds)
+        .eq('semana', semanaNum)
+        .eq('anio', anioNum)
+        .eq('tipo_movimiento', 'regularizado')
+    }
+
+    // 5. Obtener datos adicionales en paralelo
+    // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
+    const MULTAS_HABILITADAS = false
+    const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc, garantiaHistorialRecalcRes] = await Promise.all([
+      (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
+      // Aprobados + los ya aplicados a ESTE período (se vuelven a aplicar al guardar)
+      (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).or(periodoId ? `estado.eq.aprobado,periodo_aplicado_id.eq.${periodoId}` : 'estado.eq.aprobado'),
+      // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
+      (supabase.from('control_saldos') as any)
+        .select('conductor_id, saldo_pendiente, semana, anio, tipo_movimiento, created_at')
+        .in('conductor_id', conductorIds)
+        .or(`anio.lt.${anioNum},and(anio.eq.${anioNum},semana.lte.${semanaNum})`)
+        // El saldo es el del ÚLTIMO movimiento cargado (por fecha de carga), no el de la semana
+        // más alta: un Pago Cabify de la semana anterior importado después de un pago en
+        // efectivo de esta semana es el saldo vigente (ya incluye ese efectivo).
+        .order('created_at', { ascending: false }),
+      // Sin aplicar + los ya aplicados a ESTE período (se vuelven a aplicar al guardar)
+      (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).or(periodoId ? `aplicado.eq.false,periodo_id.eq.${periodoId}` : 'aplicado.eq.false'),
+      // Peajes de la SEMANA ANTERIOR
+      (() => {
+        const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
+        const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
+        return supabase.from(getCabifyTable(sedeDelPeriodo)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
+      })(),
+      (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
+      (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).or(hastaSemana(semanaNum, anioNum)).neq('estado', 'cancelada_por_baja'),
+      // Multas: se consulta pero solo se usa si MULTAS_HABILITADAS = true
+      MULTAS_HABILITADAS
+        ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').is('deleted_at', null).gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
+        : Promise.resolve({ data: [] }),
+      supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
+      // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing).
+      // Solo períodos ANTERIORES a esta semana: la cuota de esta semana se suma aparte, y los
+      // períodos posteriores (si se recalcula una semana vieja) no deben bajar esta cuota.
+      (supabase.from('facturacion_conductores') as any)
+        .select('conductor_id, subtotal_garantia, periodo:periodos_facturacion!inner(fecha_fin)')
+        .in('conductor_id', conductorIds)
+        .gt('subtotal_garantia', 0)
+        .lt('periodo.fecha_fin', fechaInicio),
+    ])
+
+    // Mapa acumulado de garantía facturada por conductor
+    const garantiaAcumuladaRecalc = new Map<string, number>()
+    for (const f of (garantiaHistorialRecalcRes.data || []) as any[]) {
+      garantiaAcumuladaRecalc.set(f.conductor_id, (garantiaAcumuladaRecalc.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
+    }
+
+    // 5b. Cargar penalidades_cuotas (cuotas de penalidades fraccionadas) hasta esta semana + pagos para cruzar
+    const [penalidadesCuotasResult, pagosCuotasRecalcRes, todasCuotasPenIdsRes] = await Promise.all([
+      (supabase
+        .from('penalidades_cuotas') as any)
+        .select('*, penalidad:penalidades!inner(id, conductor_id, detalle, cantidad_cuotas, aplicado, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
+        .eq('semana', semanaNum)
+        .eq('anio', anioNum)
+        .eq('penalidad.aplicado', true)
+        .neq('estado', 'cancelada_por_baja'),
+      // Pagos registrados para cruzar (penalidad_cuota + cobro_fraccionado)
+      (supabase
+        .from('pagos_conductores') as any)
+        .select('referencia_id')
+        .in('tipo_cobro', ['penalidad_cuota', 'cobro_fraccionado']),
+      // TODOS los penalidad_id que tienen cuotas (pagadas o no) — para excluir de penalidades completas
+      (supabase
+        .from('penalidades_cuotas') as any)
+        .select('penalidad_id')
+        .neq('estado', 'cancelada_por_baja')
+    ])
+
+    const cuotasPagadasRecalcIds = new Set(
+      (pagosCuotasRecalcRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
+    )
+
+    // Set para O(1) en lugar de O(n) con .includes()
+    const conductorIdsSet = new Set<string>(conductorIds)
+
+    // Filtrar por año correcto (o sin año), conductores del período, y excluir cuotas pagadas (aplicado=true O en pagos_conductores)
+    const penalidadesCuotas = (penalidadesCuotasResult.data || []).filter((pc: any) =>
+      (!pc.anio || pc.anio <= anioNum) &&
+      pc.penalidad?.conductor_id &&
+      conductorIdsSet.has(pc.penalidad.conductor_id) &&
+      pc.aplicado !== true &&
+      !cuotasPagadasRecalcIds.has(pc.id)
+    )
+
+    // TODAS las penalidades que tienen cuotas (pagadas o pendientes) — excluir del cálculo completo
+    // Si una penalidad tiene cuotas, SOLO se cobra por cuotas, NUNCA el monto completo
+    const penIdsConCuotas = new Set(
+      (todasCuotasPenIdsRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
+    )
+
+    const penalidades = penalidadesRes.data || []
+    const tickets = ticketsRes.data || []
+    const saldos = saldosRes.data || []
+    const excesosArr = excesosRes.data || []
+    const garantias = garantiasRes.data || []
+    // Cobros fraccionados: excluir los ya aplicados (cerrados en períodos anteriores)
+    // y los que ya tienen un pago registrado en pagos_conductores.
+    // Cuotas sin pagar que no se facturaron en OTRO período: una cuota se factura una sola
+    // vez; si no se paga, lo que falta viaja por el saldo (no se repite la semana siguiente).
+    const cobros = (cobrosRes.data || []).filter((c: any) =>
+      c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id) &&
+      (!c.periodo_facturado_id || c.periodo_facturado_id === periodoId)
+    )
+
+    // ─── O(1) lookup Maps — construidos una vez, usados en el loop por conductor ───
+    // Antes: cada iteración hacía .find()/.filter() sobre el array completo → O(n²)
+    // Ahora: lookup en O(1) por conductor_id → O(n) total
+    const garantiasMapById = new Map<string, any>(
+      (garantias as any[]).map((g: any) => [g.conductor_id, g])
+    )
+
+    // Auto-crear garantias_conductores para conductores TURNO que no tienen registro aún.
+    // Esto evita que el sistema cobre P003 sin dejar rastro en garantias_conductores.
+    // Los de régimen Toshipass no tienen garantía: no se les crea registro.
+    const conductoresSinGarantia = conductoresProcesados.filter(
+      (c) => !garantiasMapById.has(c.conductor_id) && !reglaToshipass.conductores.has(c.conductor_id)
+    )
+    if (conductoresSinGarantia.length > 0) {
+      const nuevasGarantias = conductoresSinGarantia.map((c) => ({
+        conductor_id: c.conductor_id,
+        conductor_nombre: c.conductor_nombre,
+        // Tipo predominante de la semana (antes siempre 'TURNO', aunque fuera a cargo)
+        tipo_alquiler: (c.dias_cargo + c.dias_cargo_sin_gnc) >
+          (c.dias_turno_diurno + c.dias_turno_diurno_sin_gnc + c.dias_turno_nocturno + c.dias_turno_nocturno_sin_gnc)
+          ? 'CARGO' : 'TURNO',
+        monto_total: 1000000,
+        monto_cuota_semanal: cuotaGarantia,
+        cuotas_totales: 20,
+        monto_pagado: 0,
+        monto_realmente_pagado: 0,
+        cuotas_pagadas: 0,
+        estado: 'en_curso',
+        semana_inicio: semanaNum,
+        anio_inicio: anioNum,
+      }))
+      // Al simular (Vista Previa) no se crea nada: se usa la garantía nueva en memoria
+      const { data: insertadas } = simular
+        ? { data: nuevasGarantias }
+        : await (supabase.from('garantias_conductores') as any)
+          .insert(nuevasGarantias)
+          .select()
+      for (const g of (insertadas || [])) {
+        garantiasMapById.set(g.conductor_id, g)
+      }
+    }
+
+    const penalidadesGrouped = new Map<string, any[]>()
+    ;(penalidades as any[]).forEach((p: any) => {
+      const arr = penalidadesGrouped.get(p.conductor_id) || []
+      arr.push(p)
+      penalidadesGrouped.set(p.conductor_id, arr)
+    })
+    const ticketsGrouped = new Map<string, any[]>()
+    ;(tickets as any[]).forEach((t: any) => {
+      const arr = ticketsGrouped.get(t.conductor_id) || []
+      arr.push(t)
+      ticketsGrouped.set(t.conductor_id, arr)
+    })
+    const excesosGrouped = new Map<string, any[]>()
+    ;(excesosArr as any[]).forEach((e: any) => {
+      const arr = excesosGrouped.get(e.conductor_id) || []
+      arr.push(e)
+      excesosGrouped.set(e.conductor_id, arr)
+    })
+    const cobrosGrouped = new Map<string, any[]>()
+    ;(cobros as any[]).forEach((c: any) => {
+      const arr = cobrosGrouped.get(c.conductor_id) || []
+      arr.push(c)
+      cobrosGrouped.set(c.conductor_id, arr)
+    })
+    const cuotasGrouped = new Map<string, any[]>()
+    ;(penalidadesCuotas as any[]).forEach((pc: any) => {
+      const cid = pc.penalidad?.conductor_id
+      if (!cid) return
+      const arr = cuotasGrouped.get(cid) || []
+      arr.push(pc)
+      cuotasGrouped.set(cid, arr)
+    })
+    // Saldo acumulado por conductor (fuente: último registro de control_saldos de semanas anteriores).
+    // Ignora la deuda que ya pasó a un fraccionamiento de saldo (ver utils/saldoAnterior).
+    const saldosMapById = construirSaldosAnteriores(saldos as any[], (cobrosRes.data || []) as any[])
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
+    const cabifyHashMapRecalc = new Map<string, string>(
+      (dniMapeoResRecalc.data || []).map((m: any) => [m.cabify_hash, m.dni_real])
+    )
+
+    // Mapear peajes por DNI (normalizado) - incluir todos los días del rango
+    const peajesMap = new Map<string, number>()
+    const peajesDetalleMapRecalc = new Map<string, Array<{ fecha: string; monto: number }>>()
+    ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
+      if (!r.dni) return
+      let dniKey = String(r.dni)
+      if (dniKey.startsWith('CABIFY_')) {
+        const resolved = cabifyHashMapRecalc.get(dniKey)
+        if (resolved) dniKey = resolved
+        else return // Hash desconocido, skip
+      }
+      const dniNorm = normalizeDni(dniKey)
+      const peajes = parseFloat(String(r.peajes)) || 0
+      if (peajes > 0) {
+        peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + peajes)
+      }
+      // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
+      const fecha = r.fecha_inicio ? r.fecha_inicio.split('T')[0] : 's/f'
+      if (!peajesDetalleMapRecalc.has(dniNorm)) peajesDetalleMapRecalc.set(dniNorm, [])
+      peajesDetalleMapRecalc.get(dniNorm)!.push({ fecha, monto: peajes })
+    })
+
+    // Mapear multas por patente
+    const multasMap = new Map<string, { monto: number; cantidad: number }>()
+    ;((multasRes.data || []) as any[]).forEach((m: any) => {
+      if (m.patente) {
+        const p = normalizePatente(m.patente)
+        const actual = multasMap.get(p) || { monto: 0, cantidad: 0 }
+        const importe = typeof m.importe === 'string' ? parseImporteMulta(m.importe) : parseFloat(m.importe) || 0
+        multasMap.set(p, { monto: actual.monto + importe, cantidad: actual.cantidad + 1 })
+      }
+    })
+
+    // 6. Procesar cada conductor - CREAR facturacion_conductores + facturacion_detalle
+    let totalCargosGlobal = 0
+    let totalDescuentosGlobal = 0
+    if (!simular) setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
+    // Lo calculado de cada conductor; se guarda todo junto en el paso 6b
+    const pendientesGuardar: PendienteGuardar[] = []
+
+    for (const conductor of conductoresProcesados) {
+      const flagsVeh = conductor.vehiculo_patente ? flagsVehiculoMap.get(conductor.vehiculo_patente) : undefined
+      const tieneTelepaseVehiculo = flagsVeh ? flagsVeh.telepase : conductor.tiene_telepase
+
+      // Calcular alquiler con precio diario × días
+      let alquilerTotal = 0
+      const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
+
+      // Generar líneas de alquiler separadas por modalidad+GNC
+      // Cada combinación de modalidad y flag GNC genera su propia línea con su precio
+      const lineasAlquiler: { modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO'; gnc: boolean; dias: number }[] = [
+        { modalidad: 'DIURNO', gnc: true, dias: conductor.dias_turno_diurno },
+        { modalidad: 'DIURNO', gnc: false, dias: conductor.dias_turno_diurno_sin_gnc },
+        { modalidad: 'NOCTURNO', gnc: true, dias: conductor.dias_turno_nocturno },
+        { modalidad: 'NOCTURNO', gnc: false, dias: conductor.dias_turno_nocturno_sin_gnc },
+        { modalidad: 'CARGO', gnc: true, dias: conductor.dias_cargo },
+        { modalidad: 'CARGO', gnc: false, dias: conductor.dias_cargo_sin_gnc },
+      ]
+      const labelModalidad: Record<string, string> = {
+        DIURNO: 'Alquiler Turno Diurno',
+        NOCTURNO: 'Alquiler Turno Nocturno',
+        CARGO: 'Alquiler a Cargo',
+      }
+      for (const linea of lineasAlquiler) {
+        if (linea.dias <= 0) continue
+        // Tarifa dual: separar los dias de esta linea entre tarifa antigua y nueva.
+        // Los descuentos por hora de entrega consumen primero los dias de tarifa antigua.
+        const keyTarifaN = linea.modalidad === 'CARGO' ? (linea.gnc ? 'CARGO' : 'CARGO_SIN_GNC')
+          : linea.modalidad === 'NOCTURNO' ? (linea.gnc ? 'TURNO_NOCTURNO' : 'TURNO_NOCTURNO_SIN_GNC')
+          : (linea.gnc ? 'TURNO_DIURNO' : 'TURNO_DIURNO_SIN_GNC')
+        const diasNuevaRaw = (conductor.tarifa_nueva_dias as any)?.[keyTarifaN] || 0
+        const diasNueva = Math.min(linea.dias, diasNuevaRaw)
+        const diasAntigua = linea.dias - diasNueva
+        const partesTarifa: { dias: number; tarifa: 'antigua' | 'nueva' }[] = []
+        if (diasAntigua > 0) partesTarifa.push({ dias: diasAntigua, tarifa: 'antigua' })
+        if (diasNueva > 0) partesTarifa.push({ dias: diasNueva, tarifa: 'nueva' })
+        for (const parte of partesTarifa) {
+          const codigo = getCodigoAlquiler(linea.modalidad, linea.gnc, parte.tarifa)
+          const precio = preciosActuales[codigo] || 0
+          // FIX 2026-05-19: preservar 2 decimales (ej: 5.5 * 62571.43 = 344142.865 → 344142.87)
+          const monto = Math.round(precio * parte.dias * 100) / 100
+          alquilerTotal += monto
+          detallesAlquiler.push({
+            codigo,
+            descripcion: (linea.gnc ? labelModalidad[linea.modalidad] : `${labelModalidad[linea.modalidad]} Sin GNC`) + (parte.tarifa === 'nueva' ? ' (Tarifa Nueva)' : ''),
+            dias: parte.dias, monto
+          })
+        }
+      }
+
+      // precio_final ya incluye IVA - no se agrega de nuevo
+
+      // Garantía - valor fijo semanal (no proporcional a días trabajados)
+      // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
+      // Si garantía completada o cuotas completas, cobrar $0
+      const factorProporcional = conductor.total_dias / 7
+      // Toshipass (conductor nuevo): reemplaza a la garantía. Monto semanal fijo si trabajó
+      // al menos un día (el día de la devolución final no cuenta). Ver utils/toshipass.ts
+      const esToshipass = reglaToshipass.conductores.has(conductor.conductor_id)
+      const diasTrabajadosTP = esToshipass
+        ? diasTrabajadosToshipass(
+          diasContadosRecalc.get(conductor.conductor_id),
+          maxAsigFinRecalc.get(conductor.conductor_id),
+          conductoresConAsignacionAbiertaRecalc.has(conductor.conductor_id),
+        )
+        : 0
+      const montoToshipass = esToshipass && diasTrabajadosTP > 0 ? reglaToshipass.cuotaSemanal : 0
+      const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
+      const montoTotalGarantia = garantiaConductor?.monto_total || 1000000
+      // Acumulado real: incluye la base histórica ya pagada ANTES de que facturación tomara
+      // el control (monto_realmente_pagado = base + todo lo facturado). Antes solo se contaba
+      // la suma de subtotal_garantia de este módulo, por lo que se seguía cobrando la cuota
+      // pasado el objetivo (ej: conductores que ya venían pagando garantía por otra vía).
+      // El período actual ya fue borrado arriba, así que acumuladoFacturadoRecalc es lo previo.
+      const acumuladoFacturadoRecalc = garantiaAcumuladaRecalc.get(conductor.conductor_id) || 0
+      const acumuladoRealRecalc = Math.max(acumuladoFacturadoRecalc, garantiaConductor?.monto_realmente_pagado || 0)
+      const garantiaCompletada = garantiaConductor?.estado === 'completada' || acumuladoRealRecalc >= montoTotalGarantia
+      const cuotaNormalRecalc = garantiaConductor?.monto_cuota_semanal || cuotaGarantia
+      const pendienteRecalc = montoTotalGarantia - acumuladoRealRecalc
+      const cuotaGarantiaProporcional = Math.round((esToshipass || conductor.total_dias === 0 || garantiaCompletada
+        ? 0
+        : Math.min(cuotaNormalRecalc, Math.max(0, pendienteRecalc))) * 100) / 100
+      const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
+
+      // Penalidades - segmentar por categoría de tipo_cobro_descuento
+      // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
+      const pensConductor = (penalidadesGrouped.get(conductor.conductor_id) || []).filter((p: any) =>
+        !penIdsConCuotas.has(p.id) &&
+        !(p.cantidad_cuotas && p.cantidad_cuotas > 1)
+      )
+      const pensP004 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P004')
+      const pensP006 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P006')
+      const pensP007 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P007')
+      // NULL categoria = pendiente, se excluye del cálculo
+      const totalPenP004 = pensP004.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // descuento
+      const totalPenP006 = pensP006.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
+      const totalPenP007 = pensP007.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
+      const totalPenalidades = totalPenP006 + totalPenP007 // solo cargos
+
+      // Tickets (descuentos)
+      const ticketsConductor = ticketsGrouped.get(conductor.conductor_id) || []
+      const totalTickets = ticketsConductor.reduce((sum: number, t: any) => sum + (t.monto || 0), 0)
+
+      // Excesos (P006) - no aplica si tiene 0 días
+      const excesosConductor = excesosGrouped.get(conductor.conductor_id) || []
+      const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
+
+      // Peajes (P005)
+      // Si el vehículo tiene telepase habilitado, NO cobrar P005.
+      // Si Cabify reporta peajes para el conductor, se cobran sin importar los días del período
+      // (un conductor puede tener 0 turnos en la semana pero sí haber generado peajes en Cabify).
+      const totalPeajes = tieneTelepaseVehiculo
+        ? 0
+        : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
+
+      // Cobros fraccionados (P010) - calcular monto real de la cuota
+      const cobrosConductor = cobrosGrouped.get(conductor.conductor_id) || []
+      // Usar monto_cuota solo si es razonable (menor que monto_total), sino calcular desde monto_total/total_cuotas
+      const calcularMontoCuota = (c: any) => {
+        const mt = c.monto_total || 0
+        const mc = c.monto_cuota || 0
+        const tc = c.total_cuotas || 1
+        // Si monto_cuota es mayor o igual a monto_total, está mal — recalcular
+        return (mc > 0 && mc < mt) ? mc : Math.ceil(mt / tc)
+      }
+      const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + calcularMontoCuota(c), 0)
+
+      // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
+      const cuotasConductor = cuotasGrouped.get(conductor.conductor_id) || []
+      const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
+
+      // Multas (P008)
+      const patenteNorm = normalizePatente(conductor.vehiculo_patente)
+      // Multas: desactivado temporalmente (MULTAS_HABILITADAS = false)
+      const multasVehiculo = MULTAS_HABILITADAS ? multasMap.get(patenteNorm) : undefined
+      const montoMultas = multasVehiculo?.monto || 0
+      const cantidadMultas = multasVehiculo?.cantidad || 0
+
+      // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
+      // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
+      // de la semana. Antes se forzaba a 0 con "total_dias === 0 ? 0 :", lo que hacía
+      // que los conductores de baja (0 días) perdieran la deuda arrastrada.
+      const saldoConductor = saldosMapById.get(conductor.conductor_id)
+      const saldoAnteriorRaw = -(saldoConductor?.saldo_actual || 0)
+      const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
+      const diasMora = 0
+      const montoMora = 0
+
+      // Totales (montoMultas será 0 mientras MULTAS_HABILITADAS = false)
+      const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + montoToshipass + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
+      // Devolución de garantía por cambio de tarifa: crédito que resta del total (P028)
+      const montoDevolucionGarantia = devolucionesGarantia.get(conductor.conductor_id) || 0
+      // Referido: 5% del alquiler de cada día de su primera semana (P004). Sobre lo que se
+      // cobró ese día: si hubo medio turno (entrega o vehículo fuera de servicio), sobre esa mitad.
+      let montoDescuentoReferido = 0
+      let diasDescuentoReferidoConductor = 0
+      for (const fecha of diasDescuentoReferido.get(conductor.conductor_id) || []) {
+        const tarifaDia = tarifaDiaRecalc.get(conductor.conductor_id)?.get(fecha)
+        if (!tarifaDia) continue // ese día no se cobra en esta semana
+        const descontadoDia = descontadoPorDiaR.get(`${conductor.conductor_id}|${fecha}`)
+          ?? (fechaDescEntregaRecalc.get(conductor.conductor_id) === fecha ? (descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0) : 0)
+        const fraccionCobrada = Math.max(0, 1 - descontadoDia)
+        if (fraccionCobrada <= 0) continue
+        const precioDia = preciosActuales[getCodigoAlquiler(tarifaDia.modalidad, tarifaDia.gnc, tarifaDia.tarifa)] || 0
+        montoDescuentoReferido += precioDia * fraccionCobrada * DESCUENTO_REFERIDO_PORCENTAJE
+        diasDescuentoReferidoConductor++
+      }
+      montoDescuentoReferido = Math.round(montoDescuentoReferido * 100) / 100
+      // Promoción del 10% (utils/promocionesFacturacion.ts): misma base que el referido
+      const diasPromoRecalc: DiaPromocion[] = []
+      const diasPromo10Recalc = promocionesRecalc.diasDescuento10.get(conductor.conductor_id)
+      for (const fecha of diasPromo10Recalc || []) {
+        const tarifaDia = tarifaDiaRecalc.get(conductor.conductor_id)?.get(fecha)
+        if (!tarifaDia) continue
+        const descontadoDia = descontadoPorDiaR.get(`${conductor.conductor_id}|${fecha}`)
+          ?? (fechaDescEntregaRecalc.get(conductor.conductor_id) === fecha ? (descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0) : 0)
+        const codigoDia = getCodigoAlquiler(tarifaDia.modalidad, tarifaDia.gnc, tarifaDia.tarifa)
+        diasPromoRecalc.push({ fecha, codigo: codigoDia, precio: preciosActuales[codigoDia] || 0, fraccion: Math.max(0, 1 - descontadoDia) })
+      }
+      const promoRecalc = lineasPromocionConductor(
+        promocionesRecalc, conductor.conductor_id,
+        descuentoPromoAlquiler(diasPromoRecalc),
+        descuentoPromoToshipass(montoToshipass, diasPromo10Recalc, diasContadosRecalc.get(conductor.conductor_id)),
+      )
+      const montoDescuentoPromo = promoRecalc.lineas.reduce((sum, l) => sum + l.monto, 0)
+      const subtotalDescuentos = totalTickets + totalPenP004 + montoDevolucionGarantia + montoDescuentoReferido + montoDescuentoPromo
+      const subtotalNeto = subtotalCargos - subtotalDescuentos
+      const totalAPagarRaw = subtotalNeto + saldoAnterior
+      const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
+
+      totalCargosGlobal += subtotalCargos
+      totalDescuentosGlobal += subtotalDescuentos
+
+      const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_diurno_sin_gnc + conductor.dias_turno_nocturno + conductor.dias_turno_nocturno_sin_gnc
+      const diasCargoTotal = conductor.dias_cargo + conductor.dias_cargo_sin_gnc
+      const tipoAlquilerPrincipal = diasCargoTotal >= diasTurnoTotal ? 'CARGO' : 'TURNO'
+
+      // Calcular proyectado_alquiler (misma lógica que cargarFacturacion post-load)
+      let proyectadoAlquiler = alquilerTotal
+      if (conductor.total_dias > 0 && alquilerTotal > 0) {
+        // De baja o en pausa: la facturación ya se cortó, no se proyecta
+        if (conductor.estado_billing !== 'Activo') {
+          proyectadoAlquiler = alquilerTotal
+        } else {
+          const primeraFechaR = primeraFechaRecalc.get(conductor.conductor_id)
+          const descuentoR = descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0
+          let diasCalendarioR = 7
+          if (primeraFechaR) {
+            diasCalendarioR = Math.min(7, Math.max(1,
+              Math.round((finSemanaRecalc.getTime() - primeraFechaR.getTime()) / (1000 * 60 * 60 * 24)) + 1
+            ))
+          }
+          const diasProyectadosR = Math.max(1, diasCalendarioR - descuentoR)
+          if (conductor.total_dias < diasProyectadosR) {
+            const precioDiarioR = alquilerTotal / conductor.total_dias
+            proyectadoAlquiler = Math.round(precioDiarioR * diasProyectadosR)
+          }
+        }
+      } else {
+        proyectadoAlquiler = 0
+      }
+
+      // Fila de facturacion_conductores: se guarda en bloque después del bucle (6b)
+      const filaFacturacion = {
+        periodo_id: periodoId,
+        conductor_id: conductor.conductor_id,
+        conductor_nombre: conductor.conductor_nombre,
+        conductor_dni: conductor.conductor_dni,
+        conductor_cuit: conductor.conductor_cuit,
+        // Solo para la pantalla (Vista Previa): no son columnas, la función que guarda las ignora
+        alerta_prorrateo_ingreso: alertaIngresoRecalc.get(conductor.conductor_id) || null,
+        prorrateo_cargo_dias: conductor.dias_cargo + conductor.dias_cargo_sin_gnc,
+        prorrateo_diurno_dias: conductor.dias_turno_diurno + conductor.dias_turno_diurno_sin_gnc,
+        prorrateo_nocturno_dias: conductor.dias_turno_nocturno + conductor.dias_turno_nocturno_sin_gnc,
+        vehiculo_id: null,
+        vehiculo_patente: conductor.vehiculo_patente,
+        tipo_alquiler: tipoAlquilerPrincipal,
+        turnos_base: 7,
+        turnos_cobrados: conductor.total_dias,
+        factor_proporcional: factorProporcional,
+        subtotal_alquiler: alquilerTotal,
+        proyectado_alquiler: proyectadoAlquiler,
+        subtotal_garantia: cuotaGarantiaProporcional,
+        subtotal_cargos: subtotalCargos,
+        subtotal_descuentos: subtotalDescuentos,
+        subtotal_neto: subtotalNeto,
+        saldo_anterior: saldoAnterior,
+        dias_mora: diasMora,
+        monto_mora: montoMora,
+        total_a_pagar: totalAPagar,
+        estado: 'calculado'
+      }
+
+      // ═══ BATCH: Recopilar todos los detalles en un array, insertar de una sola vez ═══
+      const todosDetalles: any[] = []
+      const ticketIdsAplicar: string[] = []
+      const excesoIdsAplicar: string[] = []
+      const cobroIdsAplicar: string[] = []
+
+      // Alquiler detalles (P001/P002/P013 con GNC, P014/P015/P016 sin GNC)
+      // precio_unitario = precio DIARIO (precio_final de conceptos_nomina ya es diario)
+      for (const detalle of detallesAlquiler) {
+        const precioUnitario = preciosActuales[detalle.codigo] || (detalle.dias > 0 ? (detalle.monto / detalle.dias) : detalle.monto)
+        todosDetalles.push({
+          concepto_codigo: detalle.codigo,
+          concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
+          precio_unitario: precioUnitario, subtotal: detalle.monto, total: detalle.monto, es_descuento: false
+        })
+      }
+
+      // P004 - Descuento 5% primera semana del referido
+      if (montoDescuentoReferido > 0) {
+        todosDetalles.push({
+          concepto_codigo: 'P004',
+          concepto_descripcion: descripcionDescuentoReferido(diasDescuentoReferidoConductor),
+          cantidad: 1, precio_unitario: montoDescuentoReferido,
+          subtotal: montoDescuentoReferido, total: montoDescuentoReferido, es_descuento: true
+        })
+      }
+
+      // Promociones: descuento con el código visible de la promoción (PRM...). El código
+      // queda guardado tal cual en la factura aunque después se edite en Parámetros.
+      for (const linea of promoRecalc.lineas) {
+        todosDetalles.push({
+          concepto_codigo: linea.codigo, concepto_descripcion: linea.descripcion,
+          cantidad: 1, precio_unitario: linea.monto, subtotal: linea.monto, total: linea.monto, es_descuento: true,
+          referencia_id: linea.promocionId, referencia_tipo: REFERENCIA_PROMOCION,
+          descripcion: JSON.stringify(linea.calculo)
+        })
+      }
+      // Promoción licencia B1: línea informativa en $0 (pago diario como saldo a favor)
+      if (promoRecalc.b1) {
+        todosDetalles.push({
+          concepto_codigo: promoRecalc.b1.codigo, concepto_descripcion: promoRecalc.b1.descripcion,
+          cantidad: promoRecalc.b1.dias, precio_unitario: 0, subtotal: 0, total: 0, es_descuento: false,
+          referencia_id: promoRecalc.b1.promocionId, referencia_tipo: REFERENCIA_PROMOCION,
+          descripcion: JSON.stringify(promoRecalc.b1.calculo)
+        })
+      }
+
+      // P028 - Devolución de garantía por cambio de tarifa (descuento)
+      if (montoDevolucionGarantia > 0) {
+        todosDetalles.push({
+          concepto_codigo: CODIGO_DEVOLUCION_GARANTIA, concepto_descripcion: DESCRIPCION_DEVOLUCION_GARANTIA,
+          cantidad: 1, precio_unitario: montoDevolucionGarantia,
+          subtotal: montoDevolucionGarantia, total: montoDevolucionGarantia, es_descuento: true
+        })
+      }
+
+      if (esToshipass) {
+        // P027 - Toshipass (en lugar de la garantía)
+        if (montoToshipass > 0) {
+          todosDetalles.push({
+            concepto_codigo: CODIGO_TOSHIPASS, concepto_descripcion: 'Toshipass',
+            cantidad: 1, precio_unitario: montoToshipass,
+            subtotal: montoToshipass, total: montoToshipass, es_descuento: false
+          })
+        }
+      } else {
+        // P003 - Garantía
+        const descripcionGarantia = garantiaCompletada
+          ? 'Garantía completada'
+          : `Cuota de Garantía ${cuotaActual}`
+        todosDetalles.push({
+          concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
+          cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
+          subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
+        })
+      }
+
+      // Penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
+      const gruposPenalidades: { pens: any[]; codigo: string; esDescuento: boolean }[] = [
+        { pens: pensP004, codigo: 'P004', esDescuento: true },
+        { pens: pensP006, codigo: 'P006', esDescuento: false },
+        { pens: pensP007, codigo: 'P007', esDescuento: false },
+      ]
+      for (const grupo of gruposPenalidades) {
+        for (const pen of grupo.pens) {
+          const tipoNombre = (pen as any).tipos_cobro_descuento?.nombre || 'Sin detalle'
+          const incDescSave = (pen as any).incidencias?.descripcion
+          const detalleCompleto = incDescSave ? `${tipoNombre} - ${incDescSave}` : tipoNombre
+          const descripcion = grupo.codigo === 'P004'
+            ? `Descuento a Favor: ${detalleCompleto}`
+            : grupo.codigo === 'P006'
+              ? `Exceso KM: ${detalleCompleto}`
+              : `Cargo: ${detalleCompleto}`
+          todosDetalles.push({
+            concepto_codigo: grupo.codigo,
+            concepto_descripcion: descripcion,
+            cantidad: 1, precio_unitario: (pen as any).monto,
+            subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
+            referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
+          })
+        }
+      }
+
+      // P004 - Tickets a Favor (descuentos)
+      for (const ticket of ticketsConductor) {
+        todosDetalles.push({
+          concepto_codigo: 'P004',
+          concepto_descripcion: (ticket as any).descripcion
+            ? `${(ticket as any).tipo || 'Ticket'} – ${(ticket as any).descripcion}`
+            : `${(ticket as any).tipo || 'Ticket'}`,
+          cantidad: 1, precio_unitario: (ticket as any).monto,
+          subtotal: (ticket as any).monto, total: (ticket as any).monto, es_descuento: true,
+          referencia_id: (ticket as any).id, referencia_tipo: 'ticket'
+        })
+        ticketIdsAplicar.push((ticket as any).id)
+      }
+
+      // P006 - Excesos de kilometraje
+      for (const exceso of excesosConductor) {
+        todosDetalles.push({
+          concepto_codigo: 'P006',
+          concepto_descripcion: `Exceso KM: ${(exceso as any).km_exceso || 0} km`,
+          cantidad: 1, precio_unitario: (exceso as any).monto_base || 0,
+          iva_porcentaje: (exceso as any).iva_porcentaje || 21,
+          iva_monto: (exceso as any).iva_monto || 0,
+          subtotal: (exceso as any).monto_base || 0,
+          total: (exceso as any).monto_total || 0, es_descuento: false,
+          referencia_id: (exceso as any).id, referencia_tipo: 'exceso_km'
+        })
+        excesoIdsAplicar.push((exceso as any).id)
+      }
+
+      // P005 - Peajes de Cabify
+      if (totalPeajes > 0) {
+        todosDetalles.push({
+          concepto_codigo: 'P005', concepto_descripcion: 'Peajes',
+          cantidad: 1, precio_unitario: totalPeajes,
+          subtotal: totalPeajes, total: totalPeajes, es_descuento: false,
+          referencia_tipo: 'cabify_peajes'
+        })
+      }
+
+      // P008 - Multas de tránsito
+      if (montoMultas > 0) {
+        todosDetalles.push({
+          concepto_codigo: 'P008',
+          concepto_descripcion: `Multas de Tránsito (${cantidadMultas})`,
+          cantidad: cantidadMultas, precio_unitario: Math.round((montoMultas / cantidadMultas) * 100) / 100,
+          subtotal: montoMultas, total: montoMultas, es_descuento: false,
+          referencia_tipo: 'multa_transito'
+        })
+      }
+
+      // P009 - Mora
+      if (montoMora > 0) {
+        todosDetalles.push({
+          concepto_codigo: 'P009',
+          concepto_descripcion: `Mora (${diasMora} días al 1%)`,
+          cantidad: diasMora, precio_unitario: Math.round(saldoAnterior * 0.01 * 100) / 100,
+          subtotal: montoMora, total: montoMora, es_descuento: false
+        })
+      }
+
+      // P010 - Cobros fraccionados (plan de pagos)
+      for (const cobro of cobrosConductor) {
+        const montoCuotaReal = calcularMontoCuota(cobro)
+        const descripcionCobro = (cobro as any).descripcion || `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
+        todosDetalles.push({
+          concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
+          cantidad: 1, precio_unitario: montoCuotaReal,
+          subtotal: montoCuotaReal, total: montoCuotaReal, es_descuento: false,
+          referencia_id: (cobro as any).id, referencia_tipo: 'cobro_fraccionado'
+        })
+        cobroIdsAplicar.push((cobro as any).id)
+      }
+
+      // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
+      for (const cuota of cuotasConductor) {
+        const penPadre = cuota.penalidad
+        const categoria = penPadre?.tipos_cobro_descuento?.categoria || 'P007'
+        const esDescuento = penPadre?.tipos_cobro_descuento?.es_a_favor === true
+        const tipoNombre = penPadre?.tipos_cobro_descuento?.nombre || penPadre?.detalle || 'Penalidad fraccionada'
+        const descripcionCuota = `Cuota ${cuota.numero_cuota} - ${tipoNombre} (Total: ${penPadre?.cantidad_cuotas || '?'} cuotas)`
+        todosDetalles.push({
+          concepto_codigo: esDescuento ? 'P004' : categoria,
+          concepto_descripcion: descripcionCuota,
+          cantidad: 1, precio_unitario: cuota.monto_cuota,
+          subtotal: cuota.monto_cuota, total: cuota.monto_cuota, es_descuento: esDescuento,
+          referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota'
+        })
+        // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
+      }
+
+      // cobros_fraccionados: NO se marcan como aplicados (pagados) aquí; eso es al PAGAR.
+      // Sí se marcan como facturados en este período (periodo_facturado_id) al guardar.
+
+      // El kardex (control_saldos) + saldos_conductores se materializan al CERRAR
+      // el período (cerrarPeriodo), no aquí. Durante recalcular el período sigue
+      // abierto y el total_a_pagar es un preview en curso.
+
+      pendientesGuardar.push({
+        nombre: conductor.conductor_nombre || 'Sin nombre',
+        fila: filaFacturacion,
+        detalles: todosDetalles,
+        ticketIds: ticketIdsAplicar,
+        excesoIds: excesoIdsAplicar,
+        cobroIds: cobroIdsAplicar,
+      })
+      latido(pendientesGuardar.length, conductoresProcesados.length)
+    }
+
+    return { sinConductores: false as const, pendientesGuardar, totalCargosGlobal, totalDescuentosGlobal }
+  }
+
   async function recalcularPeriodoAbierto(skipConfirm = false) {
     if (!periodo || (periodo.estado !== 'abierto' && periodo.estado !== 'procesando')) {
       showError('Error', 'Solo se puede recalcular un período abierto')
@@ -4399,117 +4661,12 @@ export function ReporteFacturacionTab() {
         return Number(data) || 0
       }
 
-      // 3. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean; tiene_telepase: boolean }[] = []
-      const dnisAgregadosRecalc = new Set<string>()
-      const dnisConPenalidadesRecalc = new Set<string>()
-
-      // 3a. Conductores con asignaciones activas/finalizadas que se solapan con la semana
-      {
-        const { data: asignacionesSemanaRecalc } = await (supabase
-          .from('asignaciones_conductores') as any)
-          .select(`
-            conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc, telepase, updated_at)),
-            conductores!inner(numero_dni, sede_id)
-          `)
-          .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
-          .order('fecha_inicio', { ascending: false })
-
-        const semInicioRecalc = parseISO(fechaInicio)
-        const semFinRecalc = parseISO(fechaFin)
-
-        for (const ac of (asignacionesSemanaRecalc || []) as any[]) {
-          const cond = ac.conductores
-          const asig = ac.asignaciones
-          if (!cond || !asig) continue
-          if (sedeDelPeriodo && cond.sede_id !== sedeDelPeriodo) continue
-
-          // Skip PROGRAMADO y huérfanos
-          const estadoPadreRecExtra = (asig.estado || '').toLowerCase()
-          if (['programado', 'programada'].includes(estadoPadreRecExtra)) continue
-          if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreRecExtra) && !asig.fecha_fin) continue
-          if (!ac.fecha_inicio && !asig.fecha_inicio) continue
-
-          // Verificar solapamiento con la semana (normalizar sin hora)
-          const acInicioRecExtra = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
-          const acFinRecExtra = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
-            : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
-          if (acFinRecExtra < semInicioRecalc || acInicioRecExtra > semFinRecalc) continue
-
-          if (!dnisAgregadosRecalc.has(cond.numero_dni)) {
-            dnisAgregadosRecalc.add(cond.numero_dni)
-            const modalidad = (asig.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
-            conductoresControl.push({
-              numero_dni: cond.numero_dni,
-              estado: 'Activo',
-              patente: asig.vehiculos?.patente || '',
-              modalidad,
-              valor_alquiler: null,
-              tiene_gnc: asig.vehiculos?.gnc === true,
-              tiene_telepase: asig.vehiculos?.telepase === true,
-            })
-          }
-        }
-      }
-
-      // 3b. Conductores con penalidades aplicadas (aprobadas desde incidencias) en la semana
-      {
-        const { data: penalidadesPendientesRecalc } = await (supabase
-          .from('penalidades') as any)
-          .select('conductor_id, conductores!inner(id, numero_dni, sede_id)')
-          .eq('semana_aplicacion', semanaNum)
-          .eq('anio_aplicacion', anioNum)
-          .eq('aplicado', true)
-          .neq('rechazado', true)
-
-        // Para conductores SIN asignacion en la semana (ej. de baja con multa pendiente),
-        // tomamos patente + grupo de flota + modalidad de su ULTIMA asignacion, para que
-        // la fila muestre de que auto/grupo venia (informativo; no afecta el cobro).
-        const condIdsPenalidad = [...new Set(
-          (penalidadesPendientesRecalc || [])
-            .map((p: any) => p.conductores?.id)
-            .filter(Boolean)
-        )] as string[]
-
-        const ultimaAsigPorConductor = new Map<string, { patente: string; modalidad: string }>()
-        if (condIdsPenalidad.length > 0) {
-          const { data: asigsPenalidad } = await (supabase
-            .from('asignaciones_conductores') as any)
-            .select('conductor_id, fecha_inicio, fecha_fin, asignaciones!inner(horario, vehiculos(patente))')
-            .in('conductor_id', condIdsPenalidad)
-            .order('fecha_inicio', { ascending: false })
-          // Primera por conductor = la mas reciente (ya viene ordenado desc)
-          for (const ac of (asigsPenalidad || []) as any[]) {
-            if (ultimaAsigPorConductor.has(ac.conductor_id)) continue
-            const patente = ac.asignaciones?.vehiculos?.patente || ''
-            const modalidad = (ac.asignaciones?.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
-            ultimaAsigPorConductor.set(ac.conductor_id, { patente, modalidad })
-          }
-        }
-
-        for (const p of (penalidadesPendientesRecalc || []) as any[]) {
-          const cond = p.conductores
-          if (!cond || !cond.numero_dni) continue
-          if (sedeDelPeriodo && cond.sede_id !== sedeDelPeriodo) continue
-          if (dnisAgregadosRecalc.has(cond.numero_dni)) continue
-          dnisAgregadosRecalc.add(cond.numero_dni)
-          dnisConPenalidadesRecalc.add(cond.numero_dni)
-            // Patente + modalidad de la ultima asignacion (grupo_flota se resuelve por patente)
-            const ultima = ultimaAsigPorConductor.get(cond.id)
-            conductoresControl.push({
-              numero_dni: cond.numero_dni,
-              estado: 'Activo',
-              patente: ultima?.patente || '',
-              modalidad: ultima?.modalidad || 'TURNO',
-              valor_alquiler: null,
-              tiene_gnc: true,
-              tiene_telepase: false,
-            })
-        }
-      }
-
-      if (!conductoresControl || conductoresControl.length === 0) {
+      const calculo = await calcularFacturacionSemana({
+        periodoId, fechaInicio, fechaFin, semanaNum, anioNum, sedeDelPeriodo,
+        simular: false,
+        latido: (actual, total) => { progresoLatido = { actual, total }; latido() },
+      })
+      if (calculo.sinConductores) {
         // Salida temprana: la semana queda sin facturación (se reemplaza por nada, en un
         // solo paso) y se suelta el candado (con la llave)
         await reemplazarFacturacion({ facturaciones: [], detalles: [], ticketIds: [], excesoIds: [], cobroIds: [] })
@@ -4526,1236 +4683,8 @@ export function ReporteFacturacionTab() {
         Alerta.fire('Aviso', 'No hay conductores con asignaciones ni penalidades en esta semana', 'warning')
         return
       }
-
-      // Obtener datos de conductores desde tabla conductores
-      // FILTRAR por sede del período para obtener solo conductores de esta sede
-      const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
-      let qConductoresRecalc = supabase
-        .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id, fecha_terminacion')
-        .in('numero_dni', dnisControl)
-      if (sedeDelPeriodo) qConductoresRecalc = qConductoresRecalc.eq('sede_id', sedeDelPeriodo)
-      const { data: conductoresData } = await qConductoresRecalc
-
-      const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
-      const conductorIdsTemp = (conductoresData || []).map((c: any) => c.id)
-
-      // Cargar asignaciones_conductores para calcular días reales por modalidad
-      const { data: asignacionesConductoresRecalc } = await (supabase
-        .from('asignaciones_conductores') as any)
-        .select(`
-          id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(gnc, updated_at))
-        `)
-        .in('conductor_id', conductorIdsTemp)
-        .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
-
-      // Cargar historial GNC de vehículos para evaluar por fecha
-      const vehiculoIdsRecalc = new Set<string>()
-      for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
-        const vid = ac.asignaciones?.vehiculo_id
-        if (vid) vehiculoIdsRecalc.add(vid)
-      }
-      const { data: gncHistorialRecalc } = vehiculoIdsRecalc.size > 0
-        ? await (supabase.from('vehiculos_gnc_historial') as any)
-            .select('vehiculo_id, accion, fecha')
-            .in('vehiculo_id', [...vehiculoIdsRecalc])
-            .order('fecha', { ascending: false })
-        : { data: [] }
-      const gncHistorialMapRecalc = new Map<string, GncHistorialEntry[]>()
-      for (const h of (gncHistorialRecalc || []) as GncHistorialEntry[]) {
-        if (!gncHistorialMapRecalc.has(h.vehiculo_id)) gncHistorialMapRecalc.set(h.vehiculo_id, [])
-        gncHistorialMapRecalc.get(h.vehiculo_id)!.push(h)
-      }
-
-      // Rastrear la fecha_fin más tardía de asignaciones por conductor
-      const maxAsigFinRecalc = new Map<string, string>()
-      // Rastrear primera fecha efectiva de asignación por conductor (para proyectado)
-      const primeraFechaRecalc = new Map<string, Date>()
-
-      // Calcular días reales por conductor por modalidad+GNC
-      // Cada combinación modalidad+GNC genera una línea de alquiler separada
-      interface ProrrateoRecalc {
-        CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
-        CARGO_SIN_GNC: number; TURNO_DIURNO_SIN_GNC: number; TURNO_NOCTURNO_SIN_GNC: number;
-      }
-      const prorrateoRecalcMap = new Map<string, ProrrateoRecalc>()
-      // Tarifa dual: contador paralelo con los dias que pertenecen a asignaciones
-      // con tipo_tarifa='nueva' (subconjunto de los contadores principales).
-      const diasTarifaNuevaRecalcMap = new Map<string, ProrrateoRecalc>()
-      conductorIdsTemp.forEach((id: string) => {
-        prorrateoRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 })
-        diasTarifaNuevaRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 })
-      })
-
-      // Set de fechas ya contadas por conductor para deduplicar registros duplicados
-      const diasContadosRecalc = new Map<string, Set<string>>()
-      conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
-      // Tarifa de cada día contado (para el descuento del referido, utils/descuentoReferido.ts)
-      const tarifaDiaRecalc = new Map<string, Map<string, { modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO'; gnc: boolean; tarifa: 'antigua' | 'nueva' }>>()
-
-      const fechaInicioSemanaRecalc = parseISO(fechaInicio)
-      // Recalcular capa los días hasta HOY en timezone Argentina (no del navegador)
-      const hoyRecalc = parseISO(argDateFmt.format(new Date()) + 'T00:00:00')
-      const finSemanaRecalc = parseISO(fechaFin)
-      const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalc ? hoyRecalc : finSemanaRecalc
-
-      // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
-      const fechaTerminacionMap = new Map<string, Date>()
-      for (const [, c] of conductoresMap) {
-        if (c.fecha_terminacion) {
-          fechaTerminacionMap.set(c.id, parseISO(c.fecha_terminacion))
-        }
-      }
-
-      // Cargar devoluciones con fecha_baja (requiere fecha_terminacion) y sin_cobro (independiente)
-      const conductoresConFechaBajaRecalc = new Set<string>()
-      const conductoresSinCobroRecalc = new Set<string>()
-      const conductoresConTermRecalc = [...fechaTerminacionMap.keys()]
-      // fecha_baja: solo aplica a conductores con fecha_terminacion
-      if (conductoresConTermRecalc.length > 0) {
-        const { data: devolucionesFechaBajaRecalc } = await (supabase as any)
-          .from('programaciones_onboarding')
-          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
-          .eq('devolucion_vehiculo', true)
-          .eq('ultimo_dia_cobro', 'fecha_baja')
-        for (const d of (devolucionesFechaBajaRecalc || []) as any[]) {
-          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
-          for (const id of ids) {
-            if (conductoresConTermRecalc.includes(id)) conductoresConFechaBajaRecalc.add(id)
-          }
-        }
-      }
-      // sin_cobro: buscar para TODOS los conductores del periodo
-      const conductorIdsRecalc = [...conductoresMap.values()].map((c: any) => c.id)
-      if (conductorIdsRecalc.length > 0) {
-        const { data: devolucionesSinCobroRecalc } = await (supabase as any)
-          .from('programaciones_onboarding')
-          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
-          .eq('devolucion_vehiculo', true)
-          .eq('ultimo_dia_cobro', 'sin_cobro')
-        for (const d of (devolucionesSinCobroRecalc || []) as any[]) {
-          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
-          for (const id of ids) {
-            if (conductorIdsRecalc.includes(id)) conductoresSinCobroRecalc.add(id)
-          }
-        }
-      }
-
-      // Descuentos por hora de entrega (misma lógica que Vista Previa)
-      const descuentosPorHoraRecalc = new Map<string, { descuento: number; modalidad: string }>()
-      // Vehículo fuera de servicio (utils/cierreAsignacion.ts): descuentos de diurno / a cargo.
-      // Se juntan durante el recorrido y se aplican al final, solo si ese día se cobra.
-      const pendientesCierreRecalc = new Map<string, { conductorId: string; fecha: string; modalidad: 'TURNO_DIURNO' | 'CARGO'; descuento: number }>()
-      const descuentosCierreRecalc = new Map<string, { TURNO_DIURNO: number; CARGO: number }>()
-      // Fecha (yyyy-MM-dd) del descuento por hora de entrega, para el tope de 1 turno por día
-      const fechaDescEntregaRecalc = new Map<string, string>()
-
-      // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
-      // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
-      const conductoresConAsignacionPreviaRecalc = new Set<string>()
-      // Set de fechas_inicio de asignaciones por conductor — para resolver overlap en día de entrega
-      // Regla: si asig A termina el día X y asig B empieza el día X (del mismo conductor), el día X cuenta para B
-      const fechasInicioAsigRecalc = new Map<string, Set<string>>()
-      for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
-        const asignacion = ac.asignaciones
-        if (!asignacion) continue
-        const estadoPadre = (asignacion.estado || '').toLowerCase()
-        if (['programado', 'programada'].includes(estadoPadre)) continue
-        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
-        if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
-        const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
-        const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
-        const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
-        // Un tramo cuenta como "asignación previa" (y exime del descuento por hora de entrega)
-        // si empezo antes de la semana y llega HASTA el primer dia o mas alla. Mismo criterio
-        // que en Vista Previa: en el turno seguido (entrega y recibe el mismo lunes) el
-        // conductor no perdio medio turno, solo cambio de vehiculo -> no corresponde descontar.
-        const cFinPrev = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
-        const pFinPrev = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const finEfectivoPrev = cFinPrev && pFinPrev ? (cFinPrev < pFinPrev ? cFinPrev : pFinPrev) : (cFinPrev || pFinPrev)
-        if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc && (!finEfectivoPrev || finEfectivoPrev >= fechaInicioSemanaRecalc)) {
-          conductoresConAsignacionPreviaRecalc.add(ac.conductor_id)
-        }
-        if (inicioEfectivo) {
-          const setFechas = fechasInicioAsigRecalc.get(ac.conductor_id) || new Set<string>()
-          setFechas.add(format(inicioEfectivo, 'yyyy-MM-dd'))
-          fechasInicioAsigRecalc.set(ac.conductor_id, setFechas)
-        }
-      }
-
-      for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
-        const asignacion = ac.asignaciones
-        if (!asignacion) continue
-
-        // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
-        const estadoPadre = (asignacion.estado || '').toLowerCase()
-        if (['programado', 'programada'].includes(estadoPadre)) continue
-        // Skip orphan: padre finalizado/cancelado sin fecha_fin
-        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
-        // Skip huérfano sin fecha_inicio (ni conductor ni padre)
-        if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
-
-        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
-        // para no cobrar antes de que el vehículo fuera realmente entregado
-        const conductorInicioR = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
-        const padreInicioR = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
-        const acInicio = conductorInicioR && padreInicioR
-          ? (conductorInicioR > padreInicioR ? conductorInicioR : padreInicioR)
-          : (conductorInicioR || padreInicioR || fechaInicioSemanaRecalc)
-        // Fin: usar el MENOR entre fecha_fin del conductor y fecha_fin del padre
-        const conductorFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
-        const padreFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const acFin = conductorFinR && padreFinR
-          ? (conductorFinR < padreFinR ? conductorFinR : padreFinR)
-          : (conductorFinR || padreFinR || fechaFinSemanaRecalc)
-
-        if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
-
-        const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
-        let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
-
-        // Rastrear primera fecha efectiva (para proyectado)
-        const existingPF = primeraFechaRecalc.get(ac.conductor_id)
-        if (!existingPF || efectivoInicio < existingPF) {
-          primeraFechaRecalc.set(ac.conductor_id, efectivoInicio)
-        }
-
-        // Regla: si otra asignación del mismo conductor EMPIEZA el día en que esta TERMINA,
-        // ese día cuenta para la nueva. Recortamos efectivoFin en 1 día.
-        const fechasInicioSetR = fechasInicioAsigRecalc.get(ac.conductor_id)
-        if (fechasInicioSetR) {
-          const finKeyR = format(efectivoFin, 'yyyy-MM-dd')
-          // FIX: mismo criterio que en Vista Previa — comparar contra el inicio REAL
-          // (acInicio), no contra efectivoInicio (recortado al inicio de semana).
-          const inicioKeyR = format(acInicio, 'yyyy-MM-dd')
-          if (fechasInicioSetR.has(finKeyR) && finKeyR !== inicioKeyR) {
-            const nuevoFinR = new Date(efectivoFin)
-            nuevoFinR.setDate(nuevoFinR.getDate() - 1)
-            efectivoFin = nuevoFinR
-          }
-        }
-
-        const esSinCobroRecalc = conductoresSinCobroRecalc.has(ac.conductor_id)
-
-        // Aplicar fecha_terminacion como tope si el conductor tiene devolución con ultimo_dia_cobro='fecha_baja'
-        const fechaTermRecalc = fechaTerminacionMap.get(ac.conductor_id)
-        if (fechaTermRecalc && conductoresConFechaBajaRecalc.has(ac.conductor_id) && efectivoFin > fechaTermRecalc && acInicio <= fechaTermRecalc) {
-          efectivoFin = fechaTermRecalc
-        }
-        const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
-        if (!prorrateo) continue
-
-        const modalidadAsignacion = asignacion.horario
-        const horarioLower = (ac.horario || '').toLowerCase().trim()
-        const vehiculoGncActual = asignacion.vehiculos?.gnc === true
-        const vehiculoIdR = asignacion.vehiculo_id
-
-        // Determinar modalidad para regla GNC
-        const modalidadGnc: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' =
-          (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') ? 'CARGO'
-          : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n')) ? 'TURNO_NOCTURNO'
-          : 'TURNO_DIURNO'
-
-        // Vehículo fuera de servicio (utils/cierreAsignacion.ts), mismo criterio que Vista Previa
-        const cierreR = evaluarCierre(timestampCierre(ac.fecha_fin, asignacion.fecha_fin), asignacion.notas)
-        if (cierreR) {
-          if (modalidadGnc === 'TURNO_NOCTURNO') {
-            if (format(efectivoFin, 'yyyy-MM-dd') === cierreR.fecha) {
-              const finSinCierreR = new Date(efectivoFin)
-              finSinCierreR.setDate(finSinCierreR.getDate() - 1)
-              efectivoFin = finSinCierreR
-            }
-          } else {
-            const descR = descuentoCierre(modalidadGnc, cierreR, paramsCierre)
-            if (descR > 0) pendientesCierreRecalc.set(`${ac.conductor_id}|${cierreR.fecha}|${modalidadGnc}`, { conductorId: ac.conductor_id, fecha: cierreR.fecha, modalidad: modalidadGnc, descuento: descR })
-          }
-        }
-
-        // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
-        // Si es sin_cobro, no contar ningún día pero dejar pasar al conductor
-        const fechasContadasR = diasContadosRecalc.get(ac.conductor_id)!
-        if (!esSinCobroRecalc) {
-          const cursorR = new Date(efectivoInicio)
-          while (cursorR <= efectivoFin) {
-            const key = format(cursorR, 'yyyy-MM-dd')
-            if (!fechasContadasR.has(key)) {
-              fechasContadasR.add(key)
-              // Evaluar GNC por fecha usando historial
-              const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual)
-              // Tarifa dual: si la asignacion es tarifa nueva, contar tambien en el mapa paralelo
-              const bucketNuevaR = ((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') ? diasTarifaNuevaRecalcMap.get(ac.conductor_id) : undefined
-              if (modalidadGnc === 'CARGO') {
-                if (gncEsteDia) { prorrateo.CARGO++; if (bucketNuevaR) bucketNuevaR.CARGO++ } else { prorrateo.CARGO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.CARGO_SIN_GNC++ }
-              } else if (modalidadGnc === 'TURNO_NOCTURNO') {
-                if (gncEsteDia) { prorrateo.TURNO_NOCTURNO++; if (bucketNuevaR) bucketNuevaR.TURNO_NOCTURNO++ } else { prorrateo.TURNO_NOCTURNO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.TURNO_NOCTURNO_SIN_GNC++ }
-              } else {
-                if (gncEsteDia) { prorrateo.TURNO_DIURNO++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO++ } else { prorrateo.TURNO_DIURNO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO_SIN_GNC++ }
-              }
-              const tarifasDia = tarifaDiaRecalc.get(ac.conductor_id) || new Map()
-              tarifasDia.set(key, {
-                modalidad: modalidadGnc === 'CARGO' ? 'CARGO' : modalidadGnc === 'TURNO_NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
-                gnc: gncEsteDia,
-                tarifa: bucketNuevaR ? 'nueva' : 'antigua',
-              })
-              tarifaDiaRecalc.set(ac.conductor_id, tarifasDia)
-            }
-            cursorR.setDate(cursorR.getDate() + 1)
-          }
-        }
-
-        const teniaDescEntregaR = descuentosPorHoraRecalc.has(ac.conductor_id)
-
-        // Detectar descuento por hora de entrega (mismas reglas que Vista Previa)
-        const modalidadDescR = (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia')
-          ? 'CARGO'
-          : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n'))
-            ? 'TURNO_NOCTURNO'
-            : 'TURNO_DIURNO'
-        if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id) && !conductoresConAsignacionPreviaRecalc.has(ac.conductor_id)) {
-          // Solo usar fecha_inicio del padre (entrega real) — no el fallback del conductor
-          const rawTs = asignacion.fecha_inicio
-          if (rawTs) {
-            const horaR = getArgHour(rawTs)
-            if (modalidadDescR === 'TURNO_DIURNO') {
-              if (horaR >= horasCorteTurno.diurno) {
-                descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descDiurnoDespues, modalidad: 'TURNO_DIURNO' })
-              } else {
-                descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descDiurnoAntes, modalidad: 'TURNO_DIURNO' })
-              }
-            } else if (modalidadDescR === 'CARGO' && horaR >= horasCorteTurno.cargo) {
-              descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descCargoDespues, modalidad: 'CARGO' })
-            }
-          }
-        }
-
-        if (!teniaDescEntregaR && descuentosPorHoraRecalc.has(ac.conductor_id) && asignacion.fecha_inicio) {
-          fechaDescEntregaRecalc.set(ac.conductor_id, toArgDate(asignacion.fecha_inicio))
-        }
-
-        // Rastrear fecha_fin más tardía de asignación
-        const finRealStrR = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
-        if (finRealStrR && finRealStrR > (maxAsigFinRecalc.get(ac.conductor_id) || '')) {
-          maxAsigFinRecalc.set(ac.conductor_id, finRealStrR)
-        }
-      }
-
-      // Vehículo fuera de servicio: descuento solo si ese día se cobra (con esta asignación o la
-      // de reemplazo), con tope de 1 turno por día sumando el descuento por hora de entrega.
-      const descontadoPorDiaR = new Map<string, number>()
-      for (const p of pendientesCierreRecalc.values()) {
-        if (!diasContadosRecalc.get(p.conductorId)?.has(p.fecha)) continue
-        const claveDia = `${p.conductorId}|${p.fecha}`
-        let yaDescontado = descontadoPorDiaR.get(claveDia)
-        if (yaDescontado === undefined) {
-          yaDescontado = fechaDescEntregaRecalc.get(p.conductorId) === p.fecha ? (descuentosPorHoraRecalc.get(p.conductorId)?.descuento || 0) : 0
-        }
-        const aplicado = Math.min(p.descuento, Math.max(0, 1 - yaDescontado))
-        descontadoPorDiaR.set(claveDia, yaDescontado + aplicado)
-        if (aplicado <= 0) continue
-        const acumulado = descuentosCierreRecalc.get(p.conductorId) || { TURNO_DIURNO: 0, CARGO: 0 }
-        acumulado[p.modalidad] += aplicado
-        descuentosCierreRecalc.set(p.conductorId, acumulado)
-      }
-
-      // Determinar conductores con asignación activa al cierre de la semana
-      const conductoresConAsignacionAlCierreRecalc = new Set<string>()
-      // Toshipass: con alguna asignación sin fecha de fin = no devolvió el auto
-      const conductoresConAsignacionAbiertaRecalc = new Set<string>()
-      ;(asignacionesConductoresRecalc || []).forEach((ac: any) => {
-        const asignacion = ac.asignaciones
-        if (!asignacion) return
-        const estadoPadreR = (asignacion.estado || '').toLowerCase()
-        if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadreR)) return
-        const acFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
-        const asigFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        if (!acFinR && !asigFinR) conductoresConAsignacionAbiertaRecalc.add(ac.conductor_id)
-        const finEfectivoR = acFinR || asigFinR
-        if (!finEfectivoR || finEfectivoR >= fechaFinSemanaRecalc) {
-          conductoresConAsignacionAlCierreRecalc.add(ac.conductor_id)
-        }
-      })
-
-      // Procesar conductores: solo los que tienen al menos 1 día real en la semana
-      const ESTADO_ACTIVO_ID_RECALC = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
-      const conductoresProcesados: {
-        conductor_id: string; conductor_nombre: string; conductor_dni: string | null;
-        conductor_cuit: string | null; vehiculo_patente: string | null;
-        tiene_gnc: boolean;
-        tiene_telepase: boolean;
-        dias_turno_diurno: number; dias_turno_diurno_sin_gnc: number;
-        dias_turno_nocturno: number; dias_turno_nocturno_sin_gnc: number;
-        dias_cargo: number; dias_cargo_sin_gnc: number;
-        tarifa_nueva_dias: { CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number; CARGO_SIN_GNC: number; TURNO_DIURNO_SIN_GNC: number; TURNO_NOCTURNO_SIN_GNC: number };
-        total_dias: number;
-        estado_billing: 'Activo' | 'Pausa' | 'De baja';
-        fecha_baja_no_coincide?: boolean;
-      }[] = []
-      const dnisYaProcesados = new Set<string>()
-
-      for (const control of conductoresControl) {
-        if (dnisYaProcesados.has(control.numero_dni)) continue
-        dnisYaProcesados.add(control.numero_dni)
-
-        const conductorData = conductoresMap.get(control.numero_dni)
-        if (!conductorData) continue
-
-        const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 }
-        const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO + prorrateo.CARGO_SIN_GNC + prorrateo.TURNO_DIURNO_SIN_GNC + prorrateo.TURNO_NOCTURNO_SIN_GNC)
-        // Descuento por hora de entrega: restar turnos descontados
-        const descInfoRecalc = descuentosPorHoraRecalc.get(conductorData.id)
-        const descuentoRecalc = descInfoRecalc?.descuento || 0
-        // Vehículo fuera de servicio: medio turno al diurno / a cargo (no puede superar los días contados)
-        const descCierreInfoR = descuentosCierreRecalc.get(conductorData.id)
-        const descCierreDiurnoR = Math.min(descCierreInfoR?.TURNO_DIURNO || 0, prorrateo.TURNO_DIURNO + prorrateo.TURNO_DIURNO_SIN_GNC)
-        const descCierreCargoR = Math.min(descCierreInfoR?.CARGO || 0, prorrateo.CARGO + prorrateo.CARGO_SIN_GNC)
-        const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc - descCierreDiurnoR - descCierreCargoR)
-
-        // Ajustar días por modalidad restando el descuento de la modalidad correspondiente
-        // El descuento se aplica a la variante con GNC primero, luego sin GNC
-        let diasDiurnoAjustados = prorrateo.TURNO_DIURNO
-        let diasDiurnoSinGncAjustados = prorrateo.TURNO_DIURNO_SIN_GNC
-        const diasNocturnoAjustados = prorrateo.TURNO_NOCTURNO
-        const diasNocturnoSinGncAjustados = prorrateo.TURNO_NOCTURNO_SIN_GNC
-        let diasCargoAjustados = prorrateo.CARGO
-        let diasCargoSinGncAjustados = prorrateo.CARGO_SIN_GNC
-        if (descInfoRecalc) {
-          let descRestante = descInfoRecalc.descuento
-          if (descInfoRecalc.modalidad === 'TURNO_DIURNO') {
-            const descGnc = Math.min(descRestante, diasDiurnoAjustados)
-            diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - descGnc)
-            descRestante -= descGnc
-            if (descRestante > 0) diasDiurnoSinGncAjustados = Math.max(0, diasDiurnoSinGncAjustados - descRestante)
-          } else if (descInfoRecalc.modalidad === 'CARGO') {
-            const descGnc = Math.min(descRestante, diasCargoAjustados)
-            diasCargoAjustados = Math.max(0, diasCargoAjustados - descGnc)
-            descRestante -= descGnc
-            if (descRestante > 0) diasCargoSinGncAjustados = Math.max(0, diasCargoSinGncAjustados - descRestante)
-          }
-        }
-        // Igual que el descuento por hora de entrega: primero la variante con GNC, luego sin GNC
-        if (descCierreDiurnoR > 0) {
-          let restante = descCierreDiurnoR
-          const conGnc = Math.min(restante, diasDiurnoAjustados)
-          diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - conGnc)
-          restante -= conGnc
-          if (restante > 0) diasDiurnoSinGncAjustados = Math.max(0, diasDiurnoSinGncAjustados - restante)
-        }
-        if (descCierreCargoR > 0) {
-          let restante = descCierreCargoR
-          const conGnc = Math.min(restante, diasCargoAjustados)
-          diasCargoAjustados = Math.max(0, diasCargoAjustados - conGnc)
-          restante -= conGnc
-          if (restante > 0) diasCargoSinGncAjustados = Math.max(0, diasCargoSinGncAjustados - restante)
-        }
-
-        // Excluir solo a los que NO tuvieron ningún día en la semana (nunca asignados).
-        // Si tuvo días brutos pero el neto quedó en 0 por descuento (ej. entrega fuera de
-        // turno), se mantiene visible con total_dias = 0. SALVO regla previa: penalidades
-        // pendientes o devolución sin_cobro también quedan.
-        if (totalDiasBrutos === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni) && !conductoresSinCobroRecalc.has(conductorData.id)) continue
-
-        // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
-        const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
-        const tieneAsignacionCierreRecalc = conductoresConAsignacionAlCierreRecalc.has(conductorData.id)
-        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = esDeBaja
-          ? 'De baja'
-          : ((totalDias >= 7 || tieneAsignacionCierreRecalc) ? 'Activo' : 'Pausa')
-
-        // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
-        // Solo aplica si el conductor está de baja — si está ACTIVO, fecha_terminacion es residuo.
-        const maxFinAsigR = maxAsigFinRecalc.get(conductorData.id)
-        const ftStrR = conductorData.fecha_terminacion ? conductorData.fecha_terminacion.substring(0, 10) : null
-        const fechaBajaNoCoincide = esDeBaja && !!(ftStrR && maxFinAsigR && ftStrR !== maxFinAsigR)
-
-        conductoresProcesados.push({
-          conductor_id: conductorData.id,
-          conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
-          conductor_dni: conductorData.numero_dni,
-          conductor_cuit: conductorData.numero_cuit,
-          vehiculo_patente: control.patente || null,
-          tiene_gnc: control.tiene_gnc === true,
-          tiene_telepase: control.tiene_telepase,
-          dias_turno_diurno: diasDiurnoAjustados,
-          dias_turno_diurno_sin_gnc: diasDiurnoSinGncAjustados,
-          dias_turno_nocturno: diasNocturnoAjustados,
-          dias_turno_nocturno_sin_gnc: diasNocturnoSinGncAjustados,
-          dias_cargo: diasCargoAjustados,
-          dias_cargo_sin_gnc: diasCargoSinGncAjustados,
-          tarifa_nueva_dias: diasTarifaNuevaRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 },
-          total_dias: totalDias,
-          estado_billing: estadoBilling,
-          fecha_baja_no_coincide: fechaBajaNoCoincide,
-        })
-      }
-
-      const conductorIds = conductoresProcesados.map(c => c.conductor_id)
-      // Régimen Toshipass (tarifa nueva desde el corte): pagan Toshipass en lugar de garantía.
-      // Incluye conductores nuevos y cambios de tarifa (desde la semana del cambio).
-      // Devoluciones de garantía por cambio de tarifa registradas en esta semana (P028, descuento)
-      // Referidos: días de esta semana dentro de su primera semana (descuento 5%)
-      // 4. Conceptos (precios actuales) y flags de vehículo por patente (snapshot al recalcular)
-      // Son independientes entre sí: se piden juntas.
-      const patentesRecalc = [...new Set(conductoresProcesados.map(c => c.vehiculo_patente).filter(Boolean))] as string[]
-      // Promociones activas (Parámetros > Promociones): días con 10% y días con B1
-      const [reglaToshipass, devolucionesGarantia, diasDescuentoReferido, promocionesRecalc, { data: conceptos }, { data: vehiculosFlagsRecalc }] = await Promise.all([
-        cargarReglaToshipass(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
-        cargarDevolucionesCambioTarifaEnPeriodo(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
-        cargarDiasDescuentoReferido(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
-        cargarPromocionesSemana(conductorIds, { inicio: fechaInicio, fin: fechaFin }),
-        supabase.from('conceptos_nomina').select('*').eq('activo', true),
-        patentesRecalc.length > 0
-          ? supabase.from('vehiculos').select('patente, gnc, telepase').in('patente', patentesRecalc)
-          : Promise.resolve({ data: [] as Array<{ patente: string; gnc: boolean | null; telepase: boolean | null }> }),
-      ])
-
-      // Precios DIARIOS (precio_final con IVA = precio real ingresado)
-      const conceptosPorCodigo = new Map<string, any>()
-      for (const c of ((conceptos || []) as any[])) {
-        if (c.codigo) conceptosPorCodigo.set(c.codigo, c)
-      }
-      const preciosActuales: Record<string, number> = {
-        'P001': conceptosPorCodigo.get('P001')?.precio_final || 42714,
-        'P002': conceptosPorCodigo.get('P002')?.precio_final || 75429,
-        'P003': conceptosPorCodigo.get('P003')?.precio_final || 7143,
-        'P013': conceptosPorCodigo.get('P013')?.precio_final || 32714,
-        'P014': conceptosPorCodigo.get('P014')?.precio_final || 35571,
-        'P015': conceptosPorCodigo.get('P015')?.precio_final || 27000,
-        'P016': conceptosPorCodigo.get('P016')?.precio_final || 62571,
-        // Tarifa dual: espejos de tarifa nueva. Fallback = precio del codigo antiguo
-        // equivalente para nunca facturar $0 si el concepto nuevo aun no esta cargado.
-        'P021': conceptosPorCodigo.get('P021')?.precio_final || conceptosPorCodigo.get('P001')?.precio_final || 42714,
-        'P022': conceptosPorCodigo.get('P022')?.precio_final || conceptosPorCodigo.get('P002')?.precio_final || 75429,
-        'P023': conceptosPorCodigo.get('P023')?.precio_final || conceptosPorCodigo.get('P013')?.precio_final || 32714,
-        'P024': conceptosPorCodigo.get('P024')?.precio_final || conceptosPorCodigo.get('P014')?.precio_final || 35571,
-        'P025': conceptosPorCodigo.get('P025')?.precio_final || conceptosPorCodigo.get('P015')?.precio_final || 27000,
-        'P026': conceptosPorCodigo.get('P026')?.precio_final || conceptosPorCodigo.get('P016')?.precio_final || 62571,
-      }
-
-      // Flags de vehículo por patente (snapshot al momento de recalcular)
-      const flagsVehiculoMap = new Map<string, { gnc: boolean; telepase: boolean }>()
-      ;(vehiculosFlagsRecalc || []).forEach((v: any) => {
-        flagsVehiculoMap.set(v.patente, { gnc: v.gnc === true, telepase: v.telepase === true })
-      })
-
-      // Precios diarios para alquiler por modalidad + GNC
-      const getCodigoAlquiler = (modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO', tieneGnc: boolean, tipoTarifa: 'antigua' | 'nueva' = 'antigua'): string => {
-        const codigosTarifaNueva: Record<string, string> = {
-          P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026'
-        }
-        let codigo: string
-        if (modalidad === 'CARGO') codigo = tieneGnc ? 'P002' : 'P016'
-        else if (modalidad === 'NOCTURNO') codigo = tieneGnc ? 'P013' : 'P015'
-        else codigo = tieneGnc ? 'P001' : 'P014'
-        return tipoTarifa === 'nueva' ? codigosTarifaNueva[codigo] : codigo
-      }
-      // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
-      const cuotaGarantia = cuotaSemanalGarantia(conceptosPorCodigo.get('P003'))
-
-      // 4b. Limpiar entradas regularizado anteriores de este período (idempotencia del recálculo)
-      // Esto evita que un recálculo previo deje una entrada regularizado que infle el saldo_anterior
-      if (conductorIds.length > 0) {
-        await (supabase.from('control_saldos') as any)
-          .delete()
-          .in('conductor_id', conductorIds)
-          .eq('semana', semanaNum)
-          .eq('anio', anioNum)
-          .eq('tipo_movimiento', 'regularizado')
-      }
-
-      // 5. Obtener datos adicionales en paralelo
-      // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
-      const MULTAS_HABILITADAS = false
-      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc, garantiaHistorialRecalcRes] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
-        // Aprobados + los ya aplicados a ESTE período (se vuelven a aplicar al guardar)
-        (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).or(`estado.eq.aprobado,periodo_aplicado_id.eq.${periodoId}`),
-        // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
-        (supabase.from('control_saldos') as any)
-          .select('conductor_id, saldo_pendiente, semana, anio, tipo_movimiento, created_at')
-          .in('conductor_id', conductorIds)
-          .or(`anio.lt.${anioNum},and(anio.eq.${anioNum},semana.lte.${semanaNum})`)
-          // El saldo es el del ÚLTIMO movimiento cargado (por fecha de carga), no el de la semana
-          // más alta: un Pago Cabify de la semana anterior importado después de un pago en
-          // efectivo de esta semana es el saldo vigente (ya incluye ese efectivo).
-          .order('created_at', { ascending: false }),
-        // Sin aplicar + los ya aplicados a ESTE período (se vuelven a aplicar al guardar)
-        (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).or(`aplicado.eq.false,periodo_id.eq.${periodoId}`),
-        // Peajes de la SEMANA ANTERIOR
-        (() => {
-          const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
-          const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
-          return supabase.from(getCabifyTable(sedeDelPeriodo)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
-        })(),
-        (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
-        (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).or(hastaSemana(semanaNum, anioNum)).neq('estado', 'cancelada_por_baja'),
-        // Multas: se consulta pero solo se usa si MULTAS_HABILITADAS = true
-        MULTAS_HABILITADAS
-          ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').is('deleted_at', null).gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
-          : Promise.resolve({ data: [] }),
-        supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
-        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing).
-        // Solo períodos ANTERIORES a esta semana: la cuota de esta semana se suma aparte, y los
-        // períodos posteriores (si se recalcula una semana vieja) no deben bajar esta cuota.
-        (supabase.from('facturacion_conductores') as any)
-          .select('conductor_id, subtotal_garantia, periodo:periodos_facturacion!inner(fecha_fin)')
-          .in('conductor_id', conductorIds)
-          .gt('subtotal_garantia', 0)
-          .lt('periodo.fecha_fin', fechaInicio),
-      ])
-
-      // Mapa acumulado de garantía facturada por conductor
-      const garantiaAcumuladaRecalc = new Map<string, number>()
-      for (const f of (garantiaHistorialRecalcRes.data || []) as any[]) {
-        garantiaAcumuladaRecalc.set(f.conductor_id, (garantiaAcumuladaRecalc.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
-      }
-
-      // 5b. Cargar penalidades_cuotas (cuotas de penalidades fraccionadas) hasta esta semana + pagos para cruzar
-      const [penalidadesCuotasResult, pagosCuotasRecalcRes, todasCuotasPenIdsRes] = await Promise.all([
-        (supabase
-          .from('penalidades_cuotas') as any)
-          .select('*, penalidad:penalidades!inner(id, conductor_id, detalle, cantidad_cuotas, aplicado, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
-          .eq('semana', semanaNum)
-          .eq('anio', anioNum)
-          .eq('penalidad.aplicado', true)
-          .neq('estado', 'cancelada_por_baja'),
-        // Pagos registrados para cruzar (penalidad_cuota + cobro_fraccionado)
-        (supabase
-          .from('pagos_conductores') as any)
-          .select('referencia_id')
-          .in('tipo_cobro', ['penalidad_cuota', 'cobro_fraccionado']),
-        // TODOS los penalidad_id que tienen cuotas (pagadas o no) — para excluir de penalidades completas
-        (supabase
-          .from('penalidades_cuotas') as any)
-          .select('penalidad_id')
-          .neq('estado', 'cancelada_por_baja')
-      ])
-
-      const cuotasPagadasRecalcIds = new Set(
-        (pagosCuotasRecalcRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
-      )
-
-      // Set para O(1) en lugar de O(n) con .includes()
-      const conductorIdsSet = new Set<string>(conductorIds)
-
-      // Filtrar por año correcto (o sin año), conductores del período, y excluir cuotas pagadas (aplicado=true O en pagos_conductores)
-      const penalidadesCuotas = (penalidadesCuotasResult.data || []).filter((pc: any) =>
-        (!pc.anio || pc.anio <= anioNum) &&
-        pc.penalidad?.conductor_id &&
-        conductorIdsSet.has(pc.penalidad.conductor_id) &&
-        pc.aplicado !== true &&
-        !cuotasPagadasRecalcIds.has(pc.id)
-      )
-
-      // TODAS las penalidades que tienen cuotas (pagadas o pendientes) — excluir del cálculo completo
-      // Si una penalidad tiene cuotas, SOLO se cobra por cuotas, NUNCA el monto completo
-      const penIdsConCuotas = new Set(
-        (todasCuotasPenIdsRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
-      )
-
-      const penalidades = penalidadesRes.data || []
-      const tickets = ticketsRes.data || []
-      const saldos = saldosRes.data || []
-      const excesosArr = excesosRes.data || []
-      const garantias = garantiasRes.data || []
-      // Cobros fraccionados: excluir los ya aplicados (cerrados en períodos anteriores)
-      // y los que ya tienen un pago registrado en pagos_conductores.
-      // Cuotas sin pagar que no se facturaron en OTRO período: una cuota se factura una sola
-      // vez; si no se paga, lo que falta viaja por el saldo (no se repite la semana siguiente).
-      const cobros = (cobrosRes.data || []).filter((c: any) =>
-        c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id) &&
-        (!c.periodo_facturado_id || c.periodo_facturado_id === periodoId)
-      )
-
-      // ─── O(1) lookup Maps — construidos una vez, usados en el loop por conductor ───
-      // Antes: cada iteración hacía .find()/.filter() sobre el array completo → O(n²)
-      // Ahora: lookup en O(1) por conductor_id → O(n) total
-      const garantiasMapById = new Map<string, any>(
-        (garantias as any[]).map((g: any) => [g.conductor_id, g])
-      )
-
-      // Auto-crear garantias_conductores para conductores TURNO que no tienen registro aún.
-      // Esto evita que el sistema cobre P003 sin dejar rastro en garantias_conductores.
-      // Los de régimen Toshipass no tienen garantía: no se les crea registro.
-      const conductoresSinGarantia = conductoresProcesados.filter(
-        (c) => !garantiasMapById.has(c.conductor_id) && !reglaToshipass.conductores.has(c.conductor_id)
-      )
-      if (conductoresSinGarantia.length > 0) {
-        const nuevasGarantias = conductoresSinGarantia.map((c) => ({
-          conductor_id: c.conductor_id,
-          conductor_nombre: c.conductor_nombre,
-          // Tipo predominante de la semana (antes siempre 'TURNO', aunque fuera a cargo)
-          tipo_alquiler: (c.dias_cargo + c.dias_cargo_sin_gnc) >
-            (c.dias_turno_diurno + c.dias_turno_diurno_sin_gnc + c.dias_turno_nocturno + c.dias_turno_nocturno_sin_gnc)
-            ? 'CARGO' : 'TURNO',
-          monto_total: 1000000,
-          monto_cuota_semanal: cuotaGarantia,
-          cuotas_totales: 20,
-          monto_pagado: 0,
-          monto_realmente_pagado: 0,
-          cuotas_pagadas: 0,
-          estado: 'en_curso',
-          semana_inicio: semanaNum,
-          anio_inicio: anioNum,
-        }))
-        const { data: insertadas } = await (supabase.from('garantias_conductores') as any)
-          .insert(nuevasGarantias)
-          .select()
-        for (const g of (insertadas || [])) {
-          garantiasMapById.set(g.conductor_id, g)
-        }
-      }
-
-      const penalidadesGrouped = new Map<string, any[]>()
-      ;(penalidades as any[]).forEach((p: any) => {
-        const arr = penalidadesGrouped.get(p.conductor_id) || []
-        arr.push(p)
-        penalidadesGrouped.set(p.conductor_id, arr)
-      })
-      const ticketsGrouped = new Map<string, any[]>()
-      ;(tickets as any[]).forEach((t: any) => {
-        const arr = ticketsGrouped.get(t.conductor_id) || []
-        arr.push(t)
-        ticketsGrouped.set(t.conductor_id, arr)
-      })
-      const excesosGrouped = new Map<string, any[]>()
-      ;(excesosArr as any[]).forEach((e: any) => {
-        const arr = excesosGrouped.get(e.conductor_id) || []
-        arr.push(e)
-        excesosGrouped.set(e.conductor_id, arr)
-      })
-      const cobrosGrouped = new Map<string, any[]>()
-      ;(cobros as any[]).forEach((c: any) => {
-        const arr = cobrosGrouped.get(c.conductor_id) || []
-        arr.push(c)
-        cobrosGrouped.set(c.conductor_id, arr)
-      })
-      const cuotasGrouped = new Map<string, any[]>()
-      ;(penalidadesCuotas as any[]).forEach((pc: any) => {
-        const cid = pc.penalidad?.conductor_id
-        if (!cid) return
-        const arr = cuotasGrouped.get(cid) || []
-        arr.push(pc)
-        cuotasGrouped.set(cid, arr)
-      })
-      // Saldo acumulado por conductor (fuente: último registro de control_saldos de semanas anteriores).
-      // Ignora la deuda que ya pasó a un fraccionamiento de saldo (ver utils/saldoAnterior).
-      const saldosMapById = construirSaldosAnteriores(saldos as any[], (cobrosRes.data || []) as any[])
-      // ─────────────────────────────────────────────────────────────────────────────
-
-      // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
-      const cabifyHashMapRecalc = new Map<string, string>(
-        (dniMapeoResRecalc.data || []).map((m: any) => [m.cabify_hash, m.dni_real])
-      )
-
-      // Mapear peajes por DNI (normalizado) - incluir todos los días del rango
-      const peajesMap = new Map<string, number>()
-      const peajesDetalleMapRecalc = new Map<string, Array<{ fecha: string; monto: number }>>()
-      ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
-        if (!r.dni) return
-        let dniKey = String(r.dni)
-        if (dniKey.startsWith('CABIFY_')) {
-          const resolved = cabifyHashMapRecalc.get(dniKey)
-          if (resolved) dniKey = resolved
-          else return // Hash desconocido, skip
-        }
-        const dniNorm = normalizeDni(dniKey)
-        const peajes = parseFloat(String(r.peajes)) || 0
-        if (peajes > 0) {
-          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + peajes)
-        }
-        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
-        const fecha = r.fecha_inicio ? r.fecha_inicio.split('T')[0] : 's/f'
-        if (!peajesDetalleMapRecalc.has(dniNorm)) peajesDetalleMapRecalc.set(dniNorm, [])
-        peajesDetalleMapRecalc.get(dniNorm)!.push({ fecha, monto: peajes })
-      })
-
-      // Mapear multas por patente
-      const multasMap = new Map<string, { monto: number; cantidad: number }>()
-      ;((multasRes.data || []) as any[]).forEach((m: any) => {
-        if (m.patente) {
-          const p = normalizePatente(m.patente)
-          const actual = multasMap.get(p) || { monto: 0, cantidad: 0 }
-          const importe = typeof m.importe === 'string' ? parseImporteMulta(m.importe) : parseFloat(m.importe) || 0
-          multasMap.set(p, { monto: actual.monto + importe, cantidad: actual.cantidad + 1 })
-        }
-      })
-
-      // 6. Procesar cada conductor - CREAR facturacion_conductores + facturacion_detalle
-      let totalCargosGlobal = 0
-      let totalDescuentosGlobal = 0
+      const { pendientesGuardar, totalCargosGlobal, totalDescuentosGlobal } = calculo
       let conductoresProcesadosCount = 0
-      setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
-      // Lo calculado de cada conductor; se guarda todo junto en el paso 6b
-      interface PendienteGuardar {
-        nombre: string
-        fila: { conductor_id: string } & Record<string, unknown>
-        detalles: any[]
-        ticketIds: string[]
-        excesoIds: string[]
-        cobroIds: string[]
-      }
-      const pendientesGuardar: PendienteGuardar[] = []
-
-      for (const conductor of conductoresProcesados) {
-        const flagsVeh = conductor.vehiculo_patente ? flagsVehiculoMap.get(conductor.vehiculo_patente) : undefined
-        const tieneTelepaseVehiculo = flagsVeh ? flagsVeh.telepase : conductor.tiene_telepase
-
-        // Calcular alquiler con precio diario × días
-        let alquilerTotal = 0
-        const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
-
-        // Generar líneas de alquiler separadas por modalidad+GNC
-        // Cada combinación de modalidad y flag GNC genera su propia línea con su precio
-        const lineasAlquiler: { modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO'; gnc: boolean; dias: number }[] = [
-          { modalidad: 'DIURNO', gnc: true, dias: conductor.dias_turno_diurno },
-          { modalidad: 'DIURNO', gnc: false, dias: conductor.dias_turno_diurno_sin_gnc },
-          { modalidad: 'NOCTURNO', gnc: true, dias: conductor.dias_turno_nocturno },
-          { modalidad: 'NOCTURNO', gnc: false, dias: conductor.dias_turno_nocturno_sin_gnc },
-          { modalidad: 'CARGO', gnc: true, dias: conductor.dias_cargo },
-          { modalidad: 'CARGO', gnc: false, dias: conductor.dias_cargo_sin_gnc },
-        ]
-        const labelModalidad: Record<string, string> = {
-          DIURNO: 'Alquiler Turno Diurno',
-          NOCTURNO: 'Alquiler Turno Nocturno',
-          CARGO: 'Alquiler a Cargo',
-        }
-        for (const linea of lineasAlquiler) {
-          if (linea.dias <= 0) continue
-          // Tarifa dual: separar los dias de esta linea entre tarifa antigua y nueva.
-          // Los descuentos por hora de entrega consumen primero los dias de tarifa antigua.
-          const keyTarifaN = linea.modalidad === 'CARGO' ? (linea.gnc ? 'CARGO' : 'CARGO_SIN_GNC')
-            : linea.modalidad === 'NOCTURNO' ? (linea.gnc ? 'TURNO_NOCTURNO' : 'TURNO_NOCTURNO_SIN_GNC')
-            : (linea.gnc ? 'TURNO_DIURNO' : 'TURNO_DIURNO_SIN_GNC')
-          const diasNuevaRaw = (conductor.tarifa_nueva_dias as any)?.[keyTarifaN] || 0
-          const diasNueva = Math.min(linea.dias, diasNuevaRaw)
-          const diasAntigua = linea.dias - diasNueva
-          const partesTarifa: { dias: number; tarifa: 'antigua' | 'nueva' }[] = []
-          if (diasAntigua > 0) partesTarifa.push({ dias: diasAntigua, tarifa: 'antigua' })
-          if (diasNueva > 0) partesTarifa.push({ dias: diasNueva, tarifa: 'nueva' })
-          for (const parte of partesTarifa) {
-            const codigo = getCodigoAlquiler(linea.modalidad, linea.gnc, parte.tarifa)
-            const precio = preciosActuales[codigo] || 0
-            // FIX 2026-05-19: preservar 2 decimales (ej: 5.5 * 62571.43 = 344142.865 → 344142.87)
-            const monto = Math.round(precio * parte.dias * 100) / 100
-            alquilerTotal += monto
-            detallesAlquiler.push({
-              codigo,
-              descripcion: (linea.gnc ? labelModalidad[linea.modalidad] : `${labelModalidad[linea.modalidad]} Sin GNC`) + (parte.tarifa === 'nueva' ? ' (Tarifa Nueva)' : ''),
-              dias: parte.dias, monto
-            })
-          }
-        }
-
-        // precio_final ya incluye IVA - no se agrega de nuevo
-
-        // Garantía - valor fijo semanal (no proporcional a días trabajados)
-        // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
-        // Si garantía completada o cuotas completas, cobrar $0
-        const factorProporcional = conductor.total_dias / 7
-        // Toshipass (conductor nuevo): reemplaza a la garantía. Monto semanal fijo si trabajó
-        // al menos un día (el día de la devolución final no cuenta). Ver utils/toshipass.ts
-        const esToshipass = reglaToshipass.conductores.has(conductor.conductor_id)
-        const diasTrabajadosTP = esToshipass
-          ? diasTrabajadosToshipass(
-            diasContadosRecalc.get(conductor.conductor_id),
-            maxAsigFinRecalc.get(conductor.conductor_id),
-            conductoresConAsignacionAbiertaRecalc.has(conductor.conductor_id),
-          )
-          : 0
-        const montoToshipass = esToshipass && diasTrabajadosTP > 0 ? reglaToshipass.cuotaSemanal : 0
-        const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
-        const montoTotalGarantia = garantiaConductor?.monto_total || 1000000
-        // Acumulado real: incluye la base histórica ya pagada ANTES de que facturación tomara
-        // el control (monto_realmente_pagado = base + todo lo facturado). Antes solo se contaba
-        // la suma de subtotal_garantia de este módulo, por lo que se seguía cobrando la cuota
-        // pasado el objetivo (ej: conductores que ya venían pagando garantía por otra vía).
-        // El período actual ya fue borrado arriba, así que acumuladoFacturadoRecalc es lo previo.
-        const acumuladoFacturadoRecalc = garantiaAcumuladaRecalc.get(conductor.conductor_id) || 0
-        const acumuladoRealRecalc = Math.max(acumuladoFacturadoRecalc, garantiaConductor?.monto_realmente_pagado || 0)
-        const garantiaCompletada = garantiaConductor?.estado === 'completada' || acumuladoRealRecalc >= montoTotalGarantia
-        const cuotaNormalRecalc = garantiaConductor?.monto_cuota_semanal || cuotaGarantia
-        const pendienteRecalc = montoTotalGarantia - acumuladoRealRecalc
-        const cuotaGarantiaProporcional = Math.round((esToshipass || conductor.total_dias === 0 || garantiaCompletada
-          ? 0
-          : Math.min(cuotaNormalRecalc, Math.max(0, pendienteRecalc))) * 100) / 100
-        const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
-
-        // Penalidades - segmentar por categoría de tipo_cobro_descuento
-        // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
-        const pensConductor = (penalidadesGrouped.get(conductor.conductor_id) || []).filter((p: any) =>
-          !penIdsConCuotas.has(p.id) &&
-          !(p.cantidad_cuotas && p.cantidad_cuotas > 1)
-        )
-        const pensP004 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P004')
-        const pensP006 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P006')
-        const pensP007 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P007')
-        // NULL categoria = pendiente, se excluye del cálculo
-        const totalPenP004 = pensP004.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // descuento
-        const totalPenP006 = pensP006.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
-        const totalPenP007 = pensP007.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
-        const totalPenalidades = totalPenP006 + totalPenP007 // solo cargos
-
-        // Tickets (descuentos)
-        const ticketsConductor = ticketsGrouped.get(conductor.conductor_id) || []
-        const totalTickets = ticketsConductor.reduce((sum: number, t: any) => sum + (t.monto || 0), 0)
-
-        // Excesos (P006) - no aplica si tiene 0 días
-        const excesosConductor = excesosGrouped.get(conductor.conductor_id) || []
-        const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
-
-        // Peajes (P005)
-        // Si el vehículo tiene telepase habilitado, NO cobrar P005.
-        // Si Cabify reporta peajes para el conductor, se cobran sin importar los días del período
-        // (un conductor puede tener 0 turnos en la semana pero sí haber generado peajes en Cabify).
-        const totalPeajes = tieneTelepaseVehiculo
-          ? 0
-          : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
-
-        // Cobros fraccionados (P010) - calcular monto real de la cuota
-        const cobrosConductor = cobrosGrouped.get(conductor.conductor_id) || []
-        // Usar monto_cuota solo si es razonable (menor que monto_total), sino calcular desde monto_total/total_cuotas
-        const calcularMontoCuota = (c: any) => {
-          const mt = c.monto_total || 0
-          const mc = c.monto_cuota || 0
-          const tc = c.total_cuotas || 1
-          // Si monto_cuota es mayor o igual a monto_total, está mal — recalcular
-          return (mc > 0 && mc < mt) ? mc : Math.ceil(mt / tc)
-        }
-        const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + calcularMontoCuota(c), 0)
-
-        // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
-        const cuotasConductor = cuotasGrouped.get(conductor.conductor_id) || []
-        const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
-
-        // Multas (P008)
-        const patenteNorm = normalizePatente(conductor.vehiculo_patente)
-        // Multas: desactivado temporalmente (MULTAS_HABILITADAS = false)
-        const multasVehiculo = MULTAS_HABILITADAS ? multasMap.get(patenteNorm) : undefined
-        const montoMultas = multasVehiculo?.monto || 0
-        const cantidadMultas = multasVehiculo?.cantidad || 0
-
-        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
-        // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
-        // de la semana. Antes se forzaba a 0 con "total_dias === 0 ? 0 :", lo que hacía
-        // que los conductores de baja (0 días) perdieran la deuda arrastrada.
-        const saldoConductor = saldosMapById.get(conductor.conductor_id)
-        const saldoAnteriorRaw = -(saldoConductor?.saldo_actual || 0)
-        const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
-        const diasMora = 0
-        const montoMora = 0
-
-        // Totales (montoMultas será 0 mientras MULTAS_HABILITADAS = false)
-        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + montoToshipass + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
-        // Devolución de garantía por cambio de tarifa: crédito que resta del total (P028)
-        const montoDevolucionGarantia = devolucionesGarantia.get(conductor.conductor_id) || 0
-        // Referido: 5% del alquiler de cada día de su primera semana (P004). Sobre lo que se
-        // cobró ese día: si hubo medio turno (entrega o vehículo fuera de servicio), sobre esa mitad.
-        let montoDescuentoReferido = 0
-        let diasDescuentoReferidoConductor = 0
-        for (const fecha of diasDescuentoReferido.get(conductor.conductor_id) || []) {
-          const tarifaDia = tarifaDiaRecalc.get(conductor.conductor_id)?.get(fecha)
-          if (!tarifaDia) continue // ese día no se cobra en esta semana
-          const descontadoDia = descontadoPorDiaR.get(`${conductor.conductor_id}|${fecha}`)
-            ?? (fechaDescEntregaRecalc.get(conductor.conductor_id) === fecha ? (descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0) : 0)
-          const fraccionCobrada = Math.max(0, 1 - descontadoDia)
-          if (fraccionCobrada <= 0) continue
-          const precioDia = preciosActuales[getCodigoAlquiler(tarifaDia.modalidad, tarifaDia.gnc, tarifaDia.tarifa)] || 0
-          montoDescuentoReferido += precioDia * fraccionCobrada * DESCUENTO_REFERIDO_PORCENTAJE
-          diasDescuentoReferidoConductor++
-        }
-        montoDescuentoReferido = Math.round(montoDescuentoReferido * 100) / 100
-        // Promoción del 10% (utils/promocionesFacturacion.ts): misma base que el referido
-        const diasPromoRecalc: DiaPromocion[] = []
-        const diasPromo10Recalc = promocionesRecalc.diasDescuento10.get(conductor.conductor_id)
-        for (const fecha of diasPromo10Recalc || []) {
-          const tarifaDia = tarifaDiaRecalc.get(conductor.conductor_id)?.get(fecha)
-          if (!tarifaDia) continue
-          const descontadoDia = descontadoPorDiaR.get(`${conductor.conductor_id}|${fecha}`)
-            ?? (fechaDescEntregaRecalc.get(conductor.conductor_id) === fecha ? (descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0) : 0)
-          const codigoDia = getCodigoAlquiler(tarifaDia.modalidad, tarifaDia.gnc, tarifaDia.tarifa)
-          diasPromoRecalc.push({ fecha, codigo: codigoDia, precio: preciosActuales[codigoDia] || 0, fraccion: Math.max(0, 1 - descontadoDia) })
-        }
-        const promoRecalc = lineasPromocionConductor(
-          promocionesRecalc, conductor.conductor_id,
-          descuentoPromoAlquiler(diasPromoRecalc),
-          descuentoPromoToshipass(montoToshipass, diasPromo10Recalc, diasContadosRecalc.get(conductor.conductor_id)),
-        )
-        const montoDescuentoPromo = promoRecalc.lineas.reduce((sum, l) => sum + l.monto, 0)
-        const subtotalDescuentos = totalTickets + totalPenP004 + montoDevolucionGarantia + montoDescuentoReferido + montoDescuentoPromo
-        const subtotalNeto = subtotalCargos - subtotalDescuentos
-        const totalAPagarRaw = subtotalNeto + saldoAnterior
-        const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
-
-        totalCargosGlobal += subtotalCargos
-        totalDescuentosGlobal += subtotalDescuentos
-
-        const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_diurno_sin_gnc + conductor.dias_turno_nocturno + conductor.dias_turno_nocturno_sin_gnc
-        const diasCargoTotal = conductor.dias_cargo + conductor.dias_cargo_sin_gnc
-        const tipoAlquilerPrincipal = diasCargoTotal >= diasTurnoTotal ? 'CARGO' : 'TURNO'
-
-        // Calcular proyectado_alquiler (misma lógica que cargarFacturacion post-load)
-        let proyectadoAlquiler = alquilerTotal
-        if (conductor.total_dias > 0 && alquilerTotal > 0) {
-          // De baja o en pausa: la facturación ya se cortó, no se proyecta
-          if (conductor.estado_billing !== 'Activo') {
-            proyectadoAlquiler = alquilerTotal
-          } else {
-            const primeraFechaR = primeraFechaRecalc.get(conductor.conductor_id)
-            const descuentoR = descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0
-            let diasCalendarioR = 7
-            if (primeraFechaR) {
-              diasCalendarioR = Math.min(7, Math.max(1,
-                Math.round((finSemanaRecalc.getTime() - primeraFechaR.getTime()) / (1000 * 60 * 60 * 24)) + 1
-              ))
-            }
-            const diasProyectadosR = Math.max(1, diasCalendarioR - descuentoR)
-            if (conductor.total_dias < diasProyectadosR) {
-              const precioDiarioR = alquilerTotal / conductor.total_dias
-              proyectadoAlquiler = Math.round(precioDiarioR * diasProyectadosR)
-            }
-          }
-        } else {
-          proyectadoAlquiler = 0
-        }
-
-        // Fila de facturacion_conductores: se guarda en bloque después del bucle (6b)
-        const filaFacturacion = {
-          periodo_id: periodoId,
-          conductor_id: conductor.conductor_id,
-          conductor_nombre: conductor.conductor_nombre,
-          conductor_dni: conductor.conductor_dni,
-          conductor_cuit: conductor.conductor_cuit,
-          vehiculo_id: null,
-          vehiculo_patente: conductor.vehiculo_patente,
-          tipo_alquiler: tipoAlquilerPrincipal,
-          turnos_base: 7,
-          turnos_cobrados: conductor.total_dias,
-          factor_proporcional: factorProporcional,
-          subtotal_alquiler: alquilerTotal,
-          proyectado_alquiler: proyectadoAlquiler,
-          subtotal_garantia: cuotaGarantiaProporcional,
-          subtotal_cargos: subtotalCargos,
-          subtotal_descuentos: subtotalDescuentos,
-          subtotal_neto: subtotalNeto,
-          saldo_anterior: saldoAnterior,
-          dias_mora: diasMora,
-          monto_mora: montoMora,
-          total_a_pagar: totalAPagar,
-          estado: 'calculado'
-        }
-
-        // ═══ BATCH: Recopilar todos los detalles en un array, insertar de una sola vez ═══
-        const todosDetalles: any[] = []
-        const ticketIdsAplicar: string[] = []
-        const excesoIdsAplicar: string[] = []
-        const cobroIdsAplicar: string[] = []
-
-        // Alquiler detalles (P001/P002/P013 con GNC, P014/P015/P016 sin GNC)
-        // precio_unitario = precio DIARIO (precio_final de conceptos_nomina ya es diario)
-        for (const detalle of detallesAlquiler) {
-          const precioUnitario = preciosActuales[detalle.codigo] || (detalle.dias > 0 ? (detalle.monto / detalle.dias) : detalle.monto)
-          todosDetalles.push({
-            concepto_codigo: detalle.codigo,
-            concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
-            precio_unitario: precioUnitario, subtotal: detalle.monto, total: detalle.monto, es_descuento: false
-          })
-        }
-
-        // P004 - Descuento 5% primera semana del referido
-        if (montoDescuentoReferido > 0) {
-          todosDetalles.push({
-            concepto_codigo: 'P004',
-            concepto_descripcion: descripcionDescuentoReferido(diasDescuentoReferidoConductor),
-            cantidad: 1, precio_unitario: montoDescuentoReferido,
-            subtotal: montoDescuentoReferido, total: montoDescuentoReferido, es_descuento: true
-          })
-        }
-
-        // Promociones: descuento con el código visible de la promoción (PRM...). El código
-        // queda guardado tal cual en la factura aunque después se edite en Parámetros.
-        for (const linea of promoRecalc.lineas) {
-          todosDetalles.push({
-            concepto_codigo: linea.codigo, concepto_descripcion: linea.descripcion,
-            cantidad: 1, precio_unitario: linea.monto, subtotal: linea.monto, total: linea.monto, es_descuento: true,
-            referencia_id: linea.promocionId, referencia_tipo: REFERENCIA_PROMOCION,
-            descripcion: JSON.stringify(linea.calculo)
-          })
-        }
-        // Promoción licencia B1: línea informativa en $0 (pago diario como saldo a favor)
-        if (promoRecalc.b1) {
-          todosDetalles.push({
-            concepto_codigo: promoRecalc.b1.codigo, concepto_descripcion: promoRecalc.b1.descripcion,
-            cantidad: promoRecalc.b1.dias, precio_unitario: 0, subtotal: 0, total: 0, es_descuento: false,
-            referencia_id: promoRecalc.b1.promocionId, referencia_tipo: REFERENCIA_PROMOCION,
-            descripcion: JSON.stringify(promoRecalc.b1.calculo)
-          })
-        }
-
-        // P028 - Devolución de garantía por cambio de tarifa (descuento)
-        if (montoDevolucionGarantia > 0) {
-          todosDetalles.push({
-            concepto_codigo: CODIGO_DEVOLUCION_GARANTIA, concepto_descripcion: DESCRIPCION_DEVOLUCION_GARANTIA,
-            cantidad: 1, precio_unitario: montoDevolucionGarantia,
-            subtotal: montoDevolucionGarantia, total: montoDevolucionGarantia, es_descuento: true
-          })
-        }
-
-        if (esToshipass) {
-          // P027 - Toshipass (en lugar de la garantía)
-          if (montoToshipass > 0) {
-            todosDetalles.push({
-              concepto_codigo: CODIGO_TOSHIPASS, concepto_descripcion: 'Toshipass',
-              cantidad: 1, precio_unitario: montoToshipass,
-              subtotal: montoToshipass, total: montoToshipass, es_descuento: false
-            })
-          }
-        } else {
-          // P003 - Garantía
-          const descripcionGarantia = garantiaCompletada
-            ? 'Garantía completada'
-            : `Cuota de Garantía ${cuotaActual}`
-          todosDetalles.push({
-            concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
-            cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
-            subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
-          })
-        }
-
-        // Penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
-        const gruposPenalidades: { pens: any[]; codigo: string; esDescuento: boolean }[] = [
-          { pens: pensP004, codigo: 'P004', esDescuento: true },
-          { pens: pensP006, codigo: 'P006', esDescuento: false },
-          { pens: pensP007, codigo: 'P007', esDescuento: false },
-        ]
-        for (const grupo of gruposPenalidades) {
-          for (const pen of grupo.pens) {
-            const tipoNombre = (pen as any).tipos_cobro_descuento?.nombre || 'Sin detalle'
-            const incDescSave = (pen as any).incidencias?.descripcion
-            const detalleCompleto = incDescSave ? `${tipoNombre} - ${incDescSave}` : tipoNombre
-            const descripcion = grupo.codigo === 'P004'
-              ? `Descuento a Favor: ${detalleCompleto}`
-              : grupo.codigo === 'P006'
-                ? `Exceso KM: ${detalleCompleto}`
-                : `Cargo: ${detalleCompleto}`
-            todosDetalles.push({
-              concepto_codigo: grupo.codigo,
-              concepto_descripcion: descripcion,
-              cantidad: 1, precio_unitario: (pen as any).monto,
-              subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
-              referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
-            })
-          }
-        }
-
-        // P004 - Tickets a Favor (descuentos)
-        for (const ticket of ticketsConductor) {
-          todosDetalles.push({
-            concepto_codigo: 'P004',
-            concepto_descripcion: (ticket as any).descripcion
-              ? `${(ticket as any).tipo || 'Ticket'} – ${(ticket as any).descripcion}`
-              : `${(ticket as any).tipo || 'Ticket'}`,
-            cantidad: 1, precio_unitario: (ticket as any).monto,
-            subtotal: (ticket as any).monto, total: (ticket as any).monto, es_descuento: true,
-            referencia_id: (ticket as any).id, referencia_tipo: 'ticket'
-          })
-          ticketIdsAplicar.push((ticket as any).id)
-        }
-
-        // P006 - Excesos de kilometraje
-        for (const exceso of excesosConductor) {
-          todosDetalles.push({
-            concepto_codigo: 'P006',
-            concepto_descripcion: `Exceso KM: ${(exceso as any).km_exceso || 0} km`,
-            cantidad: 1, precio_unitario: (exceso as any).monto_base || 0,
-            iva_porcentaje: (exceso as any).iva_porcentaje || 21,
-            iva_monto: (exceso as any).iva_monto || 0,
-            subtotal: (exceso as any).monto_base || 0,
-            total: (exceso as any).monto_total || 0, es_descuento: false,
-            referencia_id: (exceso as any).id, referencia_tipo: 'exceso_km'
-          })
-          excesoIdsAplicar.push((exceso as any).id)
-        }
-
-        // P005 - Peajes de Cabify
-        if (totalPeajes > 0) {
-          todosDetalles.push({
-            concepto_codigo: 'P005', concepto_descripcion: 'Peajes',
-            cantidad: 1, precio_unitario: totalPeajes,
-            subtotal: totalPeajes, total: totalPeajes, es_descuento: false,
-            referencia_tipo: 'cabify_peajes'
-          })
-        }
-
-        // P008 - Multas de tránsito
-        if (montoMultas > 0) {
-          todosDetalles.push({
-            concepto_codigo: 'P008',
-            concepto_descripcion: `Multas de Tránsito (${cantidadMultas})`,
-            cantidad: cantidadMultas, precio_unitario: Math.round((montoMultas / cantidadMultas) * 100) / 100,
-            subtotal: montoMultas, total: montoMultas, es_descuento: false,
-            referencia_tipo: 'multa_transito'
-          })
-        }
-
-        // P009 - Mora
-        if (montoMora > 0) {
-          todosDetalles.push({
-            concepto_codigo: 'P009',
-            concepto_descripcion: `Mora (${diasMora} días al 1%)`,
-            cantidad: diasMora, precio_unitario: Math.round(saldoAnterior * 0.01 * 100) / 100,
-            subtotal: montoMora, total: montoMora, es_descuento: false
-          })
-        }
-
-        // P010 - Cobros fraccionados (plan de pagos)
-        for (const cobro of cobrosConductor) {
-          const montoCuotaReal = calcularMontoCuota(cobro)
-          const descripcionCobro = (cobro as any).descripcion || `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
-          todosDetalles.push({
-            concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
-            cantidad: 1, precio_unitario: montoCuotaReal,
-            subtotal: montoCuotaReal, total: montoCuotaReal, es_descuento: false,
-            referencia_id: (cobro as any).id, referencia_tipo: 'cobro_fraccionado'
-          })
-          cobroIdsAplicar.push((cobro as any).id)
-        }
-
-        // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
-        for (const cuota of cuotasConductor) {
-          const penPadre = cuota.penalidad
-          const categoria = penPadre?.tipos_cobro_descuento?.categoria || 'P007'
-          const esDescuento = penPadre?.tipos_cobro_descuento?.es_a_favor === true
-          const tipoNombre = penPadre?.tipos_cobro_descuento?.nombre || penPadre?.detalle || 'Penalidad fraccionada'
-          const descripcionCuota = `Cuota ${cuota.numero_cuota} - ${tipoNombre} (Total: ${penPadre?.cantidad_cuotas || '?'} cuotas)`
-          todosDetalles.push({
-            concepto_codigo: esDescuento ? 'P004' : categoria,
-            concepto_descripcion: descripcionCuota,
-            cantidad: 1, precio_unitario: cuota.monto_cuota,
-            subtotal: cuota.monto_cuota, total: cuota.monto_cuota, es_descuento: esDescuento,
-            referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota'
-          })
-          // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
-        }
-
-        // cobros_fraccionados: NO se marcan como aplicados (pagados) aquí; eso es al PAGAR.
-        // Sí se marcan como facturados en este período (periodo_facturado_id) al guardar.
-
-        // El kardex (control_saldos) + saldos_conductores se materializan al CERRAR
-        // el período (cerrarPeriodo), no aquí. Durante recalcular el período sigue
-        // abierto y el total_a_pagar es un preview en curso.
-
-        pendientesGuardar.push({
-          nombre: conductor.conductor_nombre || 'Sin nombre',
-          fila: filaFacturacion,
-          detalles: todosDetalles,
-          ticketIds: ticketIdsAplicar,
-          excesoIds: excesoIdsAplicar,
-          cobroIds: cobroIdsAplicar,
-        })
-        progresoLatido = { actual: pendientesGuardar.length, total: conductoresProcesados.length }
-        latido()
-      }
 
       // 6b. GUARDAR: todo junto, en una sola transacción dentro de la base
       // (reemplazar_facturacion_periodo). Resetea lo aplicado al período, borra la
@@ -6112,10 +5041,9 @@ export function ReporteFacturacionTab() {
         return
       }
 
-      // Cierre solo cambia estado a 'cerrado'. NO toca control_saldos ni
-      // saldos_conductores: los saldos se mueven únicamente cuando se carga el
-      // Pago Cabify (o pago manual). Materializar acá producía cargos
-      // 'regularizado' fantasma que sobreescribían el saldo antes de tener el pago.
+      // El cierre cambia el estado a 'cerrado' y, a las facturas que no tienen NINGÚN pago
+      // registrado, les pasa la deuda al saldo (ver pasarDeudaSinPagoAlSaldo). Las que ya
+      // tienen pago (Cabify, DiDi o manual) no se tocan: su saldo ya lo movió el pago.
       const { error } = await (supabase
         .from('periodos_facturacion') as any)
         .update({
@@ -6127,7 +5055,25 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      showSuccess('Período Cerrado')
+      // Facturas sin ningún pago: la deuda de la semana pasa al saldo (si no, la semana
+      // siguiente no se cobraba). Se registra como un pago de $0 "Cierre sin pago": así el
+      // pago real que llegue después (Cabify de esta semana) se descuenta bien y la semana
+      // queda bloqueada para recalcular, como cualquier semana con pagos.
+      const deuda = await pasarDeudaSinPagoAlSaldo(periodo)
+      if (deuda.errores.length > 0) {
+        await Alerta.fire({
+          icon: 'warning',
+          title: 'Período cerrado con avisos',
+          html: `<div style="text-align:left;font-size:13px;">
+            <p style="margin:0 0 8px 0">No se pudo pasar al saldo la deuda de ${deuda.errores.length} conductor(es) sin pago:</p>
+            <ul style="margin:0 0 8px 18px;padding:0">${deuda.errores.slice(0, 10).map(e => `<li>${e}</li>`).join('')}</ul>
+            <p style="margin:0;color:#6B7280;font-size:12px">Se puede registrar un pago de $0 a mano desde el detalle de cada conductor.</p>
+          </div>`,
+          confirmButtonText: 'Entendido',
+        })
+      }
+
+      showSuccess('Período Cerrado', deuda.pasados > 0 ? `${deuda.pasados} conductor(es) sin pago: su deuda pasó al saldo` : undefined)
 
       // Actualizar estado local
       setPeriodo(prev => prev ? {
@@ -6142,6 +5088,82 @@ export function ReporteFacturacionTab() {
     } finally {
       setCerrando(false)
     }
+  }
+
+  /**
+   * F13: al cerrar la semana, las facturas que no tienen NINGÚN pago registrado pasan su
+   * deuda (o saldo a favor) al saldo del conductor. Se registra como un pago de $0
+   * ("Cierre sin pago S{n}/{año}") con el mismo cálculo que un pago de app: así el pago real
+   * que llegue después se descuenta bien (el movimiento cuenta como de la propia factura) y
+   * la semana queda bloqueada para recalcular como cualquier semana con pagos.
+   */
+  async function pasarDeudaSinPagoAlSaldo(per: { id: string; semana: number; anio: number }): Promise<{ pasados: number; errores: string[] }> {
+    const errores: string[] = []
+    let pasados = 0
+    const { data: facturas, error: errFacturas } = await (supabase.from('facturacion_conductores') as any)
+      .select('id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit, total_a_pagar')
+      .eq('periodo_id', per.id)
+    if (errFacturas) return { pasados, errores: [`No se pudieron leer las facturas: ${errFacturas.message}`] }
+    const lista = (facturas || []) as Array<{ id: string; conductor_id: string; conductor_nombre: string; conductor_dni: string; conductor_cuit: string | null; total_a_pagar: number }>
+    const conPago = new Set<string>()
+    for (let i = 0; i < lista.length; i += 200) {
+      const { data, error } = await (supabase.from('pagos_conductores') as any)
+        .select('referencia_id')
+        .eq('tipo_cobro', 'facturacion_semanal')
+        .in('referencia_id', lista.slice(i, i + 200).map(f => f.id))
+      if (error) return { pasados, errores: [`No se pudieron leer los pagos: ${error.message}`] }
+      for (const pg of (data || []) as Array<{ referencia_id: string }>) conPago.add(String(pg.referencia_id))
+    }
+    const hoy = new Date()
+    const { semana: semanaHoy, anio: anioHoy } = semanaISO(hoyART())
+    const referencia = `Cierre sin pago S${per.semana}/${per.anio}`
+    for (const f of lista) {
+      if (conPago.has(f.id) || !f.conductor_id) continue
+      try {
+        const { error: errPago } = await (supabase.from('pagos_conductores') as any).insert({
+          conductor_id: f.conductor_id,
+          tipo_cobro: 'facturacion_semanal',
+          referencia_id: f.id,
+          referencia_tabla: 'facturacion_conductores',
+          numero_cuota: null,
+          monto: 0,
+          fecha_pago: hoy.toISOString(),
+          referencia,
+          semana: semanaHoy,
+          anio: anioHoy,
+          conductor_nombre: f.conductor_nombre,
+          created_by_name: profile?.full_name || 'Sistema',
+        })
+        if (errPago) throw errPago
+        const posteriores = await movimientosPosterioresALaFactura(f.conductor_id, f.id)
+        const saldoCrudo = -(Number(f.total_a_pagar) || 0) + posteriores
+        const nuevoSaldo = Math.abs(saldoCrudo) < 1 ? 0 : Math.round(saldoCrudo * 100) / 100
+        await upsertSaldoConductor({
+          conductorId: f.conductor_id,
+          conductorNombre: f.conductor_nombre,
+          conductorDni: f.conductor_dni,
+          conductorCuit: f.conductor_cuit || null,
+          nuevoSaldo,
+          timestamp: hoy.toISOString(),
+          sedeId: sedeActualId || sedeUsuario?.id,
+        })
+        await insertControlSaldo({
+          conductorId: f.conductor_id,
+          semana: per.semana,
+          anio: per.anio,
+          tipoMovimiento: 'cierre_sin_pago',
+          montoMovimiento: 0,
+          saldoPendiente: nuevoSaldo,
+          referencia,
+          userName: profile?.full_name,
+        })
+        pasados++
+      } catch (errorCapturado: any) {
+        console.error('[Facturación] No se pudo pasar la deuda al saldo:', f.conductor_nombre, errorCapturado)
+        errores.push(`${f.conductor_nombre}: ${errorCapturado?.message || 'error desconocido'}`)
+      }
+    }
+    return { pasados, errores }
   }
 
   // Reabrir período cerrado (solo admin)
@@ -6270,423 +5292,25 @@ export function ReporteFacturacionTab() {
       .order('codigo')
       .then(({ data }) => { if (data) setConceptosNomina(data as ConceptoNomina[]) })
 
-    // En modo Vista Previa, generar detalles simulados desde los datos calculados
-    if (modoVistaPrevia || facturacion.id.startsWith('preview-')) {
-      const detallesSimulados: FacturacionDetalle[] = []
+    // Vista Previa: las líneas son las del recálculo simulado (las mismas que se guardarían)
+    const esSimulado = facturacion.id.startsWith('preview-')
 
-      // === CARGOS (A PAGAR) ===
-
-      // P002 - Alquiler a Cargo (monto ya incluye IVA)
-      const cargoDias = facturacion.prorrateo_cargo_dias || 0
-      const cargoMonto = facturacion.prorrateo_cargo_monto || 0
-      if (cargoDias > 0 && cargoMonto > 0) {
-        detallesSimulados.push({
-          id: `det-cargo-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P002',
-          concepto_descripcion: 'Alquiler a Cargo',
-          cantidad: cargoDias,
-          precio_unitario: Math.round(cargoMonto / cargoDias),
-          subtotal: cargoMonto,
-          total: cargoMonto,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // P001 - Alquiler Turno Diurno (monto ya incluye IVA)
-      const diurnoDias = facturacion.prorrateo_diurno_dias || 0
-      const diurnoMonto = facturacion.prorrateo_diurno_monto || 0
-      if (diurnoDias > 0 && diurnoMonto > 0) {
-        detallesSimulados.push({
-          id: `det-diurno-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P001',
-          concepto_descripcion: 'Alquiler Turno Diurno',
-          cantidad: diurnoDias,
-          precio_unitario: Math.round(diurnoMonto / diurnoDias),
-          subtotal: diurnoMonto,
-          total: diurnoMonto,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // P013 - Alquiler Turno Nocturno (monto ya incluye IVA)
-      const nocturnoDias = facturacion.prorrateo_nocturno_dias || 0
-      const nocturnoMonto = facturacion.prorrateo_nocturno_monto || 0
-      if (nocturnoDias > 0 && nocturnoMonto > 0) {
-        detallesSimulados.push({
-          id: `det-nocturno-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P013',
-          concepto_descripcion: 'Alquiler Turno Nocturno',
-          cantidad: nocturnoDias,
-          precio_unitario: Math.round(nocturnoMonto / nocturnoDias),
-          subtotal: nocturnoMonto,
-          total: nocturnoMonto,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // P003 - Garantía
-      if (facturacion.subtotal_garantia > 0) {
-        detallesSimulados.push({
-          id: `det-garantia-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P003',
-          concepto_descripcion: `Cuota de Garantía${facturacion.cuota_garantia_numero ? ` ${facturacion.cuota_garantia_numero.toString().split(' de ')[0]}` : ''}`,
-          cantidad: 1,
-          precio_unitario: facturacion.subtotal_garantia,
-          subtotal: facturacion.subtotal_garantia,
-          total: facturacion.subtotal_garantia,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // P027 - Toshipass (régimen tarifa nueva, en lugar de la garantía)
-      if ((facturacion.monto_toshipass || 0) > 0) {
-        detallesSimulados.push({
-          id: `det-toshipass-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: CODIGO_TOSHIPASS,
-          concepto_descripcion: 'Toshipass',
-          cantidad: 1,
-          precio_unitario: facturacion.monto_toshipass || 0,
-          subtotal: facturacion.monto_toshipass || 0,
-          total: facturacion.monto_toshipass || 0,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // P004 - Descuento 5% primera semana del referido
-      if ((facturacion.monto_descuento_referido || 0) > 0) {
-        detallesSimulados.push({
-          id: `det-descref-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P004',
-          concepto_descripcion: descripcionDescuentoReferido(facturacion.dias_descuento_referido || 0),
-          cantidad: 1,
-          precio_unitario: facturacion.monto_descuento_referido || 0,
-          subtotal: facturacion.monto_descuento_referido || 0,
-          total: facturacion.monto_descuento_referido || 0,
-          es_descuento: true,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // Promociones (Parámetros > Promociones): descuento con el código visible (PRM...)
-      ;(facturacion.promo_lineas || []).forEach((linea, idx) => {
-        detallesSimulados.push({
-          id: `det-promo-${facturacion.conductor_id}-${idx}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: linea.codigo,
-          concepto_descripcion: linea.descripcion,
-          cantidad: 1,
-          precio_unitario: linea.monto,
-          subtotal: linea.monto,
-          total: linea.monto,
-          es_descuento: true,
-          referencia_id: linea.promocionId,
-          referencia_tipo: REFERENCIA_PROMOCION,
-          descripcion: JSON.stringify(linea.calculo)
-        })
-      })
-      // Promoción licencia B1: informativa en $0 (pago diario como saldo a favor)
-      if (facturacion.promo_b1) {
-        detallesSimulados.push({
-          id: `det-promo-b1-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: facturacion.promo_b1.codigo,
-          concepto_descripcion: facturacion.promo_b1.descripcion,
-          cantidad: facturacion.promo_b1.dias,
-          precio_unitario: 0,
-          subtotal: 0,
-          total: 0,
-          es_descuento: false,
-          referencia_id: facturacion.promo_b1.promocionId,
-          referencia_tipo: REFERENCIA_PROMOCION,
-          descripcion: JSON.stringify(facturacion.promo_b1.calculo)
-        })
-      }
-
-      // P028 - Devolución de garantía por cambio de tarifa (descuento)
-      if ((facturacion.monto_devolucion_garantia || 0) > 0) {
-        detallesSimulados.push({
-          id: `det-devgar-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: CODIGO_DEVOLUCION_GARANTIA,
-          concepto_descripcion: DESCRIPCION_DEVOLUCION_GARANTIA,
-          cantidad: 1,
-          precio_unitario: facturacion.monto_devolucion_garantia || 0,
-          subtotal: facturacion.monto_devolucion_garantia || 0,
-          total: facturacion.monto_devolucion_garantia || 0,
-          es_descuento: true,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // P005 - Peajes Cabify
-      if ((facturacion.monto_peajes || 0) > 0) {
-        detallesSimulados.push({
-          id: `det-peajes-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P005',
-          concepto_descripcion: 'Peajes Cabify (semana anterior)',
-          cantidad: 1,
-          precio_unitario: facturacion.monto_peajes!,
-          subtotal: facturacion.monto_peajes!,
-          total: facturacion.monto_peajes!,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // P006 - Excesos KM
-      const excesosCond = getExcesosConductor(facturacion.conductor_id)
-      const montoExcesos = excesosCond.reduce((sum, e) => sum + e.monto_total, 0)
-      if (montoExcesos > 0) {
-        const kmTotal = excesosCond.reduce((sum, e) => sum + e.km_exceso, 0)
-        detallesSimulados.push({
-          id: `det-exceso-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P006',
-          concepto_descripcion: `Exceso de Kilometraje (+${kmTotal} km)`,
-          cantidad: 1,
-          precio_unitario: montoExcesos,
-          subtotal: montoExcesos,
-          total: montoExcesos,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
-
-      // Penalidades completas - En Vista Previa buscar pendientes, en período buscar aplicadas
-      const semDetalle = periodo?.semana || getISOWeek(semanaActual.inicio)
-      const anioDetalle = periodo?.anio || getISOWeekYear(semanaActual.inicio)
-      const esPreview = modoVistaPrevia || facturacion.id.startsWith('preview-')
-      const fechaInicioDetalle = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
-      const fechaFinDetalle = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
-
-      let qPenalidades = (supabase
-        .from('penalidades') as any)
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, fecha, created_at, incidencias(descripcion), tipos_cobro_descuento(categoria, es_a_favor, nombre)')
-        .eq('conductor_id', facturacion.conductor_id)
-        .eq('fraccionado', false)
-        .neq('rechazado', true)
-      if (esPreview) {
-        // Vista Previa: penalidades pendientes en el rango de la semana
-        qPenalidades = qPenalidades.eq('aplicado', false).gte('fecha', fechaInicioDetalle).lte('fecha', fechaFinDetalle)
-      } else {
-        // Período generado: penalidades ya aplicadas en esta semana
-        qPenalidades = qPenalidades.eq('aplicado', true).eq('semana_aplicacion', semDetalle).eq('anio_aplicacion', anioDetalle)
-      }
-      const { data: penalidades } = await qPenalidades
-
-      // Penalidades que tienen cuotas (excluir del listado completo)
-      const { data: penIdsConCuotasDet } = await (supabase
-        .from('penalidades_cuotas') as any)
-        .select('penalidad_id')
-      const penConCuotasSet = new Set((penIdsConCuotasDet || []).map((p: any) => p.penalidad_id))
-
-      ;(penalidades || []).forEach((p: any, idx: number) => {
-        if (penConCuotasSet.has(p.id)) return // Tiene cuotas, se cobra por cuota
-        const categoria = p.tipos_cobro_descuento?.categoria
-        if (!categoria) {
-        detallesSimulados.push({
-          id: `det-pen-pendiente-${facturacion.conductor_id}-${idx}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'PEND',
-          concepto_descripcion: `[PENDIENTE] ${p.observaciones || 'Sin tipo asignado'}`,
-          cantidad: 1, precio_unitario: p.monto, subtotal: p.monto, total: p.monto,
-          es_descuento: false, referencia_id: p.id, referencia_tipo: 'penalidad',
-          fecha_referencia: p.fecha || p.created_at
-        })
-          return
-        }
-        const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
-        const incDesc = p.incidencias?.descripcion
-        const detalleCompleto = incDesc ? `${tipoNombre} - ${incDesc}` : tipoNombre
-        const esDescuento = categoria === 'P004'
-        const descripcion = esDescuento ? `Ticket: ${detalleCompleto}` : `Penalidad: ${detalleCompleto}`
-        detallesSimulados.push({
-          id: `det-pen-${facturacion.conductor_id}-${idx}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: categoria,
-          concepto_descripcion: descripcion,
-          cantidad: 1, precio_unitario: p.monto, subtotal: p.monto, total: p.monto,
-          es_descuento: esDescuento, referencia_id: p.id, referencia_tipo: 'penalidad',
-          fecha_referencia: p.fecha || p.created_at
-        })
-      })
-
-      // Cuotas fraccionadas de penalidades para esta semana
-      {
-        const { data: cuotasSemDet } = await (supabase
-          .from('penalidades_cuotas') as any)
-          .select('id, penalidad_id, monto_cuota, numero_cuota')
-          .lte('semana', semDetalle)
-        const { data: pagosCuotasDet } = await (supabase
-          .from('pagos_conductores') as any)
-          .select('referencia_id')
-          .eq('tipo_cobro', 'penalidad_cuota')
-        const cuotasPagadasIds = new Set((pagosCuotasDet || []).map((p: any) => p.referencia_id))
-
-        // Obtener conductor_id y total cuotas de las penalidades padre
-        const penIdsCuotas = [...new Set((cuotasSemDet || []).map((c: any) => c.penalidad_id))]
-        let penPadreCuotas: any[] = []
-        if (penIdsCuotas.length > 0) {
-          const { data } = await (supabase.from('penalidades') as any)
-            .select('id, conductor_id, cantidad_cuotas, observaciones, fecha, created_at')
-            .in('id', penIdsCuotas)
-          penPadreCuotas = data || []
-        }
-        const penPadreMap = new Map(penPadreCuotas.map((p: any) => [p.id, p]))
-
-        ;(cuotasSemDet || []).filter((c: any) => c.aplicado !== true && !cuotasPagadasIds.has(c.id)).forEach((cuota: any, idx: number) => {
-          const padre = penPadreMap.get(cuota.penalidad_id) as any
-          if (!padre || padre.conductor_id !== facturacion.conductor_id) return
-          detallesSimulados.push({
-            id: `det-cuota-${facturacion.conductor_id}-${idx}`,
-            facturacion_id: facturacion.id,
-            concepto_codigo: 'P007',
-            concepto_descripcion: `Cuota ${cuota.numero_cuota}/${padre.cantidad_cuotas || '?'}: ${padre.observaciones || 'Cobro fraccionado'}`,
-            cantidad: 1, precio_unitario: cuota.monto_cuota, subtotal: cuota.monto_cuota, total: cuota.monto_cuota,
-            es_descuento: false, referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota',
-            fecha_referencia: padre.fecha || padre.created_at
-          })
-        })
-      }
-
-      // P010 - Cobros fraccionados (plan de pagos) de esta semana
-      {
-        const { data: cobrosDetalle } = await (supabase
-          .from('cobros_fraccionados') as any)
-          .select('*')
-          .eq('conductor_id', facturacion.conductor_id)
-          .or(hastaSemana(semDetalle, anioDetalle))
-
-        const { data: pagosCobrosDetalle } = await (supabase
-          .from('pagos_conductores') as any)
-          .select('referencia_id')
-          .eq('tipo_cobro', 'cobro_fraccionado')
-        const cobrosDetallePagadosIds = new Set(
-          (pagosCobrosDetalle || []).map((p: any) => p.referencia_id).filter(Boolean)
-        )
-
-        ;((cobrosDetalle || []).filter((c: any) => c.aplicado !== true && !cobrosDetallePagadosIds.has(c.id) && cuotaFacturableEn(c, facturacion.periodo_id))).forEach((cobro: any, idx: number) => {
-          const mt = cobro.monto_total || 0
-          const mc = cobro.monto_cuota || 0
-          const tc = cobro.total_cuotas || 1
-          const montoCuotaReal = (mc > 0 && mc < mt) ? mc : Math.ceil(mt / tc)
-          detallesSimulados.push({
-            id: `det-cobro-${facturacion.conductor_id}-${idx}`,
-            facturacion_id: facturacion.id,
-            concepto_codigo: 'P010',
-            concepto_descripcion: cobro.descripcion || `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`,
-            cantidad: 1, precio_unitario: montoCuotaReal, subtotal: montoCuotaReal, total: montoCuotaReal,
-            es_descuento: false, referencia_id: cobro.id, referencia_tipo: 'cobro_fraccionado'
-          })
-        })
-      }
-
-      // P008 - Multas de tránsito (por patente del conductor)
-      if (facturacion.vehiculo_patente) {
-        const patenteNorm = normalizePatente(facturacion.vehiculo_patente)
-        const fechaInicioMul = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
-        const fechaFinMul = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
-        const { data: multasDet } = await (supabase
-          .from('multas') as any)
-          .select('id, monto, fecha')
-          .ilike('patente', patenteNorm)
-          .gte('fecha', fechaInicioMul)
-          .lte('fecha', fechaFinMul)
-          .eq('aplicado', false)
-        if (multasDet && multasDet.length > 0) {
-          const montoMultasDet = multasDet.reduce((s: number, m: any) => s + (m.monto || 0), 0)
-          detallesSimulados.push({
-            id: `det-multas-${facturacion.conductor_id}`,
-            facturacion_id: facturacion.id,
-            concepto_codigo: 'P008',
-            concepto_descripcion: `Multas de Tránsito (${multasDet.length})`,
-            cantidad: multasDet.length,
-            precio_unitario: Math.round(montoMultasDet / multasDet.length),
-            subtotal: montoMultasDet, total: montoMultasDet,
-            es_descuento: false, referencia_id: null, referencia_tipo: null
-          })
-        }
-      }
-
-      // === DESCUENTOS ===
-
-      // P004 - Tickets a Favor: lo que queda del subtotal de descuentos después de los
-      // descuentos que ya tienen su propia línea (referido, promociones, devolución, tickets
-      // de penalidades). Antes se usaba el subtotal entero y esos montos salían dos veces.
-      const descuentosYaListados = detallesSimulados
-        .filter(d => d.es_descuento)
-        .reduce((sum, d) => sum + (d.total || 0), 0)
-      const montoTicketsRestante = Math.round((facturacion.subtotal_descuentos - descuentosYaListados) * 100) / 100
-      if (montoTicketsRestante > 0.01) {
-        detallesSimulados.push({
-          id: `det-tickets-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P004',
-          concepto_descripcion: 'Tickets a Favor',
-          cantidad: 1, precio_unitario: montoTicketsRestante,
-          subtotal: montoTicketsRestante, total: montoTicketsRestante,
-          es_descuento: true, referencia_id: null, referencia_tipo: null
-        })
-      }
-
-      // Saldo anterior (deuda pendiente) — se lee del tab Saldos
-      if (facturacion.saldo_anterior > 0) {
-        detallesSimulados.push({
-          id: `det-saldo-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'SALDO',
-          concepto_descripcion: 'Saldo Anterior (deuda)',
-          cantidad: 1, precio_unitario: facturacion.saldo_anterior,
-          subtotal: facturacion.saldo_anterior, total: facturacion.saldo_anterior,
-          es_descuento: false, referencia_id: null, referencia_tipo: null
-        })
-      } else if (facturacion.saldo_anterior < 0) {
-        detallesSimulados.push({
-          id: `det-saldo-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'SALDO',
-          concepto_descripcion: 'Saldo a Favor',
-          cantidad: 1, precio_unitario: Math.abs(facturacion.saldo_anterior),
-          subtotal: Math.abs(facturacion.saldo_anterior), total: Math.abs(facturacion.saldo_anterior),
-          es_descuento: true, referencia_id: null, referencia_tipo: null
-        })
-      }
-
-      setDetalleItems(detallesSimulados)
-      setLoadingDetalle(false)
-      return
-    }
 
     // Modo normal: cargar desde BD
     try {
       // Cargar detalles de la facturación
-      const { data: detalles, error } = await supabase
-        .from('facturacion_detalle')
-        .select('*')
-        .eq('facturacion_id', facturacion.id)
-        .order('es_descuento')
-        .order('concepto_codigo')
+      const { data: detalles, error } = esSimulado
+        ? {
+          data: [...(((facturacion as any)._detalles || []) as FacturacionDetalle[])].sort((x, y) =>
+            Number(x.es_descuento) - Number(y.es_descuento) || String(x.concepto_codigo).localeCompare(String(y.concepto_codigo))),
+          error: null,
+        }
+        : await supabase
+          .from('facturacion_detalle')
+          .select('*')
+          .eq('facturacion_id', facturacion.id)
+          .order('es_descuento')
+          .order('concepto_codigo')
 
       if (error) throw error
 
@@ -8856,29 +7480,44 @@ export function ReporteFacturacionTab() {
 
   // Preparar preview de SiFactura (30 columnas) - muestra antes de exportar
   async function prepararSiFacturaPreview() {
-    if (!periodo) return
+    // Semana guardada o Vista Previa (recálculo simulado): mismo armado, distinta fuente
+    const per = periodo || {
+      id: null as unknown as string,
+      semana: infoSemana.semana,
+      anio: infoSemana.anio,
+      fecha_inicio: format(semanaActual.inicio, 'yyyy-MM-dd'),
+      fecha_fin: format(semanaActual.fin, 'yyyy-MM-dd'),
+    }
+    const baseFacts = modoVistaPrevia ? vistaPreviaData : facturacionesFiltradas
 
     setLoadingSiFacturaPreview(true)
     try {
       // Cargar detalles de facturación para este período
-      const { data: detalles } = await supabase
-        .from('facturacion_detalle')
-        .select(`
-          *,
-          facturacion_conductores!inner(
-            id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit,
-            vehiculo_patente, tipo_alquiler, periodo_id, turnos_cobrados
-          )
-        `)
-
-      // Filtrar por período actual
-      const detallesFiltrados = (detalles || []).filter(
-        (d: any) => d.facturacion_conductores?.periodo_id === periodo.id
-      )
+      // Vista Previa: las líneas calculadas en memoria; semana guardada: las de la base
+      const detallesFiltrados = modoVistaPrevia
+        ? baseFacts.flatMap((f: any) => ((f._detalles || []) as any[]).map((d: any) => ({
+          ...d,
+          facturacion_conductores: {
+            id: f.id, conductor_id: f.conductor_id, conductor_nombre: f.conductor_nombre,
+            conductor_dni: f.conductor_dni, conductor_cuit: f.conductor_cuit,
+            vehiculo_patente: f.vehiculo_patente, tipo_alquiler: f.tipo_alquiler,
+            periodo_id: null, turnos_cobrados: f.turnos_cobrados,
+          },
+        })))
+        : ((await supabase
+          .from('facturacion_detalle')
+          .select(`
+            *,
+            facturacion_conductores!inner(
+              id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit,
+              vehiculo_patente, tipo_alquiler, periodo_id, turnos_cobrados
+            )
+          `)
+          .eq('facturacion_conductores.periodo_id', per.id)).data || [])
       const detallesTyped = detallesFiltrados as any[]
 
       // Cargar emails de conductores
-      const dnis = [...new Set(facturacionesFiltradas.map(f => f.conductor_dni).filter(Boolean))]
+      const dnis = [...new Set(baseFacts.map(f => f.conductor_dni).filter(Boolean))]
       const { data: conductoresData } = await supabase
         .from('conductores')
         .select('numero_dni, email, monotributo')
@@ -8895,7 +7534,7 @@ export function ReporteFacturacionTab() {
       )
 
       // Cargar conceptos pendientes (no aplicados y no en facturacion_detalle)
-      const conductorIds = facturacionesFiltradas.map(f => f.conductor_id).filter(Boolean)
+      const conductorIds = baseFacts.map(f => f.conductor_id).filter(Boolean)
       const pendientes: ConceptoPendiente[] = []
       // Set paralelo para deduplicación O(1) — evita .some() O(n) dentro de loops
       const pendientesIdsGenerado = new Set<string>()
@@ -8936,7 +7575,7 @@ export function ReporteFacturacionTab() {
         .eq('aplicado', false)
         .eq('rechazado', false)
         .eq('fraccionado', false)
-        .eq('semana', periodo.semana)
+        .eq('semana', per.semana)
 
       for (const p of (penalidadesPendientes || []) as any[]) {
         if (!detallesReferencias.has(p.id)) {
@@ -8972,7 +7611,7 @@ export function ReporteFacturacionTab() {
         .in('conductor_id', conductorIds)
         .eq('rechazado', false)
         .eq('fraccionado', false)
-        .eq('semana', periodo.semana)
+        .eq('semana', per.semana)
 
       for (const p of (penalidadesSinTipo || []) as any[]) {
         // Solo incluir las que NO tienen categoria (null o el tipo no existe)
@@ -9011,7 +7650,7 @@ export function ReporteFacturacionTab() {
           .from('cobros_fraccionados') as any)
           .select('*, conductor:conductores(nombres, apellidos)')
           .in('conductor_id', conductorIds)
-          .or(hastaSemana(periodo.semana, periodo.anio)),
+          .or(hastaSemana(per.semana, per.anio)),
         (supabase
           .from('pagos_conductores') as any)
           .select('referencia_id')
@@ -9049,7 +7688,7 @@ export function ReporteFacturacionTab() {
         (supabase
           .from('penalidades_cuotas') as any)
           .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, conductor:conductores(nombres, apellidos))')
-          .lte('semana', periodo.semana),
+          .lte('semana', per.semana),
         (supabase
           .from('pagos_conductores') as any)
           .select('referencia_id')
@@ -9109,8 +7748,8 @@ export function ReporteFacturacionTab() {
       const conductoresConSaldosPendientes = new Set(pendientes.map(p => p.conductorId))
 
       // Fechas del período
-      const fechaEmision = parseISO(periodo.fecha_fin)
-      const fechaVencimiento = addWeeks(parseISO(periodo.fecha_fin), 1)
+      const fechaEmision = parseISO(per.fecha_fin)
+      const fechaVencimiento = addWeeks(parseISO(per.fecha_fin), 1)
       // Map de IVA por código de concepto (desde tabla conceptos_nomina)
       const ivaConceptoMap = new Map<string, number>(
         conceptosNomina.map(c => [c.codigo, c.iva_porcentaje || 0])
@@ -9220,7 +7859,7 @@ export function ReporteFacturacionTab() {
       })
 
       // Procesar cada facturación
-      for (const fact of facturacionesFiltradas) {
+      for (const fact of baseFacts) {
         const detallesConductor = detallesPorFacturacion.get(fact.id) || []
 
         if (detallesConductor.length > 0) {
@@ -9441,521 +8080,6 @@ export function ReporteFacturacionTab() {
     }
   }
 
-  // Preparar preview de Facturación desde Vista Previa (sin período generado)
-  // Consulta las tablas reales para obtener datos detallados de cada concepto
-  async function prepararFacturacionPreviewVistaPrevia() {
-    if (vistaPreviaData.length === 0) return
-
-    setLoadingSiFacturaPreview(true)
-    try {
-      const conductorIds = vistaPreviaData.map(f => f.conductor_id).filter(Boolean)
-      const semana = getISOWeek(semanaActual.inicio)
-      const anio = getISOWeekYear(semanaActual.inicio)
-
-      // 1. Cargar emails de conductores
-      const dnis = [...new Set(vistaPreviaData.map(f => f.conductor_dni).filter(Boolean))]
-      const { data: conductoresData } = await supabase
-        .from('conductores')
-        .select('id, numero_dni, email, monotributo')
-        .in('numero_dni', dnis)
-
-      const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
-      const monotributoMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.monotributo === true]))
-
-      // 2. Cargar garantías activas
-      const { data: garantiasData } = await supabase
-        .from('garantias_conductores')
-        .select('*')
-        .in('conductor_id', conductorIds)
-        .in('estado', ['pendiente', 'en_curso'])
-
-      const garantiasMap = new Map((garantiasData || []).map((g: any) => [g.conductor_id, g]))
-
-      // 3. Cargar tickets a favor pendientes de aplicar
-      const { data: ticketsData } = await supabase
-        .from('tickets_favor')
-        .select('*')
-        .in('conductor_id', conductorIds)
-        .eq('estado', 'aprobado')
-        .is('periodo_aplicado_id', null)
-
-      // Agrupar tickets por conductor
-      const ticketsMap = new Map<string, any[]>()
-      ;(ticketsData || []).forEach((t: any) => {
-        if (!ticketsMap.has(t.conductor_id)) ticketsMap.set(t.conductor_id, [])
-        ticketsMap.get(t.conductor_id)!.push(t)
-      })
-
-      // 4. Cargar TODAS las penalidades pendientes (para detectar las no incluidas)
-      // Penalidades se filtran por el campo 'semana' (número de semana del período)
-      const { data: todasPenalidadesData } = await (supabase
-        .from('penalidades') as any)
-        .select('*, tipos_cobro_descuento(nombre, categoria, es_a_favor), conductor:conductores(nombres, apellidos), incidencias(descripcion)')
-        .eq('aplicado', false)
-        .eq('rechazado', false)
-        .eq('fraccionado', false) // Solo NO fraccionadas (las fraccionadas van por penalidades_cuotas)
-        .eq('semana', semana)
-
-      const todasPenalidadesFiltradas = todasPenalidadesData || []
-
-      // Set para O(1) lookups — evita dos pasadas O(n×m) con .includes()
-      const conductorIdsSetPreview = new Set<string>(conductorIds)
-
-      // Separar penalidades incluidas/no-incluidas en una sola pasada O(n)
-      const penalidadesFiltradas: any[] = []
-      const penalidadesNoIncluidas: any[] = []
-      todasPenalidadesFiltradas.forEach((p: any) => {
-        if (conductorIdsSetPreview.has(p.conductor_id)) {
-          penalidadesFiltradas.push(p)
-        } else {
-          penalidadesNoIncluidas.push(p)
-        }
-      })
-
-      // Agrupar penalidades por conductor
-      const penalidadesMap = new Map<string, any[]>()
-      penalidadesFiltradas.forEach((p: any) => {
-        if (!penalidadesMap.has(p.conductor_id)) penalidadesMap.set(p.conductor_id, [])
-        penalidadesMap.get(p.conductor_id)!.push(p)
-      })
-
-      // 5. Cargar cobros fraccionados hasta esta semana — cruzar con pagos
-      const [cobrosCloseRes, pagosCloseRes] = await Promise.all([
-        (supabase
-          .from('cobros_fraccionados') as any)
-          .select('*')
-          .in('conductor_id', conductorIds)
-          .or(hastaSemana(semana, anio)),
-        (supabase
-          .from('pagos_conductores') as any)
-          .select('referencia_id')
-          .in('tipo_cobro', ['cobro_fraccionado', 'penalidad_cuota'])
-      ])
-      const pagosFraccionadosIds = new Set(
-        (pagosCloseRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
-      )
-      const cobrosData = (cobrosCloseRes.data || []).filter((c: any) => c.aplicado !== true && !pagosFraccionadosIds.has(c.id) && cuotaFacturableEn(c, periodo?.id))
-
-      // Agrupar cobros por conductor
-      const cobrosMap = new Map<string, any[]>()
-      ;(cobrosData || []).forEach((c: any) => {
-        if (!cobrosMap.has(c.conductor_id)) cobrosMap.set(c.conductor_id, [])
-        cobrosMap.get(c.conductor_id)!.push(c)
-      })
-
-      // 6. Cargar saldos (para mora)
-      const { data: saldosData } = await supabase
-        .from('saldos_conductores')
-        .select('*')
-        .in('conductor_id', conductorIds)
-
-      const saldosMap = new Map((saldosData || []).map((s: any) => [s.conductor_id, s]))
-
-      // 7. Cargar penalidades_cuotas de esta semana — ya tenemos pagos en pagosFraccionadosIds
-      const { data: penalidadesCuotasData } = await (supabase
-        .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades!inner(conductor_id, conductor_nombre, aplicado, conductor:conductores(nombres, apellidos))')
-        .eq('semana', semana)
-        .eq('anio', anio)
-        .eq('penalidad.aplicado', true)
-
-      // Filtrar por año correcto o sin año, y excluir pagadas (aplicado=true O en pagos_conductores)
-      const penalidadesCuotasFiltradas = (penalidadesCuotasData || []).filter((pc: any) =>
-        (!pc.anio || pc.anio <= anio) && pc.aplicado !== true && !pagosFraccionadosIds.has(pc.id)
-      )
-
-      // Identificar penalidades_cuotas no incluidas (de conductores fuera de Vista Previa)
-      const penalidadesCuotasNoIncluidas = penalidadesCuotasFiltradas.filter(
-        (pc: any) => pc.penalidad?.conductor_id && !conductorIdsSetPreview.has(pc.penalidad.conductor_id)
-      )
-
-      // 8. Cargar tickets a favor de conductores NO en Vista Previa
-      const { data: todosTicketsData } = await supabase
-        .from('tickets_favor')
-        .select('*, conductor:conductores(nombres, apellidos)')
-        .eq('estado', 'aprobado')
-        .is('periodo_aplicado_id', null)
-
-      const ticketsNoIncluidos = (todosTicketsData || []).filter(
-        (t: any) => !conductorIdsSetPreview.has(t.conductor_id)
-      )
-
-      // 9. Cargar cobros fraccionados de conductores NO en Vista Previa (hasta esta semana) — ya tenemos pagosFraccionadosIds
-      const { data: todosCobrosData } = await (supabase
-        .from('cobros_fraccionados') as any)
-        .select('*, conductor:conductores(nombres, apellidos)')
-        .or(hastaSemana(semana, anio))
-
-      const cobrosNoIncluidos = ((todosCobrosData || []).filter(
-        (c: any) => !conductorIdsSetPreview.has(c.conductor_id) && c.aplicado !== true && !pagosFraccionadosIds.has(c.id) && cuotaFacturableEn(c, periodo?.id)
-      ))
-
-      // Crear lista de conceptos NO incluidos para mostrar en el panel
-      const pendientes: ConceptoPendiente[] = []
-      // Set paralelo para deduplicación en O(1) — evita .some() O(n) dentro de loops
-      const pendientesIds = new Set<string>()
-
-      const pushPendiente = (item: ConceptoPendiente) => {
-        pendientes.push(item)
-        pendientesIds.add(item.id)
-      }
-
-      // Penalidades no incluidas
-      for (const p of penalidadesNoIncluidas as any[]) {
-        const conductorNombre = p.conductor?.nombres && p.conductor?.apellidos
-          ? `${p.conductor.nombres} ${p.conductor.apellidos}`
-          : p.conductor_nombre || 'Sin nombre'
-        pushPendiente({
-          id: p.id,
-          tipo: 'penalidad',
-          conductorId: p.conductor_id,
-          conductorNombre,
-          monto: p.monto || 0,
-          descripcion: `[NO EN PREVIEW] ${p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad'}`,
-          tabla: 'penalidades'
-        })
-      }
-
-      // Penalidades cuotas no incluidas
-      for (const pc of penalidadesCuotasNoIncluidas as any[]) {
-        const conductorNombre = pc.penalidad?.conductor?.nombres && pc.penalidad?.conductor?.apellidos
-          ? `${pc.penalidad.conductor.nombres} ${pc.penalidad.conductor.apellidos}`
-          : pc.penalidad?.conductor_nombre || 'Sin nombre'
-        pushPendiente({
-          id: pc.id,
-          tipo: 'cobro_fraccionado',
-          conductorId: pc.penalidad?.conductor_id || '',
-          conductorNombre,
-          monto: pc.monto_cuota,
-          descripcion: `[NO EN PREVIEW] Cuota ${pc.numero_cuota} - Penalidad fraccionada`,
-          tabla: 'penalidades_cuotas'
-        })
-      }
-
-      // Tickets no incluidos
-      for (const t of ticketsNoIncluidos as any[]) {
-        const conductorNombre = t.conductor?.nombres && t.conductor?.apellidos
-          ? `${t.conductor.nombres} ${t.conductor.apellidos}`
-          : t.conductor_nombre || 'Sin nombre'
-        pushPendiente({
-          id: t.id,
-          tipo: 'ticket',
-          conductorId: t.conductor_id,
-          conductorNombre,
-          monto: t.monto,
-          descripcion: `[NO EN PREVIEW] ${t.descripcion || t.tipo}`,
-          tabla: 'tickets_favor'
-        })
-      }
-
-      // Cobros fraccionados no incluidos
-      for (const c of cobrosNoIncluidos as any[]) {
-        const conductorNombre = c.conductor?.nombres && c.conductor?.apellidos
-          ? `${c.conductor.nombres} ${c.conductor.apellidos}`
-          : 'Sin nombre'
-        pushPendiente({
-          id: c.id,
-          tipo: 'cobro_fraccionado',
-          conductorId: c.conductor_id,
-          conductorNombre,
-          monto: (c.monto_cuota > 0 && c.monto_cuota < c.monto_total) ? c.monto_cuota : Math.ceil((c.monto_total || 0) / (c.total_cuotas || 1)),
-          descripcion: `[NO EN PREVIEW] Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
-          tabla: 'cobros_fraccionados'
-        })
-      }
-
-      // Penalidades con categoria NULL (sin tipo asignado) - TODAS, sin importar aplicado
-      // Incluye las que el código viejo marcó como aplicado pero nunca tuvieron categoria
-      const { data: penalidadesSinTipoData } = await (supabase
-        .from('penalidades') as any)
-        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento!left(nombre, categoria)')
-        .eq('rechazado', false)
-        .eq('fraccionado', false)
-        .eq('semana', semana)
-
-      for (const p of (penalidadesSinTipoData || []) as any[]) {
-        const categoria = p.tipos_cobro_descuento?.categoria
-        if (categoria) continue
-        // Evitar duplicados — O(1) con Set en lugar de O(n) con .some()
-        if (pendientesIds.has(p.id)) continue
-        const enPreview = conductorIdsSetPreview.has(p.conductor_id)
-        const conductorNombre = p.conductor?.nombres && p.conductor?.apellidos
-          ? `${p.conductor.nombres} ${p.conductor.apellidos}`
-          : p.conductor_nombre || 'Sin nombre'
-        pushPendiente({
-          id: p.id,
-          tipo: 'penalidad',
-          conductorId: p.conductor_id,
-          conductorNombre,
-          monto: p.monto || 0,
-          descripcion: `[Sin tipo asignado${!enPreview ? ' - NO EN PREVIEW' : ''}] ${p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad'}`,
-          tabla: 'penalidades'
-        })
-      }
-
-      // Guardar conceptos pendientes para mostrar en el panel
-      setConceptosPendientes(pendientes)
-
-      // Fechas del período
-      const fechaEmision = semanaActual.fin
-      const fechaVencimiento = addWeeks(semanaActual.fin, 1)
-      // Crear Set de conductores con saldos pendientes (penalidades, tickets, cobros fraccionados, penalidades_cuotas)
-      const conductoresConSaldosPendientes = new Set<string>()
-      penalidadesFiltradas.forEach((p: any) => conductoresConSaldosPendientes.add(p.conductor_id))
-      ;(ticketsData || []).forEach((t: any) => conductoresConSaldosPendientes.add(t.conductor_id))
-      ;(cobrosData || []).forEach((c: any) => conductoresConSaldosPendientes.add(c.conductor_id))
-      ;penalidadesCuotasFiltradas.forEach((pc: any) => {
-        if (pc.penalidad?.conductor_id) conductoresConSaldosPendientes.add(pc.penalidad.conductor_id)
-      })
-
-      // Map de IVA por código de concepto (desde tabla conceptos_nomina)
-      const ivaConceptoMap = new Map<string, number>(
-        conceptosNomina.map(c => [c.codigo, c.iva_porcentaje || 0])
-      )
-
-      // Función para crear fila preview
-      const crearFilaPreview = (
-        numero: number,
-        fact: FacturacionConductor,
-        total: number,
-        codigoProducto: string,
-        descripcionAdicional: string
-      ): FacturacionPreviewRow => {
-        // Redondear total a 2 decimales para evitar errores de punto flotante
-        total = Math.round(total * 100) / 100
-
-        // Tipo de factura: A solo con monotributo y CUIT completo (ver utils/tipoFactura)
-        const tieneCuit = esFacturaA(fact.conductor_cuit, monotributoMap.get(normalizeDni(fact.conductor_dni)))
-        const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
-        const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
-        const email = emailMap.get(normalizeDni(fact.conductor_dni)) || ''
-
-        const numeroCuil = fact.conductor_dni || ''
-        const numeroDni = fact.conductor_cuit || ''
-
-        // IVA según producto (desde tabla conceptos_nomina)
-        const ivaPctConcepto = ivaConceptoMap.get(codigoProducto) || 0
-        const tieneIva = ivaPctConcepto > 0
-
-        let netoGravado = 0
-        let ivaAmount = 0
-        let exento = 0
-        let ivaPorcentaje = 'IVA_EXENTO'
-
-        if (tieneIva) {
-          netoGravado = Math.round((total / (1 + ivaPctConcepto / 100)) * 100) / 100
-          ivaAmount = Math.round((total - netoGravado) * 100) / 100
-          ivaPorcentaje = `IVA_${ivaPctConcepto}`
-        } else {
-          exento = total
-        }
-
-        let tieneError = false
-        let errorMsg = ''
-        if (!numeroCuil && !numeroDni) {
-          tieneError = true
-          errorMsg = 'Sin DNI ni CUIT'
-        }
-
-        return {
-          numero,
-          fechaEmision,
-          fechaVencimiento,
-          puntoVenta: 5,
-          tipoFactura,
-          tipoDocumento: tieneCuit ? 'CUIT' : 'DNI',
-          numeroCuil,
-          numeroDni,
-          total,
-          cobrado: 0,
-          condicionIva,
-          condicionVenta: 'CTA_CTE',
-          razonSocial: fact.conductor_nombre,
-          domicilio: '',
-          codigoProducto,
-          descripcionAdicional,
-          email,
-          nota: '',
-          moneda: 'PES',
-          tipoCambio: 1,
-          netoGravado,
-          ivaAmount,
-          exento,
-          totalRepetido: total,
-          ivaPorcentaje,
-          generarAsiento: 'SI',
-          cuentaDebito: 4500007,
-          cuentaCredito: 0,
-          referencia: 'ND',
-          check: '',
-          conductorId: fact.conductor_id,
-          tieneError,
-          errorMsg,
-          tieneSaldosPendientes: conductoresConSaldosPendientes.has(fact.conductor_id),
-          grupoFlota: fact.grupo_flota || null
-        }
-      }
-
-      // Generar filas para preview
-      const filasPreview: FacturacionPreviewRow[] = []
-      let numeroFactura = 1
-
-      for (const fact of vistaPreviaData) {
-        // P001/P002 - Alquiler (TURNO/CARGO)
-        if (fact.subtotal_alquiler > 0) {
-          const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
-          const descAlquilerVP = fact.tipo_alquiler === 'CARGO'
-            ? 'Alquiler a Cargo'
-            : 'Alquiler Turno Diurno'
-          filasPreview.push(crearFilaPreview(
-            numeroFactura++,
-            fact,
-            fact.subtotal_alquiler,
-            codigoAlquiler,
-            descAlquilerVP
-          ))
-        }
-
-        // P003 - Garantía (desde garantias_conductores)
-        const garantia = garantiasMap.get(fact.conductor_id)
-        if (garantia && garantia.cuotas_pagadas < garantia.cuotas_totales) {
-          const cuotaActual = garantia.cuotas_pagadas + 1
-          const descripcionGarantia = `Cuota de Garantía ${cuotaActual}`
-          filasPreview.push(crearFilaPreview(
-            numeroFactura++,
-            fact,
-            garantia.monto_cuota_semanal || 50000,
-            'P003',
-            descripcionGarantia
-          ))
-        }
-
-        // P004 - Tickets a favor (desde tickets_favor)
-        const tickets = ticketsMap.get(fact.conductor_id) || []
-        for (const ticket of tickets) {
-          let descripcionTicket = 'Telepases'
-          if (ticket.tipo === 'COMISION_REFERIDO') descripcionTicket = 'Comisión Referido'
-          else if (ticket.tipo === 'BONO_5_VENTAS') descripcionTicket = 'Bono 5 Ventas'
-          else if (ticket.tipo === 'BONO_EVENTO') descripcionTicket = 'Bono Evento'
-          else if (ticket.descripcion) descripcionTicket = ticket.descripcion
-
-          filasPreview.push(crearFilaPreview(
-            numeroFactura++,
-            fact,
-            ticket.monto,
-            'P004',
-            descripcionTicket
-          ))
-        }
-
-        // Promociones (descuento P004 con el código de la promoción en la descripción).
-        // El pago diario de la licencia B1 no va: es un pago del conductor, no un descuento.
-        for (const linea of fact.promo_lineas || []) {
-          if (linea.calculo.tipo === 'b1') continue
-          const filaPromo = crearFilaPreview(
-            numeroFactura++,
-            fact,
-            linea.monto,
-            'P004',
-            textoLineaPromocion(linea.codigo, linea.descripcion)
-          )
-          // El 10% del alquiler se proyecta junto con el alquiler (Proyectado ON)
-          if (linea.calculo.tipo === 'alquiler') filaPromo.promoAlquiler = true
-          filasPreview.push(filaPromo)
-        }
-
-        // P005 - Peajes (desde cabify - ya calculado en vistaPreviaData)
-        if (fact.monto_peajes && fact.monto_peajes > 0) {
-          filasPreview.push(crearFilaPreview(
-            numeroFactura++,
-            fact,
-            fact.monto_peajes,
-            'P005',
-            'Peajes'
-          ))
-        }
-
-        // Penalidades segmentadas por categoría (P004, P006, P007)
-        const penalidades = penalidadesMap.get(fact.conductor_id) || []
-        for (const penalidad of penalidades) {
-          const categoria = penalidad.tipos_cobro_descuento?.categoria
-          // NULL categoria = pendiente, mostrar como tal
-          if (!categoria) {
-            filasPreview.push(crearFilaPreview(
-              numeroFactura++,
-              fact,
-              penalidad.monto,
-              'PEND',
-              `[PENDIENTE] ${penalidad.detalle || penalidad.tipos_cobro_descuento?.nombre || 'Sin tipo asignado'}`
-            ))
-            continue
-          }
-          const tipoNombre = penalidad.tipos_cobro_descuento?.nombre || penalidad.detalle || 'Sin detalle'
-          const incDescVP = penalidad.incidencias?.descripcion
-          const detalleConcat = incDescVP ? `${tipoNombre} - ${incDescVP}` : tipoNombre
-          const descripcion = categoria === 'P004'
-            ? `Ticket: ${detalleConcat}`
-            : categoria === 'P006'
-              ? `Exceso KM: ${detalleConcat}`
-              : `Penalidad: ${detalleConcat}`
-
-          filasPreview.push(crearFilaPreview(
-            numeroFactura++,
-            fact,
-            penalidad.monto,
-            categoria,
-            descripcion
-          ))
-        }
-
-        // P009 - Mora (desde saldos_conductores)
-        const saldo = saldosMap.get(fact.conductor_id)
-        if (saldo && saldo.saldo_actual < 0) {
-          const deuda = Math.abs(saldo.saldo_actual)
-          const mora = Math.round(deuda * 0.05 * 100) / 100 // 5% semanal
-          if (mora > 0) {
-            filasPreview.push(crearFilaPreview(
-              numeroFactura++,
-              fact,
-              mora,
-              'P009',
-              `Mora 5% s/deuda ${formatCurrency(deuda)}`
-            ))
-          }
-        }
-
-        // P010 - Cobros fraccionados (desde cobros_fraccionados)
-        const cobros = cobrosMap.get(fact.conductor_id) || []
-        for (const cobro of cobros) {
-          const descripcionCobro = cobro.descripcion ||
-            `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
-
-          const montoCuotaCabify = (cobro.monto_cuota > 0 && cobro.monto_cuota < cobro.monto_total) ? cobro.monto_cuota : Math.ceil((cobro.monto_total || 0) / (cobro.total_cuotas || 1))
-          filasPreview.push(crearFilaPreview(
-            numeroFactura++,
-            fact,
-            montoCuotaCabify,
-            'P010',
-            descripcionCobro
-          ))
-        }
-      }
-
-      if (filasPreview.length === 0) {
-        Alerta.fire('Sin datos', 'No hay conceptos para el preview', 'warning')
-        return
-      }
-
-      setSiFacturaPreviewData(filasPreview)
-      setShowSiFacturaPreview(true)
-
-    } catch (errorCapturado) {
-      console.error('[Facturación] No se pudo cargar el preview de Facturación:', errorCapturado)
-      showError('Error', 'No se pudo cargar el preview de Facturación')
-    } finally {
-      setLoadingSiFacturaPreview(false)
-    }
-  }
 
   // Preparar datos para RIT Preview (formato Bruno Timoteo)
   async function prepareRITPreview() {
@@ -10819,155 +8943,20 @@ export function ReporteFacturacionTab() {
     }
   } */
 
-  // Preparar Preview Facturación Cabify
-  async function prepararCabifyPreview() {
-    if (vistaPreviaData.length === 0) {
-      Alerta.fire('Sin datos', 'No hay datos para generar preview', 'warning')
-      return
-    }
-
-    setLoadingCabifyPreview(true)
-    try {
-      // Filtrar datos según filtros actuales
-      const dataToExport = vistaPreviaData.filter(f => {
-        if (buscarConductor) {
-          const search = buscarConductor.toLowerCase()
-          if (!f.conductor_nombre.toLowerCase().includes(search) &&
-              !f.conductor_dni?.toLowerCase().includes(search) &&
-              !f.vehiculo_patente?.toLowerCase().includes(search)) {
-            return false
-          }
-        }
-        return true
-      })
-
-      // Obtener emails de conductores
-      const dnis = [...new Set(dataToExport.map(f => f.conductor_dni).filter(Boolean))]
-      const { data: conductoresData } = await supabase
-        .from('conductores')
-        .select('numero_dni, email')
-        .in('numero_dni', dnis)
-
-      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [normalizeDni(c.numero_dni), c.email]))
-
-      // Cargar datos de Cabify desde cabify_historico (o bariloche según sede)
-      const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
-      const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
-      const sedeParaPreview = sedeActualId || sedeUsuario?.id
-
-      const { data: cabifyData } = await supabase
-        .from(getCabifyTable(sedeParaPreview))
-        .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
-        .gte('fecha_inicio', fechaInicio + 'T00:00:00')
-        .lte('fecha_inicio', fechaFin + 'T23:59:59')
-
-      // Agrupar datos de Cabify por DNI normalizado (sumar si hay múltiples registros)
-      const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
-      ;(cabifyData || []).forEach((record: { dni: string; horas_conectadas: number; ganancia_total: number; cobro_app: number; cobro_efectivo: number }) => {
-        if (record.dni) {
-          const dniKey = normalizeDni(record.dni)
-          const existing = cabifyMap.get(dniKey) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
-          cabifyMap.set(dniKey, {
-            horas: existing.horas + (Number(record.horas_conectadas) || 0),
-            ganancia: existing.ganancia + (Number(record.ganancia_total) || 0),
-            cobroApp: existing.cobroApp + (Number(record.cobro_app) || 0),
-            efectivo: existing.efectivo + (Number(record.cobro_efectivo) || 0)
-          })
-        }
-      })
-
-      const semana = getISOWeek(semanaActual.inicio)
-      const anio = getISOWeekYear(semanaActual.inicio)
-
-      // Proyección: calcular días transcurridos para escalar alquiler a semana completa
-      const hoyProyeccion = startOfDay(new Date())
-      const daysSoFar = Math.min(differenceInCalendarDays(hoyProyeccion, semanaActual.inicio) + 1, 7)
-      const necesitaProyeccion = daysSoFar < 7
-
-      // Generar filas para el preview
-      const previewRows: CabifyPreviewRow[] = dataToExport.map(f => {
-        const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
-        const cabifyInfo = cabifyMap.get(normalizeDni(f.conductor_dni)) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
-
-        // Días reales del conductor en Vista Previa (capados a hoy)
-        const actualDias = (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)
-        const actualAlquiler = f.subtotal_alquiler || 0
-
-        // Proyectar alquiler a semana completa para conductores activos
-        let importeContrato = actualAlquiler
-        let diasProyectados = actualDias
-        if (necesitaProyeccion && f.estado_billing === 'Activo' && actualDias > 0) {
-          const daysRemaining = 7 - daysSoFar
-          diasProyectados = Math.min(actualDias + daysRemaining, 7)
-          importeContrato = Math.round((actualAlquiler / actualDias) * diasProyectados)
-        }
-        // Mostrar el alquiler redondo: el precio diario (semanal/7) se guarda redondeado
-        // a centavos, asi que precio_diario x 7 arrastra +/-0.01-0.03. Redondeamos a entero
-        // SOLO para visualizacion del reporte Cabify (no cambia lo guardado en la BD).
-        importeContrato = Math.round(importeContrato)
-
-        // EXCEDENTES = recalcular desde campos individuales (no usar subtotal_cargos que puede estar mal)
-        const tieneTelepasePreview = f.tiene_telepase === true
-        const peajesReales = tieneTelepasePreview ? 0 : (f.monto_peajes || 0)
-        const saldoPendiente = f.saldo_anterior || 0
-        // Toshipass (tarifa nueva) reemplaza a la garantía: nunca vienen los dos, va en excedentes igual
-        const subtotalCargosRecalc = actualAlquiler + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0) + peajesReales + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
-        const excedentes = subtotalCargosRecalc - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
-
-        return {
-          anio,
-          semana,
-          fechaInicial: semanaActual.inicio,
-          fechaFinal: semanaActual.fin,
-          conductor: f.conductor_nombre,
-          email,
-          patente: f.vehiculo_patente || '',
-          dni: f.conductor_dni || '',
-          importeContrato,
-          excedentes,
-          conductorId: f.conductor_id,
-          horasConexion: cabifyInfo.horas,
-          importeGenerado: cabifyInfo.ganancia,
-          importeGeneradoConBonos: cabifyInfo.cobroApp,
-          generadoEfectivo: cabifyInfo.efectivo,
-          flotaPrioritaria: grupoFlotaGanadorVPRef.current.get(f.conductor_dni) || null,
-          detalle: {
-            diasTrabajados: diasProyectados,
-            prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
-            prorrateoCargoMonto: f.prorrateo_cargo_monto || 0,
-            prorrateoDiurnoDias: f.prorrateo_diurno_dias || 0,
-            prorrateoDiurnoMonto: f.prorrateo_diurno_monto || 0,
-            prorrateoNocturnoDias: f.prorrateo_nocturno_dias || 0,
-            prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
-            subtotalAlquiler: importeContrato,
-            subtotalGarantia: f.subtotal_garantia || 0,
-            montoToshipass: f.monto_toshipass || 0,
-            cuotaGarantia: f.cuota_garantia_numero || '',
-            montoPeajes: peajesReales,
-            montoExcesos: f.monto_excesos || 0,
-            montoPenalidades: f.monto_penalidades || 0,
-            ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: subtotalCargosRecalc - actualAlquiler + importeContrato,
-            subtotalDescuentos: f.subtotal_descuentos || 0,
-            saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: subtotalCargosRecalc - (f.subtotal_descuentos || 0) + saldoPendiente - actualAlquiler + importeContrato,
-          }
-        }
-      })
-
-      setCabifyPreviewData(previewRows)
-      setShowCabifyPreview(true)
-    } catch (errorCapturado) {
-      console.error('[Facturación] No se pudo generar el preview de Cabify:', errorCapturado)
-      showError('Error', 'No se pudo generar el preview de Cabify')
-    } finally {
-      setLoadingCabifyPreview(false)
-    }
-  }
 
   // Preparar Preview Cabify desde Facturación Generada (con período)
   async function prepararCabifyPreviewDesdeFacturacion() {
-    if (facturaciones.length === 0 || !periodo) {
+    // Semana guardada o Vista Previa (recálculo simulado): mismo armado, distinta fuente
+    const per = periodo || {
+      id: null as unknown as string,
+      semana: infoSemana.semana,
+      anio: infoSemana.anio,
+      fecha_inicio: format(semanaActual.inicio, 'yyyy-MM-dd'),
+      fecha_fin: format(semanaActual.fin, 'yyyy-MM-dd'),
+      sede_id: null as string | null,
+    }
+    const facturacionesBase = modoVistaPrevia ? vistaPreviaData : facturaciones
+    if (facturacionesBase.length === 0) {
       Alerta.fire('Sin datos', 'No hay datos para generar preview', 'warning')
       return
     }
@@ -10975,7 +8964,7 @@ export function ReporteFacturacionTab() {
     setLoadingCabifyPreview(true)
     try {
       // Obtener emails de conductores
-      const dnis = [...new Set(facturaciones.map(f => f.conductor_dni).filter(Boolean))]
+      const dnis = [...new Set(facturacionesBase.map(f => f.conductor_dni).filter(Boolean))]
       const { data: conductoresData } = await supabase
         .from('conductores')
         .select('numero_dni, email')
@@ -10984,10 +8973,12 @@ export function ReporteFacturacionTab() {
       const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [normalizeDni(c.numero_dni), c.email]))
 
       // Cargar datos guardados de facturacion_cabify (si existen)
-      const { data: savedCabifyData } = await (supabase
-        .from('facturacion_cabify') as any)
-        .select('*')
-        .eq('periodo_id', periodo.id)
+      const { data: savedCabifyData } = per.id
+        ? await (supabase
+          .from('facturacion_cabify') as any)
+          .select('*')
+          .eq('periodo_id', per.id)
+        : { data: [] }
 
       // Crear mapa de datos guardados por conductor_id
       const savedDataMap = new Map<string, any>()
@@ -10998,12 +8989,12 @@ export function ReporteFacturacionTab() {
       })
 
       // Cargar datos de Cabify desde cabify_historico (para valores por defecto, sede-aware)
-      const sedeParaPreviewGen = periodo.sede_id || sedeActualId
+      const sedeParaPreviewGen = per.sede_id || sedeActualId
       const { data: cabifyData } = await supabase
         .from(getCabifyTable(sedeParaPreviewGen))
         .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
-        .gte('fecha_inicio', periodo.fecha_inicio + 'T00:00:00')
-        .lte('fecha_inicio', periodo.fecha_fin + 'T23:59:59')
+        .gte('fecha_inicio', per.fecha_inicio + 'T00:00:00')
+        .lte('fecha_inicio', per.fecha_fin + 'T23:59:59')
 
       // Agrupar datos de Cabify por DNI normalizado (sumar si hay múltiples registros)
       const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
@@ -11020,8 +9011,8 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      const fechaInicio = parseISO(periodo.fecha_inicio)
-      const fechaFin = parseISO(periodo.fecha_fin)
+      const fechaInicio = parseISO(per.fecha_inicio)
+      const fechaFin = parseISO(per.fecha_fin)
 
       // Proyección: si estamos dentro de la semana del período, proyectar a semana completa
       const hoyPeriodo = startOfDay(new Date())
@@ -11032,7 +9023,7 @@ export function ReporteFacturacionTab() {
       // recalculó; los pagos manuales o transferencias cargados después ya están en el saldo
       // actual y al cierre de semana se van a descontar, así que el preview usa el saldo de hoy.
       const saldoActualByConductor = new Map<string, number>()
-      const idsConductores = [...new Set(facturaciones.map(f => f.conductor_id).filter(Boolean))]
+      const idsConductores = [...new Set(facturacionesBase.map(f => f.conductor_id).filter(Boolean))]
       if (idsConductores.length > 0) {
         const { data: saldosData } = await (supabase.from('saldos_conductores') as any)
           .select('conductor_id, saldo_actual')
@@ -11043,7 +9034,7 @@ export function ReporteFacturacionTab() {
       }
 
       // Generar filas para el preview
-      const previewRows: CabifyPreviewRow[] = facturaciones.map(f => {
+      const previewRows: CabifyPreviewRow[] = facturacionesBase.map(f => {
         const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
         const cabifyInfo = cabifyMap.get(normalizeDni(f.conductor_dni)) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         const savedData = savedDataMap.get(f.conductor_id)
@@ -11051,8 +9042,8 @@ export function ReporteFacturacionTab() {
         // Si hay datos guardados, usarlos; sino usar los calculados
         if (savedData) {
           return {
-            anio: periodo.anio,
-            semana: periodo.semana,
+            anio: per.anio,
+            semana: per.semana,
             fechaInicial: fechaInicio,
             fechaFinal: fechaFin,
             conductor: savedData.conductor_nombre || f.conductor_nombre,
@@ -11115,8 +9106,8 @@ export function ReporteFacturacionTab() {
         const excedentes = Math.round((subtotalCargosRecalcCerrado - descuentosProyectados - actualAlquiler + saldoPendiente) * 100) / 100
 
         return {
-          anio: periodo.anio,
-          semana: periodo.semana,
+          anio: per.anio,
+          semana: per.semana,
           fechaInicial: fechaInicio,
           fechaFinal: fechaFin,
           conductor: f.conductor_nombre,
@@ -11156,15 +9147,15 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Agregar conductores de facturacion_cabify que no están en facturaciones
+      // Agregar conductores de facturacion_cabify que no están en facturacionesBase
       const idsEnPreview = new Set(previewRows.map(r => r.conductorId))
       const conductoresExtras = (savedCabifyData || [])
         .filter((record: any) => record.conductor_id && !idsEnPreview.has(record.conductor_id))
 
       for (const record of conductoresExtras) {
         previewRows.push({
-          anio: periodo.anio,
-          semana: periodo.semana,
+          anio: per.anio,
+          semana: per.semana,
           fechaInicial: fechaInicio,
           fechaFinal: fechaFin,
           conductor: record.conductor_nombre || '',
@@ -11935,11 +9926,6 @@ export function ReporteFacturacionTab() {
     })
   }
 
-  // Helper para obtener excesos de un conductor
-  const getExcesosConductor = (conductorId: string) => {
-    return excesos.filter(e => e.conductor_id === conductorId)
-  }
-
   // Columnas de la tabla
   const columns = useMemo<ColumnDef<FacturacionConductor>[]>(() => [
     {
@@ -12654,17 +10640,13 @@ export function ReporteFacturacionTab() {
       const alquiler = f.subtotal_alquiler || 0
       const proyectado = f.proyectado_alquiler || 0
       if (alquiler <= 0 || proyectado <= alquiler) return
-      const calculo = modoVistaPrevia
-        ? (f.promo_lineas || []).find(l => l.calculo.tipo === 'alquiler')?.calculo
-        : ((f as any)._detalles || [])
-          .filter((d: any) => d.referencia_tipo === REFERENCIA_PROMOCION)
-          .map((d: any) => leerCalculoPromocion(d.descripcion))
-          .find((c: any) => c?.tipo === 'alquiler')
+      // Vista Previa y semana guardada tienen las mismas líneas (_detalles) y los mismos días
+      const calculo = ((f as any)._detalles || [])
+        .filter((d: any) => d.referencia_tipo === REFERENCIA_PROMOCION)
+        .map((d: any) => leerCalculoPromocion(d.descripcion))
+        .find((c: any) => c?.tipo === 'alquiler')
       if (!calculo) return
-      // Días cobrados: en Vista Previa la suma por modalidad; en la facturación guardada, turnos_cobrados
-      const diasCobrados = modoVistaPrevia
-        ? (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)
-        : Number(f.turnos_cobrados) || 0
+      const diasCobrados = Number(f.turnos_cobrados) || 0
       if (diasCobrados <= 0 || (calculo.dias?.length || 0) < Math.ceil(diasCobrados)) return
       const precioDiario = alquiler / diasCobrados
       const diasExtra = Math.round((proyectado - alquiler) / precioDiario)
@@ -13240,6 +11222,18 @@ export function ReporteFacturacionTab() {
               Reabrir Período
             </button>
            )}
+          {/* Comparador de cálculo: solo en desarrollo, con un período guardado */}
+          {import.meta.env.DEV && periodo && !modoVistaPrevia && (
+            <button
+              className="fact-btn-primary fact-btn--discrepancias"
+              onClick={compararCalculo}
+              disabled={comparandoCalculo}
+              title="Compara lo guardado con la Vista Previa de la misma semana (solo lectura)"
+            >
+              {comparandoCalculo ? <Loader2 size={14} className="spinning" /> : <GitCompare size={14} />}
+              Comparar cálculo
+            </button>
+          )}
           {/* Botón Discrepancias - siempre visible */}
           <button
             className="fact-btn-primary fact-btn--discrepancias"
@@ -13414,11 +11408,11 @@ export function ReporteFacturacionTab() {
             onTableReady={setTableInstance}
             headerAction={
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <button className="fact-btn-export fact-btn--preview" onClick={prepararFacturacionPreviewVistaPrevia} disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0}>
+                <button className="fact-btn-export fact-btn--preview" onClick={prepararSiFacturaPreview} disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0}>
                   {loadingSiFacturaPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />}
                   Prev. Fact.
                 </button>
-                <button className="fact-btn-export fact-btn--preview" onClick={prepararCabifyPreview} disabled={loadingCabifyPreview || vistaPreviaData.length === 0}>
+                <button className="fact-btn-export fact-btn--preview" onClick={prepararCabifyPreviewDesdeFacturacion} disabled={loadingCabifyPreview || vistaPreviaData.length === 0}>
                   {loadingCabifyPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />}
                   Prev. Cabify
                 </button>
