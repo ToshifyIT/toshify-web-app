@@ -439,7 +439,7 @@ function getSemanaArgentina(date: Date) {
  * devoluciones sin importar el signo.
  * Devuelve el monto a sumar al saldo (positivo = a favor del conductor).
  */
-const MOVIMIENTOS_DE_LA_FACTURA = ['pago', 'pago_cabify', 'pago_didi', 'eliminacion_pago', 'edicion_pago']
+const MOVIMIENTOS_DE_LA_FACTURA = ['pago', 'pago_cabify', 'pago_didi', 'eliminacion_pago', 'edicion_pago', 'cierre_sin_pago']
 async function movimientosPosterioresALaFactura(conductorId: string, facturacionId: string): Promise<number> {
   if (!facturacionId || facturacionId.startsWith('preview')) return 0
   const { data: fact, error: errFact } = await (supabase.from('facturacion_conductores') as any)
@@ -5041,10 +5041,9 @@ export function ReporteFacturacionTab() {
         return
       }
 
-      // Cierre solo cambia estado a 'cerrado'. NO toca control_saldos ni
-      // saldos_conductores: los saldos se mueven únicamente cuando se carga el
-      // Pago Cabify (o pago manual). Materializar acá producía cargos
-      // 'regularizado' fantasma que sobreescribían el saldo antes de tener el pago.
+      // El cierre cambia el estado a 'cerrado' y, a las facturas que no tienen NINGÚN pago
+      // registrado, les pasa la deuda al saldo (ver pasarDeudaSinPagoAlSaldo). Las que ya
+      // tienen pago (Cabify, DiDi o manual) no se tocan: su saldo ya lo movió el pago.
       const { error } = await (supabase
         .from('periodos_facturacion') as any)
         .update({
@@ -5056,7 +5055,25 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      showSuccess('Período Cerrado')
+      // Facturas sin ningún pago: la deuda de la semana pasa al saldo (si no, la semana
+      // siguiente no se cobraba). Se registra como un pago de $0 "Cierre sin pago": así el
+      // pago real que llegue después (Cabify de esta semana) se descuenta bien y la semana
+      // queda bloqueada para recalcular, como cualquier semana con pagos.
+      const deuda = await pasarDeudaSinPagoAlSaldo(periodo)
+      if (deuda.errores.length > 0) {
+        await Alerta.fire({
+          icon: 'warning',
+          title: 'Período cerrado con avisos',
+          html: `<div style="text-align:left;font-size:13px;">
+            <p style="margin:0 0 8px 0">No se pudo pasar al saldo la deuda de ${deuda.errores.length} conductor(es) sin pago:</p>
+            <ul style="margin:0 0 8px 18px;padding:0">${deuda.errores.slice(0, 10).map(e => `<li>${e}</li>`).join('')}</ul>
+            <p style="margin:0;color:#6B7280;font-size:12px">Se puede registrar un pago de $0 a mano desde el detalle de cada conductor.</p>
+          </div>`,
+          confirmButtonText: 'Entendido',
+        })
+      }
+
+      showSuccess('Período Cerrado', deuda.pasados > 0 ? `${deuda.pasados} conductor(es) sin pago: su deuda pasó al saldo` : undefined)
 
       // Actualizar estado local
       setPeriodo(prev => prev ? {
@@ -5071,6 +5088,82 @@ export function ReporteFacturacionTab() {
     } finally {
       setCerrando(false)
     }
+  }
+
+  /**
+   * F13: al cerrar la semana, las facturas que no tienen NINGÚN pago registrado pasan su
+   * deuda (o saldo a favor) al saldo del conductor. Se registra como un pago de $0
+   * ("Cierre sin pago S{n}/{año}") con el mismo cálculo que un pago de app: así el pago real
+   * que llegue después se descuenta bien (el movimiento cuenta como de la propia factura) y
+   * la semana queda bloqueada para recalcular como cualquier semana con pagos.
+   */
+  async function pasarDeudaSinPagoAlSaldo(per: { id: string; semana: number; anio: number }): Promise<{ pasados: number; errores: string[] }> {
+    const errores: string[] = []
+    let pasados = 0
+    const { data: facturas, error: errFacturas } = await (supabase.from('facturacion_conductores') as any)
+      .select('id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit, total_a_pagar')
+      .eq('periodo_id', per.id)
+    if (errFacturas) return { pasados, errores: [`No se pudieron leer las facturas: ${errFacturas.message}`] }
+    const lista = (facturas || []) as Array<{ id: string; conductor_id: string; conductor_nombre: string; conductor_dni: string; conductor_cuit: string | null; total_a_pagar: number }>
+    const conPago = new Set<string>()
+    for (let i = 0; i < lista.length; i += 200) {
+      const { data, error } = await (supabase.from('pagos_conductores') as any)
+        .select('referencia_id')
+        .eq('tipo_cobro', 'facturacion_semanal')
+        .in('referencia_id', lista.slice(i, i + 200).map(f => f.id))
+      if (error) return { pasados, errores: [`No se pudieron leer los pagos: ${error.message}`] }
+      for (const pg of (data || []) as Array<{ referencia_id: string }>) conPago.add(String(pg.referencia_id))
+    }
+    const hoy = new Date()
+    const { semana: semanaHoy, anio: anioHoy } = semanaISO(hoyART())
+    const referencia = `Cierre sin pago S${per.semana}/${per.anio}`
+    for (const f of lista) {
+      if (conPago.has(f.id) || !f.conductor_id) continue
+      try {
+        const { error: errPago } = await (supabase.from('pagos_conductores') as any).insert({
+          conductor_id: f.conductor_id,
+          tipo_cobro: 'facturacion_semanal',
+          referencia_id: f.id,
+          referencia_tabla: 'facturacion_conductores',
+          numero_cuota: null,
+          monto: 0,
+          fecha_pago: hoy.toISOString(),
+          referencia,
+          semana: semanaHoy,
+          anio: anioHoy,
+          conductor_nombre: f.conductor_nombre,
+          created_by_name: profile?.full_name || 'Sistema',
+        })
+        if (errPago) throw errPago
+        const posteriores = await movimientosPosterioresALaFactura(f.conductor_id, f.id)
+        const saldoCrudo = -(Number(f.total_a_pagar) || 0) + posteriores
+        const nuevoSaldo = Math.abs(saldoCrudo) < 1 ? 0 : Math.round(saldoCrudo * 100) / 100
+        await upsertSaldoConductor({
+          conductorId: f.conductor_id,
+          conductorNombre: f.conductor_nombre,
+          conductorDni: f.conductor_dni,
+          conductorCuit: f.conductor_cuit || null,
+          nuevoSaldo,
+          timestamp: hoy.toISOString(),
+          sedeId: sedeActualId || sedeUsuario?.id,
+        })
+        await insertControlSaldo({
+          conductorId: f.conductor_id,
+          semana: per.semana,
+          anio: per.anio,
+          tipoMovimiento: 'cierre_sin_pago',
+          montoMovimiento: 0,
+          saldoPendiente: nuevoSaldo,
+          referencia,
+          userName: profile?.full_name,
+        })
+        pasados++
+      } catch (errorCapturado: any) {
+        console.error('[Facturación] No se pudo pasar la deuda al saldo:', f.conductor_nombre, errorCapturado)
+        errores.push(`${f.conductor_nombre}: ${errorCapturado?.message || 'error desconocido'}`)
+      }
+    }
+    return { pasados, errores }
   }
 
   // Reabrir período cerrado (solo admin)
