@@ -3509,6 +3509,164 @@ app.post('/api/portal/forgot-password', async (req, res) => {
   }
 })
 
+// =====================================================
+// CARTAS OFERTA FIRMADAS (DocuSeal): carpeta del conductor
+// =====================================================
+// Lo usa el Apps Script "Cartas oferta DocuSeal" (casilla de Josue): por cada correo de
+// DocuSeal "Carta Oferta ... ha sido completado por ..." pregunta en qué carpeta guardar los
+// PDF. Devuelve la carpeta del botón "Ver documentos" de la ficha (conductores.url_documentacion),
+// así no depende de buscar por nombre en Drive (fallaba con carpetas duplicadas, 2026-11-23).
+// Protegido con la clave CARTAS_OFERTA_API_KEY (header x-api-key). Solo lee: no crea ni cambia nada.
+
+const PALABRAS_NOMBRE_IGNORADAS = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y'])
+const DOMINIOS_INTERNOS_FIRMA = ['toshify.com.ar', '44dreams.com']
+
+function palabrasNombre(texto) {
+  return String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ').trim().split(' ')
+    .filter(p => p && !PALABRAS_NOMBRE_IGNORADAS.has(p))
+}
+
+/** Mismo nombre (en cualquier orden) o todas las palabras de uno están en el otro (mín. 2). */
+function coincideNombre(a, b) {
+  const pa = palabrasNombre(a)
+  const pb = palabrasNombre(b)
+  if (pa.length === 0 || pb.length === 0) return null
+  if ([...pa].sort().join(' ') === [...pb].sort().join(' ')) return 'exacto'
+  const [corto, largo] = pa.length <= pb.length ? [pa, pb] : [pb, pa]
+  if (corto.length < 2) return null
+  const restantes = [...largo]
+  for (const p of corto) {
+    const i = restantes.indexOf(p)
+    if (i < 0) return null
+    restantes.splice(i, 1)
+  }
+  return 'parcial'
+}
+
+/**
+ * "Carta Oferta OCT-26 N° 000002 - Turno - Nocturno - MARTIN SEBASTIAN MARTINEZ ha sido
+ * completado por a@x.com, b@y.com" -> { nombre, numero: 2, turno: 'nocturno', firmantes }
+ * También: "... - Auto a Cargo - NOMBRE", formato viejo sin N°, y el "(1)" que agrega DocuSeal.
+ */
+function leerAsuntoCartaOferta(asunto) {
+  const texto = String(asunto || '').replace(/\s+/g, ' ').trim()
+  const m = texto.match(/-\s*([^-]+?)\s+ha\s+sido\s+completad[oa]/i)
+  const nombre = m ? m[1].replace(/\(\d+\)\s*$/, '').trim() : ''
+  const numero = Number(texto.match(/N[°º]\s*0*(\d+)/i)?.[1]) || null
+  const turnoTxt = texto.match(/-\s*(Diurno|Nocturno)\s*-/i)?.[1]
+  const turno = turnoTxt ? turnoTxt.toLowerCase() : null
+  const porMatch = texto.match(/completad[oa]\s+por\s+(.+)$/i)
+  const firmantes = porMatch
+    ? (porMatch[1].match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || []).map(e => e.toLowerCase())
+    : []
+  return { nombre, numero, turno, firmantes }
+}
+
+function idCarpetaDeUrl(url) {
+  const s = String(url || '')
+  return s.match(/folders\/([\w-]{10,})/)?.[1] || s.match(/[?&]id=([\w-]{10,})/)?.[1] || null
+}
+
+app.post('/api/carpeta-carta-oferta', async (req, res) => {
+  try {
+    const clave = process.env.CARTAS_OFERTA_API_KEY
+    if (!clave) return res.status(503).json({ ok: false, motivo: 'sin_configurar', detalle: 'Falta CARTAS_OFERTA_API_KEY en el servidor' })
+    const recibida = String(req.headers['x-api-key'] || '')
+    const a = Buffer.from(recibida)
+    const b = Buffer.from(clave)
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ ok: false, motivo: 'no_autorizado' })
+    }
+
+    const asunto = String(req.body?.asunto || '')
+    const { nombre, numero, turno, firmantes } = leerAsuntoCartaOferta(asunto)
+    if (palabrasNombre(nombre).length < 2) {
+      return res.json({ ok: false, motivo: 'sin_nombre', detalle: 'No se pudo leer el nombre del conductor del asunto' })
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
+    const COLS = 'id,nombres,apellidos,numero_dni,email,url_documentacion'
+    const leer = async (ruta) => {
+      const r = await fetch(`${supabaseUrl}/rest/v1/${ruta}`, { headers })
+      if (!r.ok) throw new Error(`Supabase ${r.status}: ${await r.text()}`)
+      return r.json()
+    }
+    const nombreDe = c => `${c.nombres || ''} ${c.apellidos || ''}`.trim()
+    const unicos = lista => [...new Map(lista.map(c => [c.id, c])).values()]
+
+    let conductor = null
+    let motivo = ''
+    let candidatos = []
+
+    // 1) La carta generada en Toshibase: mismo N° (y turno) + nombre del conductor
+    if (numero) {
+      let ruta = `documentos_generados?correlativo=eq.${numero}&conductor_id=not.is.null&select=turno,conductores(${COLS})`
+      if (turno) ruta += `&turno=eq.${turno}`
+      const docs = await leer(ruta)
+      const porNombre = unicos(docs.map(d => d.conductores).filter(c => c && coincideNombre(nombreDe(c), nombre)))
+      if (porNombre.length === 1) { conductor = porNombre[0]; motivo = `carta N° ${numero} generada en Toshibase` }
+      else if (porNombre.length > 1) candidatos = porNombre
+    }
+
+    // 2) Email del conductor que firmó (sin las casillas internas de Toshify / 44 Dreams)
+    const externos = firmantes.filter(e => !DOMINIOS_INTERNOS_FIRMA.some(d => e.endsWith('@' + d)))
+    if (!conductor && externos.length) {
+      const lista = externos.map(e => `email.ilike.${encodeURIComponent(e)}`).join(',')
+      const porEmail = unicos(await leer(`conductores?select=${COLS}&or=(${lista})`))
+      const confirmados = porEmail.filter(c => coincideNombre(nombreDe(c), nombre))
+      const elegidos = confirmados.length ? confirmados : porEmail
+      if (elegidos.length === 1) { conductor = elegidos[0]; motivo = `email del firmante (${elegidos[0].email})` }
+      else if (elegidos.length > 1 && !candidatos.length) candidatos = elegidos
+    }
+
+    // 3) Nombre exacto (en cualquier orden) entre todos los conductores
+    if (!conductor && !candidatos.length) {
+      const apellido = palabrasNombre(nombre).slice(-1)[0]
+      const posibles = await leer(`conductores?select=${COLS}&apellidos=ilike.*${encodeURIComponent(apellido)}*`)
+      const exactos = posibles.filter(c => coincideNombre(nombreDe(c), nombre) === 'exacto')
+      if (exactos.length === 1) { conductor = exactos[0]; motivo = 'mismo nombre en Toshibase' }
+      else if (exactos.length > 1) candidatos = exactos
+    }
+
+    if (!conductor) {
+      return res.json(candidatos.length
+        ? { ok: false, motivo: 'ambiguo', nombre, detalle: `Varios conductores posibles: ${candidatos.slice(0, 5).map(c => `${nombreDe(c)} (DNI ${c.numero_dni || '?'})`).join(' / ')}` }
+        : { ok: false, motivo: 'no_encontrado', nombre, detalle: 'No hay un conductor en Toshibase para esta carta' })
+    }
+
+    const resumen = { nombre: nombreDe(conductor), dni: conductor.numero_dni || null }
+    const folderId = idCarpetaDeUrl(conductor.url_documentacion)
+    if (!folderId) {
+      return res.json({ ok: false, motivo: 'sin_carpeta', conductor: resumen, detalle: 'La ficha del conductor no tiene carpeta en "Ver documentos"' })
+    }
+
+    // La carpeta tiene que existir y no estar en la papelera
+    try {
+      const drive = getDriveService(false)
+      const f = await drive.files.get({ fileId: folderId, fields: 'id,name,mimeType,trashed', supportsAllDrives: true })
+      if (f.data.trashed || f.data.mimeType !== 'application/vnd.google-apps.folder') {
+        return res.json({ ok: false, motivo: 'carpeta_invalida', conductor: resumen, detalle: 'La carpeta de "Ver documentos" está en la papelera o no es una carpeta' })
+      }
+      return res.json({
+        ok: true,
+        folderId,
+        folderUrl: `https://drive.google.com/drive/folders/${folderId}`,
+        carpeta: f.data.name,
+        conductor: resumen,
+        motivo,
+      })
+    } catch (driveErr) {
+      return res.json({ ok: false, motivo: 'carpeta_invalida', conductor: resumen, detalle: `No se pudo abrir la carpeta de "Ver documentos": ${driveErr.message}` })
+    }
+  } catch (error) {
+    console.error('[carpeta-carta-oferta] Error:', error.message)
+    res.status(500).json({ ok: false, motivo: 'error', detalle: error.message })
+  }
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
