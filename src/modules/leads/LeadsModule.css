@@ -1429,15 +1429,16 @@ button.lead-pareja-badge:hover { filter: none; }
   height: 6px;
 }
 
-/* Celular: las 4 acciones secundarias en una fila de botones iguales (solo ícono o texto
-   corto) y «Nuevo Lead» abajo, a lo ancho. Antes quedaban de anchos distintos y mezclados. */
+/* Celular: las acciones secundarias en una fila de botones iguales (solo ícono o texto
+   corto) y «Nuevo Lead» abajo, a lo ancho. Antes quedaban de anchos distintos y mezclados.
+   Son 3: Exportar, Carga Masiva y Calculadora (sin permiso de alta, 2). */
 @media (max-width: 640px) {
   .leads-module .dt-header-action {
     width: 100%;
   }
   #root .leads-module .dt-header-action .leads-header-actions {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     width: 100%;
   }

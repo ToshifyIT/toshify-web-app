@@ -1,0 +1,398 @@
+/* Calculadora de neto del conductor (Leads) */
+
+.calc-neto-modal {
+  max-width: 880px;
+}
+
+.calc-neto-modal .modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calc-neto-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calc-cargando,
+.calc-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.calc-error {
+  color: var(--color-danger);
+}
+
+.calc-intro,
+.calc-fuente {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.calc-entradas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.calc-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.calc-campo em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.calc-campo input,
+.calc-campo select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg, var(--bg-primary));
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.calc-entradas .calc-campo input,
+.calc-entradas .calc-campo select {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.calc-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.calc-aviso {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-warning-dark);
+}
+
+.calc-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.calc-bloque {
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md, 8px);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.calc-bloque h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.calc-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.calc-fila > span:last-child,
+.calc-fila > strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-fila-fuerte {
+  font-weight: 600;
+}
+
+.calc-total {
+  font-weight: 700;
+  font-size: 15px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.calc-total + .calc-total {
+  border-top: none;
+  padding-top: 0;
+}
+
+.calc-positivo {
+  color: var(--color-success);
+}
+
+.calc-negativo {
+  color: var(--color-danger);
+}
+
+.calc-diagnostico {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.calc-diag-deuda {
+  color: var(--color-danger);
+}
+
+.calc-diag-justo {
+  color: var(--color-warning-dark);
+}
+
+.calc-diag-ok {
+  color: var(--color-success);
+}
+
+.calc-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Semanas floja / normal / buena: una fila cada una, la semana a la izquierda y lo que
+   le queda a la derecha (viven en la columna derecha, que es angosta). */
+.calc-escenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calc-escenario {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.calc-escenario + .calc-escenario {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.calc-escenario-res {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.calc-escenario-titulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.calc-escenario-pct,
+.calc-escenario-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.calc-escenario-cab,
+.calc-escenario-res {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calc-escenario-neto {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-escenario-neto .calc-escenario-sub {
+  font-weight: 400;
+}
+
+.calc-titulo-ayuda {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calc-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.calc-info:hover,
+.calc-info[aria-expanded='true'] {
+  color: var(--color-primary);
+}
+
+.calc-ayuda {
+  margin-bottom: 4px;
+}
+
+.calc-decir {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.calc-decir strong {
+  color: var(--text-primary);
+}
+
+.calc-toggle {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary, #ff0033);
+  cursor: pointer;
+}
+
+.calc-modificados {
+  color: var(--color-warning-dark);
+}
+
+.calc-supuestos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  margin-top: 6px;
+}
+
+.calc-supuestos-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.calc-supuestos-acciones button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 768px) {
+  .calc-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .calc-supuestos-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .calc-neto-modal .modal-body {
+    padding: 14px;
+  }
+
+  .calc-entradas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calc-entradas .calc-campo:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .calc-escenario-neto {
+    font-size: 16px;
+  }
+
+  .calc-supuestos-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calc-neto-modal .modal-header h2 {
+    font-size: 16px;
+    padding-right: 32px;
+  }
+}
+
+.calc-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calc-check {
+  align-items: flex-start;
+  line-height: 1.4;
+}
+
+.calc-check input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.calc-check-nota {
+  padding-left: 24px;
+}
+
+.calc-primera {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.calc-primera h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.calc-realidad {
+  margin-top: 4px;
+}
+
+.calc-realidad strong {
+  color: var(--text-primary);
+}

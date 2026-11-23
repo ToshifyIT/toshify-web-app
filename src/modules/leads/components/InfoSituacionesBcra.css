@@ -1,0 +1,63 @@
+.info-sit-bcra-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.info-sit-bcra-btn:hover,
+.info-sit-bcra-btn[aria-expanded='true'] {
+  color: var(--color-primary);
+}
+
+.info-sit-bcra-panel {
+  position: fixed;
+  z-index: calc(var(--z-modal, 1000) + 10);
+  width: min(300px, calc(100vw - 16px));
+  padding: 12px 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--modal-bg, var(--bg-primary));
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.info-sit-bcra-titulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.info-sit-bcra-fila {
+  display: flex;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.info-sit-bcra-num {
+  flex-shrink: 0;
+  width: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.info-sit-bcra-det {
+  display: block;
+  color: var(--text-secondary);
+}
