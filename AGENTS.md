@@ -28,9 +28,7 @@ npm start                # Start production server
 
 ### Sync Scripts (Data Pipelines)
 ```bash
-npm run sync:cabify              # Sync Cabify historical data
-npm run sync:cabify:weekly       # Sync last week
-npm run sync:cabify:realtime     # Real-time sync
+# Cabify sync runs on the server (/opt/toshify-sync/sync-cabify-cuentas.ts), not from this repo
 npm run sync:uss                 # Sync USS Kilometraje
 npm run sync:wialon:bitacora     # Sync Wialon Bitacora
 npm run scheduler                # Run scheduler daemon
