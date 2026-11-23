@@ -14,7 +14,7 @@ import {
 } from '../../utils/facturacionIva'
 import { calcularKmSemanasConductor } from './kmRecorridos'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
-import logoToshifyWordmarkUrl from '../../assets/logo-toshify-wordmark.png'
+import logoToshifyWordmarkUrl from '../../assets/logo-toshify-red.svg'
 import { Spinner } from '../../components/ui/LoadingOverlay'
 import { ClipboardList } from 'lucide-react'
 import './PortalPage.css'
@@ -2036,8 +2036,10 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       <div className="portal portal-login">
         <img src={logoToshifyWordmarkUrl} alt="Toshify" className="portal-login-brand-logo" />
         <form className="portal-login-card" onSubmit={handleLogin}>
+          <img src="/mascota/saluda.webp" alt="" aria-hidden="true" className="portal-login-mascot" width={257} height={320} />
+          <p className="portal-login-eyebrow">Portal de conductores</p>
           <h1 className="portal-login-title">Iniciar sesión</h1>
-          <p className="portal-login-subtitle">Portal de conductores</p>
+          <p className="portal-login-subtitle">Entrá para ver tu facturación de cada semana, tu saldo y tus multas.</p>
 
           <div className="portal-login-field">
             <label className="portal-login-label" htmlFor="portal-login-dni">DNI</label>
@@ -2050,6 +2052,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
               autoFocus
               inputMode="numeric"
               autoComplete="username"
+              placeholder="Ej: 30123456"
             />
           </div>
 
@@ -2063,13 +2066,14 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                 value={loginPassword}
                 onChange={(e) => { setLoginPassword(e.target.value); setLoginError('') }}
                 autoComplete="current-password"
+                placeholder="Tu contraseña"
               />
               <button
                 type="button"
                 className="portal-login-toggle"
                 onClick={() => setShowLoginPassword(v => !v)}
-                tabIndex={-1}
                 aria-label={showLoginPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-pressed={showLoginPassword}
               >
                 {showLoginPassword ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -2105,6 +2109,13 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           >
             ¿Olvidaste tu contraseña?
           </button>
+
+          <p className="portal-login-help">
+            ¿No podés entrar?{' '}
+            <a href="https://wa.me/5491151332075" target="_blank" rel="noopener noreferrer">
+              Escribinos por WhatsApp
+            </a>
+          </p>
         </form>
       </div>
     )
