@@ -12,10 +12,10 @@ import {
 import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
-  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, Link2,
+  Eye, Edit2, Trash2, Users, UserPlus, Link2,
   AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
   Handshake, CalendarCheck, MessageCircle, Truck,
-  MapPin, CreditCard,
+  MapPin, CreditCard, Calculator,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -41,7 +41,10 @@ import { clasificarMotivoDesinteres } from './leadMotivos'
 import { esGuiaActivo, GUIAS_ACTIVOS, homologarGuia } from './guias'
 import { ESTADO_GESTION_FLOTA, ESTADO_LISTO_EMPAREJAR, ESTADOS_LEAD_FILTRO, ESTADOS_SIN_PAREJA } from './leadEstados'
 import { LABELS_CUENTA_APP } from './cuentasApps'
-import { LeadsConductoresModal } from './components/LeadsConductoresModal'
+import { CalculadoraNetoModal } from './components/CalculadoraNetoModal'
+import { precargarDatosCalculadora } from './calculadoraNeto'
+import { situacionBcra } from './bcraSituaciones'
+import { InfoSituacionesBcra } from './components/InfoSituacionesBcra'
 import { ChatLeadModal } from './components/ChatLeadModal'
 import { nombresDelLead } from './nombreLead'
 import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, MARCA_RECONTACTO_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
@@ -484,7 +487,7 @@ const COLUMNAS_LISTA = [
   'url_folder', 'fuente_de_lead', 'companero', 'patente',
   // tipo: lo usa calcularEstadoLead ('auto' → Auto del pueblo, 'flota' → Gestión flota)
   'tipo',
-  'bcra_nivel', 'bcra_nivel_motivo', 'bcra_error', 'bcra_consultado_at',
+  'bcra_nivel', 'bcra_nivel_motivo', 'bcra_error', 'bcra_consultado_at', 'bcra_situacion',
 ].join(', ')
 
 /** Grupo BCRA del lead para la columna y su filtro (ver server-bcra.js y Parámetros > Riesgo BCRA). */
@@ -859,7 +862,7 @@ export function LeadsModule() {
   const [leadsVisibles, setLeadsVisibles] = useState<Lead[] | null>(null)
 
   // Modal de conciliación Lead ↔ Conductor (solo lectura)
-  const [verLeadsConductores, setVerLeadsConductores] = useState(false)
+  const [verCalculadora, setVerCalculadora] = useState(false)
 
   // Inline estado dropdown
   const [estadoDropdownId, setEstadoDropdownId] = useState<string | null>(null)
@@ -1176,6 +1179,100 @@ export function LeadsModule() {
   }, [aplicarFiltroSede, sedeKey])
 
   useEffect(() => { loadLeads() }, [loadLeads])
+
+  // Calculadora de neto: se carga en segundo plano al entrar (y al cambiar de sede) para que
+  // el botón la abra al instante. Espera un poco para no competir con la carga de la lista.
+  useEffect(() => {
+    const t = setTimeout(() => precargarDatosCalculadora(sedeActualId), 1500)
+    return () => clearTimeout(t)
+  }, [sedeActualId])
+
+  // ---------- TIEMPO REAL ----------
+  // Los leads nuevos o modificados (Sellium, formulario web, otros usuarios) aparecen
+  // solos. Requiere sql/leads_realtime.sql (tabla leads en la publicación supabase_realtime);
+  // sin eso el canal se conecta pero no llegan eventos (verificado el 23/11/2026: ya está).
+  // Del evento solo se usa el id: la fila se vuelve a pedir con los mismos filtros que la
+  // lista (sede, proceso y RLS), así un lead de otra sede o ya convertido no entra, y uno
+  // que deja de cumplirlos se saca. El estado calculado se muestra pero no se escribe en
+  // la base (eso lo hace loadLeads), para no generar eventos en cadena.
+  const calcularEstadoRef = useRef<(lead: Lead) => string>(() => '')
+  calcularEstadoRef.current = (lead: Lead) => calcularEstadoLead(lead)
+
+  useEffect(() => {
+    const pendientes = new Set<string>()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let cancelado = false
+
+    const conEstado = (lead: Lead): Lead => {
+      const proceso = (lead.proceso || '').toLowerCase()
+      const esConductor = proceso === 'convertido' || proceso === 'conductor'
+      const esPendienteHireflix = lead.fase_de_preguntas === 'Video Entrevista' && lead.estado_de_lead === 'Acepta oferta'
+      if (lead.estado_manual_at && !esConductor && !esPendienteHireflix) return lead
+      const estado = calcularEstadoRef.current(lead)
+      return estado && estado !== lead.estado_de_lead ? { ...lead, estado_de_lead: estado } : lead
+    }
+
+    const aplicar = (actualizados: Lead[], quitar: Set<string>) => {
+      setLeads(prev => {
+        const porId = new Map(actualizados.map(l => [l.id, conEstado(l)]))
+        const siguientes = prev
+          .filter(l => !quitar.has(l.id))
+          .map(l => porId.get(l.id) ?? l)
+        const existentes = new Set(prev.map(l => l.id))
+        const nuevos = actualizados.filter(l => !existentes.has(l.id)).map(l => porId.get(l.id) as Lead)
+        const resultado = nuevos.length
+          ? [...nuevos, ...siguientes].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+          : siguientes
+        if (leadsCache?.sedeKey === sedeKey) leadsCache = { ...leadsCache, leads: resultado }
+        return resultado
+      })
+    }
+
+    const procesar = async () => {
+      timer = null
+      const ids = [...pendientes]
+      pendientes.clear()
+      if (ids.length === 0) return
+      try {
+        const { data, error } = await aplicarFiltroSede(
+          (supabase.from('leads') as any)
+            .select(COLUMNAS_LISTA)
+            .or('proceso.is.null,proceso.not.in.(Convertido,Reingreso,"Ya era conductor")')
+            .in('id', ids),
+          'sede_id'
+        )
+        if (error) throw error
+        if (cancelado) return
+        const actualizados = (data || []) as Lead[]
+        const vigentes = new Set(actualizados.map(l => l.id))
+        aplicar(actualizados, new Set(ids.filter(id => !vigentes.has(id))))
+      } catch (err) {
+        console.error('Leads en tiempo real:', err)
+      }
+    }
+
+    const channel = supabase
+      .channel(`leads_tiempo_real_${sedeKey}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload: any) => {
+        if (payload.eventType === 'DELETE') {
+          const id = payload.old?.id
+          if (id) aplicar([], new Set([id]))
+          return
+        }
+        const id = payload.new?.id
+        if (!id) return
+        pendientes.add(id)
+        // Se juntan los cambios de 1,5 s en un solo pedido (Sellium carga en tandas).
+        if (!timer) timer = setTimeout(procesar, 1500)
+      })
+      .subscribe()
+
+    return () => {
+      cancelado = true
+      if (timer) clearTimeout(timer)
+      supabase.removeChannel(channel)
+    }
+  }, [aplicarFiltroSede, sedeKey])
 
   // Conductores (actuales y antiguos) para avisar si un lead ya fue conductor.
   // Se traen una vez: solo los campos para comparar DNI, teléfono y nombre.
@@ -3541,6 +3638,35 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
+      // Situación en el BCRA (0 a 6) del lead consultado; la "i" explica cada una
+      id: 'bcra_situacion',
+      accessorFn: (row) => (row.bcra_consultado_at && !row.bcra_error ? (row.bcra_situacion ?? 0) : -1),
+      header: () => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+          Sit. BCRA <InfoSituacionesBcra />
+        </span>
+      ),
+      cell: ({ row }) => {
+        const l = row.original
+        if (!l.bcra_consultado_at || l.bcra_error) {
+          return <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>-</span>
+        }
+        const valor = l.bcra_situacion ?? 0
+        const sit = situacionBcra(valor)
+        const color = COLOR_BCRA[grupoBcra(l)]
+        return (
+          <span
+            title={sit ? `${valor} · ${sit.nombre}: ${sit.detalle}` : undefined}
+            style={{ fontSize: '12px', fontWeight: 700, color: color ?? 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}
+          >
+            {valor}
+          </span>
+        )
+      },
+      size: 90,
+      enableSorting: true,
+    },
+    {
       id: 'fuente',
       accessorFn: (row) => row.fuente_de_lead || '-',
       header: 'Fuente',
@@ -4050,9 +4176,7 @@ export function LeadsModule() {
         emptyDescription="No se encontraron leads con los filtros aplicados"
         headerAction={
           <div className="leads-header-actions">
-            <button className="btn-secondary btn-sm" onClick={loadLeads} title="Recargar" aria-label="Recargar">
-              <RefreshCw size={14} />
-            </button>
+            {/* Sin botón Recargar: la lista se actualiza sola (ver "TIEMPO REAL"). */}
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel" aria-label="Exportar Excel">
               <Download size={14} /> <span className="leads-btn-label">Exportar</span>
             </button>
@@ -4075,13 +4199,15 @@ export function LeadsModule() {
                 <UserPlus size={14} /> <span className="leads-btn-label">Nuevo Lead</span>
               </button>
             )}
+            {/* La calculadora ocupa el lugar del botón "Ver Lead/Conductores" (23/11/2026).
+                Esa vista (components/LeadsConductoresModal.tsx) queda sin acceso desde acá. */}
             <button
               className="btn-secondary btn-sm"
-              onClick={() => setVerLeadsConductores(true)}
-              aria-label="Ver Lead/Conductores"
-              title="Ver los leads que ya son conductores y los que tienen un conductor con el mismo documento pero siguen sin convertir"
+              onClick={() => setVerCalculadora(true)}
+              aria-label="Calculadora de neto"
+              title="Calculadora de neto del conductor: cuánto le queda según los días y las horas que maneje"
             >
-              <Link2 size={14} /> <span className="leads-btn-label leads-btn-label--sec">Ver Lead/Conductores</span>
+              <Calculator size={14} /> <span className="leads-btn-label leads-btn-label--sec">Calculadora</span>
             </button>
           </div>
         }
@@ -4213,12 +4339,7 @@ export function LeadsModule() {
         <ChatLeadModal leadId={chatLead.id} nombre={chatLead.nombre} onClose={() => setChatLead(null)} />
       )}
 
-      {verLeadsConductores && (
-        <LeadsConductoresModal
-          onClose={() => setVerLeadsConductores(false)}
-          onActualizado={loadLeads}
-        />
-      )}
+      {verCalculadora && <CalculadoraNetoModal onClose={() => setVerCalculadora(false)} />}
     </div>
   )
 }

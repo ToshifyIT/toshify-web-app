@@ -58,22 +58,28 @@ function extraerPeriodo(descripcion: string): string {
   return /^[A-Za-zÁÉÍÓÚÑ]{3}-\d{2}$/.test(ultimo) ? ultimo.toUpperCase() : ''
 }
 
+/** Período del concepto: el campo `periodo` (vigencia) y, si no está, el sufijo del nombre. */
+function periodoDeConcepto(c: { periodo?: string | null; descripcion: string }): string {
+  return (c.periodo || '').trim().toUpperCase() || extraerPeriodo(c.descripcion)
+}
+
 /** Trae los conceptos de alquiler activos. Ante cualquier error devuelve {} (el
  *  selector cae a sus etiquetas por defecto en vez de romperse). */
 export async function cargarConceptosTarifa(): Promise<MapaConceptosTarifa> {
   try {
     const { data, error } = await (supabase.from('conceptos_nomina') as any)
-      .select('codigo, descripcion, precio_final, precio_semanal, iva_porcentaje')
+      // '*' y no una lista: `periodo` puede no existir todavía si falta correr el SQL de vigencia.
+      .select('*')
       .eq('activo', true)
       .in('codigo', CODIGOS_TARIFA_ALQUILER)
     if (error || !data) return {}
     const mapa: MapaConceptosTarifa = {}
-    for (const c of data as Array<{ codigo: string; descripcion: string; precio_final: number | null; precio_semanal: number | null; iva_porcentaje: number | null }>) {
+    for (const c of data as Array<{ codigo: string; descripcion: string; periodo?: string | null; precio_final: number | null; precio_semanal: number | null; iva_porcentaje: number | null }>) {
       const neto = c.precio_semanal || 0
       const factorIva = 1 + (c.iva_porcentaje || 0) / 100
       mapa[c.codigo] = {
         codigo: c.codigo,
-        periodo: extraerPeriodo(c.descripcion),
+        periodo: periodoDeConcepto(c),
         // Mismo criterio que ConceptosFacturacionTab: precio_semanal de BD, respaldo precio_final × 7.
         precioSemanal: c.precio_semanal ?? Math.round((c.precio_final || 0) * 7),
         // Idem columna "Total por semana (Con IVA)": neto × (1 + IVA), respaldo precio_final × 7.
@@ -120,13 +126,13 @@ export async function validarPreciosSemanales(
 
   try {
     const { data, error } = await (supabase.from('conceptos_nomina') as any)
-      .select('codigo, descripcion, precio_semanal')
+      .select('*')
       .in('codigo', codigos)
     if (error || !data) return []
 
-    const porCodigo = new Map<string, { descripcion: string; precio_semanal: number | null }>(
-      (data as Array<{ codigo: string; descripcion: string; precio_semanal: number | null }>)
-        .map(c => [c.codigo, { descripcion: c.descripcion, precio_semanal: c.precio_semanal }])
+    const porCodigo = new Map<string, { periodo: string; precio_semanal: number | null }>(
+      (data as Array<{ codigo: string; descripcion: string; periodo?: string | null; precio_semanal: number | null }>)
+        .map(c => [c.codigo, { periodo: periodoDeConcepto(c), precio_semanal: c.precio_semanal }])
     )
 
     const faltantes: string[] = []
@@ -137,9 +143,9 @@ export async function validarPreciosSemanales(
         faltantes.push(`${r.label} → concepto de alquiler ${codigo} no encontrado`)
         continue
       }
-      if (extraerPeriodo(concepto.descripcion) === PERIODO_TARIFA_LEGACY) continue
+      if (concepto.periodo === PERIODO_TARIFA_LEGACY) continue
       if (!concepto.precio_semanal || concepto.precio_semanal <= 0) {
-        const periodo = extraerPeriodo(concepto.descripcion) || codigo
+        const periodo = concepto.periodo || codigo
         faltantes.push(`${r.label} → tarifa ${periodo}: falta "Total por semana (Sin IVA)"`)
       }
     }

@@ -1,63 +1,59 @@
+/* Parámetros > Riesgo BCRA: mismo formato que el resto de Parámetros (indicadores a lo
+   ancho, barra de configuración y tabla). */
+
 .riesgo-bcra {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 760px;
+  /* El fondo blanco llega hasta abajo aunque la página sea corta */
+  box-sizing: border-box;
+  min-height: 100%;
 }
 
-.riesgo-bcra-conteo {
+.riesgo-bcra-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
 }
 
-.riesgo-bcra-conteo-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 16px;
+.riesgo-bcra-aviso {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-warning-dark);
+}
+
+/* Barra de configuración, a lo ancho */
+.riesgo-bcra-config {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 16px;
   border: 1px solid var(--border-primary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-primary);
 }
 
-.riesgo-bcra-conteo-valor {
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.riesgo-bcra-conteo-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.riesgo-bcra-card {
+.riesgo-bcra-campo {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 20px;
-  border: 1px solid var(--border-primary);
-  border-radius: 10px;
-  background: var(--bg-primary);
-}
-
-.riesgo-bcra-card h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.riesgo-bcra-ayuda {
-  margin: 0;
+  gap: 6px;
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
 /* Los controles tienen alto fijo (--alto-control): sin relleno vertical para que el texto entre */
-.riesgo-bcra .form-group .form-input {
+.riesgo-bcra-campo .form-input {
+  width: 100%;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+.riesgo-bcra-checks {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
 }
 
 .riesgo-bcra-check {
@@ -69,34 +65,56 @@
   cursor: pointer;
 }
 
-.riesgo-bcra-reglas {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-primary);
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.riesgo-bcra-reglas span {
-  font-weight: 600;
-}
-
 .riesgo-bcra-pie {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
 }
 
-@media (max-width: 600px) {
-  .riesgo-bcra-conteo {
-    grid-template-columns: 1fr;
-  }
+.riesgo-bcra-ultimo {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
 
-  .riesgo-bcra .form-row {
-    flex-direction: column;
+/* Tabla */
+.riesgo-bcra-th {
+  display: inline-flex;
+  align-items: center;
+}
+
+.riesgo-bcra-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mismo formato que la tabla de Promociones: título en negrita y descripción en gris */
+.riesgo-bcra-nombre {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.riesgo-bcra-titulo {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.riesgo-bcra-detalle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: normal;
+}
+
+.riesgo-bcra-celda {
+  font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .riesgo-bcra-config {
+    grid-template-columns: 1fr;
   }
 }

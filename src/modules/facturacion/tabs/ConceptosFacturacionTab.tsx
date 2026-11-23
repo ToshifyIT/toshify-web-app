@@ -11,6 +11,24 @@ import { formatCurrency, TIPOS_CONCEPTO, TIPOS_PARAMETRO } from '../../../types/
 import { hoyART, fechaLocalISO } from '../../../utils/fechaArgentina'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
+import { TurnoBadge } from '../../../components/ui/TurnoBadge'
+
+/** Alquileres por turno (mismos códigos que onboarding/tarifaConceptos.ts), con y sin GNC. */
+const CODIGOS_DIURNO = new Set(['P001', 'P014', 'P021', 'P024'])
+const CODIGOS_NOCTURNO = new Set(['P013', 'P015', 'P023', 'P025'])
+
+/**
+ * Modalidades de un concepto. Turno se abre en DIURNO / NOCTURNO: el alquiler de cada turno
+ * dice cuál es (código o descripción); un concepto de turno que no es de uno solo vale para los dos.
+ */
+function modalidadesConcepto(c: ConceptoFacturacion): string[] {
+  const desc = (c.descripcion || '').toUpperCase()
+  const turnos = !c.aplica_turno ? []
+    : CODIGOS_NOCTURNO.has(c.codigo) || desc.includes('NOCTURNO') ? ['NOCTURNO']
+      : CODIGOS_DIURNO.has(c.codigo) || desc.includes('DIURNO') ? ['DIURNO']
+        : ['DIURNO', 'NOCTURNO']
+  return c.aplica_cargo ? [...turnos, 'CARGO'] : turnos
+}
 const HTML_CAMPO_PRECIO_BASE = `
           <div class="fact-form-row" id="swal-base-group">
             <div class="fact-form-group">
@@ -22,6 +40,96 @@ const HTML_CAMPO_PRECIO_BASE = `
               <input id="swal-base-con-iva" type="number" class="fact-form-input" value="0" step="0.01">
             </div>
           </div>`
+
+// ---------------------------------------------------------------------------
+// Vigencia de conceptos (alquileres, garantía: lo que se firma en el contrato).
+// Varias versiones conviven; cada una lleva su período ("ENE-26"). En los
+// conceptos nuevos el período sale del mes de "Vigente desde" y se agrega al
+// final del nombre, porque varias pantallas (facturación, garantías, exceso de
+// km) todavía lo leen de ahí.
+// ---------------------------------------------------------------------------
+
+const MESES_PERIODO = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC']
+const RE_SUFIJO_PERIODO = /\s+[A-Za-zÁÉÍÓÚÑ]{3}-\d{2}$/
+
+/** "2026-01-05" -> "ENE-26". Vacío si la fecha no es válida. */
+function periodoDeFecha(fecha: string): string {
+  const [anio, mes] = (fecha || '').split('-')
+  const nombreMes = MESES_PERIODO[Number(mes) - 1]
+  return nombreMes && anio?.length === 4 ? `${nombreMes}-${anio.slice(2)}` : ''
+}
+
+/** "2026-01-05" -> "05/01/26". */
+function fechaCorta(fecha: string | null | undefined): string {
+  if (!fecha) return ''
+  const [a, m, d] = fecha.slice(0, 10).split('-')
+  return `${d}/${m}/${a.slice(2)}`
+}
+
+function htmlVigencia(opts: { tiene: boolean; desde: string; hasta: string; periodo: string }) {
+  return `
+          <div class="fact-form-checkboxes">
+            <label class="fact-checkbox-label">
+              <input id="swal-tiene-vig" type="checkbox" class="fact-checkbox" ${opts.tiene ? 'checked' : ''}> Tiene vigencia (se firma en el contrato)
+            </label>
+          </div>
+          <div id="swal-vig-group" style="${opts.tiene ? '' : 'display:none;'}">
+            <div class="fact-form-row">
+              <div class="fact-form-group">
+                <label class="fact-form-label">Vigente desde</label>
+                <input id="swal-vig-desde" type="date" class="fact-form-input" value="${opts.desde}">
+              </div>
+              <div class="fact-form-group">
+                <label class="fact-form-label">Vigente hasta</label>
+                <input id="swal-vig-hasta" type="date" class="fact-form-input" value="${opts.hasta}">
+              </div>
+            </div>
+            <small style="color: var(--text-tertiary); font-size: 11px; display: block;">
+              Período: <strong id="swal-vig-periodo" style="color: var(--text-primary);">${opts.periodo || '—'}</strong>.
+              Sin fecha "hasta" = sin vencimiento.
+            </small>
+          </div>`
+}
+
+/** Lee el bloque de vigencia. Devuelve un mensaje de error o los valores. */
+function leerVigencia(periodoActual: string): string | { tiene: boolean; desde: string | null; hasta: string | null; periodo: string | null } {
+  const tiene = (document.getElementById('swal-tiene-vig') as HTMLInputElement | null)?.checked || false
+  if (!tiene) return { tiene: false, desde: null, hasta: null, periodo: null }
+  const desde = (document.getElementById('swal-vig-desde') as HTMLInputElement).value
+  const hasta = (document.getElementById('swal-vig-hasta') as HTMLInputElement).value
+  if (!desde) return 'Cargá "Vigente desde"'
+  if (hasta && hasta < desde) return '"Vigente hasta" no puede ser anterior a "Vigente desde"'
+  const periodo = periodoActual || periodoDeFecha(desde)
+  if (!periodo) return 'No se pudo calcular el período de "Vigente desde"'
+  return { tiene: true, desde, hasta: hasta || null, periodo }
+}
+
+/**
+ * Mantiene el bloque de vigencia: muestra/oculta las fechas con el check y
+ * recalcula el período al cambiar "desde". `periodoFijo` (edición) se respeta
+ * mientras no se toque la fecha original (ej. OCT-26 arrancó el 04/09).
+ * Devuelve una función que da el período vigente en pantalla.
+ */
+function instalarVigencia(opts: { desdeOriginal?: string; periodoFijo?: string; onToggle?: () => void }) {
+  const check = document.getElementById('swal-tiene-vig') as HTMLInputElement
+  const grupo = document.getElementById('swal-vig-group') as HTMLDivElement
+  const desde = document.getElementById('swal-vig-desde') as HTMLInputElement
+  const etiqueta = document.getElementById('swal-vig-periodo') as HTMLElement
+  const periodo = () => {
+    if (opts.periodoFijo && desde.value === (opts.desdeOriginal || '')) return opts.periodoFijo
+    return periodoDeFecha(desde.value)
+  }
+  const pintar = () => {
+    grupo.style.display = check.checked ? '' : 'none'
+    etiqueta.textContent = periodo() || '—'
+    opts.onToggle?.()
+  }
+  check.addEventListener('change', pintar)
+  desde.addEventListener('input', pintar)
+  desde.addEventListener('change', pintar)
+  pintar()
+  return periodo
+}
 
 /**
  * Mantiene sincronizados los cuatro importes del modal de concepto.
@@ -145,6 +253,7 @@ export function ConceptosFacturacionTab() {
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [activoFilter, setActivoFilter] = useState<string[]>([])
+  const [modalidadFilter, setModalidadFilter] = useState<string[]>([])
 
   useEffect(() => {
     cargarConceptos()
@@ -171,9 +280,11 @@ export function ConceptosFacturacionTab() {
         const estado = c.activo ? 'activo' : 'inactivo'
         if (!activoFilter.includes(estado)) return false
       }
+      // Entra si tiene alguna de las modalidades elegidas (un concepto de las tres aparece en todas)
+      if (modalidadFilter.length > 0 && !modalidadesConcepto(c).some(m => modalidadFilter.includes(m))) return false
       return true
     })
-  }, [conceptos, tipoFilter, activoFilter])
+  }, [conceptos, tipoFilter, activoFilter, modalidadFilter])
 
   async function cargarConceptos(silent = false) {
     if (!silent) setLoading(true)
@@ -199,6 +310,7 @@ export function ConceptosFacturacionTab() {
     const tiposParamOptions = TIPOS_PARAMETRO.map(t =>
       `<option value="${t.value}">${t.label}</option>`
     ).join('')
+    let periodoEnPantalla: () => string = () => ''
 
     const { value: formValues } = await Alerta.fire({
       title: 'Nuevo Concepto',
@@ -253,6 +365,8 @@ export function ConceptosFacturacionTab() {
               <input id="swal-cargo" type="checkbox" class="fact-checkbox" checked> Aplica a CARGO
             </label>
           </div>
+          ${htmlVigencia({ tiene: true, desde: hoyART(), hasta: '', periodo: periodoDeFecha(hoyART()) })}
+          <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 8px; display: block;">Si tiene vigencia, el período se agrega solo al final de la descripción.</small>
         </div>
       `,
       focusConfirm: false,
@@ -295,6 +409,16 @@ export function ConceptosFacturacionTab() {
 
         // Precio <-> Precio Semanal <-> Precio base
         instalarCalculoTarifa(() => { /* el alta no tiene selector de vigencia */ })
+
+        // Vigencia: marcada por defecto solo en alquileres.
+        const tipoSelect = document.getElementById('swal-tipo') as HTMLSelectElement
+        const tieneVig = document.getElementById('swal-tiene-vig') as HTMLInputElement
+        tieneVig.checked = tipoSelect.value === 'alquiler'
+        periodoEnPantalla = instalarVigencia({})
+        tipoSelect.addEventListener('change', () => {
+          tieneVig.checked = tipoSelect.value === 'alquiler'
+          tieneVig.dispatchEvent(new Event('change'))
+        })
       },
       preConfirm: () => {
         const codigo = (document.getElementById('swal-codigo') as HTMLInputElement).value
@@ -329,9 +453,25 @@ export function ConceptosFacturacionTab() {
           ? baseSinIvaInput
           : (ivaPorcentaje === 0 ? newFinal : Number((newFinal / (1 + ivaPorcentaje / 100)).toFixed(2)))
 
-        return {
-          codigo: codigo.toUpperCase(),
-          descripcion,
+        const codigoFinal = codigo.trim().toUpperCase()
+        const codigosExistentes = new Set(conceptos.map(c => c.codigo.toUpperCase()))
+        if (codigosExistentes.has(codigoFinal)) {
+          Alerta.showValidationMessage(`El código ${codigoFinal} ya existe`)
+          return false
+        }
+
+        const vig = leerVigencia(periodoEnPantalla())
+        if (typeof vig === 'string') {
+          Alerta.showValidationMessage(vig)
+          return false
+        }
+        // El período va al final del nombre: otras pantallas lo leen de ahí.
+        const nombreBase = descripcion.trim().replace(RE_SUFIJO_PERIODO, '')
+        const conPeriodo = (nombre: string) => vig.periodo ? `${nombre} ${vig.periodo}` : nombre
+
+        const principal = {
+          codigo: codigoFinal,
+          descripcion: conPeriodo(nombreBase),
           tipo,
           tipo_parametro: tipoParametro,
           precio_base: newBase,
@@ -343,15 +483,21 @@ export function ConceptosFacturacionTab() {
           aplica_turno: aplicaTurno,
           aplica_cargo: aplicaCargo,
           activo: true,
-          orden: conceptos.length + 1
+          orden: conceptos.length + 1,
+          tiene_vigencia: vig.tiene,
+          vigente_desde: vig.desde,
+          vigente_hasta: vig.hasta,
+          periodo: vig.periodo,
         }
+
+        return principal
       }
     })
 
     if (!formValues) return
 
     try {
-      const { error } = await supabase.from('conceptos_nomina').insert(formValues)
+      const { error } = await (supabase.from('conceptos_nomina') as any).insert(formValues)
       if (error) throw error
       showSuccess('Concepto creado')
       cargarConceptos(true)
@@ -382,6 +528,7 @@ export function ConceptosFacturacionTab() {
 
     // Fecha por defecto para vigencia: hoy
     const hoyStr = hoyART()
+    let periodoEnPantalla: () => string = () => concepto.periodo || ''
 
     const { value: formValues } = await Alerta.fire({
       title: 'Editar Concepto',
@@ -426,7 +573,7 @@ export function ConceptosFacturacionTab() {
             <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">Monto que se factura por semana completa (7 días). Si queda en 0 se usa Precio × 7.</small>
           </div>
           <div class="fact-form-group" id="swal-vigencia-group" style="display:none; margin-top: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-primary);">
-            <label class="fact-form-label" style="color: var(--color-primary); font-weight: 600;">Nuevo precio aplica desde:</label>
+            <label class="fact-form-label" style="color: var(--color-primary); font-weight: 600;">El nuevo precio se cobra desde:</label>
             <input id="swal-vigencia" type="date" class="fact-form-input" value="${hoyStr}">
             <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">El precio anterior se guardará en el historial hasta el día anterior a la fecha seleccionada.</small>
           </div>
@@ -444,6 +591,12 @@ export function ConceptosFacturacionTab() {
               <input id="swal-activo" type="checkbox" class="fact-checkbox" ${concepto.activo ? 'checked' : ''}> Activo
             </label>
           </div>
+          ${htmlVigencia({
+            tiene: !!concepto.tiene_vigencia,
+            desde: concepto.vigente_desde || hoyStr,
+            hasta: concepto.vigente_hasta || '',
+            periodo: concepto.periodo || periodoDeFecha(concepto.vigente_desde || hoyStr),
+          })}
         </div>
       `,
       focusConfirm: false,
@@ -502,9 +655,26 @@ export function ConceptosFacturacionTab() {
         // adrede: sin el, un precio recalculado no mostraria el selector de
         // vigencia y se guardaria sin escribir el historial de precios.
         instalarCalculoTarifa(checkPriceChange)
+
+        // Vigencia: el período guardado se respeta mientras no se cambie "desde".
+        periodoEnPantalla = instalarVigencia({
+          desdeOriginal: concepto.vigente_desde || hoyStr,
+          periodoFijo: concepto.periodo || '',
+        })
       },
       preConfirm: () => {
-        const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
+        const descripcionEnPantalla = (document.getElementById('swal-desc') as HTMLInputElement).value.trim()
+        const vig = leerVigencia(periodoEnPantalla())
+        if (typeof vig === 'string') {
+          Alerta.showValidationMessage(vig)
+          return false
+        }
+        // Si cambió el período y el nombre terminaba con el anterior, se actualiza el sufijo.
+        const periodoAnterior = concepto.periodo || ''
+        const descripcion = vig.periodo && periodoAnterior && vig.periodo !== periodoAnterior
+          && descripcionEnPantalla.toUpperCase().endsWith(` ${periodoAnterior}`)
+          ? descripcionEnPantalla.replace(RE_SUFIJO_PERIODO, ` ${vig.periodo}`)
+          : descripcionEnPantalla
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
         const tipoParametro = (document.getElementById('swal-tipo-param') as HTMLSelectElement).value
         const valorCampoPrecio = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
@@ -558,6 +728,10 @@ export function ConceptosFacturacionTab() {
           aplica_turno: aplicaTurno,
           aplica_cargo: aplicaCargo,
           activo,
+          tiene_vigencia: vig.tiene,
+          vigente_desde: vig.desde,
+          vigente_hasta: vig.hasta,
+          periodo: vig.periodo,
           _priceChanged: priceChanged,
           _vigencia: vigenciaValue,
         }
@@ -735,18 +909,58 @@ export function ConceptosFacturacionTab() {
       }
     },
     {
-      accessorKey: 'modalidad',
-      header: 'Modalidad',
-      cell: ({ row }) => (
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {row.original.aplica_turno && (
-            <span className="dt-badge dt-badge-blue">TURNO</span>
-          )}
-          {row.original.aplica_cargo && (
-            <span className="dt-badge dt-badge-purple">CARGO</span>
-          )}
-        </div>
-      )
+      // Antes leía un campo "modalidad" que no existe: en el celular la tarjeta la ocultaba
+      id: 'modalidad',
+      accessorFn: (c) => modalidadesConcepto(c).join(' '),
+      // Tres opciones fijas: el filtro automático armaba una por combinación ("DIURNO NOCTURNO CARGO")
+      header: () => (
+        <ExcelColumnFilter
+          label="Modalidad"
+          options={[
+            { value: 'DIURNO', label: 'Diurno' },
+            { value: 'NOCTURNO', label: 'Nocturno' },
+            { value: 'CARGO', label: 'A cargo' },
+          ]}
+          selectedValues={modalidadFilter}
+          onSelectionChange={setModalidadFilter}
+          filterId="modalidad"
+          openFilterId={openColumnFilter}
+          onOpenChange={setOpenColumnFilter}
+        />
+      ),
+      cell: ({ row }) => {
+        const c = row.original
+        const turnos = modalidadesConcepto(c)
+        return (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {turnos.includes('DIURNO') && <TurnoBadge turno="diurno" size={16} />}
+            {turnos.includes('NOCTURNO') && <TurnoBadge turno="nocturno" size={16} />}
+            {c.aplica_cargo && <TurnoBadge turno="a_cargo" size={16} />}
+          </div>
+        )
+      }
+    },
+    {
+      // Solo los conceptos versionados (alquileres, garantía): período + desde/hasta.
+      id: 'vigencia',
+      header: 'Vigencia',
+      accessorFn: (c) => c.tiene_vigencia ? `${c.periodo || ''} ${c.vigente_desde || ''}` : '',
+      cell: ({ row }) => {
+        const c = row.original
+        if (!c.tiene_vigencia) return <span style={{ color: '#6B7280' }}>—</span>
+        const vencida = !!c.vigente_hasta && c.vigente_hasta < hoyART()
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+            <span style={{ fontWeight: 600 }}>{c.periodo || '—'}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+              desde {fechaCorta(c.vigente_desde)}
+            </span>
+            <span style={{ fontSize: '10px', color: vencida ? '#DC2626' : 'var(--text-tertiary)' }}>
+              {c.vigente_hasta ? `hasta ${fechaCorta(c.vigente_hasta)}` : 'sin vencimiento'}
+            </span>
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'activo',
@@ -789,7 +1003,7 @@ export function ConceptosFacturacionTab() {
         />
       )
     }
-  ], [tipoFilter, activoFilter, openColumnFilter])
+  ], [tipoFilter, activoFilter, modalidadFilter, openColumnFilter])
 
   return (
     <DataTable

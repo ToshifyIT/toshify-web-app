@@ -1,19 +1,29 @@
-// Parámetros > Riesgo BCRA: umbrales del nivel de alerta (verde / amarillo / rojo) de los
-// leads según la Central de Deudores del BCRA. Tabla bcra_umbrales (sql/bcra_umbrales.sql):
-// al guardar, la base recalcula el nivel de todos los leads consultados.
-import { useState, useEffect } from 'react'
+// Parámetros > Riesgo BCRA: color de alerta (verde / amarillo / rojo) de los leads según su
+// situación en la Central de Deudores del BCRA. Tabla bcra_umbrales (sql/bcra_umbrales.sql y
+// sql/bcra_umbrales_situacion.sql): al guardar, la base recalcula el color de todos los leads.
+//
+// Se completa con dos valores: desde qué situación es amarillo y desde cuál es rojo
+// (criterio del correo de E. Ritegno, 2026-11-21: no superar la situación 2). Además, rojo si
+// tiene proceso judicial, cheques rechazados o una deuda con atraso muy alta.
+import { useEffect, useMemo, useState } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
+import { ShieldCheck, ShieldAlert, ShieldX, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import { showError, showSuccess, showWarning } from '../../utils/toast'
-import { formatFechaHora, formatPlata } from '../../utils/format'
+import { formatFechaHora, formatNumero } from '../../utils/format'
+import { SITUACIONES_BCRA, type SituacionBcra } from '../../modules/leads/bcraSituaciones'
+import { StatsGrid } from '../../components/ui/StatsGrid'
+import { DataTable } from '../../components/ui/DataTable'
+import { InfoSituacionesBcra } from '../../modules/leads/components/InfoSituacionesBcra'
 import '../../styles/modules.css'
 import './RiesgoBcraPage.css'
 
 interface Umbrales {
-  deuda_verde_max: number
-  deuda_amarilla_max: number
+  situacion_amarilla_desde?: number
   situacion_roja_desde: number
+  deuda_amarilla_max: number
   rojo_con_judicial: boolean
   rojo_con_cheques: boolean
   updated_at: string | null
@@ -22,43 +32,52 @@ interface Umbrales {
 
 type Nivel = 'verde' | 'amarillo' | 'rojo'
 
-const NIVELES: { nivel: Nivel; label: string; color: string }[] = [
-  { nivel: 'verde', label: 'Verde', color: 'var(--color-success)' },
-  { nivel: 'amarillo', label: 'Amarillo', color: 'var(--color-warning)' },
-  { nivel: 'rojo', label: 'Rojo', color: 'var(--color-danger)' },
-]
+const COLOR: Record<Nivel, string> = {
+  verde: 'var(--color-success)',
+  amarillo: 'var(--color-warning)',
+  rojo: 'var(--color-danger)',
+}
+const ETIQUETA: Record<Nivel, string> = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo' }
 
-const SITUACIONES_ROJAS = [
-  { valor: 6, label: '6 - Irrecuperable por disposición técnica' },
-  { valor: 5, label: '5 - Irrecuperable' },
-  { valor: 4, label: '4 - Riesgo alto' },
-  { valor: 3, label: '3 - Riesgo medio' },
-]
+interface FilaSituacion extends SituacionBcra {
+  leads: number | null
+}
 
 export function RiesgoBcraPage() {
   const { canEditInSubmenu } = usePermissions()
   const puedeEditar = canEditInSubmenu('riesgo-bcra')
   const { aplicarFiltroSede } = useSede()
   const [umbrales, setUmbrales] = useState<Umbrales | null>(null)
-  const [form, setForm] = useState({ verde: '', amarilla: '', situacion: 6, judicial: true, cheques: true })
-  const [conteo, setConteo] = useState<Record<Nivel, number | null>>({ verde: null, amarillo: null, rojo: null })
+  /** La columna situacion_amarilla_desde existe recién después de sql/bcra_umbrales_situacion.sql */
+  const [faltaSql, setFaltaSql] = useState(false)
+  const [form, setForm] = useState({ amarilla: 2, roja: 3, deudaRoja: '1000000', judicial: true, cheques: true })
+  const [conteoNivel, setConteoNivel] = useState<Record<Nivel, number | null>>({ verde: null, amarillo: null, rojo: null })
+  const [conteoSituacion, setConteoSituacion] = useState<Record<number, number>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isGuardando, setIsGuardando] = useState(false)
 
   useEffect(() => { void cargar() }, [])
-  // Los umbrales son de todas las sedes; el conteo de leads es de la sede elegida
+  // Los umbrales son de todas las sedes; los conteos de leads son de la sede elegida
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void cargarConteo() }, [aplicarFiltroSede])
+  useEffect(() => { void cargarConteos() }, [aplicarFiltroSede])
 
-  async function cargarConteo() {
-    const resultados = await Promise.all(NIVELES.map(n =>
-      aplicarFiltroSede(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('bcra_nivel', n.nivel)),
-    ))
-    setConteo({
-      verde: resultados[0].count ?? 0,
-      amarillo: resultados[1].count ?? 0,
-      rojo: resultados[2].count ?? 0,
-    })
+  async function cargarConteos() {
+    try {
+      const consultados = () => aplicarFiltroSede(
+        supabase.from('leads').select('id', { count: 'exact', head: true })
+          .not('bcra_consultado_at', 'is', null).is('bcra_error', null),
+      )
+      const [niveles, situaciones] = await Promise.all([
+        Promise.all((['verde', 'amarillo', 'rojo'] as Nivel[]).map(n => consultados().eq('bcra_nivel', n))),
+        Promise.all(SITUACIONES_BCRA.map(s => s.valor === 0
+          ? consultados().or('bcra_situacion.is.null,bcra_situacion.eq.0')
+          : consultados().eq('bcra_situacion', s.valor))),
+      ])
+      setConteoNivel({ verde: niveles[0].count ?? 0, amarillo: niveles[1].count ?? 0, rojo: niveles[2].count ?? 0 })
+      setConteoSituacion(Object.fromEntries(SITUACIONES_BCRA.map((s, i) => [s.valor, situaciones[i].count ?? 0])))
+    } catch (error) {
+      console.error('Error contando leads por BCRA:', error)
+    }
   }
 
   async function cargar() {
@@ -69,161 +88,239 @@ export function RiesgoBcraPage() {
       if (data) {
         const u = data as Umbrales
         setUmbrales(u)
+        setFaltaSql(u.situacion_amarilla_desde === undefined)
         setForm({
-          verde: String(Number(u.deuda_verde_max)),
-          amarilla: String(Number(u.deuda_amarilla_max)),
-          situacion: u.situacion_roja_desde,
+          amarilla: u.situacion_amarilla_desde ?? 2,
+          roja: u.situacion_roja_desde,
+          deudaRoja: String(Number(u.deuda_amarilla_max)),
           judicial: u.rojo_con_judicial,
           cheques: u.rojo_con_cheques,
         })
       }
     } catch (error) {
       console.error('Error cargando umbrales BCRA:', error)
-      showError('Error', 'No se pudieron cargar los umbrales. ¿Se ejecutó sql/bcra_umbrales.sql?')
+      showError('Error', 'No se pudieron cargar los umbrales del BCRA')
     } finally {
       setIsLoading(false)
     }
   }
 
   async function guardar() {
-    const verde = Number(form.verde)
-    const amarilla = Number(form.amarilla)
-    if (!Number.isFinite(verde) || !Number.isFinite(amarilla) || verde < 0 || amarilla < 0) {
-      showWarning('Montos inválidos', 'Los montos tienen que ser números positivos.')
+    const deudaRoja = Number(form.deudaRoja)
+    if (!Number.isFinite(deudaRoja) || deudaRoja < 0) {
+      showWarning('Monto inválido', 'La deuda con atraso tiene que ser un número positivo.')
       return
     }
-    if (amarilla < verde) {
-      showWarning('Montos inválidos', 'El tope de amarillo no puede ser menor que el de verde.')
+    if (form.amarilla > form.roja) {
+      showWarning('Situaciones inválidas', 'El amarillo tiene que empezar antes que el rojo.')
       return
     }
     setIsGuardando(true)
     try {
       const { error } = await supabase.from('bcra_umbrales').update({
-        deuda_verde_max: verde,
-        deuda_amarilla_max: amarilla,
-        situacion_roja_desde: form.situacion,
+        situacion_amarilla_desde: form.amarilla,
+        situacion_roja_desde: form.roja,
+        deuda_amarilla_max: deudaRoja,
         rojo_con_judicial: form.judicial,
         rojo_con_cheques: form.cheques,
       }).eq('id', 1)
       if (error) throw error
-      showSuccess('Umbrales guardados', 'Se recalculó el nivel de todos los leads consultados.')
+      showSuccess('Guardado', 'Se recalculó el color de todos los leads consultados.')
       await cargar()
-      await cargarConteo()
+      await cargarConteos()
     } catch (error) {
       console.error('Error guardando umbrales BCRA:', error)
-      showError('Error', 'No se pudieron guardar los umbrales')
+      showError('Error', 'No se pudieron guardar los cambios')
     } finally {
       setIsGuardando(false)
     }
   }
 
-  const verdeTxt = form.verde ? formatPlata(Number(form.verde)) : '-'
-  const amarillaTxt = form.amarilla ? formatPlata(Number(form.amarilla)) : '-'
+  const nivelDe = (situacion: number): Nivel =>
+    situacion >= form.roja ? 'rojo' : situacion >= form.amarilla ? 'amarillo' : 'verde'
+
+  const filas: FilaSituacion[] = useMemo(
+    () => SITUACIONES_BCRA.map(s => ({ ...s, leads: conteoSituacion[s.valor] ?? null })),
+    [conteoSituacion],
+  )
+
+  const columns = useMemo<ColumnDef<FilaSituacion>[]>(() => [
+    {
+      id: 'situacion',
+      accessorKey: 'valor',
+      header: 'Situación',
+      cell: ({ row }) => <strong className="riesgo-bcra-num riesgo-bcra-celda">{row.original.valor}</strong>,
+      size: 110,
+      enableSorting: false,
+    },
+    {
+      id: 'nombre',
+      header: 'Qué significa',
+      accessorFn: r => r.nombre,
+      cell: ({ row }) => (
+        <div className="riesgo-bcra-nombre">
+          <span className="riesgo-bcra-titulo">{row.original.nombre}</span>
+          <span className="riesgo-bcra-detalle">{row.original.detalle}</span>
+        </div>
+      ),
+      enableSorting: false,
+    },
+    {
+      id: 'leads',
+      header: 'Leads',
+      accessorFn: r => r.leads ?? 0,
+      cell: ({ row }) => <span className="riesgo-bcra-num riesgo-bcra-celda">{row.original.leads === null ? '-' : formatNumero(row.original.leads)}</span>,
+      size: 90,
+      enableSorting: false,
+    },
+    {
+      id: 'nivel',
+      header: 'Queda en',
+      accessorFn: r => nivelDe(r.valor),
+      cell: ({ row }) => {
+        const n = nivelDe(row.original.valor)
+        return <strong className="riesgo-bcra-celda" style={{ color: COLOR[n] }}>{ETIQUETA[n]}</strong>
+      },
+      size: 110,
+      enableSorting: false,
+    },
+  // Siete filas fijas: sin ordenar (así tampoco aparece "Filtrar y ordenar" en el celular).
+  // nivelDe depende de form.amarilla y form.roja
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [form.amarilla, form.roja])
+
+  const total = (conteoNivel.verde ?? 0) + (conteoNivel.amarillo ?? 0) + (conteoNivel.rojo ?? 0)
+  const editable = puedeEditar && !isLoading && !faltaSql
 
   return (
     <div className="module-container riesgo-bcra">
-      <div className="riesgo-bcra-conteo">
-        {NIVELES.map(n => (
-          <div key={n.nivel} className="riesgo-bcra-conteo-item">
-            <span className="riesgo-bcra-conteo-valor" style={{ color: n.color }}>
-              {conteo[n.nivel] ?? '-'}
-            </span>
-            <span className="riesgo-bcra-conteo-label">Leads en {n.label.toLowerCase()}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="riesgo-bcra-card">
-        <h3>Umbrales</h3>
-        <p className="riesgo-bcra-ayuda">
-          No se exige deuda cero. Cada lead consultado en el BCRA queda en verde, amarillo o rojo
-          según estos valores. Los montos son la deuda con atraso (situación 2 o peor): un préstamo
-          al día no cuenta. Al guardar, se recalcula el nivel de todos los leads.
-        </p>
-
-        <div className="form-row">
-          <div className="form-group">
-            <label>Verde: deuda con atraso hasta ($)</label>
-            <input
-              type="number"
-              min={0}
-              step={10000}
-              className="form-input"
-              value={form.verde}
-              disabled={!puedeEditar || isLoading}
-              onChange={e => setForm(f => ({ ...f, verde: e.target.value }))}
-            />
-          </div>
-          <div className="form-group">
-            <label>Amarillo: deuda con atraso hasta ($)</label>
-            <input
-              type="number"
-              min={0}
-              step={10000}
-              className="form-input"
-              value={form.amarilla}
-              disabled={!puedeEditar || isLoading}
-              onChange={e => setForm(f => ({ ...f, amarilla: e.target.value }))}
-            />
+      <StatsGrid className="riesgo-bcra-stats-grid" storageKey="RiesgoBcraPage">
+        <div className="stat-card">
+          <Search size={18} className="stat-icon" />
+          <div className="stat-content">
+            <span className="stat-value">{conteoNivel.verde === null ? '-' : formatNumero(total)}</span>
+            <span className="stat-label">Leads consultados</span>
           </div>
         </div>
+        <div className="stat-card">
+          <ShieldCheck size={18} className="stat-icon" style={{ color: COLOR.verde }} />
+          <div className="stat-content">
+            <span className="stat-value">{conteoNivel.verde ?? '-'}</span>
+            <span className="stat-label">En verde</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <ShieldAlert size={18} className="stat-icon" style={{ color: COLOR.amarillo }} />
+          <div className="stat-content">
+            <span className="stat-value">{conteoNivel.amarillo ?? '-'}</span>
+            <span className="stat-label">En amarillo</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <ShieldX size={18} className="stat-icon" style={{ color: COLOR.rojo }} />
+          <div className="stat-content">
+            <span className="stat-value">{conteoNivel.rojo ?? '-'}</span>
+            <span className="stat-label">En rojo</span>
+          </div>
+        </div>
+      </StatsGrid>
 
-        <div className="form-group">
-          <label>Rojo sin importar el monto desde la situación</label>
+      {faltaSql && (
+        <div className="riesgo-bcra-aviso">
+          Para elegir desde qué situación es amarillo falta correr sql/bcra_umbrales_situacion.sql en Supabase.
+        </div>
+      )}
+
+      <div className="riesgo-bcra-config">
+        <label className="riesgo-bcra-campo">
+          <span className="riesgo-bcra-th">
+            <span style={{ color: COLOR.amarillo }}>Amarillo desde la situación</span>
+            <InfoSituacionesBcra />
+          </span>
           <select
             className="form-input"
-            value={form.situacion}
-            disabled={!puedeEditar || isLoading}
-            onChange={e => setForm(f => ({ ...f, situacion: Number(e.target.value) }))}
+            value={form.amarilla}
+            disabled={!editable}
+            onChange={e => {
+              const amarilla = Number(e.target.value)
+              setForm(f => ({ ...f, amarilla, roja: Math.max(f.roja, amarilla) }))
+            }}
           >
-            {SITUACIONES_ROJAS.map(s => <option key={s.valor} value={s.valor}>{s.label}</option>)}
+            {SITUACIONES_BCRA.filter(s => s.valor >= 1).map(s => (
+              <option key={s.valor} value={s.valor}>{s.valor} · {s.nombre}</option>
+            ))}
           </select>
-        </div>
-
-        <label className="riesgo-bcra-check">
-          <input
-            type="checkbox"
-            checked={form.judicial}
-            disabled={!puedeEditar || isLoading}
-            onChange={e => setForm(f => ({ ...f, judicial: e.target.checked }))}
-          />
-          Rojo si tiene proceso judicial
         </label>
-        <label className="riesgo-bcra-check">
-          <input
-            type="checkbox"
-            checked={form.cheques}
-            disabled={!puedeEditar || isLoading}
-            onChange={e => setForm(f => ({ ...f, cheques: e.target.checked }))}
-          />
-          Rojo si tiene cheques rechazados
+        <label className="riesgo-bcra-campo">
+          <span style={{ color: COLOR.rojo }}>Rojo desde la situación</span>
+          <select
+            className="form-input"
+            value={form.roja}
+            disabled={!editable}
+            onChange={e => setForm(f => ({ ...f, roja: Number(e.target.value) }))}
+          >
+            {SITUACIONES_BCRA.filter(s => s.valor >= Math.max(2, form.amarilla)).map(s => (
+              <option key={s.valor} value={s.valor}>{s.valor} · {s.nombre}</option>
+            ))}
+          </select>
         </label>
-
-        <div className="riesgo-bcra-reglas">
-          <div><span style={{ color: 'var(--color-success)' }}>Verde:</span> situación 0 o 1, o deuda con atraso hasta {verdeTxt}.</div>
-          <div><span style={{ color: 'var(--color-warning)' }}>Amarillo:</span> deuda con atraso entre {verdeTxt} y {amarillaTxt}.</div>
-          <div>
-            <span style={{ color: 'var(--color-danger)' }}>Rojo:</span> deuda con atraso de más de {amarillaTxt},
-            situación {form.situacion} o peor
-            {form.judicial ? ', proceso judicial' : ''}
-            {form.cheques ? ', cheques rechazados' : ''}.
-          </div>
+        <label className="riesgo-bcra-campo">
+          <span>También rojo si la deuda con atraso supera ($)</span>
+          <input
+            type="number"
+            min={0}
+            step={100000}
+            className="form-input"
+            value={form.deudaRoja}
+            disabled={!editable}
+            onChange={e => setForm(f => ({ ...f, deudaRoja: e.target.value }))}
+          />
+        </label>
+        <div className="riesgo-bcra-checks">
+          <label className="riesgo-bcra-check">
+            <input
+              type="checkbox"
+              checked={form.judicial}
+              disabled={!editable}
+              onChange={e => setForm(f => ({ ...f, judicial: e.target.checked }))}
+            />
+            Rojo si tiene proceso judicial
+          </label>
+          <label className="riesgo-bcra-check">
+            <input
+              type="checkbox"
+              checked={form.cheques}
+              disabled={!editable}
+              onChange={e => setForm(f => ({ ...f, cheques: e.target.checked }))}
+            />
+            Rojo si tiene cheques rechazados
+          </label>
         </div>
-
         <div className="riesgo-bcra-pie">
-          <span className="riesgo-bcra-ayuda">
+          <span className="riesgo-bcra-ultimo">
             {umbrales?.updated_at
               ? `Último cambio: ${formatFechaHora(umbrales.updated_at, { segundos: false })}` +
                 (umbrales.updated_by_name ? ` por ${umbrales.updated_by_name}` : '')
               : ''}
           </span>
           {puedeEditar && (
-            <button className="btn-primary" onClick={() => void guardar()} disabled={isGuardando || isLoading}>
+            <button className="btn-primary" onClick={() => void guardar()} disabled={isGuardando || !editable}>
               {isGuardando ? 'Guardando...' : 'Guardar'}
             </button>
           )}
         </div>
       </div>
+
+      <DataTable
+        data={filas}
+        columns={columns}
+        loading={isLoading}
+        showSearch={false}
+        showPagination={false}
+        pageSize={10}
+        disableAutoFilters
+        emptyTitle="Sin datos"
+      />
     </div>
   )
 }
