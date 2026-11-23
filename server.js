@@ -1500,7 +1500,7 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc, tipoTarifa) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/conceptos_nomina?codigo=eq.${codigo}&select=descripcion,precio_semanal,precio_final`,
+    `${supabaseUrl}/rest/v1/conceptos_nomina?codigo=eq.${codigo}&select=*`,
     {
       headers: {
         'apikey': serviceKey,
@@ -1521,7 +1521,8 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc, tipoTarifa) {
   }
 
   const concepto = data[0]
-  const periodo = extraerPeriodoConcepto(concepto.descripcion)
+  // Período de la vigencia del concepto; si no está cargado, el sufijo del nombre.
+  const periodo = (concepto.periodo || '').trim().toUpperCase() || extraerPeriodoConcepto(concepto.descripcion)
 
   // Tarifa historica (periodoLegacy): el monto redondo esta del lado CON IVA,
   // se recompone desde el precio diario. Comportamiento original, sin cambios.
