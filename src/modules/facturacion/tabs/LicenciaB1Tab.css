@@ -14,11 +14,21 @@
   font-size: 12px;
 }
 
-.lb1-ayuda {
-  margin: 0 0 16px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+/* Última actualización de Cresium: queda fija abajo al desplazar la página */
+.lb1-cresium-pie {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 4px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .lb1-tenue {
@@ -449,7 +459,7 @@
 
 /* Separación entre el texto de la promoción, las tarjetas y la tabla */
 .lb1 .fact-stats {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 /* "Filtros activos" de la tabla con el estilo de Saldos (solo en esta pestaña) */
@@ -520,8 +530,9 @@
 }
 
 /* Activos / Bajas */
-.lb1-vistas {
-  margin-bottom: 12px;
+/* .tabs-bar--modal pone margin-bottom 0; acá separa las pestañas de las tarjetas */
+.tabs-bar.lb1-vistas {
+  margin-bottom: 16px;
 }
 
 .lb1-motivo {

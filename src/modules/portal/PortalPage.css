@@ -19,55 +19,99 @@
 
 /* =====================================================
    LOGIN
+   Mismo lenguaje que el sitio público (toshify.com.ar):
+   fondo blanco liso, títulos en tinta con Satoshi, un solo rojo
+   de marca y campos con borde fino. Colores fijos a propósito:
+   estas pantallas son públicas y siempre se ven en claro.
    ===================================================== */
+@font-face {
+  font-family: 'Satoshi';
+  src: url('/fonts/Satoshi-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 .portal-login {
+  --login-ink: #1c1c22;
+  --login-muted: #5b5f6b;
+  --login-line: #e6e9ef;
+  --login-focus: #ffb8ca;
+  --login-red: #ff0033;
+  --login-red-hover: #e0002d;
+
   min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 28px;
-  padding: 20px;
-  background: radial-gradient(
-    120% 90% at 72% 0%,
-    rgba(255, 0, 51, 0.06) 0%,
-    rgba(255, 0, 51, 0.025) 40%,
-    rgba(255, 0, 51, 0) 72%
-  ), var(--bg-primary);
+  gap: 32px;
+  padding: 32px 16px;
+  background: #fff;
+  color: var(--login-ink);
 }
 
 .portal-login-brand-logo {
   display: block;
-  width: 148px;
-  height: 44px;
+  /* Mismo ancho que el formulario: el logo queda alineado con los títulos */
+  width: min(380px, 100%);
+  height: 34px;
   object-fit: contain;
-  object-position: center;
+  object-position: left center;
 }
 
 .portal-login-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  padding: 44px 40px;
+  position: relative;
   width: 100%;
-  max-width: 440px;
-  box-shadow: 0 24px 60px -12px rgba(17, 24, 39, 0.16), 0 4px 16px rgba(17, 24, 39, 0.04);
+  max-width: 380px;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+/* Toshi saludando al costado del formulario, solo en pantallas anchas */
+.portal-login-mascot {
+  position: absolute;
+  right: calc(100% + 56px);
+  top: 8px;
+  width: 168px;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (max-width: 860px) {
+  .portal-login-mascot {
+    display: none;
+  }
+}
+
+.portal-login-eyebrow {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--login-muted);
 }
 
 .portal-login-title {
-  text-align: center;
-  font-size: 26px;
-  font-weight: 800;
+  margin: 0 0 8px;
+  font-family: 'Satoshi', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
   letter-spacing: -0.02em;
-  color: var(--text-primary);
-  margin: 0 0 6px;
+  color: var(--login-ink);
 }
 
 .portal-login-subtitle {
-  text-align: center;
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0 0 32px;
+  margin: 0 0 28px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--login-muted);
 }
 
 /* Aviso "tu DNI es tu contraseña la primera vez" — tono informativo (azul),
@@ -80,7 +124,7 @@
   padding: 12px 14px;
   background: rgba(37, 99, 235, 0.06);
   border: 1px solid rgba(37, 99, 235, 0.18);
-  border-radius: var(--radius-lg);
+  border-radius: 12px;
   color: #1d4ed8;
   font-size: 12.5px;
   line-height: 1.45;
@@ -94,62 +138,73 @@
 
 .portal-login-input {
   width: 100%;
-  padding: 14px 16px;
-  border: 1.5px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  font-size: 15px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--login-line);
+  border-radius: 12px;
+  /* 16px evita que Safari en iPhone haga zoom al tocar el campo */
+  font-size: 16px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s;
   box-sizing: border-box;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: #fff;
+  color: var(--login-ink);
+}
+
+.portal-login-input:hover {
+  border-color: #cfd4dd;
 }
 
 .portal-login-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 4px rgba(255, 0, 51, 0.1);
+  border-color: var(--login-focus);
+  box-shadow: 0 0 0 3px rgba(255, 184, 202, 0.35);
 }
 
 .portal-login-input::placeholder {
-  color: var(--text-tertiary);
+  color: #9aa0ab;
 }
 
 .portal-login-btn {
   width: 100%;
-  padding: 15px;
-  margin-top: 10px;
-  background: var(--color-primary);
+  min-height: 48px;
+  padding: 12px 16px;
+  margin-top: 8px;
+  background: var(--login-red, var(--color-primary));
   color: #fff;
-  border: none;
-  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  border-radius: 12px;
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.01em;
   cursor: pointer;
-  box-shadow: 0 10px 24px -6px rgba(255, 0, 51, 0.45);
-  transition: background 0.2s, opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  transition: background 0.15s;
 }
 
 .portal-login-btn:hover:not(:disabled) {
-  background: #e0002d;
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px -6px rgba(255, 0, 51, 0.5);
+  background: var(--login-red-hover, #e0002d);
 }
 
+.portal-login-btn:focus-visible {
+  outline: 3px solid var(--login-focus, #ffb8ca);
+  outline-offset: 2px;
+}
+
+/* Deshabilitado: gris, para que no se confunda con el botón activo */
 .portal-login-btn:disabled {
-  opacity: 0.6;
+  background: #f1f2f5;
+  color: #9aa0ab;
+  border-color: var(--login-line, #e6e9ef);
   cursor: not-allowed;
 }
 
 .portal-login-error {
   margin-top: 12px;
   padding: 10px 12px;
-  background: rgba(220, 38, 38, 0.08);
-  border: 1px solid rgba(220, 38, 38, 0.2);
-  border-radius: var(--radius-md);
-  color: #ef4444;
-  font-size: 13px;
-  text-align: center;
+  background: #fff5f7;
+  border: 1px solid #ffd1dc;
+  border-radius: 12px;
+  color: #c8002a;
+  font-size: 14px;
+  text-align: left;
 }
 
 .portal-login-error-list {
@@ -168,20 +223,16 @@
 
 /* Campo con label arriba (DNI, Contraseña) */
 .portal-login-field {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   text-align: left;
-}
-
-.portal-login-field:first-of-type {
-  margin-top: 4px;
 }
 
 .portal-login-label {
   display: block;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--login-ink);
+  margin-bottom: 6px;
 }
 
 .portal-login-input-wrapper {
@@ -189,7 +240,7 @@
 }
 
 .portal-login-input-wrapper .portal-login-input {
-  padding-right: 42px;
+  padding-right: 48px;
 }
 
 .portal-login-toggle {
@@ -197,12 +248,12 @@
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   background: none;
   border: none;
-  border-radius: var(--radius-md);
-  color: var(--text-tertiary);
+  border-radius: 8px;
+  color: var(--login-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -210,8 +261,11 @@
 }
 
 .portal-login-toggle:hover {
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
+  color: var(--login-ink);
+}
+
+.portal-login-toggle:focus-visible {
+  outline: 2px solid var(--login-focus, #ffb8ca);
 }
 
 /* "¿Olvidaste tu contraseña?" y "Volver a iniciar sesión" — botones con look
@@ -219,19 +273,42 @@
 .portal-login-forgot {
   display: block;
   width: 100%;
-  margin: 20px 0 0;
-  padding: 0;
+  margin: 18px 0 0;
+  padding: 4px 0;
   background: none;
   border: none;
   font: inherit;
   text-align: center;
   font-size: 14px;
-  font-weight: 700;
-  color: var(--color-primary);
+  font-weight: 600;
+  color: var(--login-ink, var(--text-primary));
+  text-decoration: underline;
+  text-decoration-color: var(--login-line, #e6e9ef);
+  text-underline-offset: 4px;
   cursor: pointer;
 }
 
 .portal-login-forgot:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Ayuda por WhatsApp si no pueden entrar */
+.portal-login-help {
+  margin: 24px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--login-line);
+  text-align: center;
+  font-size: 14px;
+  color: var(--login-muted);
+}
+
+.portal-login-help a {
+  color: var(--login-red);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.portal-login-help a:hover {
   text-decoration: underline;
 }
 
@@ -241,7 +318,7 @@
   padding: 14px 16px;
   background: rgba(5, 150, 105, 0.08);
   border: 1px solid rgba(5, 150, 105, 0.2);
-  border-radius: var(--radius-lg);
+  border-radius: 12px;
   color: #047857;
   font-size: 13.5px;
   line-height: 1.5;
@@ -252,7 +329,7 @@
   margin-top: 4px;
   margin-bottom: 16px;
   background: var(--bg-secondary);
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   padding: 10px 12px;
   text-align: left;
 }
@@ -1587,10 +1664,6 @@
 }
 
 @media (max-width: 640px) {
-  .portal-login-card {
-    padding: 32px 24px;
-  }
-
   .portal-header {
     padding: 10px 14px;
   }

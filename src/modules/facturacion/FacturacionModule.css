@@ -2460,3 +2460,12 @@
   background: currentColor;
   flex-shrink: 0;
 }
+
+
+/* Indicadores del Reporte en filas parejas: useColumnasParejas fija la cantidad
+   de columnas (9 tarjetas → 5 + 4) para que ninguna quede sola estirada. */
+@media (min-width: 769px) {
+  #root .fact-stats-grid.fact-stats-grid-reporte.fact-stats-grid-parejas[style] {
+    display: grid;
+  }
+}

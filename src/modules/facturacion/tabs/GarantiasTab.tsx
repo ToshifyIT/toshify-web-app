@@ -1535,8 +1535,9 @@ export function GarantiasTab() {
     const PAGINA = 1000
     const filas: any[] = []
     for (let desde = 0; ; desde += PAGINA) {
-      const { data, error } = await (supabase.from('conductores') as any)
-        .select('numero_dni, telefono_contacto, direccion, contacto_emergencia, telefono_emergencia, email, cbu, numero_cuit, estados_civiles(descripcion)')
+      // Solo conductores de la sede (el mismo DNI puede estar cargado en la sede Pruebas)
+      const { data, error } = await aplicarFiltroSede((supabase.from('conductores') as any)
+        .select('numero_dni, telefono_contacto, direccion, contacto_emergencia, telefono_emergencia, email, cbu, numero_cuit, estados_civiles(descripcion)'))
         .range(desde, desde + PAGINA - 1)
       if (error) throw error
       filas.push(...(data || []))

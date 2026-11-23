@@ -31,7 +31,7 @@ interface WeeklyData {
 }
 
 export function PermanenciaChart() {
-  const { sedeActual } = useSede()
+  const { sedeActual, aplicarFiltroSede } = useSede()
   const [data, setData] = useState<WeeklyData[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -62,7 +62,7 @@ export function PermanenciaChart() {
         let parsedDate = now
         try {
           parsedDate = parse(selectedMonth, 'MMM yyyy', now, { locale: es })
-        } catch (_e) {
+        } catch {
           // silently ignored
         }
         
@@ -83,9 +83,8 @@ export function PermanenciaChart() {
           .gte('fecha_terminacion', formatDateOnly(intervalStart))
           .lte('fecha_terminacion', formatDateOnly(intervalEnd))
         
-        if (sedeActual?.id) {
-          query = query.eq('sede_id', sedeActual.id)
-        }
+        // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+        query = sedeActual?.id ? query.eq('sede_id', sedeActual.id) : aplicarFiltroSede(query)
 
         const { data: allConductors } = await query
 
@@ -150,14 +149,14 @@ export function PermanenciaChart() {
           setLoading(false)
           setCache(CACHE_NS, paramsKey, chartData)
         }
-      } catch (_err) {
+      } catch {
         if (isMounted) setLoading(false)
       }
     }
 
     fetchData()
     return () => { isMounted = false }
-  }, [selectedMonth, sedeActual?.id])
+  }, [selectedMonth, sedeActual?.id, aplicarFiltroSede])
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { User, Users, Building2, UserCheck, Plus, Eye, Trash2, Car, FileText, Edit2 } from 'lucide-react'
+import { User, Users, Building2, UserCheck, Plus, Eye, Trash2, Car, FileText, Edit2, Info } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { DataTable } from '../../../components/ui/DataTable'
+import { TabsBar } from '../../../components/ui/TabsBar'
 import { ActionsMenu } from '../../../components/ui/ActionsMenu'
 import { ExcelColumnFilter, useExcelFilters } from '../../../components/ui/DataTable/ExcelColumnFilter'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -65,7 +66,7 @@ const EMPTY_FORM: TitularFormData = {
 
 export function TitularesModule() {
   const { user, profile } = useAuth()
-  const { sedeActualId } = useSede()
+  const { sedeActualId, sedes } = useSede()
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
 
   const canEdit = canEditInMenu('vehiculos')
@@ -83,7 +84,8 @@ export function TitularesModule() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
-  const [showVehiculosModal, setShowVehiculosModal] = useState(false)
+  const [tabDetalle, setTabDetalle] = useState<'info' | 'vehiculos'>('info')
+  const [cargandoVehiculos, setCargandoVehiculos] = useState(false)
   const [selectedTitular, setSelectedTitular] = useState<Titular | null>(null)
   const [formData, setFormData] = useState<TitularFormData>({ ...EMPTY_FORM })
   const [vehiculosTitular, setVehiculosTitular] = useState<VehiculoTitular[]>([])
@@ -109,6 +111,10 @@ export function TitularesModule() {
 
       if (sedeActualId) {
         query = query.or(`sede_id.eq.${sedeActualId},sede_id.is.null`)
+      } else {
+        // "Todas": solo las sedes reales (sin Pruebas) y los que no tienen sede
+        const idsReales = sedes.filter(s => !s.solo_admin).map(s => s.id)
+        if (idsReales.length > 0) query = query.or(`sede_id.in.(${idsReales.join(',')}),sede_id.is.null`)
       }
 
       // Query paralela: vehículos activos por titular con su estado
@@ -140,7 +146,7 @@ export function TitularesModule() {
     } finally {
       setLoading(false)
     }
-  }, [sedeActualId])
+  }, [sedeActualId, sedes])
 
   useEffect(() => { loadTitulares() }, [loadTitulares])
 
@@ -493,13 +499,13 @@ export function TitularesModule() {
     setShowEditModal(true)
   }
 
-  const openDetail = (titular: Titular) => {
+  // Un solo modal (ojito) con dos pestañas: Información y Vehículos
+  const openDetail = async (titular: Titular) => {
     setSelectedTitular(titular)
+    setTabDetalle('info')
+    setVehiculosTitular([])
     setShowDetailModal(true)
-  }
-
-  const openVehiculos = async (titular: Titular) => {
-    setSelectedTitular(titular)
+    setCargandoVehiculos(true)
     try {
       const { data } = await supabase
         .from('vehiculos_titulares')
@@ -510,8 +516,9 @@ export function TitularesModule() {
       setVehiculosTitular((data || []) as VehiculoTitular[])
     } catch {
       setVehiculosTitular([])
+    } finally {
+      setCargandoVehiculos(false)
     }
-    setShowVehiculosModal(true)
   }
 
   // ---------- Crear Oferta Locacion ----------
@@ -731,11 +738,6 @@ export function TitularesModule() {
             icon: <Eye size={15} />,
             label: 'Ver detalles',
             onClick: () => openDetail(row.original),
-          },
-          {
-            icon: <Car size={15} />,
-            label: 'Ver vehículos',
-            onClick: () => openVehiculos(row.original),
           },
           {
             icon: <Edit2 size={15} />,
@@ -1037,12 +1039,23 @@ export function TitularesModule() {
       {/* Modal Detalle */}
       {showDetailModal && selectedTitular && (
         <div className="modal-overlay" onClick={() => setShowDetailModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '860px', width: '95vw' }}>
             <div className="modal-header">
-              <h3>Detalles del Titular</h3>
+              <h3>{getNombre(selectedTitular)}</h3>
               <button className="modal-close" onClick={() => setShowDetailModal(false)}>&times;</button>
             </div>
-            <div className="modal-body">
+            <TabsBar
+              className="tabs-bar--modal"
+              ariaLabel="Datos del titular"
+              tabs={[
+                { id: 'info', label: 'Información', icon: Info },
+                { id: 'vehiculos', label: 'Vehículos', icon: Car, count: cargandoVehiculos ? null : vehiculosTitular.length },
+              ]}
+              active={tabDetalle}
+              onChange={setTabDetalle}
+            />
+            <div className="modal-body" style={{ overflowX: 'auto' }}>
+              {tabDetalle === 'info' && (
               <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '16px', fontSize: '13px' }}>
                 <div>
                   <label style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Tipo</label>
@@ -1118,24 +1131,12 @@ export function TitularesModule() {
                   <div style={{ fontWeight: 500 }}>{selectedTitular.created_at ? formatFecha(selectedTitular.created_at) : 'N/A'}</div>
                 </div>
               </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowDetailModal(false)}>Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Vehículos asociados */}
-      {showVehiculosModal && selectedTitular && (
-        <div className="modal-overlay" onClick={() => setShowVehiculosModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '860px', width: '95vw' }}>
-            <div className="modal-header">
-              <h3>Vehículos de {getNombre(selectedTitular)}</h3>
-              <button className="modal-close" onClick={() => setShowVehiculosModal(false)}>&times;</button>
-            </div>
-            <div className="modal-body" style={{ overflowX: 'auto' }}>
-              {vehiculosTitular.length === 0 ? (
+              )}
+              {tabDetalle === 'vehiculos' && (
+                <>
+              {cargandoVehiculos ? (
+                <p style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Cargando vehículos...</p>
+              ) : vehiculosTitular.length === 0 ? (
                 <EmptyState size="sm" title="No hay vehículos asociados a este titular." />
               ) : (
                 <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
@@ -1222,9 +1223,11 @@ export function TitularesModule() {
                   </tbody>
                 </table>
               )}
+                </>
+              )}
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowVehiculosModal(false)}>Cerrar</button>
+              <button className="btn-secondary" onClick={() => setShowDetailModal(false)}>Cerrar</button>
             </div>
           </div>
         </div>

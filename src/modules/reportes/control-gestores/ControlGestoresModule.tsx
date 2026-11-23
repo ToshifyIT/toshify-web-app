@@ -190,10 +190,13 @@ export function ControlGestoresModule() {
       datos.historia.map((h) => h.inicio),
       datos.periodo,
       datos.activosInicio,
+      filtroSede,
     )
       .then((c) => { if (activo) setContacto(c) })
       .catch((err) => console.error('[ControlGestores] Error cargando contacto 2Chat', err))
     return () => { activo = false }
+    // datos se recarga al cambiar la sede, y con él filtroSede
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datos])
 
   const colorDe = useMemo(() => {

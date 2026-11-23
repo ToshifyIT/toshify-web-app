@@ -4,6 +4,7 @@
 // ============================================================
 
 import { supabase } from '../lib/supabase';
+import { filtrarSede, realesSiTodas } from '../utils/sedesReales';
 import type {
   VisitaCategoria,
   VisitaMotivo,
@@ -40,12 +41,13 @@ export async function fetchMotivos(): Promise<VisitaMotivo[]> {
 }
 
 export async function fetchAtendedores(sedeId: string | null): Promise<VisitaAtendedor[]> {
+  const reales = await realesSiTodas(sedeId);
   let query = supabase
     .from('visitas_atendedores')
     .select('id, nombre, user_id, sede_id, activo, created_at')
     .eq('activo', true)
     .order('nombre');
-  if (sedeId) query = query.eq('sede_id', sedeId);
+  query = filtrarSede(query, sedeId, reales);
   const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
@@ -69,6 +71,8 @@ export async function fetchVisitas(
   rangeStart: string,
   rangeEnd: string
 ): Promise<VisitaCompleta[]> {
+  // Con "Todas" (sin sedeId) solo las sedes reales, sin Pruebas
+  const reales = await realesSiTodas(sedeId);
   let query = supabase
     .from('visitas')
     .select(`
@@ -81,7 +85,7 @@ export async function fetchVisitas(
     .lte('fecha_hora', rangeEnd)
     .order('fecha_hora', { ascending: false });
 
-  if (sedeId) query = query.eq('sede_id', sedeId);
+  query = filtrarSede(query, sedeId, reales);
 
   const { data, error } = await query;
   if (error) throw error;

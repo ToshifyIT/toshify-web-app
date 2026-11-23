@@ -14,6 +14,7 @@ import { useDeviceType } from './hooks/useDeviceType'
 
 // Lazy load de páginas que arrastran dependencias pesadas (jsPDF, recharts)
 const PortalPage = lazy(() => import('./modules/portal/PortalPage').then(m => ({ default: m.PortalPage })))
+const TitularPortalPage = lazy(() => import('./modules/portal/titular/TitularPortalPage').then(m => ({ default: m.TitularPortalPage })))
 const PermissionsDebugPage = lazy(() => import('./pages/PermissionsDebugPage'))
 
 // Componente para detectar flujo de recovery y redirigir
@@ -110,6 +111,8 @@ function App() {
         <Routes>
           {/* Portal público - fuera de auth providers (lazy: arrastra jsPDF + recharts) */}
           <Route path="/mi-espacio" element={<Suspense fallback={<div />}><PortalPage /></Suspense>} />
+          {/* Espacio del titular (en construcción: todavía sin clave ni botón de acceso) */}
+          <Route path="/mi-espacio/titular" element={<Suspense fallback={<div />}><TitularPortalPage /></Suspense>} />
 
           {/* App principal - con auth */}
           <Route path="/*" element={

@@ -2955,6 +2955,8 @@ export function IncidenciasModule() {
     try {
       const monto = penalidadReasignar.monto || 0
       const esAFavor = penalidadReasignar.tipo_es_a_favor === true
+      // Período de la misma sede que la penalidad (hay un período por semana y sede)
+      const sedePenalidad = (penalidadReasignar as PenalidadCompleta & { sede_id?: string }).sede_id
       
       // 1. Actualizar la penalidad con la nueva semana
       const { error: updateError } = await (supabase.from('penalidades' as any) as any)
@@ -2969,12 +2971,13 @@ export function IncidenciasModule() {
       
       // 2. Recalcular período origen (restar el monto)
       if (semanaOrigen && anioOrigen) {
-        const { data: periodoOrigen } = await (supabase
+        let qPeriodoOrigen = (supabase
           .from('periodos_facturacion') as any)
           .select('id, total_cargos, total_descuentos, total_neto')
           .eq('semana', semanaOrigen)
           .eq('anio', anioOrigen)
-          .single()
+        if (sedePenalidad) qPeriodoOrigen = qPeriodoOrigen.eq('sede_id', sedePenalidad)
+        const { data: periodoOrigen } = await qPeriodoOrigen.single()
         
         if (periodoOrigen) {
           const nuevosCargosOrigen = esAFavor 
@@ -2996,12 +2999,13 @@ export function IncidenciasModule() {
       }
       
       // 3. Recalcular período destino (sumar el monto)
-      const { data: periodoDestino } = await (supabase
+      let qPeriodoDestino = (supabase
         .from('periodos_facturacion') as any)
         .select('id, total_cargos, total_descuentos, total_neto')
         .eq('semana', nuevaSemana)
         .eq('anio', nuevoAnio)
-        .single()
+      if (sedePenalidad) qPeriodoDestino = qPeriodoDestino.eq('sede_id', sedePenalidad)
+      const { data: periodoDestino } = await qPeriodoDestino.single()
       
       if (periodoDestino) {
         const nuevosCargosDestino = esAFavor 

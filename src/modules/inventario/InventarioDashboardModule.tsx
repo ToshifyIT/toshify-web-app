@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { useSede } from '../../contexts/SedeContext'
+import { sumarStockPorProducto } from './stockPorSede'
 import {
   Package,
   AlertTriangle,
@@ -62,7 +63,7 @@ const parseFechaOperativa = (value: string) => {
 
 export function InventarioDashboardModule() {
   const navigate = useNavigate()
-  const { sedeActualId } = useSede()
+  const { aplicarFiltroSede } = useSede()
   const [stockProductos, setStockProductos] = useState<StockProducto[]>([])
   const [pendientes, setPendientes] = useState<PendientesOperativos>({
     entradasTransito: 0,
@@ -83,7 +84,7 @@ export function InventarioDashboardModule() {
 
   useEffect(() => {
     loadStockData()
-  }, [sedeActualId])
+  }, [aplicarFiltroSede])
 
 
   const loadStockData = async () => {
@@ -91,7 +92,7 @@ export function InventarioDashboardModule() {
       setLoading(true)
       // Cargar vista de stock con datos de productos para stock_minimo y unidad_medida
       const [stockRes, productosRes] = await Promise.all([
-        supabase.from('v_stock_productos').select('*').order('nombre'),
+        aplicarFiltroSede(supabase.from('v_stock_productos').select('*')).order('nombre'),
         supabase.from('productos').select('id, stock_minimo, alerta_reposicion, categorias(codigo), unidades_medida(descripcion)')
       ])
 
@@ -110,7 +111,8 @@ export function InventarioDashboardModule() {
         })
       }
 
-      const dataConStock = (stockRes.data || []).map((item: any) => {
+      // Una fila por producto (con "Todas" la vista trae una por sede)
+      const dataConStock = sumarStockPorProducto((stockRes.data || []) as any[]).map((item: any) => {
         const productoInfo = productosMap.get(item.id) || { stock_minimo: 0, alerta_reposicion: 0, categoria_codigo: '', unidad_medida: 'Uds' }
         return {
           ...item,
@@ -124,9 +126,9 @@ export function InventarioDashboardModule() {
       setStockProductos(dataConStock)
 
       const [entradasRes, pedidosRes, movimientosRes] = await Promise.allSettled([
-        supabase.from('v_entradas_en_transito').select('id, created_at'),
-        supabase.from('v_pedidos_en_transito').select('pedido_id, fecha_estimada_llegada'),
-        supabase.from('v_movimientos_pendientes').select('id, created_at')
+        aplicarFiltroSede(supabase.from('v_entradas_en_transito').select('id, created_at')),
+        aplicarFiltroSede(supabase.from('v_pedidos_en_transito').select('pedido_id, fecha_estimada_llegada')),
+        aplicarFiltroSede(supabase.from('v_movimientos_pendientes').select('id, created_at'))
       ])
 
       const entradasData = entradasRes.status === 'fulfilled' && !entradasRes.value.error

@@ -15,6 +15,7 @@
 // El resto de las multas atribuidas se consideran pendientes con su importe original.
 
 import { supabase } from '../../../lib/supabase'
+import { filtrarSede, realesSiTodas } from '../../../utils/sedesReales'
 import { FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
 import { cargarAppsPagoSemana, etiquetasApps } from '../../../services/appsPagoService'
@@ -214,12 +215,13 @@ export async function cargarKmGeoPanel(
   sedeId: string | null | undefined,
   semana: { startDate: string; endDate: string },
 ): Promise<Map<string, number>> {
+  const reales = await realesSiTodas(sedeId)
   const conductores = fetchAll<{ id: string; nombres: string | null; apellidos: string | null }>((from, to) => {
     let q = supabase
       .from('conductores')
       .select('id, nombres, apellidos').not(...FILTRO_SIN_INTERNOS)
       .range(from, to)
-    if (sedeId) q = q.eq('sede_id', sedeId)
+    q = filtrarSede(q, sedeId, reales)
     return q
   })
   conductores.catch(() => {}) // si el calculo corta antes de usarla, que no quede sin manejar
@@ -256,6 +258,8 @@ export async function cargarPanelConductores(
   sedeId?: string | null,
   opciones?: PanelOpciones,
 ): Promise<ConductorPanelRow[]> {
+  // Con "Todas" (sin sedeId) se usan solo las sedes reales, sin Pruebas
+  const reales = await realesSiTodas(sedeId)
   // Las 5 consultas son independientes entre si: se lanzan EN PARALELO para no
   // sumar la latencia de cada una (antes iban en serie). Los datos traidos y el
   // procesamiento posterior son identicos; solo cambia el "cuando" se piden.
@@ -266,7 +270,7 @@ export async function cargarPanelConductores(
         .from('conductores')
         .select('id, nombres, apellidos, numero_dni, numero_cuit, telefono_contacto, telefono_secundario, numero_licencia, categoria_licencia, categoria_licencia_otra, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
         .range(from, to)
-      if (sedeId) q = q.eq('sede_id', sedeId)
+      q = filtrarSede(q, sedeId, reales)
       return q
     }),
     // 2. Asignacion ACTUAL (auto asignado ahora mismo). Mismo criterio que
@@ -305,9 +309,12 @@ export async function cargarPanelConductores(
         .range(from, to)
     ),
     // 5. Periodos cerrados (para clasificar pagada, misma logica que Mi Espacio / Multas).
-    fetchAll<{ semana: number; anio: number }>((from, to) =>
-      supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado').range(from, to)
-    ),
+    // Solo los de la sede: un cierre en otra sede (Pruebas) no marca multas como pagadas.
+    fetchAll<{ semana: number; anio: number }>((from, to) => {
+      let q = supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado')
+      q = filtrarSede(q, sedeId, reales)
+      return q.range(from, to)
+    }),
     // 6. Kardex de saldos, ordenado de mas reciente a mas viejo: la PRIMERA fila de
     // cada conductor es su ultimo saldo. Mismo criterio que el hero de la pestaña
     // "Historial de saldo" del modal de detalle (por eso los numeros coinciden).
@@ -355,7 +362,7 @@ export async function cargarPanelConductores(
         .select('id, guia')
         .not('guia', 'is', null)
         .range(from, to)
-      if (sedeId) q = q.eq('sede_id', sedeId)
+      q = filtrarSede(q, sedeId, reales)
       return q
     }).catch(() => [] as { id: string; guia: string | null }[]),
     // 11. Apps con las que pagó (solo para la etiqueta de app). Tolerante: si falla,
@@ -467,7 +474,7 @@ export async function cargarPanelConductores(
     const a = ac.asignaciones
     if (!a || !['activo', 'activa'].includes(a.estado || '')) continue
     if (!['asignado', 'activo'].includes(ac.estado || '')) continue
-    if (sedeId && a.sede_id !== sedeId) continue
+    if (sedeId ? a.sede_id !== sedeId : (reales && !reales.includes(a.sede_id || ''))) continue
     if (!ac.conductor_id || !a.vehiculos?.patente) continue
     if (!vehiculoPorConductor.has(ac.conductor_id)) {
       vehiculoPorConductor.set(ac.conductor_id, a.vehiculos.patente)

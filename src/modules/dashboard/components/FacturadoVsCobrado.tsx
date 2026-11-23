@@ -70,7 +70,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export function FacturadoVsCobrado() {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [granularity, setGranularity] = useState<Granularity>('semana')
   const [activeTab, setActiveTab] = useState<ActiveTab>('datos')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
@@ -88,7 +88,8 @@ export function FacturadoVsCobrado() {
       let query = (supabase.from('periodos_facturacion') as any)
         .select('semana, anio')
         .eq('estado', 'cerrado')
-      if (sedeActualId) query = query.eq('sede_id', sedeActualId)
+      // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+      query = sedeActualId ? query.eq('sede_id', sedeActualId) : aplicarFiltroSede(query)
       const { data } = await query
       if (data) {
         const weeks = new Set<string>()
@@ -99,7 +100,7 @@ export function FacturadoVsCobrado() {
       }
     }
     fetchClosedPeriods()
-  }, [sedeActualId])
+  }, [sedeActualId, aplicarFiltroSede])
 
   // Agregar pctCobrado a cada data point para el label encima de la barra
   const chartData = rawChartData.map(d => ({

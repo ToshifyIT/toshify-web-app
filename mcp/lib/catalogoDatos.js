@@ -382,8 +382,8 @@ export const CATALOGO = {
   },
   v_stock_productos: {
     modulo: 'Inventario',
-    descripcion: 'Stock por producto: total, disponible, en uso, dañado, perdido.',
-    columnas: { id: 'id', codigo: 'texto', nombre: 'texto', es_retornable: 'booleano', categoria: 'texto', stock_total: 'numero', disponible: 'numero', en_uso: 'numero', dañado: 'numero', perdido: 'numero' },
+    descripcion: 'Stock por producto y sede (una fila por producto y sede): total, disponible, en uso, dañado, perdido. Para el total de un producto, sumar las sedes.',
+    columnas: { id: 'id', codigo: 'texto', nombre: 'texto', es_retornable: 'booleano', categoria: 'texto', stock_total: 'numero', disponible: 'numero', en_uso: 'numero', dañado: 'numero', perdido: 'numero', sede_id: 'id' },
   },
   v_entradas_en_transito: {
     modulo: 'Inventario',

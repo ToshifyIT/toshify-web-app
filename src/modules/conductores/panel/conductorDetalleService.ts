@@ -63,6 +63,17 @@ function primera(s: string | null | undefined): string {
   return norm(s).split(/\s+/).filter(Boolean)[0] || ''
 }
 
+// Semanas cerradas de la sede del conductor: un cierre en otra sede (por ejemplo
+// Pruebas) no debe marcar como pagada una multa de este conductor.
+async function periodosCerradosDeSuSede(conductorId: string) {
+  const { data: c } = await supabase.from('conductores').select('sede_id').eq('id', conductorId).maybeSingle()
+  const sedeId = (c as { sede_id: string | null } | null)?.sede_id
+  let q = supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado')
+  if (sedeId) q = q.eq('sede_id', sedeId)
+  const res = await q
+  return res
+}
+
 // Multas atribuidas al conductor (por nombre, como el portal) + estado de pago (por penalidad).
 export async function cargarMultasConductor(cond: { id: string; nombres: string | null; apellidos: string | null }): Promise<MultaDetalle[]> {
   const primerNombre = primera(cond.nombres)
@@ -106,7 +117,7 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
       .select('id, monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, incidencias!inner(multa_id)')
       .eq('conductor_id', cond.id)
       .not('incidencias.multa_id', 'is', null),
-    supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado'),
+    periodosCerradosDeSuSede(cond.id),
   ])
 
   // Estado por multa (misma logica que Mi Espacio / modulo de Multas):

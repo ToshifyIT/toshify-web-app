@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
+import { useSede } from '../contexts/SedeContext'
 
 const CACHE_NS = 'useIncidenciasSplitStats'
 
@@ -28,7 +29,8 @@ interface IncidenciasSplitResult {
 async function fetchSplitIncidencias(
   start: string,
   end: string,
-  sedeId?: string | null
+  sedeId: string | null,
+  aplicarFiltroSede: <T>(query: T, campo?: string) => T
 ): Promise<{ aFavor: number; enContra: number; tiposAFavor: string[] }> {
   // Consultar penalidades aplicadas con su tipo
   let query = supabase
@@ -45,9 +47,8 @@ async function fetchSplitIncidencias(
     .gte('fecha', start)
     .lte('fecha', end)
 
-  if (sedeId) {
-    query = query.eq('sede_id', sedeId)
-  }
+  // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+  query = sedeId ? query.eq('sede_id', sedeId) : aplicarFiltroSede(query)
 
   const { data, error } = await query
 
@@ -82,6 +83,7 @@ export function useIncidenciasSplitStats(
   periodB: string,
   sedeId?: string
 ): IncidenciasSplitResult {
+  const { aplicarFiltroSede } = useSede()
   const [stats, setStats] = useState<IncidenciasSplitResult>({
     aFavorA: 0,
     aFavorB: 0,
@@ -121,12 +123,14 @@ export function useIncidenciasSplitStats(
           fetchSplitIncidencias(
             rangeA.start.toISOString(),
             rangeA.end.toISOString(),
-            sedeId || null
+            sedeId || null,
+            aplicarFiltroSede
           ),
           fetchSplitIncidencias(
             rangeB.start.toISOString(),
             rangeB.end.toISOString(),
-            sedeId || null
+            sedeId || null,
+            aplicarFiltroSede
           ),
         ])
 
@@ -159,7 +163,7 @@ export function useIncidenciasSplitStats(
     return () => {
       isMounted = false
     }
-  }, [granularity, periodA, periodB, sedeId])
+  }, [granularity, periodA, periodB, sedeId, aplicarFiltroSede])
 
   if (paramsChanged) {
     return { ...stats, loading: true }

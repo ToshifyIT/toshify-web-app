@@ -919,7 +919,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
 
     try {
       // 1. Primero intentar cargar desde la base de datos (datos pre-calculados)
-      const { data: emparajamientosDB, error: errorDB } = await supabase
+      let queryPares = supabase
         .from('conductor_emparajamientos')
         .select(`
           *,
@@ -928,6 +928,14 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
         `)
         .gte('score', 20)
         .lte('tiempo_minutos', 30)
+      // Solo conductores de la sede de la programación: el de otra sede llega en null
+      // y el par se descarta abajo (if (!conductorA || !conductorB) continue).
+      if (formData.sede_id) {
+        queryPares = queryPares
+          .eq('conductor_a.sede_id', formData.sede_id)
+          .eq('conductor_b.sede_id', formData.sede_id)
+      }
+      const { data: emparajamientosDB, error: errorDB } = await queryPares
         .order('score', { ascending: false })
         .limit(500)
 
@@ -5530,7 +5538,6 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 <option value="">Seleccionar...</option>
                                 <option value="dia_entrega">Día de entrega de vehículo</option>
                                 <option value="fecha_baja">Fecha de Baja</option>
-                                <option value="sin_cobro">Sin cobro (0 días)</option>
                               </select>
                             </>
                           )}
@@ -5645,7 +5652,6 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 <option value="">Seleccionar...</option>
                                 <option value="dia_entrega">Día de entrega de vehículo</option>
                                 <option value="fecha_baja">Fecha de Baja</option>
-                                <option value="sin_cobro">Sin cobro (0 días)</option>
                               </select>
                             </>
                           )}
@@ -5765,7 +5771,6 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                                 <option value="">Seleccionar...</option>
                                 <option value="dia_entrega">Día de entrega de vehículo</option>
                                 <option value="fecha_baja">Fecha de Baja</option>
-                                <option value="sin_cobro">Sin cobro (0 días)</option>
                               </select>
                             </>
                           )}

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
+import { useSede } from '../contexts/SedeContext'
 
 const CACHE_NS = 'usePermanenciaStats'
 
@@ -14,6 +15,7 @@ function formatDateOnly(d: Date): string {
 }
 
 export function usePermanenciaStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
+  const { aplicarFiltroSede } = useSede()
   const [stats, setStats] = useState({
     avgDaysA: 0,
     avgDaysB: 0,
@@ -40,9 +42,8 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
         .gte('fecha_terminacion', formatDateOnly(range.start))
         .lte('fecha_terminacion', formatDateOnly(range.end))
       
-      if (sedeId) {
-        query = query.eq('sede_id', sedeId)
-      }
+      // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+      query = sedeId ? query.eq('sede_id', sedeId) : aplicarFiltroSede(query)
 
       const { data: conductores, error } = await query
 
@@ -119,7 +120,7 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
     return () => {
       isMounted = false
     }
-  }, [granularity, periodA, periodB, sedeId])
+  }, [granularity, periodA, periodB, sedeId, aplicarFiltroSede])
 
   if (paramsChanged) {
     return { ...stats, loading: true }

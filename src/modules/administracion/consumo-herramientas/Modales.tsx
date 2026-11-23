@@ -72,9 +72,16 @@ export function HerramientaModal({ herramienta, onClose, onGuardado }: Herramien
     enlace_gestor: h?.enlace_gestor ?? '',
     licencias: h?.licencias != null ? String(h.licencias) : '',
     licencias_incluidas: h?.licencias_incluidas != null ? String(h.licencias_incluidas) : '',
+    precio_licencia: montoATexto(h?.precio_licencia),
   })
   const [guardando, setGuardando] = useState(false)
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm(prev => ({ ...prev, [k]: v }))
+
+  // Herramientas que cobran por usuario: monto = licencias × precio por licencia
+  const precioForm = numeroONull(form.precio_licencia)
+  const montoPorLicencias = !sinCosto(form.periodicidad) && precioForm !== null && precioForm >= 0 && form.licencias
+    ? Math.round(Number(form.licencias) * precioForm * 100) / 100
+    : null
 
   const guardar = async () => {
     if (!form.nombre.trim()) { showError('Falta el nombre de la herramienta'); return }
@@ -90,11 +97,14 @@ export function HerramientaModal({ herramienta, onClose, onGuardado }: Herramien
     const gestor = vacioANull(form.enlace_gestor)
     if (gestor && !/^https?:\/\//i.test(gestor)) { showError('El enlace del gestor tiene que empezar con http:// o https://'); return }
 
+    const precioLicencia = sinCosto(form.periodicidad) ? null : numeroONull(form.precio_licencia)
+    if (precioLicencia !== null && precioLicencia < 0) { showError('El precio por licencia no puede ser negativo'); return }
     const datos = {
       nombre: form.nombre.trim(),
       uso: vacioANull(form.uso),
       plan: vacioANull(form.plan),
-      monto: sinCosto(form.periodicidad) ? null : numeroONull(form.monto),
+      // Con precio por licencia el monto sale de la cuenta (licencias × precio)
+      monto: sinCosto(form.periodicidad) ? null : (montoPorLicencias ?? numeroONull(form.monto)),
       moneda: sinCosto(form.periodicidad) ? null : form.moneda,
       periodicidad: form.periodicidad,
       dia_cobro: form.periodicidad === 'Anual' || sinCosto(form.periodicidad) ? null : dia,
@@ -114,6 +124,8 @@ export function HerramientaModal({ herramienta, onClose, onGuardado }: Herramien
       enlace_gestor: vacioANull(form.enlace_gestor),
       licencias: form.licencias ? Number(form.licencias) : null,
       licencias_incluidas: form.licencias_incluidas ? Number(form.licencias_incluidas) : null,
+      // Solo si la columna existe (sql/consumo_herramientas_precio_licencia.sql) o se cargó un valor
+      ...((h && 'precio_licencia' in h) || precioLicencia !== null ? { precio_licencia: precioLicencia } : {}),
     }
 
     setGuardando(true)
@@ -189,7 +201,8 @@ export function HerramientaModal({ herramienta, onClose, onGuardado }: Herramien
               </div>
               <div className="form-group">
                 <label className="form-label">Monto</label>
-                <input className="form-input" inputMode="decimal" disabled={esGratis} value={esGratis ? '' : form.monto}
+                <input className="form-input" inputMode="decimal" disabled={esGratis || montoPorLicencias !== null}
+                  value={esGratis ? '' : montoPorLicencias !== null ? montoATexto(montoPorLicencias) : form.monto}
                   onChange={e => set('monto', e.target.value)} placeholder={form.periodicidad === 'Por uso' ? 'Estimado por mes' : ''} />
               </div>
               <div className="form-group">
@@ -199,6 +212,20 @@ export function HerramientaModal({ herramienta, onClose, onGuardado }: Herramien
                 </select>
               </div>
             </div>
+            {!esGratis && (
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Precio por licencia</label>
+                  <input className="form-input" inputMode="decimal" value={form.precio_licencia}
+                    onChange={e => set('precio_licencia', e.target.value)} placeholder="Solo si cobra por usuario" />
+                </div>
+                <div className="form-group" style={{ alignSelf: 'end', fontSize: 12, color: 'var(--text-secondary)', paddingBottom: 8 }}>
+                  {montoPorLicencias !== null
+                    ? `${form.licencias} licencias × ${form.precio_licencia} = ${montoATexto(montoPorLicencias)} ${form.moneda}. Estimado, sin impuestos.`
+                    : form.precio_licencia && !form.licencias ? 'Falta cargar la cantidad de licencias.' : ''}
+                </div>
+              </div>
+            )}
             {!esGratis && (
               <div className="form-row">
                 {esAnual ? (
@@ -638,7 +665,10 @@ export function PagoDetalleModal({ pago, herramienta: h, equivalenteUsd, onVerFa
                 <Dato label="Plan">{h.plan}</Dato>
                 <Dato label="Periodicidad">{h.periodicidad}{h.dia_cobro ? ` · día ${h.dia_cobro}` : ''}</Dato>
                 <Dato label="Licencias">
-                  {h.licencias != null ? `${h.licencias}${h.licencias_incluidas != null ? ` / ${h.licencias_incluidas} incluidas` : ''}` : null}
+                  {h.licencias != null
+                    ? `${h.licencias}${h.licencias_incluidas != null ? ` / ${h.licencias_incluidas} incluidas` : ''}`
+                      + (h.precio_licencia != null && h.moneda ? ` × ${formatMoneda(h.precio_licencia, h.moneda)}` : '')
+                    : null}
                 </Dato>
                 <Dato label="Responsable">{h.responsable}</Dato>
                 <Dato label="Tarjeta">{h.tarjeta_ultimos4 ? `•••• ${h.tarjeta_ultimos4}` : null}</Dato>

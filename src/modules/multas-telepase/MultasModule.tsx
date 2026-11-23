@@ -263,7 +263,8 @@ export default function MultasModule() {
         (supabase.from('penalidades' as any) as any)
           .select('id, monto, fraccionado, cantidad_cuotas, aplicado, rechazado, semana_aplicacion, anio_aplicacion, incidencias!inner(multa_id)')
           .not('incidencias.multa_id', 'is', null),
-        supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado'),
+        // Semanas cerradas de la sede elegida (hay un período por semana y sede)
+        aplicarFiltroSede(supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado')),
       ])
 
       if (multasRes.error) throw multasRes.error

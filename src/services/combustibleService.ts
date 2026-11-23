@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { filtrarSede, realesSiTodas } from '../utils/sedesReales'
 import type {
   FuelSummary,
   FuelFillup,
@@ -31,12 +32,13 @@ const FILLUP_SELECT = `
  * Trae el resumen agregado por vehículo (último período).
  */
 export async function fetchFuelSummary(sedeId?: string | null, periodoDias = 30): Promise<FuelSummary[]> {
+  const reales = await realesSiTodas(sedeId)
   let q = supabase
     .from('geotab_fuel_summary')
     .select(SUMMARY_SELECT)
     .eq('periodo_dias', periodoDias)
     .order('combustible_litros', { ascending: false })
-  if (sedeId) q = q.eq('sede_id', sedeId)
+  q = filtrarSede(q, sedeId, reales)
   const { data, error } = await q
   if (error) throw error
   return (data || []) as unknown as FuelSummary[]
@@ -51,11 +53,12 @@ export async function fetchFillups(opts: {
   desde?: Date
   hasta?: Date
 }): Promise<FuelFillup[]> {
+  const reales = opts.vehiculoId ? null : await realesSiTodas(opts.sedeId)
   let q = supabase
     .from('geotab_fillups')
     .select(FILLUP_SELECT)
     .order('fecha_evento', { ascending: false })
-  if (opts.sedeId) q = q.eq('sede_id', opts.sedeId)
+  q = filtrarSede(q, opts.sedeId, reales)
   if (opts.vehiculoId) q = q.eq('vehiculo_id', opts.vehiculoId)
   if (opts.desde) q = q.gte('fecha_evento', opts.desde.toISOString())
   if (opts.hasta) q = q.lte('fecha_evento', opts.hasta.toISOString())

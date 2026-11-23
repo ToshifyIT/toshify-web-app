@@ -658,11 +658,12 @@ export function VisitasFormModal({
       if (mode === 'create') {
         const { supabase } = await import('../../../lib/supabase');
         const nombreVisitante = dataToSave.nombre_visitante.split(';')[0].trim();
-        const { data: existentes } = await supabase
+        // Solo citas de la sede (la cita nueva se crea en la sede elegida)
+        const { data: existentes } = await aplicarFiltroSede(supabase
           .from('visitas')
           .select('id, nombre_visitante, fecha_hora')
           .eq('fecha_hora', fechaHora)
-          .neq('estado', 'cancelada');
+          .neq('estado', 'cancelada'));
 
         const duplicada = (existentes || []).find((v: { nombre_visitante: string }) =>
           v.nombre_visitante.toUpperCase().includes(nombreVisitante.toUpperCase())

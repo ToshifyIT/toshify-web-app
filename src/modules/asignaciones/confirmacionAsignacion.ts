@@ -10,7 +10,12 @@
 // Regla: hasta activar la asignación, cualquier paso que falle FRENA la
 // confirmación (exigirOk). Después de activarla, los pasos que fallan se
 // AVISAN al usuario pero no deshacen la activación.
+//
+// Desde la revisión del 20/11/2026 (A2, A3, A7) confirmar, cerrar lo anterior y
+// activar pasan dentro de la base en una sola transacción:
+// confirmar_asignacion() en sql/confirmar_asignacion_atomica.sql.
 import { supabase } from '../../lib/supabase'
+import { actualizarEstadoVehiculo } from '../../services/vehiculoEstadoService'
 
 /** Error de un paso de la confirmación, con un mensaje para el usuario. */
 export class ErrorPasoConfirmacion extends Error {
@@ -34,64 +39,134 @@ export function exigirOk<T = unknown>(res: RespuestaSupabase, paso: string): T |
   return (res.data ?? null) as T | null
 }
 
-/**
- * Cierra (estado completado) la participación de estos conductores en cualquier
- * otra asignación vigente. Es lo que hace que un cambio de auto deje de
- * mostrar al conductor en el auto anterior.
- */
-export async function cerrarOtrasParticipaciones(conductorIds: string[], asignacionId: string, ahora: string): Promise<void> {
-  if (conductorIds.length === 0) return
-  exigirOk(
-    await (supabase as any)
-      .from('asignaciones_conductores')
-      .update({ estado: 'completado', fecha_fin: ahora })
-      .in('conductor_id', conductorIds)
-      .in('estado', ['asignado', 'activo'])
-      .neq('asignacion_id', asignacionId),
-    'cerrar la asignación anterior de los conductores',
-  )
+/** Lo que devuelve confirmar_asignacion() (sql/confirmar_asignacion_atomica.sql). */
+export interface ResultadoConfirmacion {
+  /** true si la asignación pasó de programada a activa en esta llamada. */
+  activada: boolean
+  /** Conductores que quedaron vigentes por esta acción. */
+  conductores: string[]
+  /** Cómo quedaron las filas de conductores de la asignación. */
+  filas: { id: string; conductor_id: string | null; horario: string | null; confirmado: boolean; estado: string }[]
+  sin_confirmar: number
+  /** Asignaciones anteriores del vehículo que se finalizaron, con sus conductores. */
+  cerradas: { id: string; codigo: string | null; conductores: string[] }[]
+  /** Avisos: asignaciones programadas a futuro donde los conductores siguen figurando. */
+  programadas_pendientes: string[]
 }
 
 /**
- * Finaliza las asignaciones activas que quedaron sin ningún conductor vigente
- * (por ejemplo, la del auto anterior en un cambio de auto).
+ * Confirma a los conductores y, si la asignación estaba programada, la activa:
+ * cierra a los conductores en sus otras asignaciones (no en las programadas a
+ * futuro), cierra las asignaciones activas anteriores del vehículo y activa la
+ * nueva. Todo en una transacción de la base: si algo falla, no cambia nada.
  */
-export async function finalizarAsignacionesSinConductores(excluirId: string, ahora: string, usuario: string): Promise<void> {
-  const asignaciones = exigirOk<any[]>(
-    await (supabase as any)
-      .from('asignaciones')
-      .select(`
-        id, notas,
-        asignaciones_conductores(conductor_id, estado, horario,
-          conductores(nombres, apellidos)
-        )
-      `)
-      .in('estado', ['activa', 'activo'])
-      .neq('id', excluirId),
-    'revisar asignaciones que quedaron sin conductores',
-  ) || []
+export async function confirmarAsignacionAtomica(
+  asignacionId: string,
+  filasConfirmar: string[],
+  notas: string | null,
+  usuario: string,
+): Promise<ResultadoConfirmacion> {
+  const { data, error } = await (supabase as any).rpc('confirmar_asignacion', {
+    p_asignacion_id: asignacionId,
+    p_filas_confirmar: filasConfirmar,
+    p_notas: notas,
+    p_usuario: usuario,
+  })
+  if (error) {
+    const mensaje = String(error.message || '')
+    if (error.code === 'PGRST202' || (error.code !== 'P0001' && mensaje.includes('confirmar_asignacion'))) {
+      throw new Error('Falta instalar en la base la función confirmar_asignacion (sql/confirmar_asignacion_atomica.sql). No se cambió nada.')
+    }
+    // P0001: la función frenó a propósito (la asignación cambió de estado, etc.)
+    if (error.code === 'P0001') throw new Error(`${mensaje} No se cambió nada.`)
+    throw new ErrorPasoConfirmacion('confirmar la asignación (no se cambió nada)', mensaje)
+  }
+  const r = (data || {}) as Partial<ResultadoConfirmacion>
+  return {
+    activada: r.activada === true,
+    conductores: r.conductores || [],
+    filas: r.filas || [],
+    sin_confirmar: Number(r.sin_confirmar) || 0,
+    cerradas: r.cerradas || [],
+    programadas_pendientes: r.programadas_pendientes || [],
+  }
+}
 
-  for (const asig of asignaciones) {
-    const activos = (asig.asignaciones_conductores || []).filter(
-      (ac: any) => ac.estado === 'asignado' || ac.estado === 'activo',
-    )
-    if (activos.length > 0) continue
+/**
+ * Devolución de un vehículo: finaliza sus asignaciones ACTIVAS (y la asignación
+ * de devolución, si se pasa) y deja el auto en PKG ON BASE. La usan los dos
+ * caminos de "Confirmar Devolución" para que hagan lo mismo (A4):
+ *  - no toca las asignaciones PROGRAMADAS del auto (las devuelve como aviso);
+ *  - agrega la nota al final, sin borrar las anteriores;
+ *  - frena si no puede finalizar una asignación (si no, se seguiría cobrando).
+ * Devuelve los avisos a mostrar; lista vacía = todo bien.
+ */
+export async function confirmarDevolucionVehiculo(p: {
+  vehiculoId: string
+  ahora: string
+  usuario: string
+  asignacionDevolucionId?: string
+}): Promise<string[]> {
+  const avisos: string[] = []
+  const hoy = new Date(p.ahora).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
 
-    const ultimos = (asig.asignaciones_conductores || [])
-      .filter((ac: any) => ac.estado === 'completado' || ac.estado === 'finalizado')
-      .map((ac: any) => {
-        const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
-        return `${nombre} (${ac.horario || 'sin turno'})`
-      })
-    const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Sin conductores activos.\nUltimos conductores: ${ultimos.length > 0 ? ultimos.join(', ') : 'ninguno'}`
+  let consulta = (supabase as any)
+    .from('asignaciones')
+    .select('id, codigo, estado, notas')
+    .eq('vehiculo_id', p.vehiculoId)
+  consulta = p.asignacionDevolucionId
+    ? consulta.or(`estado.in.(activa,activo),id.eq.${p.asignacionDevolucionId}`)
+    : consulta.in('estado', ['activa', 'activo'])
+  const aFinalizar = (exigirOk<any[]>(await consulta, 'buscar las asignaciones activas del vehículo') || [])
+    .filter(a => a.estado !== 'finalizada' && a.estado !== 'cancelada')
+
+  for (const asig of aFinalizar) {
     exigirOk(
       await (supabase as any)
-        .from('asignaciones')
-        .update({ estado: 'finalizada', fecha_fin: ahora, notas: (asig.notas || '') + traza, updated_by: usuario })
-        .eq('id', asig.id),
-      'finalizar una asignación que quedó sin conductores',
+        .from('asignaciones_conductores')
+        .update({ estado: 'completado', fecha_fin: p.ahora })
+        .eq('asignacion_id', asig.id)
+        .in('estado', ['asignado', 'activo']),
+      'cerrar a los conductores de la asignación del vehículo',
+    )
+    const cambios: Record<string, unknown> = {
+      estado: 'finalizada',
+      fecha_fin: p.ahora,
+      notas: `${asig.notas || ''}\n[DEVOLUCIÓN ${hoy}] Vehículo devuelto a base.`,
+      updated_by: p.usuario,
+    }
+    if (asig.id === p.asignacionDevolucionId) cambios.fecha_inicio = p.ahora
+    exigirOk(
+      await (supabase as any).from('asignaciones').update(cambios).eq('id', asig.id),
+      'finalizar la asignación del vehículo',
     )
   }
+
+  // ── Desde acá las asignaciones ya están finalizadas: lo que falla se avisa ──
+  const estadoBase = await supabase.from('vehiculos_estados').select('id').eq('codigo', 'PKG_ON_BASE').single()
+  const estadoBaseId = (estadoBase.data as { id: string } | null)?.id
+  if (!estadoBaseId) {
+    avisos.push('No se pudo pasar el vehículo a PKG ON BASE: cambiá su estado a mano.')
+  } else {
+    const { error } = await actualizarEstadoVehiculo(p.vehiculoId, estadoBaseId, 'Devolución del vehículo: asignación finalizada')
+    if (error) avisos.push(`No se pudo pasar el vehículo a PKG ON BASE (${error.message || 'error'}): cambiá su estado a mano.`)
+  }
+
+  let programadas = (supabase as any)
+    .from('asignaciones')
+    .select('codigo')
+    .eq('vehiculo_id', p.vehiculoId)
+    .eq('estado', 'programado')
+  if (p.asignacionDevolucionId) programadas = programadas.neq('id', p.asignacionDevolucionId)
+  const resProg = await programadas
+  if (resProg.error) {
+    avisos.push('No se pudo verificar si el vehículo tiene asignaciones programadas.')
+  } else {
+    for (const a of (resProg.data || []) as { codigo: string | null }[]) {
+      avisos.push(`El vehículo tiene la asignación programada ${a.codigo || ''}: no se modificó, revisá si sigue en pie.`)
+    }
+  }
+  return avisos
 }
 
 /**

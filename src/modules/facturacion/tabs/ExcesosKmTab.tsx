@@ -141,7 +141,7 @@ export function ExcesosKmTab() {
     }
 
     // Obtener asignaciones activas con vehículo y tipo
-    const { data: asignaciones } = await supabase
+    const { data: asignaciones } = await aplicarFiltroSede(supabase
       .from('asignaciones')
       .select(`
         conductor_id,
@@ -149,7 +149,7 @@ export function ExcesosKmTab() {
         horario,
         conductores!inner(id, nombres, apellidos),
         vehiculos!inner(id, patente)
-      `)
+      `))
       .eq('estado', 'activa')
 
     const conductoresConVehiculo = (asignaciones || []).map((a: any) => ({
