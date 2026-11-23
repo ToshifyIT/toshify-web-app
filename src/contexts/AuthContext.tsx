@@ -34,10 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signingOutRef = useRef(false)
 
   useEffect(() => {
-    // Evitar doble inicialización en React StrictMode
-    if (initRef.current) return
-    initRef.current = true
-
     // Función para inicializar la sesión
     const initSession = async () => {
       try {
@@ -72,7 +68,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    initSession()
+    // La sesión inicial se lee una sola vez, aunque React StrictMode monte el
+    // efecto dos veces en desarrollo. La suscripción de abajo, en cambio, se
+    // crea en CADA montaje: el desmontaje intermedio de StrictMode la cancela,
+    // y si se salteaba junto con initSession el ingreso con correo quedaba sin
+    // oyente (SIGNED_IN no llegaba, no se seteaba el usuario y ProtectedRoute
+    // devolvía a /login).
+    if (!initRef.current) {
+      initRef.current = true
+      initSession()
+    }
 
     // Escuchar cambios de autenticación
     const {
