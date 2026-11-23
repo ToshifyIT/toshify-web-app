@@ -8,7 +8,8 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { getISOWeek } from 'date-fns'
-import { AlertTriangle, CheckCircle, Edit2, Eye, Plus, Search, Trash2, UserX, Users, Wallet, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Edit2, Eye, Landmark, Plus, Search, Trash2, UserX, Users, Wallet, X } from 'lucide-react'
+import { supabase } from '../../../lib/supabase'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
@@ -263,9 +264,27 @@ export function LicenciaB1Tab() {
   const [editandoPago, setEditandoPago] = useState(false)
   const [formPago, setFormPago] = useState({ fecha: '', monto: '', pagador: '', cuit: '', nota: '' })
 
+  // Última vez que la sincronización guardó movimientos de Cresium (se muestra fijo abajo)
+  const [cresiumActualizado, setCresiumActualizado] = useState<string | null>(null)
+
+  const cargarCresiumActualizado = useCallback(async () => {
+    try {
+      const { data, error: err } = await (supabase.from('cresium_movimientos') as any)
+        .select('updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (err) throw err
+      setCresiumActualizado(data?.updated_at ?? null)
+    } catch (err) {
+      console.error('No se pudo leer la última actualización de Cresium:', err)
+    }
+  }, [])
+
   const cargar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
     if (!silencioso) setLoading(true)
     setError(null)
+    void cargarCresiumActualizado()
     try {
       // Misma carga que usa Saldos para mostrar estos pagos (licenciaB1Service)
       const { promo: p, filas: lista } = await cargarConductoresLicenciaB1(aplicarFiltroSede)
@@ -279,7 +298,7 @@ export function LicenciaB1Tab() {
     } finally {
       setLoading(false)
     }
-  }, [aplicarFiltroSede])
+  }, [aplicarFiltroSede, cargarCresiumActualizado])
 
   useEffect(() => {
     cargar()
@@ -828,15 +847,6 @@ export function LicenciaB1Tab() {
           La promoción {promo.codigo} está desactivada: estos pagos no restan en la facturación hasta activarla en Parámetros &gt; Promociones.
         </div>
       )}
-      {promo && (
-        <p className="lb1-ayuda">
-          {promo.codigo} · {promo.nombre} ({formatFecha(promo.fecha_inicio)} al {formatFecha(promo.fecha_fin)}).
-          Adelantan {formatCurrency(PROMO_B1_PAGO_DIARIO)} por día de su facturación semanal, todos los días desde su primer turno hasta obtener la D1.
-          No es una deuda: lo que no adelantan se cobra igual al facturar la semana, y cada lunes empieza de cero (las semanas anteriores quedan como historial).
-          Los depósitos de Cresium se toman solos por CUIT/CUIL; lo que paga otra persona se agrega en el detalle.
-          Lo adelantado resta en la facturación de la semana y se ve en Saldos como informativo (no cambia el saldo).
-        </p>
-      )}
 
       <TabsBar<Vista>
         tabs={[
@@ -907,6 +917,8 @@ export function LicenciaB1Tab() {
         error={error}
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
+        // Conductor y Desde quedan fijas al desplazar la tabla a la derecha
+        stickyLeftColumns={2}
         searchPlaceholder="Buscar conductor..."
         externalFilters={filtrosActivos}
         // Con filtros puestos, aunque no quede ninguna fila se ve la tabla (para poder cambiarlos)
@@ -1462,6 +1474,14 @@ export function LicenciaB1Tab() {
           </div>
         </div>
       )}
+
+      {/* Fijo abajo: hasta cuándo están los depósitos de Cresium que se cruzan */}
+      <div className="lb1-cresium-pie">
+        <Landmark size={13} aria-hidden="true" />
+        {cresiumActualizado
+          ? `Cresium actualizado: ${formatFechaHoraART(cresiumActualizado)}`
+          : 'Cresium: sin datos de actualización'}
+      </div>
     </div>
   )
 }

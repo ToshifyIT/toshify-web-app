@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useSede } from '../../contexts/SedeContext'
 import { showError, showSuccess, showWarning } from '../../utils/toast'
 import { formatFechaHora, formatPlata } from '../../utils/format'
 import '../../styles/modules.css'
@@ -37,6 +38,7 @@ const SITUACIONES_ROJAS = [
 export function RiesgoBcraPage() {
   const { canEditInSubmenu } = usePermissions()
   const puedeEditar = canEditInSubmenu('riesgo-bcra')
+  const { aplicarFiltroSede } = useSede()
   const [umbrales, setUmbrales] = useState<Umbrales | null>(null)
   const [form, setForm] = useState({ verde: '', amarilla: '', situacion: 6, judicial: true, cheques: true })
   const [conteo, setConteo] = useState<Record<Nivel, number | null>>({ verde: null, amarillo: null, rojo: null })
@@ -44,10 +46,13 @@ export function RiesgoBcraPage() {
   const [isGuardando, setIsGuardando] = useState(false)
 
   useEffect(() => { void cargar() }, [])
+  // Los umbrales son de todas las sedes; el conteo de leads es de la sede elegida
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void cargarConteo() }, [aplicarFiltroSede])
 
   async function cargarConteo() {
     const resultados = await Promise.all(NIVELES.map(n =>
-      supabase.from('leads').select('id', { count: 'exact', head: true }).eq('bcra_nivel', n.nivel),
+      aplicarFiltroSede(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('bcra_nivel', n.nivel)),
     ))
     setConteo({
       verde: resultados[0].count ?? 0,
@@ -72,7 +77,6 @@ export function RiesgoBcraPage() {
           cheques: u.rojo_con_cheques,
         })
       }
-      await cargarConteo()
     } catch (error) {
       console.error('Error cargando umbrales BCRA:', error)
       showError('Error', 'No se pudieron cargar los umbrales. ¿Se ejecutó sql/bcra_umbrales.sql?')
@@ -104,6 +108,7 @@ export function RiesgoBcraPage() {
       if (error) throw error
       showSuccess('Umbrales guardados', 'Se recalculó el nivel de todos los leads consultados.')
       await cargar()
+      await cargarConteo()
     } catch (error) {
       console.error('Error guardando umbrales BCRA:', error)
       showError('Error', 'No se pudieron guardar los umbrales')

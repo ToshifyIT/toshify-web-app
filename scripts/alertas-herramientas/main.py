@@ -5,6 +5,12 @@ Alertas de Consumo herramientas (Administración › Consumo herramientas).
 Ejecución diaria desde el crontab del servidor (toshify-sync). Avisa por correo
 (Resend) y, si está configurado, por Slack:
   0) actualiza las cotizaciones del día (ARS / EUR / PEN contra USD),
+  0b) trae el consumo real de las herramientas por uso: llamadas de 2Chat (ya están
+      en la base) y Google Cloud (Maps, Gemini) desde la exportación de facturación
+      a BigQuery, si está configurada,
+  0c) trae la cantidad de licencias de Slack y Google Workspace y recalcula el monto
+      (licencias × precio por licencia) si están configurados; avisa cuando cambia,
+  - Todos los días: saldos prepago que se terminan en 7 días o menos (o ya agotados).
   - Lunes: agenda de la semana (pagos ordenados por fecha), resto del mes,
     pagos vencidos y herramientas activas sin facturación al grupo (SAS o INC.) o sin tarjeta.
   - Resto de los días: recordatorio de los pagos que vencen en N días (por defecto 2) u hoy.
@@ -18,20 +24,37 @@ Variables de entorno (env.sh del servidor):
   HERRAMIENTAS_ALERTAS_DESTINATARIOS        correos separados por coma (obligatoria)
   HERRAMIENTAS_ALERTAS_DIAS                 días de anticipación del recordatorio (por defecto 2)
   HERRAMIENTAS_ALERTAS_SLACK_WEBHOOK        webhook de Slack (opcional)
+  HERRAMIENTAS_GCP_CREDENCIALES             ruta al JSON de la cuenta de servicio de Google (opcional)
+  HERRAMIENTAS_GCP_TABLA                    proyecto.dataset.gcp_billing_export_v1_XXXXXX (opcional);
+                                            varias separadas por coma, una por cuenta de facturación
+  HERRAMIENTAS_GCP_UBICACION                ubicación del dataset de BigQuery (por defecto US)
+  HERRAMIENTAS_SLACK_TOKEN                  token de usuario administrador de Slack, alcance admin (opcional)
+  HERRAMIENTAS_GWS_ADMIN                    correo del administrador de Google Workspace (opcional)
+  HERRAMIENTAS_GWS_DOMINIO                  dominio de Google Workspace, ej. toshify.com.ar (opcional)
+  HERRAMIENTAS_GWS_CREDENCIALES             JSON de la cuenta de servicio (por defecto, la de GCP)
+  GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+                                            la cuenta de servicio que ya usa la web para Drive; se usa
+                                            si no hay ningún JSON en las variables de arriba
 
 Uso:
   python3 main.py              # ejecución normal
   python3 main.py --dry-run    # muestra el aviso sin enviar nada
   python3 main.py --resumen    # fuerza la agenda semanal (aunque no sea lunes)
 
-Solo usa la biblioteca estándar de Python (no hace falta instalar nada).
+Solo usa la biblioteca estándar de Python (no hace falta instalar nada). Para firmar
+el acceso a Google usa el comando openssl del servidor.
 No lee ni guarda contraseñas ni datos de tarjetas (solo los últimos 4 dígitos).
 """
 
+import base64
 import html
 import json
 import os
+import re
+import subprocess
 import sys
+import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -88,6 +111,10 @@ class Supabase:
         q = urllib.parse.urlencode(filtro, safe="(),.*:")
         return pedir(f"{self.url}/rest/v1/{tabla}?{q}", "PATCH", datos, {**self.h, "Prefer": "return=minimal"})
 
+    def upsert(self, tabla: str, conflicto: str, filas: list):
+        return pedir(f"{self.url}/rest/v1/{tabla}?on_conflict={conflicto}", "POST", filas,
+                     {**self.h, "Prefer": "resolution=merge-duplicates,return=minimal"})
+
     def rpc(self, funcion: str, args: dict):
         return pedir(f"{self.url}/rest/v1/rpc/{funcion}", "POST", args, self.h)
 
@@ -134,6 +161,286 @@ def actualizar_cotizaciones(sb: "Supabase") -> None:
     log("cotizaciones actualizadas: " + ", ".join(f"{m} {tasas[m]:.4f}" for m in ("ARS", "EUR", "PEN") if m in tasas))
 
 
+# ── Consumo real de las herramientas por uso ─────────────────────────────────
+
+DIAS_RITMO = 14        # días que se miran para el ritmo de gasto del prepago
+DIAS_AVISO_SALDO = 7   # con menos días de saldo que estos, se avisa
+
+# Servicios de la facturación de Google Cloud agrupados en los conceptos de la pantalla
+PALABRAS_GEMINI = ("gemini", "generative language")
+PALABRAS_MAPS = ("maps", "places", "geocoding", "routes", "directions", "distance matrix", "geolocation",
+                 "roads", "street view", "address validation", "time zone", "elevation")
+
+
+def concepto_google(servicio: str) -> str:
+    s = (servicio or "").lower()
+    if any(p in s for p in PALABRAS_GEMINI):
+        return "Gemini"
+    if any(p in s for p in PALABRAS_MAPS):
+        return "Google Maps"
+    return "Otros de Google Cloud"
+
+
+def b64url(datos: bytes) -> str:
+    return base64.urlsafe_b64encode(datos).rstrip(b"=").decode()
+
+
+def credenciales_google(*variables_ruta: str) -> Optional[dict]:
+    """Credenciales de la cuenta de servicio: el JSON de la primera variable de ruta cargada o,
+    si no hay ninguna, las mismas dos variables que usa la web para Drive
+    (GOOGLE_SERVICE_ACCOUNT_EMAIL y GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY). None si no hay nada."""
+    for variable in variables_ruta:
+        ruta = env(variable, False)
+        if ruta:
+            with open(ruta, encoding="utf-8") as f:
+                return json.load(f)
+    correo = env("GOOGLE_SERVICE_ACCOUNT_EMAIL", False)
+    clave = env("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY", False)
+    if correo and clave:
+        # En el .env la clave va en una sola línea, con los saltos escritos como \n
+        return {"client_email": correo, "private_key": clave.replace("\\n", "\n")}
+    return None
+
+
+def token_google(credenciales: dict, alcance: str = "https://www.googleapis.com/auth/bigquery.readonly",
+                 en_nombre_de: str = "") -> str:
+    """Token de acceso de la cuenta de servicio (JWT RS256 firmado con openssl).
+    en_nombre_de: correo del administrador de Workspace (delegación de todo el dominio)."""
+    ahora = int(time.time())
+    cabecera = b64url(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+    cuerpo = b64url(json.dumps({
+        "iss": credenciales["client_email"],
+        "scope": alcance,
+        "aud": "https://oauth2.googleapis.com/token",
+        "iat": ahora, "exp": ahora + 600,
+        **({"sub": en_nombre_de} if en_nombre_de else {}),
+    }).encode())
+    a_firmar = f"{cabecera}.{cuerpo}".encode()
+    with tempfile.NamedTemporaryFile("w", suffix=".pem") as clave:
+        os.chmod(clave.name, 0o600)
+        clave.write(credenciales["private_key"])
+        clave.flush()
+        firma = subprocess.run(["openssl", "dgst", "-sha256", "-sign", clave.name],
+                               input=a_firmar, capture_output=True, check=True).stdout
+    datos = urllib.parse.urlencode({
+        "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        "assertion": f"{cabecera}.{cuerpo}.{b64url(firma)}",
+    }).encode()
+    req = urllib.request.Request("https://oauth2.googleapis.com/token", data=datos, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode())["access_token"]
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Google no dio el token: HTTP {e.code}: {e.read().decode()[:300]}") from e
+
+
+def consumo_google(desde) -> list:
+    """Costo neto (con créditos) por día y concepto desde la exportación de facturación a BigQuery.
+    HERRAMIENTAS_GCP_TABLA admite varias tablas separadas por coma (una por cuenta de facturación).
+    Devuelve [] si no está configurado."""
+    tablas = [t.strip() for t in env("HERRAMIENTAS_GCP_TABLA", False).split(",") if t.strip()]
+    credenciales = credenciales_google("HERRAMIENTAS_GCP_CREDENCIALES")
+    if not credenciales or not tablas:
+        log("consumo de Google Cloud omitido: faltan las credenciales de Google o HERRAMIENTAS_GCP_TABLA")
+        return []
+    for tabla in tablas:
+        if not re.fullmatch(r"[\w-]+\.\w+\.\w+", tabla):
+            raise RuntimeError("HERRAMIENTAS_GCP_TABLA tiene que ser proyecto.dataset.tabla")
+    token = token_google(credenciales)
+    suma: dict = {}
+    leidas = 0
+    for tabla in tablas:
+        consulta = f"""
+            SELECT FORMAT_DATE('%F', DATE(usage_start_time, 'America/Argentina/Buenos_Aires')) AS fecha,
+                   service.description AS servicio, currency AS moneda,
+                   SUM(CAST(cost AS NUMERIC))
+                     + SUM(IFNULL((SELECT SUM(CAST(c.amount AS NUMERIC)) FROM UNNEST(credits) c), 0)) AS neto
+            FROM `{tabla}`
+            WHERE usage_start_time >= TIMESTAMP('{desde:%Y-%m-%d}', 'America/Argentina/Buenos_Aires')
+            GROUP BY 1, 2, 3"""
+        try:
+            res = pedir(f"https://bigquery.googleapis.com/bigquery/v2/projects/{tabla.split('.')[0]}/queries", "POST", {
+                "query": consulta, "useLegacySql": False, "timeoutMs": 60000, "maxResults": 10000,
+                "location": env("HERRAMIENTAS_GCP_UBICACION", False, "US"),
+                # Tope de lo que puede leer la consulta (1 GB): no puede generar un costo por error
+                "maximumBytesBilled": "1000000000",
+            }, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+        except Exception as e:  # noqa: BLE001 — una tabla que falla (o que Google todavía no creó) no frena las demás
+            log(f"aviso: no se pudo leer {tabla} ({e})")
+            continue
+        if not res.get("jobComplete"):
+            log(f"aviso: la consulta de {tabla} no terminó a tiempo")
+            continue
+        leidas += 1
+        for fila in res.get("rows", []):
+            fecha, servicio, moneda, neto = (c["v"] for c in fila["f"])
+            clave = (fecha, concepto_google(servicio), moneda)
+            suma[clave] = suma.get(clave, 0.0) + float(neto or 0)
+    log(f"Google Cloud: {leidas} de {len(tablas)} tablas de facturación leídas")
+    return [{"fecha": f, "concepto": c, "moneda": m, "monto": round(v, 4)} for (f, c, m), v in suma.items()]
+
+
+def actualizar_consumo(sb: "Supabase", hoy) -> None:
+    """2Chat: suma las llamadas por día (función de la base). Google Cloud: BigQuery.
+    Rehace desde el primer día del mes anterior (la facturación llega con hasta un día de atraso)."""
+    desde = (hoy.replace(day=1) - timedelta(days=1)).replace(day=1)
+    try:
+        n = sb.rpc("herramientas_actualizar_consumo_2chat", {})
+        log(f"consumo de 2Chat: {n} días actualizados")
+    except Exception as e:  # noqa: BLE001 — sin el consumo igual se mandan las alertas
+        log(f"aviso: no se pudo actualizar el consumo de 2Chat ({e})")
+    try:
+        filas = consumo_google(desde)
+        if not filas:
+            return
+        herramienta = sb.select("herramientas", {"select": "id", "fuente_consumo": "eq.google_cloud", "limit": "1"})
+        if not herramienta:
+            log("aviso: no hay ninguna herramienta con fuente_consumo = google_cloud")
+            return
+        monedas = {"USD", "ARS", "EUR", "PEN"}
+        ahora = datetime.now(timezone.utc).isoformat()
+        validas = [{**f, "herramienta_id": herramienta[0]["id"], "fuente": "bigquery", "actualizado_en": ahora}
+                   for f in filas if f["moneda"] in monedas]
+        if len(validas) < len(filas):
+            log(f"aviso: {len(filas) - len(validas)} filas de Google en una moneda no contemplada")
+        for i in range(0, len(validas), 500):
+            sb.upsert("herramientas_consumo", "herramienta_id,fecha,concepto", validas[i:i + 500])
+        log(f"consumo de Google Cloud: {len(validas)} filas (día y concepto) desde {desde:%d/%m}")
+    except Exception as e:  # noqa: BLE001
+        log(f"aviso: no se pudo traer el consumo de Google Cloud ({e})")
+
+
+def saldos_por_agotarse(sb: "Supabase", hoy) -> list:
+    """Herramientas con saldo prepago cargado al que le quedan DIAS_AVISO_SALDO días o menos.
+    Misma cuenta que la pantalla (consumo.ts)."""
+    try:
+        herramientas = sb.select("herramientas", {
+            "select": "id,nombre,moneda,saldo_prepago,saldo_prepago_fecha,saldo_prepago_concepto",
+            "estado": "eq.Activa", "saldo_prepago": "not.is.null", "saldo_prepago_fecha": "not.is.null",
+        })
+        if not herramientas:
+            return []
+        tasas = {c["moneda"]: float(c["unidades_por_usd"]) for c in sb.select("herramientas_cotizaciones", {"select": "moneda,unidades_por_usd"})}
+        avisos = []
+        for h in herramientas:
+            moneda = h.get("moneda") or "USD"
+            filas = sb.select("herramientas_consumo", {
+                "select": "fecha,concepto,monto,moneda", "herramienta_id": f"eq.{h['id']}",
+                "fecha": f"gte.{min(h['saldo_prepago_fecha'], (hoy - timedelta(days=DIAS_RITMO)).isoformat())}",
+            })
+            if h.get("saldo_prepago_concepto"):
+                filas = [f for f in filas if f["concepto"] == h["saldo_prepago_concepto"]]
+
+            def en_moneda(f, moneda=moneda):
+                m = float(f["monto"])
+                if f["moneda"] == moneda or f["moneda"] not in tasas or moneda not in tasas:
+                    return m
+                return m / tasas[f["moneda"]] * tasas[moneda]
+
+            usado = sum(en_moneda(f) for f in filas if f["fecha"] > h["saldo_prepago_fecha"])
+            queda = float(h["saldo_prepago"]) - usado
+            desde = (hoy - timedelta(days=DIAS_RITMO)).isoformat()
+            ritmo = sum(en_moneda(f) for f in filas if desde <= f["fecha"] < hoy.isoformat()) / DIAS_RITMO
+            dias = int(max(0, queda) // ritmo) if ritmo > 0 else None
+            if queda <= 0 or (dias is not None and dias <= DIAS_AVISO_SALDO):
+                nombre = h["nombre"] + (f" ({h['saldo_prepago_concepto']})" if h.get("saldo_prepago_concepto") else "")
+                if queda <= 0:
+                    avisos.append(f"{nombre}: saldo agotado según el consumo desde el {fecha_ar(h['saldo_prepago_fecha'])}")
+                else:
+                    avisos.append(f"{nombre}: quedan {plata(queda, moneda)}, alcanza hasta el "
+                                  f"{(hoy + timedelta(days=dias)):%d/%m} ({dias} {'día' if dias == 1 else 'días'} al ritmo actual)")
+        return avisos
+    except Exception as e:  # noqa: BLE001 — sin la tabla de consumo no hay avisos de saldo
+        log(f"aviso: no se pudieron revisar los saldos prepago ({e})")
+        return []
+
+
+# ── Cantidad de licencias (herramientas que cobran por usuario) ──────────────
+
+def licencias_slack() -> Optional[int]:
+    """Usuarios que Slack cobra hoy (team.billableInfo). None si no está configurado."""
+    token = env("HERRAMIENTAS_SLACK_TOKEN", False)
+    if not token:
+        log("licencias de Slack omitidas: falta HERRAMIENTAS_SLACK_TOKEN")
+        return None
+    total, cursor = 0, ""
+    for _ in range(50):
+        q = urllib.parse.urlencode({"limit": 1000, **({"cursor": cursor} if cursor else {})})
+        res = pedir(f"https://slack.com/api/team.billableInfo?{q}", encabezados={"Authorization": f"Bearer {token}"})
+        if not res.get("ok"):
+            raise RuntimeError(f"Slack respondió {res.get('error')}")
+        total += sum(1 for u in (res.get("billable_info") or {}).values() if u.get("billing_active"))
+        cursor = (res.get("response_metadata") or {}).get("next_cursor") or ""
+        if not cursor:
+            return total
+    raise RuntimeError("Slack devolvió demasiadas páginas")
+
+
+def licencias_google_workspace() -> Optional[int]:
+    """Licencias de Google Workspace asignadas (API de licencias). None si no está configurado."""
+    admin = env("HERRAMIENTAS_GWS_ADMIN", False)
+    dominio = env("HERRAMIENTAS_GWS_DOMINIO", False)
+    credenciales = credenciales_google("HERRAMIENTAS_GWS_CREDENCIALES", "HERRAMIENTAS_GCP_CREDENCIALES")
+    if not credenciales or not admin or not dominio:
+        log("licencias de Google Workspace omitidas: faltan las credenciales de Google, HERRAMIENTAS_GWS_ADMIN o _DOMINIO")
+        return None
+    token = token_google(credenciales, "https://www.googleapis.com/auth/apps.licensing", admin)
+    total, pagina = 0, ""
+    for _ in range(50):
+        q = urllib.parse.urlencode({"customerId": dominio, "maxResults": 1000, **({"pageToken": pagina} if pagina else {})})
+        res = pedir(f"https://licensing.googleapis.com/apps/licensing/v1/product/Google-Apps/users?{q}",
+                    encabezados={"Authorization": f"Bearer {token}"}) or {}
+        total += len(res.get("items") or [])
+        pagina = res.get("nextPageToken") or ""
+        if not pagina:
+            return total
+    raise RuntimeError("Google devolvió demasiadas páginas")
+
+
+FUENTES_LICENCIAS = {"slack": licencias_slack, "google_workspace": licencias_google_workspace}
+
+
+def actualizar_licencias(sb: "Supabase", hoy) -> list:
+    """Trae la cantidad de licencias de cada herramienta con fuente_licencias. Si cambió, actualiza
+    licencias, el monto (licencias × precio_licencia) y los pagos pendientes que todavía no vencieron.
+    Devuelve los cambios para avisar."""
+    try:
+        herramientas = sb.select("herramientas", {
+            "select": "id,nombre,moneda,licencias,precio_licencia,monto,fuente_licencias",
+            "estado": "eq.Activa", "fuente_licencias": "not.is.null",
+        })
+    except Exception as e:  # noqa: BLE001 — sin la columna (falta correr el SQL) no hay nada que traer
+        log(f"aviso: no se pudieron revisar las licencias ({e})")
+        return []
+    cambios = []
+    for h in herramientas:
+        try:
+            cantidad = FUENTES_LICENCIAS[h["fuente_licencias"]]()
+            if cantidad is None:
+                continue
+            if cantidad <= 0:
+                log(f"aviso: {h['nombre']} devolvió {cantidad} licencias; no se toca la ficha")
+                continue
+            datos = {"licencias_actualizadas_en": datetime.now(timezone.utc).isoformat()}
+            precio = h.get("precio_licencia")
+            monto = round(cantidad * float(precio), 2) if precio is not None else None
+            if cantidad != h.get("licencias"):
+                datos["licencias"] = cantidad
+                texto = f"{h['nombre']}: de {h.get('licencias') if h.get('licencias') is not None else 'sin dato'} a {cantidad} licencias"
+                if monto is not None:
+                    texto += f", el próximo cobro pasa a {plata(monto, h.get('moneda'))} (estimado, sin impuestos)"
+                cambios.append(texto)
+            if monto is not None and (h.get("monto") is None or abs(float(h["monto"]) - monto) > 0.005):
+                datos["monto"] = monto
+                sb.patch("herramientas_pagos", {"herramienta_id": f"eq.{h['id']}", "estado": "eq.Pendiente",
+                                                "fecha_vencimiento": f"gte.{hoy.isoformat()}"}, {"monto": monto})
+            sb.patch("herramientas", {"id": f"eq.{h['id']}"}, datos)
+            log(f"licencias de {h['nombre']}: {cantidad}")
+        except Exception as e:  # noqa: BLE001 — una herramienta que falla no frena las demás
+            log(f"aviso: no se pudieron traer las licencias de {h['nombre']} ({e})")
+    return cambios
+
+
 def factura_a_grupo_cg(h: dict) -> bool:
     cuit = "".join(c for c in (h.get("cuit_facturado") or "") if c.isdigit())
     razon = " ".join((h.get("razon_social_facturada") or "").upper().replace(".", " ").split())
@@ -157,6 +464,9 @@ def main() -> int:
 
     if not dry:
         actualizar_cotizaciones(sb)
+        actualizar_consumo(sb, hoy)
+    cambios_licencias = [] if dry else actualizar_licencias(sb, hoy)
+    saldos = saldos_por_agotarse(sb, hoy)
 
     # Genera los pagos que falten y marca vencidos (misma función que la pantalla)
     creados = sb.rpc("herramientas_generar_pagos", {})
@@ -198,9 +508,9 @@ def main() -> int:
             sin_datos.append((h["nombre"], ", ".join(faltas)))
 
     if es_resumen:
-        hay_algo = semana or resto_mes or vencidos or sin_datos
+        hay_algo = semana or resto_mes or vencidos or sin_datos or saldos or cambios_licencias
     else:
-        hay_algo = bool(recordatorio)
+        hay_algo = bool(recordatorio or saldos or cambios_licencias)
     if not hay_algo:
         log("sin novedades: no se envía nada")
         return 0
@@ -230,6 +540,11 @@ def main() -> int:
         if items:
             seccion(f"{titulo} ({len(items)})", [linea_pago(p) for p in items], [enlace(p) for p in items])
 
+    if saldos:
+        seccion(f"Saldos prepago por agotarse ({len(saldos)})", saldos, [html.escape(s) for s in saldos])
+    if cambios_licencias:
+        seccion(f"Cambios en las licencias ({len(cambios_licencias)})", cambios_licencias,
+                [html.escape(c) for c in cambios_licencias])
     if es_resumen:
         # Agenda del lunes: semana, resto del mes, vencidos y datos pendientes (ordenado por fecha)
         lista(f"Esta semana (hasta el {fin_semana:%d/%m})", semana)
@@ -243,7 +558,12 @@ def main() -> int:
         intro = f"Agenda de pagos de la semana del {hoy:%d/%m/%Y}."
     else:
         lista(f"Vencen el {(hoy + timedelta(days=dias)):%d/%m} o hoy", recordatorio)
-        asunto = f"Consumo herramientas: {len(recordatorio)} " + ("pago vence" if len(recordatorio) == 1 else "pagos vencen") + f" en {dias} días o menos"
+        if recordatorio:
+            asunto = f"Consumo herramientas: {len(recordatorio)} " + ("pago vence" if len(recordatorio) == 1 else "pagos vencen") + f" en {dias} días o menos"
+        elif saldos:
+            asunto = f"Consumo herramientas: {len(saldos)} " + ("saldo prepago por agotarse" if len(saldos) == 1 else "saldos prepago por agotarse")
+        else:
+            asunto = "Consumo herramientas: cambió la cantidad de licencias"
         intro = f"Recordatorio del {hoy:%d/%m/%Y}."
     texto = f"{asunto}\n\n" + "\n\n".join(partes_txt) + f"\n\nVer en Toshibase: {URL_MODULO}"
     cuerpo_html = (

@@ -161,6 +161,17 @@ interface PortalFraccionamiento {
 type View = 'login' | 'changePassword' | 'forgotPassword' | 'resetPassword' | 'dashboard' | 'detail'
 
 
+// Semanas cerradas de la sede del conductor: un cierre en otra sede (por ejemplo
+// Pruebas) no debe marcar como pagada una multa o un cobro de este conductor.
+async function periodosCerradosDeSuSede(conductorId: string) {
+  const { data: c } = await supabase.from('conductores').select('sede_id').eq('id', conductorId).maybeSingle()
+  const sedeId = (c as { sede_id: string | null } | null)?.sede_id
+  let q = supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado')
+  if (sedeId) q = q.eq('sede_id', sedeId)
+  const res = await q
+  return res
+}
+
 /** Convierte un link de Google Drive ("/file/d/<ID>/view" o "open?id=<ID>")
  *  en su URL de descarga directa (uc?export=download&id=<ID>), que dispara
  *  la descarga del navegador en vez de abrir el visor de Drive.
@@ -1216,10 +1227,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           .select('monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, cantidad_cuotas, incidencias!inner(multa_id), penalidades_cuotas(numero_cuota, aplicado, semana, anio)')
           .eq('conductor_id', conductor.id)
           .not('incidencias.multa_id', 'is', null),
-        supabase
-          .from('periodos_facturacion')
-          .select('semana, anio')
-          .eq('estado', 'cerrado'),
+        periodosCerradosDeSuSede(conductor.id),
       ]).then(([penRes, perRes]) => {
         const cerradas = new Set<string>(
           ((perRes.data || []) as Array<{ semana: number; anio: number }>)
@@ -1285,10 +1293,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           .eq('conductor_id', conductor.id)
           .eq('incidencias.tipo', 'cobro')
           .eq('incidencias.tipos_cobro_descuento.codigo', 'EXCESO_KM'),
-        supabase
-          .from('periodos_facturacion')
-          .select('semana, anio')
-          .eq('estado', 'cerrado'),
+        periodosCerradosDeSuSede(conductor.id),
       ]).then(([penRes, perRes]) => {
         const cerradas = new Set<string>(
           ((perRes.data || []) as Array<{ semana: number; anio: number }>).map(p => `${p.semana}-${p.anio}`)

@@ -151,7 +151,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 async function calcularPipelineMesIndependiente(
   rangeStart: Date,
   rangeEnd: Date,
-  sedeActualId: string | null
+  sedeActualId: string | null,
+  aplicarFiltroSede: <T>(query: T, campo?: string) => T
 ): Promise<Map<string, { garantiaTeorica: number, alquilerTeorico: number, cobroReal: number }>> {
   const daysInt = eachDayOfInterval({ start: rangeStart, end: rangeEnd })
   const fIniStr = format(rangeStart, 'yyyy-MM-dd')
@@ -212,6 +213,8 @@ async function calcularPipelineMesIndependiente(
   const dnisList = Array.from(dnisDesc)
   let qC = supabase.from('conductores').select('id, nombres, apellidos, numero_dni, fecha_terminacion').in('numero_dni', dnisList)
   if (sedeActualId) qC = qC.eq('sede_id', sedeActualId)
+  // "Todas las sedes": solo las sedes reales (deja afuera Pruebas)
+  else qC = aplicarFiltroSede(qC)
   const { data: condData } = await qC
   const cInfoMap = new Map<string, any>()
   const fTermMap = new Map<string, Date>()
@@ -382,7 +385,7 @@ async function calcularPipelineMesIndependiente(
 }
 
 export function CobroTeoricoVsReal() {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [granularity, setGranularity] = useState<Granularity>('semana')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
     const now = new Date()
@@ -583,6 +586,8 @@ export function CobroTeoricoVsReal() {
           .select('id, nombres, apellidos, numero_dni, fecha_terminacion')
           .in('numero_dni', dnisList)
         if (sedeActualId) qConductores = qConductores.eq('sede_id', sedeActualId)
+        // "Todas las sedes": solo las sedes reales (deja afuera Pruebas)
+        else qConductores = aplicarFiltroSede(qConductores)
         const { data: conductoresData } = await qConductores
 
         const conductorInfoMap = new Map<string, any>()
@@ -1145,14 +1150,16 @@ export function CobroTeoricoVsReal() {
                   ? calcularPipelineMesIndependiente(
                       startOfMonth(addDays(startDate, -1)),
                       endOfMonth(addDays(startDate, -1)),
-                      sedeActualId
+                      sedeActualId,
+                      aplicarFiltroSede
                     )
                   : Promise.resolve(null),
                 hasAfter
                   ? calcularPipelineMesIndependiente(
                       startOfMonth(addDays(endDate, 1)),
                       endOfMonth(addDays(endDate, 1)),
-                      sedeActualId
+                      sedeActualId,
+                      aplicarFiltroSede
                     )
                   : Promise.resolve(null),
               ])
@@ -1256,7 +1263,7 @@ export function CobroTeoricoVsReal() {
     }
 
     fetchData()
-  }, [selectedPeriod, granularity, sedeActualId])
+  }, [selectedPeriod, granularity, sedeActualId, aplicarFiltroSede])
 
   const handleGranularityChange = (val: Granularity) => {
     setGranularity(val)

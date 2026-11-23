@@ -6,6 +6,7 @@ import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { Eye, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box, AlertTriangle, CheckCircle, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useSede } from '../../contexts/SedeContext'
 import { DataTable } from '../../components/ui/DataTable'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { StatsGrid } from '../../components/ui/StatsGrid'
@@ -65,6 +66,7 @@ interface StockPorProveedor {
 
 export function ProductosModule() {
   const { canCreateInSubmenu, canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+  const { aplicarFiltroSede } = useSede()
 
   // Permisos específicos para el submenú de productos
   const canCreate = canCreateInSubmenu('productos')
@@ -108,8 +110,12 @@ export function ProductosModule() {
   // Stat card filter state
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
 
+  // El stock que se muestra es el de la sede: se recarga al cambiarla
   useEffect(() => {
     loadProductos()
+  }, [aplicarFiltroSede])
+
+  useEffect(() => {
     loadUnidadesMedida()
     loadEstados()
     loadCategorias()
@@ -243,10 +249,11 @@ export function ProductosModule() {
 
       if (error) throw error
 
-      const { data: stockData } = await supabase
+      // Stock que se muestra: solo el de la sede elegida
+      const { data: stockData } = await aplicarFiltroSede(supabase
         .from('inventario')
         .select('producto_id, cantidad, estado')
-        .gt('cantidad', 0)
+        .gt('cantidad', 0))
 
       const stockPorProducto: Record<string, {
         disponible: number
@@ -413,7 +420,9 @@ export function ProductosModule() {
 
     if (result.isConfirmed) {
       try {
-        // Verificar si el producto está en uso en inventario
+        // Verificar si el producto está en uso en inventario.
+        // Sin filtro de sede a propósito: el producto es un catálogo compartido,
+        // así que no se borra si tiene inventario en CUALQUIER sede.
         const { data: inventarioData } = await supabase
           .from('inventario')
           .select('id')
@@ -503,7 +512,8 @@ export function ProductosModule() {
   const loadStockPorProveedor = async (productoId: string) => {
     try {
       setLoadingStock(true)
-      const { data, error } = await supabase
+      // Stock que se muestra: solo el de la sede elegida
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('inventario')
         .select(`
           proveedor_id,
@@ -515,7 +525,7 @@ export function ProductosModule() {
         `)
         .eq('producto_id', productoId)
         .in('estado', ['disponible', 'en_uso'])
-        .gt('cantidad', 0)
+        .gt('cantidad', 0))
         .order('estado', { ascending: true })
 
       if (error) throw error

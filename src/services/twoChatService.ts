@@ -31,6 +31,8 @@ export interface ContactosTwoChatResponse {
   filas: ContactoTwoChat[]
   canal_whatsapp: boolean
   puede_sincronizar: boolean
+  /** El servidor crea solo los contactos de los conductores recién asignados (TWOCHAT_SYNC_AUTO) */
+  alta_automatica?: boolean
 }
 
 export interface SincronizarResponse {

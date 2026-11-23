@@ -61,7 +61,7 @@ import { tomarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../../types/onboarding.types'
 import { cargarConceptosTarifa, getEtiquetaTarifa, getPeriodoTarifa, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
 import { avisarDatosIncompletos, avisarTarifasFaltantes, esBarilocheTurno, validarDatosDocumento, validarTarifasDocumento, type ConductorAValidar } from '../validacionDocumento'
-import { Alerta } from '../../../components/ui/alertas'
+import { Alerta, avisar } from '../../../components/ui/alertas'
 import { showError, showSuccess } from '../../../utils/toast'
 import { generateContracts } from '../../../services/contractService'
 import type { GeneratedDocument } from '../../../services/contractService'
@@ -1900,7 +1900,62 @@ export function ProgramacionV2Module() {
     return pendientes
   }
 
-  const handleEnviarAEntrega = async (prog: ProgramacionOnboardingCompleta) => {
+  // P3 (revisión del 20/11/2026): la lista se carga al abrir la pantalla y no se
+  // actualiza sola. Antes de enviar se vuelve a leer la programación de la base: si
+  // otra persona la eliminó, la envió o cambió algo que va a la asignación, se frena
+  // y se actualiza la pantalla, en vez de crear la asignación con datos viejos.
+  const CAMPOS_QUE_SE_ENVIAN = [
+    'vehiculo_entregar_id', 'modalidad', 'tipo_asignacion', 'fecha_cita', 'hora_cita',
+    'conductor_id', 'conductor_diurno_id', 'conductor_nocturno_id',
+    'tipo_documento', 'documento_diurno', 'documento_nocturno',
+    'tipo_asignacion_diurno', 'tipo_asignacion_nocturno',
+    'confirmacion_diurno', 'confirmacion_nocturno', 'ultimo_dia_cobro', 'zona', 'observaciones',
+  ] as const
+
+  const releerParaEnviar = async (
+    enPantalla: ProgramacionOnboardingCompleta,
+  ): Promise<ProgramacionOnboardingCompleta | null> => {
+    const { data, error } = await supabase
+      .from('v_programaciones_onboarding')
+      .select('*')
+      .eq('id', enPantalla.id)
+      .maybeSingle()
+    if (error) {
+      console.error('[Programaciones] No se pudo releer la programación antes de enviar:', error)
+      showError('Error', 'No se pudo verificar la programación. Revisá tu conexión y volvé a intentar.')
+      return null
+    }
+    const enBase = data as (ProgramacionOnboardingCompleta & { eliminado?: boolean | null }) | null
+    if (!enBase || enBase.eliminado) {
+      await avisar('La programación ya no existe', 'Otra persona la eliminó. Se actualizó la lista.', 'warning')
+      loadProgramaciones()
+      return null
+    }
+    if (enBase.estado === 'completado' || enBase.asignacion_id) {
+      await avisar('Ya fue enviada', 'Otra persona ya envió esta programación a Entrega. Se actualizó la lista.', 'info')
+      loadProgramaciones()
+      return null
+    }
+    const valor = (p: object, campo: string) => String((p as Record<string, unknown>)[campo] ?? '')
+    const cambio = CAMPOS_QUE_SE_ENVIAN.some(campo => valor(enPantalla, campo) !== valor(enBase, campo))
+    if (cambio) {
+      const [actualizada] = await adjuntarCuentasApps(await adjuntarLeadIds([enBase]))
+      setProgramaciones(prev => prev.map(p => (p.id === enPantalla.id ? actualizada : p)))
+      setPreviewProgramacion(prev => (prev && prev.id === enPantalla.id ? actualizada : prev))
+      await avisar(
+        'La programación cambió',
+        'Otra persona la modificó después de que abriste la pantalla. Ya se muestra actualizada: revisala y volvé a enviar.',
+        'warning',
+      )
+      return null
+    }
+    return enPantalla
+  }
+
+  const handleEnviarAEntrega = async (enPantalla: ProgramacionOnboardingCompleta) => {
+    const prog = await releerParaEnviar(enPantalla)
+    if (!prog) return
+
     // Si es devolución, usar flujo separado
     if (prog.tipo_asignacion === 'devolucion_vehiculo') {
       return handleEnviarDevolucion(prog)
@@ -1991,74 +2046,13 @@ export function ProgramacionV2Module() {
       }
     }
 
-    // Para TURNO: verificar confirmaciones y determinar qué conductores enviar
+    // Para TURNO, en "Enviar a Entrega" se elige con checks a quién se envía; los dos
+    // vienen marcados. El que se destilda no va a la asignación ni queda pendiente
+    // (decisión del 23/11/2026, P2): queda anotado en las notas de la asignación.
     let enviarDiurno = true
     let enviarNocturno = true
-    
-    if (prog.modalidad === 'turno') {
-      const diurnoConfirmo = prog.confirmacion_diurno === 'confirmo'
-      const nocturnoConfirmo = prog.confirmacion_nocturno === 'confirmo'
-      
-      // Si ninguno confirmó, advertir pero permitir continuar
-      if (!diurnoConfirmo && !nocturnoConfirmo) {
-        const result = await Alerta.fire({
-          title: 'Ningún conductor confirmó',
-          html: `
-            <div style="text-align: left; font-size: 14px;">
-              <p style="color: #ff0033;"><strong>Atención:</strong> Ninguno de los conductores ha confirmado asistencia.</p>
-              <p><strong>D:</strong> ${prog.conductor_diurno_nombre || '-'} - <span style="color: #6B7280;">${prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar'}</span></p>
-              <p><strong>N:</strong> ${prog.conductor_nocturno_nombre || '-'} - <span style="color: #6B7280;">${prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar'}</span></p>
-            </div>
-          `,
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonColor: '#F59E0B',
-          confirmButtonText: 'Enviar de todas formas',
-          cancelButtonText: 'Cancelar'
-        })
-        if (!result.isConfirmed) return
-      } else if (diurnoConfirmo !== nocturnoConfirmo) {
-        // Si solo uno confirmó, preguntar qué hacer
-        const quienConfirmo = diurnoConfirmo ? 'DIURNO' : 'NOCTURNO'
-        const quienNo = diurnoConfirmo ? 'NOCTURNO' : 'DIURNO'
-        const nombreConfirmo = diurnoConfirmo ? prog.conductor_diurno_nombre : prog.conductor_nocturno_nombre
-        const nombreNo = diurnoConfirmo ? prog.conductor_nocturno_nombre : prog.conductor_diurno_nombre
-        const estadoNo = diurnoConfirmo
-          ? (prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
-          : (prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
-
-        const result = await Alerta.fire({
-          title: 'Solo 1 conductor confirmó',
-          html: `
-            <div style="text-align: left; font-size: 14px;">
-              <p><strong style="color: #10B981;">${quienConfirmo}:</strong> ${nombreConfirmo} - <span style="color: #10B981;">Confirmó</span></p>
-              <p><strong style="color: #ff0033;">${quienNo}:</strong> ${nombreNo} - <span style="color: #ff0033;">${estadoNo}</span></p>
-              <p style="margin-top: 12px; color: #6B7280;">
-                ¿Cómo desea proceder?
-              </p>
-            </div>
-          `,
-          icon: 'question',
-          showCancelButton: true,
-          showDenyButton: true,
-          confirmButtonColor: '#10B981',
-          denyButtonColor: '#3B82F6',
-          confirmButtonText: 'Enviar ambos',
-          denyButtonText: `Solo ${quienConfirmo}`,
-          cancelButtonText: 'Cancelar'
-        })
-
-        if (result.isDismissed) return
-
-        // Si eligió "Solo el confirmado" (deny button)
-        if (result.isDenied) {
-          enviarDiurno = diurnoConfirmo
-          enviarNocturno = nocturnoConfirmo
-        }
-        // Si eligió "Enviar ambos" (confirm button) - ambos quedan en true
-      }
-      // Si ambos confirmaron, continuar normal
-    }
+    const etiquetaConfirmacion = (c?: string | null) =>
+      c === 'confirmo' ? 'Confirmó' : c === 'no_confirmo' ? 'No confirmó' : c === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar'
 
     // ─── Determinar si corresponde generar documentos ───
     // Bariloche no tiene plantillas para turnos, se excluye de la generación.
@@ -2122,13 +2116,26 @@ export function ProgramacionV2Module() {
     // Formatear hora para mostrar
     const horaDisplay = prog.hora_cita ? prog.hora_cita.substring(0, 5) : 'Sin definir'
 
-    // Construir display de conductores según modalidad (solo los que se van a enviar)
+    // Conductores: en TURNO, un check por conductor (marcados por defecto) con su
+    // confirmación al lado; en A CARGO, el nombre.
+    const esTurnoEnvio = prog.modalidad === 'turno'
+    const checkConductor = (id: string, letra: string, nombre: string, confirmacion?: string | null) => {
+      const confirmo = confirmacion === 'confirmo'
+      return `
+        <label style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #E5E7EB; border-radius: 6px; margin-top: 6px; cursor: pointer;">
+          <input type="checkbox" id="${id}" checked style="width: 16px; height: 16px;">
+          <span><strong>${letra}:</strong> ${nombre}
+            <span style="color: ${confirmo ? '#10B981' : '#ff0033'};"> - ${etiquetaConfirmacion(confirmacion)}</span></span>
+        </label>`
+    }
     let conductorDisplay = '-'
-    if (prog.modalidad === 'turno') {
-      const conductores = []
-      if (enviarDiurno && prog.conductor_diurno_nombre) conductores.push(`D: ${prog.conductor_diurno_nombre}`)
-      if (enviarNocturno && prog.conductor_nocturno_nombre) conductores.push(`N: ${prog.conductor_nocturno_nombre}`)
-      conductorDisplay = conductores.length > 0 ? conductores.join('<br>') : '-'
+    if (esTurnoEnvio) {
+      const filas = []
+      if (prog.conductor_diurno_nombre) filas.push(checkConductor('enviar-diurno', 'D', prog.conductor_diurno_nombre, prog.confirmacion_diurno))
+      if (prog.conductor_nocturno_nombre) filas.push(checkConductor('enviar-nocturno', 'N', prog.conductor_nocturno_nombre, prog.confirmacion_nocturno))
+      conductorDisplay = filas.length > 0
+        ? `${filas.join('')}<span style="display: block; margin-top: 6px; color: #6B7280; font-size: 12px;">Destildá al que no se envía: no va a la asignación ni queda pendiente.</span>`
+        : '-'
     } else {
       conductorDisplay = prog.conductor_display || prog.conductor_nombre || '-'
     }
@@ -2138,7 +2145,7 @@ export function ProgramacionV2Module() {
       html: `
         <div style="text-align: left; font-size: 14px;">
           <p><strong>Vehiculo:</strong> ${prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '-'}</p>
-          <p><strong>Conductor${prog.modalidad === 'turno' && enviarDiurno && enviarNocturno ? 'es' : ''}:</strong><br>${conductorDisplay}</p>
+          <div style="margin: 0 0 8px 0;"><strong>Conductor${esTurnoEnvio ? 'es' : ''}:</strong>${esTurnoEnvio ? '' : '<br>'}${conductorDisplay}</div>
           <p><strong>Modalidad:</strong> ${prog.modalidad === 'turno' ? 'Turno' : 'A Cargo'}</p>
           <p><strong>Fecha:</strong> ${prog.fecha_cita ? formatFecha(prog.fecha_cita) : 'Sin definir'}</p>
           <p><strong>Hora:</strong> ${horaDisplay}</p>
@@ -2150,10 +2157,22 @@ export function ProgramacionV2Module() {
       showCancelButton: true,
       confirmButtonColor: '#10B981',
       confirmButtonText: 'Crear Asignacion',
-      cancelButtonText: 'Cancelar'
+      cancelButtonText: 'Cancelar',
+      preConfirm: () => {
+        if (!esTurnoEnvio) return true
+        const marcado = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.checked ?? false
+        const elegido = { diurno: marcado('enviar-diurno'), nocturno: marcado('enviar-nocturno') }
+        if (!elegido.diurno && !elegido.nocturno) throw new Error('Marcá al menos un conductor para enviar.')
+        return elegido
+      },
     })
 
     if (!result.isConfirmed) return
+    if (esTurnoEnvio) {
+      const elegido = result.value as { diurno: boolean; nocturno: boolean }
+      enviarDiurno = elegido.diurno
+      enviarNocturno = elegido.nocturno
+    }
 
     setEnviandoEntrega(true)
     try {
@@ -2205,6 +2224,13 @@ export function ProgramacionV2Module() {
       }
       if (companeroMeta.length > 0) {
         notasBase = `${notasBase}\n${companeroMeta.join('\n')}`
+      }
+      // Conductor destildado al enviar: queda anotado (no va a la asignación)
+      const noEnviados: string[] = []
+      if (esTurno && !enviarDiurno && prog.conductor_diurno_nombre) noEnviados.push(`diurno ${prog.conductor_diurno_nombre}`)
+      if (esTurno && !enviarNocturno && prog.conductor_nocturno_nombre) noEnviados.push(`nocturno ${prog.conductor_nocturno_nombre}`)
+      if (noEnviados.length > 0) {
+        notasBase = `${notasBase}\nNo enviado al crear la asignación: ${noEnviados.join(', ')}.`
       }
 
       // NO finalizar asignaciones activas aquí: la asignación se crea como "programado"

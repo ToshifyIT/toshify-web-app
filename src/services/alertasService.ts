@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { filtrarSede, realesSiTodas } from '../utils/sedesReales'
 import type { AlertaMantenimiento, AlertaEstado } from '../modules/vehiculos/alertas-mantenimiento/types/alertas.types'
 
 // Select liviano para el listado: solo lo que usan la tabla y las stats.
@@ -30,13 +31,14 @@ export async function fetchAlertasPage(
   from: number,
   to: number,
 ): Promise<AlertaMantenimiento[]> {
+  const reales = await realesSiTodas(sedeId)
   let q = supabase
     .from('geotab_fault_data')
     .select(SELECT_LISTA)
     .order('fecha_evento', { ascending: false })
     .order('id', { ascending: true })
     .range(from, to)
-  if (sedeId) q = q.eq('sede_id', sedeId)
+  q = filtrarSede(q, sedeId, reales)
   const { data, error } = await q
   if (error) throw error
   return (data || []) as unknown as AlertaMantenimiento[]

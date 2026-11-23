@@ -36,8 +36,35 @@ export interface Herramienta {
   licencias?: number | null
   /** Cuántas incluye el plan (para ver si se pagan extras) */
   licencias_incluidas?: number | null
+  /** Precio de una licencia por período: monto = licencias × precio (sql/consumo_herramientas_precio_licencia.sql) */
+  precio_licencia?: number | null
+  /** De dónde trae el script diario la cantidad de licencias (null = a mano) */
+  fuente_licencias?: 'slack' | 'google_workspace' | null
+  licencias_actualizadas_en?: string | null
+  /** De dónde se trae solo el consumo real (sql/consumo_herramientas_consumo.sql) */
+  fuente_consumo?: FuenteConsumo | null
+  /** Saldo prepago que mostraba la herramienta al cierre de saldo_prepago_fecha (se carga a mano) */
+  saldo_prepago?: number | null
+  saldo_prepago_fecha?: string | null
+  /** Concepto al que se le descuenta el saldo ('Gemini', 'Google Maps'...). null = todo el consumo */
+  saldo_prepago_concepto?: string | null
   created_at: string
   updated_at: string
+}
+
+export type FuenteConsumo = '2chat' | 'google_cloud'
+
+/** Consumo real de un día y un concepto (Llamadas, Google Maps, Gemini...) */
+export interface ConsumoDia {
+  herramienta_id: string
+  fecha: string
+  concepto: string
+  monto: number
+  moneda: Moneda
+  cantidad: number | null
+  unidad: string | null
+  fuente: string
+  actualizado_en: string
 }
 
 export interface PagoHerramienta {
@@ -88,6 +115,16 @@ export interface Cotizacion {
   unidades_por_usd: number
   fuente: string | null
   actualizada_en: string
+}
+
+/** Monto pasado de una moneda a otra con las cotizaciones (null si falta alguna) */
+export function convertir(monto: number, de: Moneda, a: Moneda, cotizaciones: Map<string, number>): number | null {
+  if (de === a) return monto
+  const usd = aUsd(monto, de, cotizaciones)
+  if (usd === null) return null
+  if (a === 'USD') return usd
+  const tasa = cotizaciones.get(a)
+  return tasa ? usd * tasa : null
 }
 
 /** Monto en su moneda pasado a USD (null si falta la cotización) */

@@ -319,9 +319,10 @@ export function TicketsFavorTab() {
   }
 
   async function aplicarTicket(ticket: TicketFavor) {
-    const { data: periodos } = await supabase
+    // Solo períodos de la sede elegida: cada sede tiene su propio período por semana
+    const { data: periodos } = await aplicarFiltroSede(supabase
       .from('periodos_facturacion')
-      .select('id, semana, anio')
+      .select('id, semana, anio'))
       .eq('estado', 'abierto')
       .order('anio', { ascending: false })
       .order('semana', { ascending: false })

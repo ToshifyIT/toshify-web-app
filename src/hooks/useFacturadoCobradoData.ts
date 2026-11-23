@@ -34,6 +34,7 @@ interface PeriodoRow {
  */
 async function fetchClosedWeeks(
   sedeId: string | null,
+  aplicarFiltroSede: <T>(query: T, campo?: string) => T,
   limit: number,
   upToSemana?: number,
   upToAnio?: number
@@ -46,7 +47,8 @@ async function fetchClosedWeeks(
     .order('semana', { ascending: false })
     .limit(limit * 3)
 
-  if (sedeId) qPeriodos = qPeriodos.eq('sede_id', sedeId)
+  // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+  qPeriodos = sedeId ? qPeriodos.eq('sede_id', sedeId) : aplicarFiltroSede(qPeriodos)
 
   const { data: periodosRaw } = await qPeriodos
   if (!periodosRaw || periodosRaw.length === 0) return []
@@ -237,7 +239,7 @@ function parseUpTo(selectedPeriod: string, granularity: Granularity): { semana?:
  * - ano: semanas agrupadas por mes del año seleccionado
  */
 export function useFacturadoCobradoData(granularity: Granularity, selectedPeriod: string): FactCobResult {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [result, setResult] = useState<FactCobResult>({ chartData: [], loading: true })
   const lastParams = useRef({ granularity, sedeActualId, selectedPeriod })
 
@@ -264,7 +266,7 @@ export function useFacturadoCobradoData(granularity: Granularity, selectedPeriod
         if (granularity === 'mes') limit = 20
         if (granularity === 'ano') limit = 52
 
-        const raw = await fetchClosedWeeks(sedeActualId ?? null, limit, upTo.semana, upTo.anio)
+        const raw = await fetchClosedWeeks(sedeActualId ?? null, aplicarFiltroSede, limit, upTo.semana, upTo.anio)
 
         let chartData: FactCobDataPoint[]
         if (granularity === 'semana') {
@@ -290,7 +292,7 @@ export function useFacturadoCobradoData(granularity: Granularity, selectedPeriod
 
     load()
     return () => { isMounted = false }
-  }, [granularity, sedeActualId, selectedPeriod])
+  }, [granularity, sedeActualId, selectedPeriod, aplicarFiltroSede])
 
   return result
 }
@@ -305,7 +307,7 @@ export function useFactCobComparativeData(
   periodA: string,
   periodB: string
 ): { dataA: FactCobDataPoint[]; dataB: FactCobDataPoint[]; loading: boolean } {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [state, setState] = useState<{
     dataA: FactCobDataPoint[]
     dataB: FactCobDataPoint[]
@@ -328,7 +330,7 @@ export function useFactCobComparativeData(
       setState(prev => ({ ...prev, loading: true }))
       try {
         // Para comparativo, traemos todas las semanas cerradas y filtramos
-        const allWeeks = await fetchClosedWeeks(sedeActualId ?? null, 104)
+        const allWeeks = await fetchClosedWeeks(sedeActualId ?? null, aplicarFiltroSede, 104)
 
         const filterByPeriod = (period: string): FactCobDataPoint[] => {
           if (granularity === 'semana') {
@@ -377,7 +379,7 @@ export function useFactCobComparativeData(
 
     load()
     return () => { isMounted = false }
-  }, [granularity, periodA, periodB, sedeActualId])
+  }, [granularity, periodA, periodB, sedeActualId, aplicarFiltroSede])
 
   return state
 }

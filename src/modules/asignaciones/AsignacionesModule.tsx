@@ -25,10 +25,9 @@ import { completeControl } from '../../services/controlService'
 import { generateContracts, type ContractGenerationRequest } from '../../services/contractService'
 import { avisarDatosIncompletos, avisarTarifasFaltantes, esBarilocheTurno, validarDatosDocumento, validarTarifasDocumento } from '../onboarding/validacionDocumento'
 import {
-  ErrorPasoConfirmacion,
   exigirOk,
-  cerrarOtrasParticipaciones,
-  finalizarAsignacionesSinConductores,
+  confirmarAsignacionAtomica,
+  confirmarDevolucionVehiculo,
   registrarTurnosOcupados,
   conductoresVigentesEnOtraAsignacion,
 } from './confirmacionAsignacion'
@@ -173,11 +172,11 @@ interface ExpandedAsignacion extends Asignacion {
  * encontró conductores todavía vigentes en otra asignación): se muestra la lista
  * para que se revise a mano. Ver confirmacionAsignacion.ts.
  */
-async function mostrarAvisosConfirmacion(textoOk: string, avisos: string[]): Promise<void> {
+async function mostrarAvisosConfirmacion(textoOk: string, avisos: string[], titulo = 'Activada, con avisos'): Promise<void> {
   const esc = (t: string) => t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
   await Alerta.fire({
     icon: 'warning',
-    title: 'Activada, con avisos',
+    title: titulo,
     html: `
       <div style="text-align:left;font-size:13px">
         <p style="margin:0 0 8px 0">${esc(textoOk)}</p>
@@ -410,20 +409,14 @@ function SeguroVehiculo({ cobertura }: { cobertura?: string | null }) {
 }
 
 export function AsignacionesModule() {
-  const { canEditInMenu, canDeleteInMenu, isAdmin: esAdmin } = usePermissions()
+  const { canEditInMenu, isAdmin: esAdmin } = usePermissions()
   const { profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedes } = useSede()
   const vehiculosRC = useVehiculosRC()
   const canEdit = canEditInMenu('asignaciones')
-  const canDelete = canDeleteInMenu('asignaciones')
-  
-  // Crear asignación manual, regularizar y borrar: admin, o un rol con permiso de
-  // ELIMINAR en el menú Asignaciones (Configuración > Roles). Antes había una lista
-  // de correos en el código; ahora el acceso se da desde los permisos del rol.
-  const canCreateManualAssignment = esAdmin() || canDelete
 
-  // El botón "Nueva Asignación" se restringe a admin (independiente de las
-  // acciones "Regularizar" / "Eliminar" del menú de filas).
+  // "Nueva Asignación" y "Eliminar" son solo para admin. Eliminar además se limita a
+  // asignaciones programadas (A1); antes alcanzaba con el permiso de ELIMINAR del rol.
   const isAdmin = esAdmin()
 
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
@@ -2227,12 +2220,22 @@ export function AsignacionesModule() {
   const handleConfirmarDevolucion = async (asig: ExpandedAsignacion) => {
     if (isSubmitting) return
 
+    if (!asig.vehiculo_id || !asig.devolucionId) {
+      showError('Error', 'La devolución no tiene vehículo asociado.')
+      return
+    }
+    const vehiculoId = asig.vehiculo_id
+
     // Buscar conductores activos del vehículo para mostrar selector
-    const { data: asignacionesActivas } = await (supabase as any)
+    const { data: asignacionesActivas, error: errActivas } = await (supabase as any)
       .from('asignaciones')
       .select(`id, horario, asignaciones_conductores(id, conductor_id, horario, estado, conductores(nombres, apellidos))`)
-      .eq('vehiculo_id', asig.vehiculo_id)
+      .eq('vehiculo_id', vehiculoId)
       .in('estado', ['activa', 'activo'])
+    if (errActivas) {
+      showError('Error', 'No se pudieron leer los conductores del vehículo. Revisá tu conexión y volvé a intentar.')
+      return
+    }
 
     const conductores: Array<{ id: string; nombre: string; turno: string }> = []
     if (asignacionesActivas) {
@@ -2305,56 +2308,38 @@ export function AsignacionesModule() {
     try {
       const ahora = new Date().toISOString()
 
-      // 1. Marcar devolución como completada con el conductor seleccionado
-      await (supabase as any)
-        .from('devoluciones')
-        .update({
-          estado: 'completado',
-          fecha_devolucion: ahora,
-          conductor_id: selectedConductor?.id || null,
-          conductor_nombre: selectedConductor?.nombre || null,
-        })
-        .eq('id', asig.devolucionId)
+      // 1. Finalizar las asignaciones activas del vehículo y pasarlo a base.
+      //    Va primero: si falla, la devolución sigue pendiente y se puede reintentar.
+      //    Mismo paso que la confirmación desde el modal (A4).
+      const avisosDev = await confirmarDevolucionVehiculo({
+        vehiculoId, ahora, usuario: profile?.full_name || 'Sistema',
+      })
 
-      // 2. Finalizar asignaciones activas del vehículo
-      const { data: asignacionesPrevias } = await (supabase as any)
-        .from('asignaciones')
-        .select('id')
-        .eq('vehiculo_id', asig.vehiculo_id)
-        .in('estado', ['activa', 'activo'])
+      // 2. Marcar devolución como completada con el conductor seleccionado
+      exigirOk(
+        await (supabase as any)
+          .from('devoluciones')
+          .update({
+            estado: 'completado',
+            fecha_devolucion: ahora,
+            conductor_id: selectedConductor?.id || null,
+            conductor_nombre: selectedConductor?.nombre || null,
+          })
+          .eq('id', asig.devolucionId),
+        'marcar la devolución como completada (las asignaciones del vehículo ya quedaron finalizadas)',
+      )
 
-      if (asignacionesPrevias && asignacionesPrevias.length > 0) {
-        for (const asigPrevia of asignacionesPrevias) {
-          await (supabase as any)
-            .from('asignaciones_conductores')
-            .update({ estado: 'completado', fecha_fin: ahora })
-            .eq('asignacion_id', asigPrevia.id)
-            .in('estado', ['asignado', 'activo'])
-
-          await (supabase as any)
-            .from('asignaciones')
-            .update({ estado: 'finalizada', fecha_fin: ahora, notas: `Finalizada por devolución de vehículo` })
-            .eq('id', asigPrevia.id)
-        }
+      const textoDev = `${asig.vehiculos?.patente} quedó devuelto y su asignación finalizada.`
+      if (avisosDev.length > 0) {
+        await mostrarAvisosConfirmacion(textoDev, avisosDev, 'Devolución confirmada, con avisos')
+      } else {
+        showSuccess('Devolución Confirmada', `${asig.vehiculos?.patente} ahora está en PKG ON BASE`)
       }
-
-      // 3. Cambiar estado del vehículo a PKG_ON_BASE
-      const { data: estadoPkgOn } = await supabase
-        .from('vehiculos_estados')
-        .select('id')
-        .eq('codigo', 'PKG_ON_BASE')
-        .single() as { data: { id: string } | null }
-
-      if (estadoPkgOn && asig.vehiculo_id) {
-        await actualizarEstadoVehiculo(asig.vehiculo_id, estadoPkgOn.id, 'Devolución del vehículo: asignación finalizada')
-      }
-
-      showSuccess('Devolución Confirmada', `${asig.vehiculos?.patente} ahora está en PKG ON BASE`)
 
       // Historial: vehículo devuelto
-      if (asig.vehiculo_id) {
+      {
         registrarHistorialVehiculo({
-          vehiculoId: asig.vehiculo_id,
+          vehiculoId,
           tipoEvento: 'devolucion',
           estadoNuevo: 'PKG_ON_BASE',
           detalles: { patente: asig.vehiculos?.patente, codigo: asig.codigo },
@@ -2381,8 +2366,10 @@ export function AsignacionesModule() {
     }
   }
 
+  // Eliminar: solo admin y solo asignaciones PROGRAMADAS (A1). Una activa o
+  // finalizada tiene días facturados: no se borra desde la app.
   const handleDelete = async (id: string) => {
-    if (isSubmitting || !canDelete) return
+    if (isSubmitting || !isAdmin) return
 
     const result = await Alerta.fire({
       title: '¿Eliminar asignación?',
@@ -2401,56 +2388,86 @@ export function AsignacionesModule() {
     try {
       const asignacion = asignaciones.find(a => a.id === id)
 
+      // Se mira el estado en la base, no el de la pantalla (otro pudo confirmarla).
+      const actual = exigirOk<{ estado: string }>(
+        await (supabase as any).from('asignaciones').select('estado').eq('id', id).maybeSingle(),
+        'leer la asignación',
+      )
+      if (!actual) throw new Error('La asignación ya no existe.')
+      if (actual.estado !== 'programado') {
+        throw new Error(`Solo se pueden eliminar asignaciones programadas. Esta está "${actual.estado}".`)
+      }
+
       // 1. Limpiar referencia en programaciones_onboarding (si existe)
       // Esto permite re-enviar la programacion despues de eliminar la asignacion
-      const { error: progError } = await (supabase as any)
-        .from('programaciones_onboarding')
-        .update({ asignacion_id: null, fecha_asignacion_creada: null })
-        .eq('asignacion_id', id)
-        .select('id')
-
-      if (progError) {
-        // silently ignored
-      }
+      exigirOk(
+        await (supabase as any)
+          .from('programaciones_onboarding')
+          .update({ asignacion_id: null, fecha_asignacion_creada: null })
+          .eq('asignacion_id', id)
+          .select('id'),
+        'liberar la programación de origen',
+      )
 
       // 2. Eliminar conductores asociados
-      const { error: conductoresError } = await (supabase as any)
-        .from('asignaciones_conductores')
-        .delete()
-        .eq('asignacion_id', id)
+      exigirOk(
+        await (supabase as any)
+          .from('asignaciones_conductores')
+          .delete()
+          .eq('asignacion_id', id),
+        'eliminar los conductores de la asignación',
+      )
 
-      if (conductoresError) {
-        // silently ignored
+      // 3. Eliminar la asignación (solo si sigue programada)
+      const borradas = exigirOk<{ id: string }[]>(
+        await (supabase as any)
+          .from('asignaciones')
+          .delete()
+          .eq('id', id)
+          .eq('estado', 'programado')
+          .select('id'),
+        'eliminar la asignación',
+      ) || []
+      if (borradas.length === 0) {
+        throw new Error('La asignación cambió de estado mientras se eliminaba y no se borró. Revisá sus conductores.')
       }
 
-      // 3. Eliminar la asignación
-      const { error: asignacionError } = await (supabase as any)
-        .from('asignaciones')
-        .delete()
-        .eq('id', id)
-      if (asignacionError) throw asignacionError
-
-      // 4. Cambiar estado del vehículo a PKG_ON_BASE
+      // 4. El vehículo vuelve a base solo si no tiene otra asignación activa
+      //    (antes pasaba siempre a base, aunque el auto estuviera trabajando).
+      let pasoABase = false
+      let avisoVehiculo = ''
       if (asignacion?.vehiculo_id) {
-        const { data: estadoPkgOn } = await supabase
-          .from('vehiculos_estados')
+        const { data: otrasActivas, error: errOtras } = await supabase
+          .from('asignaciones')
           .select('id')
-          .eq('codigo', 'PKG_ON_BASE')
-          .single() as { data: { id: string } | null }
+          .eq('vehiculo_id', asignacion.vehiculo_id)
+          .in('estado', ['activa', 'activo'])
+          .limit(1)
+        if (errOtras) {
+          avisoVehiculo = ' No se pudo verificar el estado del vehículo: revisalo a mano.'
+        } else if (!otrasActivas || otrasActivas.length === 0) {
+          const { data: estadoPkgOn } = await supabase
+            .from('vehiculos_estados')
+            .select('id')
+            .eq('codigo', 'PKG_ON_BASE')
+            .single() as { data: { id: string } | null }
 
-        if (estadoPkgOn) {
-          await actualizarEstadoVehiculo(asignacion.vehiculo_id, estadoPkgOn.id, 'Asignación eliminada')
+          if (estadoPkgOn) {
+            const { error: errEstado } = await actualizarEstadoVehiculo(asignacion.vehiculo_id, estadoPkgOn.id, 'Asignación eliminada')
+            pasoABase = !errEstado
+          }
+          if (!pasoABase) avisoVehiculo = ' No se pudo pasar el vehículo a PKG ON BASE: revisalo a mano.'
         }
       }
 
-      showSuccess('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviar desde Programaciones.')
+      showSuccess('Eliminado', `La asignación ha sido eliminada. Puedes re-enviar desde Programaciones.${avisoVehiculo}`)
 
       // Historial: asignación eliminada
       if (asignacion?.vehiculo_id) {
         registrarHistorialVehiculo({
           vehiculoId: asignacion.vehiculo_id,
           tipoEvento: 'eliminacion_asignacion',
-          estadoNuevo: 'PKG_ON_BASE',
+          estadoNuevo: pasoABase ? 'PKG_ON_BASE' : undefined,
           detalles: { patente: asignacion.vehiculos?.patente, codigo: asignacion.codigo },
           modulo: 'asignaciones',
           sedeId: sedeActualId,
@@ -2485,51 +2502,30 @@ export function AsignacionesModule() {
         const ahora = new Date().toISOString()
 
         // 1. Confirmar conductores
-        await (supabase as any)
-          .from('asignaciones_conductores')
-          .update({ confirmado: true, fecha_confirmacion: ahora, estado: 'completado', fecha_fin: ahora })
-          .in('id', conductoresToConfirm)
+        exigirOk(
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ confirmado: true, fecha_confirmacion: ahora, estado: 'completado', fecha_fin: ahora })
+            .in('id', conductoresToConfirm),
+          'confirmar a los conductores de la devolución',
+        )
 
-        // 2. Finalizar asignaciones activas del vehículo (incluida esta)
-        const { data: asignacionesVehiculo } = await (supabase as any)
-          .from('asignaciones')
-          .select('id, notas')
-          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-          .in('estado', ['activa', 'activo', 'programado'])
+        // 2 y 3. Finalizar las asignaciones ACTIVAS del vehículo y esta, y pasarlo a base.
+        // Mismo paso que "Confirmar Devolución" del menú (A4). Las programadas del
+        // auto ya no se finalizan: se avisan.
+        const avisosDev = await confirmarDevolucionVehiculo({
+          vehiculoId: selectedAsignacion.vehiculo_id,
+          ahora,
+          usuario: profile?.full_name || 'Sistema',
+          asignacionDevolucionId: selectedAsignacion.id,
+        })
 
-        if (asignacionesVehiculo) {
-          for (const asig of asignacionesVehiculo as any[]) {
-            await (supabase as any)
-              .from('asignaciones_conductores')
-              .update({ estado: 'completado', fecha_fin: ahora })
-              .eq('asignacion_id', asig.id)
-              .in('estado', ['asignado', 'activo'])
-
-            await (supabase as any)
-              .from('asignaciones')
-              .update({
-                estado: 'finalizada',
-                fecha_inicio: asig.id === selectedAsignacion.id ? ahora : undefined,
-                fecha_fin: ahora,
-                notas: (asig.notas || '') + `\n[DEVOLUCIÓN ${new Date().toLocaleDateString('es-AR')}] Vehículo devuelto a base.`,
-                updated_by: profile?.full_name || 'Sistema'
-              })
-              .eq('id', asig.id)
-          }
+        const textoDev = `${selectedAsignacion.vehiculos?.patente} quedó devuelto y su asignación finalizada.`
+        if (avisosDev.length > 0) {
+          await mostrarAvisosConfirmacion(textoDev, avisosDev, 'Devolución confirmada, con avisos')
+        } else {
+          showSuccess('Devolución Confirmada', `${selectedAsignacion.vehiculos?.patente} ahora está en PKG ON BASE`)
         }
-
-        // 3. Cambiar vehículo a PKG_ON_BASE
-        const { data: estadoPkgOn } = await supabase
-          .from('vehiculos_estados')
-          .select('id')
-          .eq('codigo', 'PKG_ON_BASE')
-          .single() as { data: { id: string } | null }
-
-        if (estadoPkgOn && selectedAsignacion.vehiculo_id) {
-          await actualizarEstadoVehiculo(selectedAsignacion.vehiculo_id, estadoPkgOn.id, 'Vehículo devuelto a base')
-        }
-
-        showSuccess('Devolución Confirmada', `${selectedAsignacion.vehiculos?.patente} ahora está en PKG ON BASE`)
 
         // Historial: vehículo devuelto (programacion)
         if (selectedAsignacion.vehiculo_id) {
@@ -2578,7 +2574,6 @@ export function AsignacionesModule() {
     // pero se muestran al usuario (ver confirmacionAsignacion.ts).
     const avisos: string[] = []
     try {
-      const ahora = new Date().toISOString()
       const fechaProgramada = selectedAsignacion.fecha_programada
         ? fechaISOART(selectedAsignacion.fecha_programada)
         : null
@@ -2595,113 +2590,32 @@ export function AsignacionesModule() {
         }
       })
       const tieneCompaneros = companeroIds.size > 0
-      
 
+      // Si tiene tags de compañero, limpiarlos de las notas antes de activar
+      const notasFinales = tieneCompaneros
+        ? notas.replace(/\[COMPANERO:(diurno|nocturno):[a-f0-9-]+\]\n?/gi, '').trim()
+        : (confirmComentarios || selectedAsignacion.notas)
 
-      //Esto es una prueba
-      // Hasta activar, cada paso revisa su resultado: si falla (p. ej. corte de
-      // red) se frena acá y se avisa, en vez de seguir con datos vacíos.
-      exigirOk(
-        await (supabase as any)
-          .from('asignaciones_conductores')
-          .update({ confirmado: true, fecha_confirmacion: ahora, fecha_inicio: ahora })
-          .in('id', conductoresToConfirm),
-        'confirmar a los conductores',
+      // Confirmar, cerrar lo anterior y activar pasan en la base en un solo paso
+      // (A2: sql/confirmar_asignacion_atomica.sql). Si algo falla, no cambia nada.
+      // Los conductores ya no se cierran en asignaciones programadas a futuro (A3):
+      // esas vuelven como aviso.
+      const resultado = await confirmarAsignacionAtomica(
+        selectedAsignacion.id,
+        conductoresToConfirm,
+        notasFinales ?? null,
+        profile?.full_name || 'Sistema',
       )
-
-      const allConductores = exigirOk<any[]>(
-        await supabase
-          .from('asignaciones_conductores')
-          .select('id, conductor_id, confirmado, horario')
-          .eq('asignacion_id', selectedAsignacion.id),
-        'leer los conductores de la asignación',
-      ) || []
-      if (allConductores.length === 0) {
-        throw new ErrorPasoConfirmacion('leer los conductores de la asignación', 'la consulta no devolvió conductores')
-      }
-
-      const todosConfirmados = (allConductores as any)?.every((c: any) => c.confirmado === true)
-      const asignacionYaActiva = selectedAsignacion.estado === 'activa' || selectedAsignacion.estado === 'activo'
-      // FIX 2026-05-28: activar asignación con al menos un confirmado (no requiere todos)
-      const debeActivar = !asignacionYaActiva
-
+      const allConductores = resultado.filas
+      const todosConfirmados = allConductores.every(c => c.confirmado)
+      const debeActivar = resultado.activada
       // IDs de los conductores que se acaban de confirmar (no todos, solo los de esta acción)
-      const conductoresConfirmadosAhora = (allConductores as any)?.filter(
-        (c: any) => conductoresToConfirm.includes(c.id)
-      ).map((c: any) => c.conductor_id) || []
+      const conductoresConfirmadosAhora = allConductores
+        .filter(c => conductoresToConfirm.includes(c.id) && c.conductor_id)
+        .map(c => c.conductor_id as string)
+      avisos.push(...resultado.programadas_pendientes)
 
-      // 1. Finalizar participación de los conductores CONFIRMADOS AHORA en otras asignaciones activas
-      await cerrarOtrasParticipaciones(conductoresConfirmadosAhora, selectedAsignacion.id, ahora)
-
-      // Solo ejecutar lógica de activación si la asignación aún no está activa
-      let asignacionesVehiculo: any[] | null = null
       if (debeActivar) {
-        // Si tiene tags de compañero, limpiarlos de las notas antes de activar
-        const notasFinales = tieneCompaneros
-          ? notas.replace(/\[COMPANERO:(diurno|nocturno):[a-f0-9-]+\]\n?/gi, '').trim()
-          : (confirmComentarios || selectedAsignacion.notas)
-
-        // 2. Cerrar asignaciones activas anteriores del mismo vehículo
-        asignacionesVehiculo = exigirOk<any[]>(
-          await (supabase as any)
-            .from('asignaciones')
-            .select(`id, codigo, notas,
-              asignaciones_conductores(conductor_id, estado, horario,
-                conductores(nombres, apellidos)
-              )
-            `)
-            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-            .in('estado', ['activa', 'activo'])
-            .neq('id', selectedAsignacion.id),
-          'buscar asignaciones activas del vehículo',
-        )
-
-        if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
-          const idsACerrar = asignacionesVehiculo.map((a: any) => a.id)
-          // Finalizar conductores de esas asignaciones
-          exigirOk(
-            await (supabase as any)
-              .from('asignaciones_conductores')
-              .update({ estado: 'completado', fecha_fin: ahora })
-              .in('asignacion_id', idsACerrar)
-              .in('estado', ['asignado', 'activo']),
-            'cerrar los conductores de la asignación anterior del vehículo',
-          )
-          // Finalizar las asignaciones con traza de conductores
-          for (const asigAnterior of asignacionesVehiculo as any[]) {
-            const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
-              .map((ac: any) => {
-                const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
-                return `${nombre} (${ac.horario || 'sin turno'})`
-              })
-            const notasAnterior = asigAnterior.notas || ''
-            const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
-            exigirOk(
-              await (supabase as any)
-                .from('asignaciones')
-                .update({
-                  estado: 'finalizada',
-                  fecha_fin: ahora,
-                  notas: notasAnterior + traza,
-                  updated_by: profile?.full_name || 'Sistema'
-                })
-                .eq('id', asigAnterior.id),
-              'finalizar la asignación anterior del vehículo',
-            )
-          }
-        }
-
-        // 3. Verificar si alguna otra asignación quedó sin conductores activos y finalizarla
-        await finalizarAsignacionesSinConductores(selectedAsignacion.id, ahora, profile?.full_name || 'Sistema')
-
-        // 4. Activar la asignación nueva
-        exigirOk(
-          await (supabase as any)
-            .from('asignaciones')
-            .update({ estado: 'activa', fecha_inicio: ahora, notas: notasFinales, updated_by: profile?.full_name || 'Sistema' })
-            .eq('id', selectedAsignacion.id),
-          'activar la asignación',
-        )
 
         // ── Desde acá la asignación ya está activa: lo que falla se avisa, no frena ──
 
@@ -2760,7 +2674,7 @@ export function AsignacionesModule() {
           const avisoTurnos = await registrarTurnosOcupados(
             selectedAsignacion.vehiculo_id,
             fechaProgramada,
-            allConductores.filter((ac: any) => ac.confirmado).map((ac: any) => ({ id: ac.id, horario: ac.horario })),
+            allConductores.filter(ac => ac.confirmado).map(ac => ({ id: ac.id, horario: ac.horario || '' })),
           )
           if (avisoTurnos) avisos.push(avisoTurnos)
         }
@@ -2788,46 +2702,31 @@ export function AsignacionesModule() {
           })
         }
         // Historial: conductores de asignaciones anteriores del vehículo finalizados
-        if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
-          for (const asigAnterior of asignacionesVehiculo as any[]) {
-            for (const ac of (asigAnterior.asignaciones_conductores || []) as any[]) {
-              if (ac.conductor_id && (ac.estado === 'asignado' || ac.estado === 'activo' || ac.estado === 'completado')) {
-                registrarHistorialConductor({
-                  conductorId: ac.conductor_id,
-                  tipoEvento: 'asignacion_completada',
-                  detalles: {
-                    patente: selectedAsignacion.vehiculos?.patente,
-                    codigoAnterior: asigAnterior.codigo,
-                    codigoNuevo: selectedAsignacion.codigo,
-                    motivo: 'nueva_asignacion_activada',
-                  },
-                  modulo: 'asignaciones',
-                  sedeId: sedeActualId,
-                })
-              }
-            }
+        for (const asigAnterior of resultado.cerradas) {
+          for (const conductorAnteriorId of asigAnterior.conductores) {
+            registrarHistorialConductor({
+              conductorId: conductorAnteriorId,
+              tipoEvento: 'asignacion_completada',
+              detalles: {
+                patente: selectedAsignacion.vehiculos?.patente,
+                codigoAnterior: asigAnterior.codigo,
+                codigoNuevo: selectedAsignacion.codigo,
+                motivo: 'nueva_asignacion_activada',
+              },
+              modulo: 'asignaciones',
+              sedeId: sedeActualId,
+            })
           }
         }
       }
 
-      // FIX 2026-05-28: cancelar conductores no confirmados (su turno queda vacante)
-      if (!todosConfirmados && debeActivar) {
-        const noConfirmados = (allConductores as any)?.filter((c: any) => !c.confirmado) || []
-        if (noConfirmados.length > 0) {
-          const idsNoConfirmados = noConfirmados.map((c: any) => c.id)
-          const { error: errVacantes } = await (supabase as any)
-            .from('asignaciones_conductores')
-            .update({ estado: 'cancelado', fecha_fin: ahora })
-            .in('id', idsNoConfirmados)
-          if (errVacantes) avisos.push(`No se pudieron dejar vacantes los turnos sin confirmar (${errVacantes.message}).`)
-        }
-      }
+      // Los turnos sin confirmar quedan vacantes dentro de la misma función de la base.
 
       // Control final: los conductores confirmados no deben seguir vigentes en otra asignación
       avisos.push(...await conductoresVigentesEnOtraAsignacion(conductoresConfirmadosAhora, selectedAsignacion.id))
 
       // Mensaje según estado
-      const cancelados = allConductores.filter((c: any) => !c.confirmado).length
+      const cancelados = allConductores.filter(c => !c.confirmado).length
       const textoOk = todosConfirmados
         ? 'Todos los conductores han confirmado. La asignación está ACTIVA.'
         : `Asignación ACTIVA. ${cancelados > 0 ? `${cancelados} turno(s) vacante(s).` : ''} La facturación del confirmado ya corre.`
@@ -3424,77 +3323,22 @@ export function AsignacionesModule() {
     setIsSubmitting(true)
     const avisos: string[] = []
     try {
-      const ahora = new Date().toISOString()
       const usuario = profile?.full_name || 'Sistema'
       // Conductores de esta asignación (todos ya confirmados); los cancelados no cuentan
       const conductoresAsig = (selectedAsignacion.asignaciones_conductores || [])
         .filter(ac => ac.conductor_id && ac.estado !== 'cancelado')
       const conductoresIds = conductoresAsig.map(ac => ac.conductor_id)
 
-      // Hasta activar, cada paso revisa su resultado y frena si falla (ver confirmacionAsignacion.ts).
+      // Mismo paso único que "Confirmar" (A2: sql/confirmar_asignacion_atomica.sql).
       // Este botón aparece cuando los conductores ya figuran confirmados, por ejemplo al
-      // reintentar una confirmación que se cortó: tiene que dejar lo mismo que "Confirmar".
-
-      // Cerrar asignaciones activas anteriores del mismo vehículo
-      const asignacionesACerrar = exigirOk<any[]>(
-        await (supabase as any)
-          .from('asignaciones')
-          .select(`id, codigo, notas,
-            asignaciones_conductores(conductor_id, estado, horario,
-              conductores(nombres, apellidos)
-            )
-          `)
-          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-          .in('estado', ['activa', 'activo'])
-          .neq('id', selectedAsignacion.id),
-        'buscar asignaciones activas del vehículo',
+      // reintentar una confirmación que se cortó: no hay filas nuevas que confirmar.
+      const resultado = await confirmarAsignacionAtomica(
+        selectedAsignacion.id,
+        [],
+        confirmComentarios || selectedAsignacion.notas || null,
+        usuario,
       )
-
-      if (asignacionesACerrar && asignacionesACerrar.length > 0) {
-        exigirOk(
-          await (supabase as any)
-            .from('asignaciones_conductores')
-            .update({ estado: 'completado', fecha_fin: ahora })
-            .in('asignacion_id', asignacionesACerrar.map((a: any) => a.id))
-            .in('estado', ['asignado', 'activo']),
-          'cerrar los conductores de la asignación anterior del vehículo',
-        )
-        for (const asigAnterior of asignacionesACerrar) {
-          // Capturar TODOS los conductores para trazabilidad (no solo activos)
-          const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
-            .map((ac: any) => {
-              const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
-              return `${nombre} (${ac.horario || 'sin turno'})`
-            })
-          const notasAnterior = asigAnterior.notas || ''
-          const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
-          exigirOk(
-            await (supabase as any).from('asignaciones')
-              .update({ estado: 'finalizada', fecha_fin: ahora, notas: notasAnterior + traza, updated_by: usuario })
-              .eq('id', asigAnterior.id),
-            'finalizar la asignación anterior del vehículo',
-          )
-        }
-      }
-
-      // Cerrar asignaciones anteriores de los CONDUCTORES (cuando cambian de vehículo)
-      await cerrarOtrasParticipaciones(conductoresIds, selectedAsignacion.id, ahora)
-      // Y finalizar las que quedaron sin conductores (la del auto anterior)
-      await finalizarAsignacionesSinConductores(selectedAsignacion.id, ahora, usuario)
-
-      // Activar la asignación
-      exigirOk(
-        await (supabase as any)
-          .from('asignaciones')
-          .update({
-            estado: 'activa',
-            fecha_inicio: ahora,
-            notas: confirmComentarios || selectedAsignacion.notas,
-            updated_by: usuario
-          })
-          .eq('id', selectedAsignacion.id),
-        'activar la asignación',
-      )
+      avisos.push(...resultado.programadas_pendientes)
 
       // ── Desde acá la asignación ya está activa: lo que falla se avisa, no frena ──
 
@@ -4198,7 +4042,7 @@ export function AsignacionesModule() {
             },
           },
           // Regularizar: oculto por ahora (pedido de operaciones). Para volver a
-          // mostrarlo, usar `hidden: !canCreateManualAssignment`.
+          // mostrarlo, usar `hidden: !isAdmin`.
           {
             icon: <Edit2 size={15} />,
             label: 'Regularizar',
@@ -4218,22 +4062,22 @@ export function AsignacionesModule() {
               Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
           },
-          // Eliminar: admin o rol con permiso de eliminar en Asignaciones (igual que Nueva Asignación)
+          // Eliminar: solo admin y solo asignaciones programadas (A1). Las activas o
+          // finalizadas tienen días facturados y no se borran desde la app.
           {
             icon: <Trash2 size={15} />,
             label: 'Eliminar',
             onClick: () => esDevolucion && row.original.devolucionId
               ? handleCancelDevolucion(row.original.devolucionId)
               : handleDelete(row.original.id),
-            hidden: !canCreateManualAssignment,
-            disabled: !canDelete,
+            hidden: !isAdmin || (!esDevolucion && row.original.estado !== 'programado'),
             variant: 'danger' as const,
           },
         ]
         return <ActionsMenu actions={actions} />
       }
     }
-  ], [canEdit, canDelete, canCreateManualAssignment, capitanPorVehiculo, capitanPorConductor, cuentasPorAsignacion, appsPagoPorConductor, vehiculosRC, primerasAsignaciones])
+  ], [canEdit, isAdmin, capitanPorVehiculo, capitanPorConductor, cuentasPorAsignacion, appsPagoPorConductor, vehiculosRC, primerasAsignaciones])
 
   return (
     <div className="asig-module">

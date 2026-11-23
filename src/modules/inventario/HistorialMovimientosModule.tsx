@@ -17,6 +17,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { hoyART } from '../../utils/fechaArgentina'
+import { useSede } from '../../contexts/SedeContext'
 import './HistorialMovimientos.css'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
@@ -76,6 +77,7 @@ const escapeCsvValue = (value: string | number | null | undefined) =>
   `"${String(value ?? '').replace(/"/g, '""')}"`
 
 export function HistorialMovimientosModule() {
+  const { aplicarFiltroSede } = useSede()
   const [movimientos, setMovimientos] = useState<Movimiento[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -93,7 +95,7 @@ export function HistorialMovimientosModule() {
 
   useEffect(() => {
     loadMovimientos()
-  }, [])
+  }, [aplicarFiltroSede])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -110,7 +112,7 @@ export function HistorialMovimientosModule() {
     try {
       setLoading(true)
       setError(null)
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await aplicarFiltroSede(supabase
         .from('movimientos')
         .select(`
           id,
@@ -131,7 +133,7 @@ export function HistorialMovimientosModule() {
             patente
           ),
           usuario_id
-        `)
+        `))
         .order('created_at', { ascending: false })
         .limit(100)
 

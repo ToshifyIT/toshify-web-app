@@ -45,7 +45,7 @@ interface Props {
 
 export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const { profile } = useAuth()
-  const { sedeActualId, sedeUsuario } = useSede()
+  const { sedeActualId, sedeUsuario, aplicarFiltroSede } = useSede()
   const [step, setStep] = useState(1)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
@@ -95,7 +95,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
             )
           `)
           .is('deleted_at', null)
-        if (sedeActualId) vehiculosQuery = vehiculosQuery.eq('sede_id', sedeActualId)
+        vehiculosQuery = aplicarFiltroSede(vehiculosQuery)
         const { data: vehiculosData, error: vehiculosError } = await vehiculosQuery.order('patente')
 
         if (vehiculosError) throw vehiculosError
@@ -204,7 +204,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     }
 
     loadVehicles()
-  }, [])
+  }, [aplicarFiltroSede])
 
   // Cargar conductores disponibles
   useEffect(() => {
@@ -226,7 +226,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               descripcion
             )
           `).not(...FILTRO_SIN_INTERNOS)
-        if (sedeActualId) conductoresQuery = conductoresQuery.eq('sede_id', sedeActualId)
+        conductoresQuery = aplicarFiltroSede(conductoresQuery)
         const { data, error } = await conductoresQuery.order('apellidos')
 
         if (error) throw error
@@ -296,7 +296,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     }
 
     loadConductores()
-  }, [])
+  }, [aplicarFiltroSede])
 
   const handleNext = () => {
     // Step 1: Validate modalidad

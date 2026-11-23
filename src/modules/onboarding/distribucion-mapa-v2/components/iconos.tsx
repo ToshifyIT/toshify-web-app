@@ -5,7 +5,6 @@
 // pictograma y mismos tonos que los pines del mapa.
 
 import { glifoEntidad } from './glifos'
-import { fondoPastel } from './colores'
 import type { TipoEntidadMapa } from '../types'
 
 export function IconoEntidad({
@@ -17,8 +16,9 @@ export function IconoEntidad({
   color: string
   size?: number
 }) {
-  const fondo = `<circle cx="12" cy="12" r="11.2" fill="${fondoPastel(color)}" stroke="${color}" stroke-width="1.2"/>`
-  const glifo = glifoEntidad(tipo, { tamano: 16, cx: 12, cy: 12, tinta: color })
+  // Sin círculo de fondo (2026-11-23): sólo el pictograma en el color de acento,
+  // igual que en 2Chat.
+  const glifo = glifoEntidad(tipo, { tamano: 24, cx: 12, cy: 12, tinta: color })
 
   return (
     <svg
@@ -27,7 +27,7 @@ export function IconoEntidad({
       viewBox="0 0 24 24"
       style={{ flexShrink: 0, display: 'block' }}
       aria-hidden
-      dangerouslySetInnerHTML={{ __html: fondo + glifo }}
+      dangerouslySetInnerHTML={{ __html: glifo }}
     />
   )
 }
