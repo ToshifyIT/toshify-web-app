@@ -3515,7 +3515,7 @@ app.post('/api/portal/forgot-password', async (req, res) => {
 // =====================================================
 // Lo usa el Apps Script "Cartas oferta DocuSeal" (casilla de Josue): por cada correo de
 // DocuSeal "Carta Oferta ... ha sido completado por ..." pregunta en qué carpeta guardar los
-// PDF. Devuelve la carpeta del botón "Ver documentos" de la ficha (conductores.url_documentacion),
+// PDF. Devuelve la carpeta del botón "Ver historial contratos" de la ficha (conductores.drive_contract_folder_url),
 // así no depende de buscar por nombre en Drive (fallaba con carpetas duplicadas, 2026-11-23).
 // Protegido con la clave CARTAS_OFERTA_API_KEY (header x-api-key). Solo lee: no crea ni cambia nada.
 
@@ -3589,7 +3589,7 @@ app.post('/api/carpeta-carta-oferta', async (req, res) => {
     const supabaseUrl = process.env.VITE_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
-    const COLS = 'id,nombres,apellidos,numero_dni,email,url_documentacion'
+    const COLS = 'id,nombres,apellidos,numero_dni,email,drive_contract_folder_url'
     const leer = async (ruta) => {
       const r = await fetch(`${supabaseUrl}/rest/v1/${ruta}`, { headers })
       if (!r.ok) throw new Error(`Supabase ${r.status}: ${await r.text()}`)
@@ -3639,9 +3639,9 @@ app.post('/api/carpeta-carta-oferta', async (req, res) => {
     }
 
     const resumen = { nombre: nombreDe(conductor), dni: conductor.numero_dni || null }
-    const folderId = idCarpetaDeUrl(conductor.url_documentacion)
+    const folderId = idCarpetaDeUrl(conductor.drive_contract_folder_url)
     if (!folderId) {
-      return res.json({ ok: false, motivo: 'sin_carpeta', conductor: resumen, detalle: 'La ficha del conductor no tiene carpeta en "Ver documentos"' })
+      return res.json({ ok: false, motivo: 'sin_carpeta', conductor: resumen, detalle: 'La ficha del conductor no tiene carpeta en "Ver historial contratos"' })
     }
 
     // La carpeta tiene que existir y no estar en la papelera
@@ -3649,7 +3649,7 @@ app.post('/api/carpeta-carta-oferta', async (req, res) => {
       const drive = getDriveService(false)
       const f = await drive.files.get({ fileId: folderId, fields: 'id,name,mimeType,trashed', supportsAllDrives: true })
       if (f.data.trashed || f.data.mimeType !== 'application/vnd.google-apps.folder') {
-        return res.json({ ok: false, motivo: 'carpeta_invalida', conductor: resumen, detalle: 'La carpeta de "Ver documentos" está en la papelera o no es una carpeta' })
+        return res.json({ ok: false, motivo: 'carpeta_invalida', conductor: resumen, detalle: 'La carpeta de "Ver historial contratos" está en la papelera o no es una carpeta' })
       }
       return res.json({
         ok: true,
@@ -3660,7 +3660,7 @@ app.post('/api/carpeta-carta-oferta', async (req, res) => {
         motivo,
       })
     } catch (driveErr) {
-      return res.json({ ok: false, motivo: 'carpeta_invalida', conductor: resumen, detalle: `No se pudo abrir la carpeta de "Ver documentos": ${driveErr.message}` })
+      return res.json({ ok: false, motivo: 'carpeta_invalida', conductor: resumen, detalle: `No se pudo abrir la carpeta de "Ver historial contratos": ${driveErr.message}` })
     }
   } catch (error) {
     console.error('[carpeta-carta-oferta] Error:', error.message)
