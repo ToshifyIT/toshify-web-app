@@ -326,6 +326,14 @@ export interface ConceptoFacturacion {
   activo: boolean
   orden: number
   precio_semanal?: number
+  /** Concepto versionado (alquileres, garantía): convive con otras versiones. */
+  tiene_vigencia?: boolean
+  /** YYYY-MM-DD. Obligatorio si tiene_vigencia. */
+  vigente_desde?: string | null
+  /** YYYY-MM-DD. null = sin vencimiento. */
+  vigente_hasta?: string | null
+  /** Etiqueta de la versión, ej. "ENE-26". */
+  periodo?: string | null
   created_at: string
   updated_at: string
 }
