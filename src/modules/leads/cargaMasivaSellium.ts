@@ -316,9 +316,23 @@ function quitar15(d: string): string {
   return d
 }
 
-/** Formato en que se guarda un teléfono NUEVO. */
+/**
+ * Formato en que se guarda un teléfono NUEVO. Tiene que volver a dar la MISMA clave al
+ * leerlo de la base; si no, la próxima carga no lo encuentra y lo crea otra vez.
+ * Un número argentino incompleto (menos de 10 dígitos, p. ej. "+54 9 15 5887-7683") se
+ * guarda tal como vino: con "+549" delante, "+54958877683" se leía como extranjero
+ * (2026-11-21: así se había duplicado un lead 49 veces).
+ */
 export function telefonoParaGuardar(t: Telefono): string {
-  return t.argentino ? `+549${t.clave}` : `+${t.digitos}`
+  if (!t.argentino) return `+${t.digitos}`
+  if (t.clave.length < 10) return t.digitos.startsWith('54') ? `+${t.digitos}` : t.digitos
+  return `+549${t.clave}`
+}
+
+/** Mismo criterio que limpiar_nombre_persona de la base: puntos fuera, espacios simples, vacío = null. */
+function nombrePersona(v: string | null | undefined): string | null {
+  const limpio = (v ?? '').replace(/\./g, ' ').replace(/\s+/g, ' ').trim()
+  return limpio || null
 }
 
 const LARGO_MIN_SUFIJO = 8
@@ -683,9 +697,11 @@ function payloadActualizacion(
     Object.assign(p, { latitud: null, longitud: null, direccion_geocode_estado: null, direccion_geocode_fecha: null })
   }
 
-  completar('nombre_completo', f.nombreCompleto)
-  completar('primer_nombre', f.nombre)
-  completar('apellido', f.apellido)
+  // Nombres limpios como los deja la base (trigger leads_limpiar_nombres): un nombre que
+  // es solo puntos (".", "....") queda vacío y no se propone en cada carga como cambio.
+  completar('nombre_completo', nombrePersona(f.nombreCompleto))
+  completar('primer_nombre', nombrePersona(f.nombre))
+  completar('apellido', nombrePersona(f.apellido))
   completar('email', f.email)
 
   if (f.casillas.acepta_oferta) completar('acepta_oferta', true)

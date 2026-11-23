@@ -203,9 +203,7 @@ npm start                # Servidor de produccion
 
 ### Sincronizacion de Datos
 ```bash
-npm run sync:cabify              # Sync Cabify historico
-npm run sync:cabify:weekly       # Sync ultima semana
-npm run sync:cabify:realtime     # Sync tiempo real
+# Cabify: corre en el servidor (/opt/toshify-sync/sync-cabify-cuentas.ts), no desde el repo
 npm run sync:uss                 # Sync USS Kilometraje
 npm run sync:wialon:bitacora     # Sync Wialon Bitacora
 npm run scheduler                # Daemon de sincronizacion
