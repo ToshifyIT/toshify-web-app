@@ -27,7 +27,7 @@ interface AsignacionActiva {
 
 export function AsignacionesActivasModule() {
   const navigate = useNavigate()
-  const { sedeActual, sedeActualId, verTodas } = useSede()
+  const { sedeActual, verTodas, aplicarFiltroSede } = useSede()
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -84,7 +84,7 @@ export function AsignacionesActivasModule() {
     try {
       setLoading(true)
       setError(null)
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await aplicarFiltroSede(supabase
         .from('inventario')
         .select(`
           id,
@@ -106,7 +106,7 @@ export function AsignacionesActivasModule() {
           )
         `)
         .eq('estado', 'en_uso')
-        .not('asignado_a_vehiculo_id', 'is', null)
+        .not('asignado_a_vehiculo_id', 'is', null))
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -131,7 +131,7 @@ export function AsignacionesActivasModule() {
           fecha_asignacion: item.created_at,
           dias_asignada: diasAsignada
         }
-      }).filter((item: AsignacionActiva) => verTodas || !sedeActualId || item.sede_id === sedeActualId)
+      })
 
       setAsignaciones(transformed)
     } catch (err: any) {
@@ -139,7 +139,7 @@ export function AsignacionesActivasModule() {
     } finally {
       setLoading(false)
     }
-  }, [sedeActualId, verTodas])
+  }, [aplicarFiltroSede])
 
   useEffect(() => {
     loadAsignaciones()

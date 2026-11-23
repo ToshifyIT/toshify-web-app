@@ -20,7 +20,7 @@ import { formatFecha } from '../../../utils/format'
 
 export function OfertaLocacionListModule() {
   const { user, profile } = useAuth()
-  const { sedeActualId } = useSede()
+  const { sedeActualId, sedes } = useSede()
 
   const [ofertas, setOfertas] = useState<OfertaLocacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -155,6 +155,10 @@ export function OfertaLocacionListModule() {
 
       if (sedeActualId) {
         query = query.or(`sede_id.eq.${sedeActualId},sede_id.is.null`)
+      } else {
+        // "Todas": solo las sedes reales (sin Pruebas) y los que no tienen sede
+        const idsReales = sedes.filter(s => !s.solo_admin).map(s => s.id)
+        if (idsReales.length > 0) query = query.or(`sede_id.in.(${idsReales.join(',')}),sede_id.is.null`)
       }
 
       const { data, error } = await query
@@ -166,7 +170,7 @@ export function OfertaLocacionListModule() {
     } finally {
       setLoading(false)
     }
-  }, [sedeActualId])
+  }, [sedeActualId, sedes])
 
   useEffect(() => { loadOfertas() }, [loadOfertas])
 

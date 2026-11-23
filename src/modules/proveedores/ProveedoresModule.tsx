@@ -6,6 +6,7 @@ import { Alerta } from '../../components/ui/alertas'
 import { showError, showSuccess } from '../../utils/toast'
 import { Eye, Trash2, Building2, FileText, Phone, CreditCard, Calendar, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package, Edit2 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useSede } from '../../contexts/SedeContext'
 import { DataTable } from '../../components/ui/DataTable'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { formatDateTimeAR } from '../../utils/dateUtils'
@@ -42,6 +43,7 @@ interface Proveedor {
 
 export function ProveedoresModule() {
   const { canCreateInSubmenu, canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+  const { aplicarFiltroSede } = useSede()
 
   // Permisos específicos para el submenú de proveedores
   const canCreate = canCreateInSubmenu('proveedores')
@@ -79,9 +81,10 @@ export function ProveedoresModule() {
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([])
 
+  // El stock asociado que se muestra es el de la sede: se recarga al cambiarla
   useEffect(() => {
     loadProveedores()
-  }, [])
+  }, [aplicarFiltroSede])
 
   // Cerrar dropdown de filtro al hacer click fuera
   useEffect(() => {
@@ -199,10 +202,11 @@ export function ProveedoresModule() {
 
       if (error) throw error
 
-      const { data: inventarioData } = await supabase
+      // Stock asociado que se muestra: solo el de la sede elegida (el proveedor es compartido)
+      const { data: inventarioData } = await aplicarFiltroSede(supabase
         .from('inventario')
         .select('proveedor_id, producto_id, cantidad')
-        .gt('cantidad', 0)
+        .gt('cantidad', 0))
 
       const proveedorOperacion: Record<string, { stock: number; productos: Set<string> }> = {}
       ;(inventarioData || []).forEach((item: any) => {

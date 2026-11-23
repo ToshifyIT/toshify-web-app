@@ -75,23 +75,27 @@ export interface ContactoCapitanes {
   historia: { inicio: string; contactos: Map<string, number> }[]
 }
 
-interface Llamada {
+/** Sede de la persona (embed): twochat_llamadas/twochat_mensajes no tienen sede_id */
+interface SedeDePersona {
+  conductor_id: string | null
+  lead_id: string | null
+  conductores?: { sede_id: string | null } | null
+  leads?: { sede_id: string | null } | null
+}
+
+interface Llamada extends SedeDePersona {
   fecha: string
   agente: string | null
   resultado: string
   tipo_atencion: string | null
   duracion: number | null
   calificacion: number | null
-  conductor_id: string | null
-  lead_id: string | null
   numero_clave: string | null
 }
 
-interface Mensaje {
+interface Mensaje extends SedeDePersona {
   fecha: string
   session_key: string
-  conductor_id: string | null
-  lead_id: string | null
   numero_clave: string | null
 }
 
@@ -159,31 +163,53 @@ function vacio(capitan: string): ContactoCapitan {
  * @param periodos inicios de la evolución
  * @param elegido período que se mira en los números y la tabla
  * @param activos conductores al empezar el período elegido → capitán
+ * @param filtroSede aplicarFiltroSede del SedeContext: leads y contactos solo de la sede elegida
  */
 export async function cargarContactoCapitanes(
   granularidad: Granularidad,
   periodos: string[],
   elegido: { inicio: string; fin: string },
   activos: Map<string, string>,
+  filtroSede?: <T>(query: T, campo?: string) => T,
 ): Promise<ContactoCapitanes> {
+  const filtro = filtroSede ?? (<T>(query: T) => query)
   const primero = [...periodos, elegido.inicio].sort()[0]
   const desde = `${primero}T00:00:00-03:00`
   const hasta = `${sumarDias(elegido.fin, 1)}T00:00:00-03:00`
   const COLS_LLAMADA = 'fecha, agente, resultado, tipo_atencion, duracion, calificacion, conductor_id, lead_id, numero_clave'
   const COLS_MENSAJE = 'fecha, session_key, conductor_id, lead_id, numero_clave'
+  // Las tablas de 2Chat no tienen sede_id: la sede sale del conductor o del lead
+  const COLS_SEDE = 'conductores(sede_id), leads(sede_id)'
 
-  const [llamadas, mensajes, conversaciones, convertidos] = await Promise.all([
-    todas<Llamada>((d) => supabase.from('twochat_llamadas').select(COLS_LLAMADA)
+  const [llamadasTodas, mensajesTodos, conversaciones, convertidos, sedesFiltro] = await Promise.all([
+    todas<Llamada>((d) => supabase.from('twochat_llamadas').select(`${COLS_LLAMADA}, ${COLS_SEDE}`)
       .gte('fecha', desde).lt('fecha', hasta).order('fecha').range(d, d + PAGINA - 1)),
-    todas<Mensaje>((d) => supabase.from('twochat_mensajes').select(COLS_MENSAJE)
+    todas<Mensaje>((d) => supabase.from('twochat_mensajes').select(`${COLS_MENSAJE}, ${COLS_SEDE}`)
       .eq('enviado_por', 'agente').gte('fecha', desde).lt('fecha', hasta).order('fecha').range(d, d + PAGINA - 1)),
     todas<{ session_key: string; agente: string | null }>((d) => supabase.from('twochat_conversaciones')
       .select('session_key, agente').range(d, d + PAGINA - 1)),
-    todas<LeadConvertido>((d) => supabase.from('leads')
+    todas<LeadConvertido>((d) => filtro(supabase.from('leads')
       .select('id, nombre_completo, fecha_convertido, phone, whatsapp_number')
-      .gte('fecha_convertido', `${elegido.inicio}T00:00:00`).lt('fecha_convertido', `${sumarDias(elegido.fin, 1)}T00:00:00`)
+      .gte('fecha_convertido', `${elegido.inicio}T00:00:00`).lt('fecha_convertido', `${sumarDias(elegido.fin, 1)}T00:00:00`))
       .range(d, d + PAGINA - 1)),
+    // Sedes que abarca el filtro (la elegida, o las reales si es "Todas")
+    filtroSede
+      ? Promise.resolve(filtro(supabase.from('sedes').select('id'), 'id')).then(({ data, error }) => {
+        if (error) throw error
+        return new Set(((data as { id: string }[]) || []).map((r) => r.id))
+      })
+      : Promise.resolve(null),
   ])
+  // Contacto con un conductor o lead de otra sede (p. ej. Pruebas) no cuenta.
+  // Los números que no son ni conductor ni lead no tienen sede y quedan.
+  const enSede = (r: SedeDePersona) => {
+    if (!sedesFiltro) return true
+    if (r.conductor_id) return sedesFiltro.has(r.conductores?.sede_id ?? '')
+    if (r.lead_id) return sedesFiltro.has(r.leads?.sede_id ?? '')
+    return true
+  }
+  const llamadas = llamadasTodas.filter(enSede)
+  const mensajes = mensajesTodos.filter(enSede)
   const agenteDeChat = new Map(conversaciones.map((c) => [c.session_key, c.agente]))
   const capitanDeMensaje = (m: Mensaje) => capitanDe(agenteDeChat.get(m.session_key))
 

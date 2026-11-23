@@ -18,6 +18,7 @@ import {
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { Spinner } from '../../components/ui/LoadingOverlay'
 import { TabsBar } from '../../components/ui/TabsBar'
+import { AyudaLicenciaB1 } from './components/AyudaLicenciaB1'
 
 // Lazy-load tabs — solo se carga el JS del tab activo
 const ReporteFacturacionTab = lazy(() => import('./tabs/ReporteFacturacionTab').then(m => ({ default: m.ReporteFacturacionTab })))
@@ -50,7 +51,8 @@ const TABS = [
   // { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban }, // Oculto temporalmente
   // { id: 'liquidacion' as TabType, label: 'Liquidacion', icon: UserMinus }, // Sin tabla en BD
   { id: 'cobros_fraccionados' as TabType, label: 'Cobros Fraccionados', icon: CreditCard },
-  { id: 'licencia_b1' as TabType, label: 'Licencia B1', icon: IdCard }, // Pagos diarios de la promoción PRM02
+  // Pagos diarios de la promoción PRM02; la "i" explica cómo funciona
+  { id: 'licencia_b1' as TabType, label: <>Licencia B1<AyudaLicenciaB1 /></>, icon: IdCard },
   // { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings } // Movido a menú Parámetros
 ]
 

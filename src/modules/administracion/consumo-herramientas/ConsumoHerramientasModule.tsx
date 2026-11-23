@@ -20,14 +20,17 @@ import { showError } from '../../../utils/toast'
 import { formatFecha, formatMoneda } from '../../../utils/format'
 import { hoyART } from '../../../utils/fechaArgentina'
 import { nombreMes } from '../../../utils/meses'
-import type { Cotizacion, EstadoPago, Herramienta, Moneda, PagoHerramienta } from './types'
+import type { ConsumoDia, Cotizacion, EstadoPago, Herramienta, Moneda, PagoHerramienta } from './types'
 import { BUCKET_FACTURAS, MONEDAS, PERIODICIDADES, aUsd } from './types'
 import { CotizacionesModal, PagoDetalleModal, PagoModal } from './Modales'
+import { ConsumoPorUso } from './ConsumoPorUso'
 import '../../vehiculos/VehicleManagement.css'
 
 const SUBMENU = 'consumo-herramientas'
 /** Días hacia adelante para "vencen pronto" */
 const DIAS_AVISO = 5
+/** Días de consumo real que se traen (mes elegido, el anterior y el saldo prepago) */
+const DIAS_CONSUMO = 120
 
 /** Estado que se muestra: un pago "Pendiente" que todavía no venció (ej. Contabo se cobra
  *  el 28) se ve como "Programado"; "Pendiente" queda para los que vencen hoy. */
@@ -75,6 +78,7 @@ export function ConsumoHerramientasModule() {
   const [herramientas, setHerramientas] = useState<Herramienta[]>([])
   const [pagos, setPagos] = useState<PagoHerramienta[]>([])
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([])
+  const [consumo, setConsumo] = useState<ConsumoDia[]>([])
   const [modalCotizaciones, setModalCotizaciones] = useState(false)
   const [detallePago, setDetallePago] = useState<PagoHerramienta | null>(null)
   const [cargando, setCargando] = useState(true)
@@ -94,11 +98,18 @@ export function ConsumoHerramientasModule() {
       // Genera (si faltan) los pagos del mes elegido y del siguiente, y marca vencidos
       const { error: errGen } = await supabase.rpc('herramientas_generar_pagos', { p_mes: `${mesGenerar}-01` })
       if (errGen) console.error('No se pudieron generar los pagos del mes:', errGen)
-      const [rh, rp, rc] = await Promise.all([
+      // Consumo real: suma las llamadas de 2Chat por día (Google Cloud lo carga el servidor).
+      // Sin sql/consumo_herramientas_consumo.sql la función no existe y el panel no se muestra.
+      const { error: errCons } = await supabase.rpc('herramientas_actualizar_consumo_2chat')
+      if (errCons) console.warn('Consumo de 2Chat sin actualizar:', errCons.message)
+      const [rh, rp, rc, rk] = await Promise.all([
         supabase.from('herramientas').select('*').order('nombre'),
         supabase.from('herramientas_pagos').select('*').order('fecha_vencimiento', { ascending: true, nullsFirst: false }),
         supabase.from('herramientas_cotizaciones').select('*'),
+        supabase.from('herramientas_consumo').select('*')
+          .gte('fecha', sumarDias(`${mesGenerar < mesActual ? mesGenerar : mesActual}-01`, -DIAS_CONSUMO)),
       ])
+      setConsumo(rk.error ? [] : ((rk.data || []) as ConsumoDia[]))
       // Sin la tabla de cotizaciones (SQL de monedas sin correr) se muestra sin equivalente
       setCotizaciones(rc.error ? [] : ((rc.data || []) as Cotizacion[]))
       if (rh.error) throw rh.error
@@ -111,7 +122,7 @@ export function ConsumoHerramientasModule() {
     } finally {
       setCargando(false)
     }
-  }, [])
+  }, [mesActual])
 
   useEffect(() => { cargar(mes) }, [cargar, mes])
 
@@ -246,7 +257,12 @@ export function ConsumoHerramientasModule() {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <strong style={{ whiteSpace: 'nowrap' }}>{h?.nombre || '-'}</strong>
-            {h?.periodicidad && <span style={{ color: 'var(--text-tertiary)' }}>{h.periodicidad}</span>}
+            {(h?.periodicidad || h?.licencias != null) && (
+              <span style={{ color: 'var(--text-tertiary)' }}>
+                {[h.periodicidad, h.licencias != null ? `${h.licencias} ${h.licencias === 1 ? 'licencia' : 'licencias'}` : null]
+                  .filter(Boolean).join(' · ')}
+              </span>
+            )}
             {(() => {
               // Cuántos períodos de esta herramienta hay que pagar este mes (atrasados + el actual)
               const abiertos = listaPagos
@@ -463,6 +479,9 @@ export function ConsumoHerramientasModule() {
           </div>
         </div>
       </div>
+
+      <ConsumoPorUso herramientas={herramientas} consumo={consumo} mes={mes} tasas={tasas}
+        puedeEditar={puedeEditar} onGuardado={() => cargar(mes)} />
 
       <DataTable
         data={listaPagos}

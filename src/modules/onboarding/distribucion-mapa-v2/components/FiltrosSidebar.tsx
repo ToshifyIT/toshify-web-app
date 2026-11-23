@@ -15,7 +15,7 @@
 
 import { useState } from 'react'
 import { CheckSquare, ChevronRight, Search, Square, Users, UserPlus, X } from 'lucide-react'
-import { Acordeon, CheckRow, Chip, GrupoTitulo, Hint } from './ui'
+import { Acordeon, CheckRow, Chip, GrupoTitulo } from './ui'
 import { IconoEntidad } from './iconos'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
 import {
@@ -281,16 +281,15 @@ export function FiltrosSidebar({
             onAlternar={() => alternarBloque('conductores')}
           >
 
-            <Acordeon titulo="Estado" resumen={filtros.verBaja ? 'Incluye baja' : 'Sin baja'}>
+            <Acordeon titulo="Estado" resumen={filtros.verBaja ? 'Incluye baja' : 'Sin baja'} ayuda="Los de baja se muestran atenuados en el mapa.">
               <CheckRow
                 label="Incluir de baja"
                 checked={filtros.verBaja}
                 onChange={() => onChange({ verBaja: !filtros.verBaja })}
               />
-              <Hint>Los de baja se muestran atenuados en el mapa.</Hint>
             </Acordeon>
 
-            <Acordeon titulo="Turno" resumen={resumen(filtros.turnosConductor)}>
+            <Acordeon titulo="Turno" resumen={resumen(filtros.turnosConductor)} ayuda="Sale de la asignación actual; si no tiene, de su preferencia.">
               {TURNOS_CONDUCTOR.map((t) => (
                 <CheckRow
                   key={t.value}
@@ -301,10 +300,9 @@ export function FiltrosSidebar({
                   }
                 />
               ))}
-              <Hint>Sale de la asignación actual; si no tiene, de su preferencia.</Hint>
             </Acordeon>
 
-            <Acordeon titulo="Asignación" resumen={resumen(filtros.asignacion)}>
+            <Acordeon titulo="Asignación" resumen={resumen(filtros.asignacion)} ayuda="Con asignación = asignación activa vigente con vehículo.">
               {ASIGNACION_OPCIONES.map((a) => (
                 <CheckRow
                   key={a.value}
@@ -324,7 +322,6 @@ export function FiltrosSidebar({
                   }}
                 />
               ))}
-              <Hint>Con asignación = asignación activa vigente con vehículo.</Hint>
             </Acordeon>
 
             <Acordeon
@@ -332,6 +329,9 @@ export function FiltrosSidebar({
               resumen={companeroAplica ? resumen(filtros.companero) : 'No aplica'}
               destacado={companeroAplica}
               defaultAbierto
+              ayuda={companeroAplica
+                  ? 'Sin compañero = tiene asignación activa por turno y el turno complementario de ese vehículo está vacío.'
+                  : 'No aplica con “Sin asignación”: el compañero sale de la asignación activa, así que un conductor sin asignación no tiene compañero ni le falta.'}
             >
               {COMPANERO_OPCIONES.map((c) => (
                 <CheckRow
@@ -344,11 +344,6 @@ export function FiltrosSidebar({
                   onChange={() => onChange({ companero: alternar(filtros.companero, c.value) })}
                 />
               ))}
-              <Hint>
-                {companeroAplica
-                  ? 'Sin compañero = tiene asignación activa por turno y el turno complementario de ese vehículo está vacío.'
-                  : 'No aplica con “Sin asignación”: el compañero sale de la asignación activa, así que un conductor sin asignación no tiene compañero ni le falta.'}
-              </Hint>
             </Acordeon>
 
             <Acordeon titulo="Requisitos" resumen={resumen(filtros.requisitosConductor, 'Ninguno')}>
@@ -380,6 +375,9 @@ export function FiltrosSidebar({
               titulo="Estado de lead"
               resumen={resumen(filtros.estadosLead)}
               defaultAbierto
+              ayuda="Al abrir vienen marcados los estados de inducción y Listo Emparejar; sin
+                selección se muestran todos. Los leads descartados, “Auto del pueblo”, “No le interesa”
+                y los ubicados en zona restringida no entran al mapa."
             >
               {/* Marcar / desmarcar los 14 de una: con 14 casillas, tildar una
                   por una para "quiero ver todo el pipeline" es un castigo. */}
@@ -421,14 +419,9 @@ export function FiltrosSidebar({
                   onChange={() => onChange({ estadosLead: alternar(filtros.estadosLead, estado) })}
                 />
               ))}
-              <Hint>
-                Al abrir vienen marcados los estados de inducción y Listo Emparejar; sin
-                selección se muestran todos. Los leads descartados, “Auto del pueblo”, “No le interesa”
-                y los ubicados en zona restringida no entran al mapa.
-              </Hint>
             </Acordeon>
 
-            <Acordeon titulo="Turno (preferencia)" resumen={resumen(filtros.turnosLead)}>
+            <Acordeon titulo="Turno (preferencia)" resumen={resumen(filtros.turnosLead)} ayuda="Turno que el lead declaró como preferencia.">
               {TURNOS.map((t) => (
                 <CheckRow
                   key={t.value}
@@ -437,10 +430,11 @@ export function FiltrosSidebar({
                   onChange={() => onChange({ turnosLead: alternar(filtros.turnosLead, t.value) })}
                 />
               ))}
-              <Hint>Turno que el lead declaró como preferencia.</Hint>
             </Acordeon>
 
-            <Acordeon titulo="Capitán" resumen={resumen(filtros.guias)}>
+            <Acordeon titulo="Capitán" resumen={resumen(filtros.guias)} ayuda={guiasDisponibles.length > 0
+                  ? 'Capitán asignado al lead. Sin selección se muestran todos, con y sin capitán.'
+                  : 'Ningún lead cargado tiene capitán asignado.'}>
               {guiasDisponibles.map((g) => (
                 <CheckRow
                   key={claveGuia(g)}
@@ -449,16 +443,13 @@ export function FiltrosSidebar({
                   onChange={() => onChange({ guias: alternar(filtros.guias, claveGuia(g)) })}
                 />
               ))}
-              <Hint>
-                {guiasDisponibles.length > 0
-                  ? 'Capitán asignado al lead. Sin selección se muestran todos, con y sin capitán.'
-                  : 'Ningún lead cargado tiene capitán asignado.'}
-              </Hint>
             </Acordeon>
 
             <Acordeon
               titulo="Fecha de creación"
               resumen={resumenRangoCreacion(filtros.creadoDesde, filtros.creadoHasta)}
+              ayuda="Fecha en que se creó el lead (columna “Creación” del módulo Leads). Por
+                defecto, el último mes. Ambos extremos son inclusivos; se puede dejar uno vacío."
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <CampoFecha
@@ -474,10 +465,6 @@ export function FiltrosSidebar({
                   onChange={(v) => onChange({ creadoHasta: v })}
                 />
               </div>
-              <Hint>
-                Fecha en que se creó el lead (columna “Creación” del módulo Leads). Por
-                defecto, el último mes. Ambos extremos son inclusivos; se puede dejar uno vacío.
-              </Hint>
             </Acordeon>
 
             {/* Requisitos del lead. Antes eran dos acordeones separados
@@ -490,6 +477,8 @@ export function FiltrosSidebar({
             <Acordeon
               titulo="Requisitos"
               resumen={requisitosLeadActivos === 0 ? 'Todos' : `${requisitosLeadActivos} activo${requisitosLeadActivos > 1 ? 's' : ''}`}
+              ayuda="Tildado = sólo los que tienen. Sin tildar no filtra: aparecen los que
+                tienen, los que no, y los que todavía no tienen el dato cargado."
             >
               {REQUISITOS_LEAD.map((r) => (
                 <CheckRow
@@ -505,10 +494,6 @@ export function FiltrosSidebar({
                   }
                 />
               ))}
-              <Hint>
-                Tildado = sólo los que tienen. Sin tildar no filtra: aparecen los que
-                tienen, los que no, y los que todavía no tienen el dato cargado.
-              </Hint>
             </Acordeon>
           </BloqueFiltros>
         )}
@@ -524,7 +509,7 @@ export function FiltrosSidebar({
               marginTop: 2,
             }}
           >
-            <GrupoTitulo>Zona operativa · aplica a conductores y leads</GrupoTitulo>
+            <GrupoTitulo ayuda="Agrupación interna de trabajo, no geográfica. Sin selección = todas.">Zona operativa · aplica a conductores y leads</GrupoTitulo>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
               {ZONAS.map((z) => (
                 <Chip
@@ -536,9 +521,6 @@ export function FiltrosSidebar({
                 </Chip>
               ))}
             </div>
-            <Hint>
-              Agrupación interna de trabajo, no geográfica. Sin selección = todas.
-            </Hint>
           </div>
         )}
       </div>

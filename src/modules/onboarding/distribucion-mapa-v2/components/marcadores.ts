@@ -3,12 +3,9 @@
 // Construcción del SVG de los pines del mapa. Separado de iconos.tsx para no
 // mezclar exports de componentes con exports de utilidades (fast refresh).
 //
-// Forma: pin de ubicación (gota) para ambos tipos, con fondo pastel y el
-// pictograma en el color de acento (ver colores.ts). Conductor y lead llevan el
-// pictograma al mismo tamaño; los distingue el dibujo (auto / persona) y el
-// color. La punta del pin queda abajo al centro, que es donde se ancla en el
-// mapa (anchor 17,44 en MapaCanvas).
-
+// Forma: círculo para ambos tipos (2026-11-23; antes era un pin de ubicación con
+// forma de gota). Fondo pastel, contorno blanco fino y el pictograma (volante o
+// persona) en el color de acento (ver colores.ts). Se ancla en su centro.
 import { glifoEntidad } from './glifos'
 import { fondoPastel } from './colores'
 import type { TipoEntidadMapa } from '../types'
@@ -19,16 +16,19 @@ function svgPin(
   activo: boolean,
   atenuado: boolean
 ): string {
-  const borde = activo ? '#ff0033' : atenuado ? '#9CA3AF' : color
-  const grosor = activo ? 2.6 : 1.6
+  // Círculo simple (2026-11-23): el pin con forma de GPS se veía escandaloso.
+  // Fondo pastel suave, sin borde de color (sólo un contorno blanco fino para
+  // despegarlo del mapa) y el pictograma en el color de acento. El seleccionado
+  // lleva borde rojo.
   const opacidad = atenuado ? 0.55 : 1
-
-  const silueta = '<path d="M17 42.6C13.4 37.6 3 27.4 3 16.2a14 14 0 0 1 28 0c0 11.2-10.4 21.4-14 26.4Z"/>'
-  const glifo = glifoEntidad(tipo, { tamano: 19, cx: 17, cy: 16.2, tinta: atenuado ? '#6B7280' : color })
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44">
-  <g fill="${fondoPastel(color)}" stroke="${borde}" stroke-width="${grosor}" opacity="${opacidad}">${silueta}</g>
-  <g opacity="${opacidad}">${glifo}</g>
+  const borde = activo ? '#ff0033' : '#ffffff'
+  const grosor = activo ? 2.4 : 1.5
+  const glifo = glifoEntidad(tipo, { tamano: 15, cx: 16, cy: 16, tinta: atenuado ? '#6B7280' : color })
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <g opacity="${opacidad}">
+    <circle cx="16" cy="16" r="14.2" fill="${fondoPastel(color)}" stroke="${borde}" stroke-width="${grosor}"/>
+    ${glifo}
+  </g>
 </svg>`
 }
 
@@ -56,15 +56,22 @@ export function urlEtiquetaPill(texto: string, fondo = '#ff0033', color = '#ffff
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
-/** Diámetro en px del aro que se dibuja alrededor de la persona seleccionada. */
-export const TAMANO_HALO = 48
-
 /**
- * Distancia (px) desde la punta del pin destacado (34x44) hasta el centro de su
- * cabeza, donde va el pictograma. El aro se centra ahí para rodear el ícono en
- * vez de quedar debajo de la punta.
+ * Tamaño en pantalla de los pines (2026-11-23: antes 28x36 y 34x44; con zoom
+ * tapaban las calles). El SVG se dibuja en 34x44 y Google lo escala.
  */
-export const HALO_SOBRE_PUNTA = 28
+export const PIN_ANCHO = 26
+export const PIN_ALTO = 26
+/** Pin de la persona seleccionada o de la base fijada: un poco más grande. */
+export const PIN_ANCHO_DESTACADO = 32
+export const PIN_ALTO_DESTACADO = 32
+
+/** Diámetro en px del aro que se dibuja alrededor de la persona seleccionada. */
+export const TAMANO_HALO = 42
+
+/** Distancia (px) entre el punto de anclaje y el centro del ícono; 0 con el círculo. */
+// Con el pin redondo anclado en su centro, el aro y la ficha se centran ahí.
+export const HALO_SOBRE_PUNTA = 0
 
 /**
  * Aro de selección (2026-10-22): antes era un disco rojo de 76px con relleno que
@@ -76,7 +83,7 @@ export const HALO_SOBRE_PUNTA = 28
 export const URL_HALO_ACTIVO: string = (() => {
   const r = TAMANO_HALO / 2
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${TAMANO_HALO}" height="${TAMANO_HALO}" viewBox="0 0 ${TAMANO_HALO} ${TAMANO_HALO}">
-  <circle cx="${r}" cy="${r}" r="${r - 1.5}" fill="#ff0033" fill-opacity="0.08" stroke="#ff0033" stroke-opacity="0.9" stroke-width="2.5"/>
+  <circle cx="${r}" cy="${r}" r="${r - 1.25}" fill="#ff0033" fill-opacity="0.06" stroke="#ff0033" stroke-opacity="0.85" stroke-width="2"/>
 </svg>`
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 })()

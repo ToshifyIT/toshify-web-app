@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
+import { useSede } from '../contexts/SedeContext'
 
 const CACHE_NS = 'useBajasConductoresStats'
 
@@ -19,6 +20,7 @@ export function useBajasConductoresStats(
   periodB: string,
   sedeId?: string
 ) {
+  const { aplicarFiltroSede } = useSede()
   const [stats, setStats] = useState({
     totalA: 0,
     totalB: 0,
@@ -82,11 +84,9 @@ export function useBajasConductoresStats(
           .gte('fecha_terminacion', formatDateOnly(rangeB.start))
           .lte('fecha_terminacion', formatDateOnly(rangeB.end))
 
-        // Aplicar filtro de sede si existe
-        if (sedeId) {
-          queryA = queryA.eq('sede_id', sedeId)
-          queryB = queryB.eq('sede_id', sedeId)
-        }
+        // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+        queryA = sedeId ? queryA.eq('sede_id', sedeId) : aplicarFiltroSede(queryA)
+        queryB = sedeId ? queryB.eq('sede_id', sedeId) : aplicarFiltroSede(queryB)
 
         const [resA, resB] = await Promise.all([queryA, queryB])
 
@@ -110,7 +110,7 @@ export function useBajasConductoresStats(
     return () => {
       isMounted = false
     }
-  }, [granularity, periodA, periodB, sedeId])
+  }, [granularity, periodA, periodB, sedeId, aplicarFiltroSede])
 
   if (paramsChanged) {
     return { ...stats, loading: true }

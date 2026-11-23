@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
+import { sumarStockPorProducto } from './stockPorSede'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
@@ -296,7 +297,9 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const location = useLocation()
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, canViewTab, isAdmin } = usePermissions()
-  const { sedeActual, verTodas } = useSede()
+  const { sedeActual, verTodas, sedeActualId, sedeUsuario, aplicarFiltroSede } = useSede()
+  // Sede donde se graba. Si no hay ninguna (null), el trigger usa la principal.
+  const sedeEscrituraId = sedeActualId || sedeUsuario?.id || null
   const isControlMode = mode === 'control'
   const defaultTab: TabActiva = isControlMode ? 'entradas' : 'nuevo'
 
@@ -405,13 +408,15 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
     } else {
       setLoadingAprobaciones(false)
     }
-  }, [canApprove])
+    // Al cambiar de sede el histórico se vacía para que se vuelva a cargar con la nueva
+    setHistorico([])
+  }, [canApprove, aplicarFiltroSede])
 
   useEffect(() => {
     if (activeTab === 'historico' && historico.length === 0 && canApprove) {
       cargarHistorico()
     }
-  }, [activeTab, canApprove])
+  }, [activeTab, canApprove, historico.length])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -460,17 +465,19 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
             )
           `)
           .order('nombre'),
-        supabase
+        aplicarFiltroSede(supabase
           .from('v_stock_productos')
-          .select('id, disponible')
+          .select('id, disponible'))
       ])
 
       if (proveedoresRes.error) throw proveedoresRes.error
       if (productosRes.error) throw productosRes.error
       if (stockRes.error) throw stockRes.error
 
+      // Una fila por producto (con "Todas" la vista trae una por sede)
       const stockMap = new Map<string, number>(
-        (stockRes.data || []).map((row: { id: string; disponible: number }) => [row.id, row.disponible || 0])
+        sumarStockPorProducto((stockRes.data || []) as { id: string; disponible: number }[])
+          .map(row => [row.id, row.disponible || 0])
       )
 
       setProveedoresPedido((proveedoresRes.data || []) as ProveedorPedido[])
@@ -489,9 +496,9 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
 
   const loadEntradasSimples = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('v_entradas_en_transito')
-        .select('*')
+        .select('*'))
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -503,9 +510,9 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
 
   const loadPedidos = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('v_pedidos_en_transito')
-        .select('*')
+        .select('*'))
         .order('fecha_pedido', { ascending: false })
 
       if (error) throw error
@@ -1010,7 +1017,8 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
         p_items: JSON.stringify(pedidoItemsValidos.map(item => ({
           producto_id: item.producto_id,
           cantidad: item.cantidad
-        })))
+        }))),
+        p_sede_id: sedeEscrituraId
       })
 
       if (error) throw error
@@ -1218,9 +1226,9 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const cargarMovimientosPendientes = async () => {
     setLoadingAprobaciones(true)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('v_movimientos_pendientes')
-        .select('*')
+        .select('*'))
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -1235,7 +1243,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
   const cargarHistorico = async () => {
     setLoadingHistorico(true)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('movimientos')
         .select(`
           id,
@@ -1253,7 +1261,7 @@ export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoMod
           aprobador:usuario_aprobador_id (full_name)
         `)
         .in('estado_aprobacion', ['aprobado', 'rechazado'])
-        .neq('tipo_movimiento', 'entrada')
+        .neq('tipo_movimiento', 'entrada'))
         .order('fecha_aprobacion', { ascending: false, nullsFirst: false })
         .limit(50)
 

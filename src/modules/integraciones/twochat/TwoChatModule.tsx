@@ -3,12 +3,14 @@
  * Integraciones > 2Chat
  *
  * - Contactos: conductores de Toshibase y si ya están cargados en 2Chat.
- *   "Sincronizar nuevos" crea en 2Chat solo los pendientes (y reintenta errores).
+ *   El servidor los crea solo cuando el conductor activo ya tiene una asignación
+ *   (revisa cada 5 minutos). "Sincronizar nuevos" queda solo como respaldo si el
+ *   alta automática está apagada en el servidor.
  * - Llamadas: historial de llamadas de 2Chat con reporte por agente y export a Excel.
  *
  * Toda la comunicación con 2Chat pasa por /api/2chat (server-2chat.js).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Users, CheckCircle2, Clock, PhoneOff, AlertTriangle, RefreshCw, UploadCloud,
@@ -168,6 +170,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [puedeSincronizar, setPuedeSincronizar] = useState(false)
   const [canalWhatsapp, setCanalWhatsapp] = useState(false)
+  const [altaAutomatica, setAltaAutomatica] = useState(false)
   const [filtroSync, setFiltroSync] = useState<FiltroSync>('todos')
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstadoConductor>('activo')
 
@@ -179,6 +182,7 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
       setFilas(r.filas)
       setPuedeSincronizar(r.puede_sincronizar)
       setCanalWhatsapp(r.canal_whatsapp)
+      setAltaAutomatica(r.alta_automatica === true)
     } catch (err) {
       console.error('Error cargando contactos 2Chat:', err)
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los contactos')
@@ -389,7 +393,12 @@ function ContactosTab({ pestanas }: { pestanas: ReactNode }) {
             <button className="btn-secondary" onClick={() => void cargar()} disabled={loading} title="Recargar">
               <RefreshCw size={16} />
             </button>
-            {puedeSincronizar && (
+            {altaAutomatica && (
+              <span className="tc-muted" style={{ fontSize: 12 }}>
+                Alta automática: se crean solos al asignar
+              </span>
+            )}
+            {puedeSincronizar && !altaAutomatica && (
               <button
                 className="btn-primary"
                 onClick={() => void sincronizar()}
@@ -423,26 +432,52 @@ function LlamadasTab() {
   const [actualizadoEn, setActualizadoEn] = useState<string | null>(null)
   const [errorSync, setErrorSync] = useState<string | null>(null)
   const [analisis, setAnalisis] = useState<LlamadaTwoChat | null>(null)
+  // Trayendo lo nuevo de 2Chat en segundo plano (la tabla ya muestra lo guardado)
+  const [actualizando, setActualizando] = useState(false)
+  const consultaActual = useRef(0)
 
+  const aplicar = (r: Awaited<ReturnType<typeof obtenerLlamadasTwoChat>>) => {
+    // El agente es la persona de Toshibase que llamó; la cuenta de 2Chat queda aparte
+    setLlamadas(r.llamadas.map((l) => ({ ...l, agente: l.realizada_por || l.cuenta_2chat || l.agente })))
+    setActualizadoEn(r.actualizado_en)
+    setErrorSync(r.error_sync)
+  }
+
+  /**
+   * Primero muestra lo guardado en la base (menos de un segundo). Con actualizar,
+   * después trae lo nuevo de 2Chat en segundo plano (2 a 3 s) y refresca la tabla
+   * sin volver a bloquearla.
+   */
   const consultar = useCallback(async (actualizar = false) => {
     if (desde > hasta) {
       showError('Rango inválido', 'La fecha desde no puede ser posterior a hasta')
       return
     }
+    const id = ++consultaActual.current
     setLoading(true)
     setError(null)
     try {
-      const r = await obtenerLlamadasTwoChat({ desde, hasta, direccion, actualizar })
-      // El agente es la persona de Toshibase que llamó; la cuenta de 2Chat queda aparte
-      setLlamadas(r.llamadas.map((l) => ({ ...l, agente: l.realizada_por || l.cuenta_2chat || l.agente })))
-      setActualizadoEn(r.actualizado_en)
-      setErrorSync(r.error_sync)
+      const r = await obtenerLlamadasTwoChat({ desde, hasta, direccion })
+      if (id !== consultaActual.current) return
+      aplicar(r)
       setAgente('todos')
     } catch (err) {
       console.error('Error cargando llamadas 2Chat:', err)
-      setError(err instanceof Error ? err.message : 'No se pudo cargar el historial')
+      if (id === consultaActual.current) setError(err instanceof Error ? err.message : 'No se pudo cargar el historial')
+      return
     } finally {
-      setLoading(false)
+      if (id === consultaActual.current) setLoading(false)
+    }
+    if (!actualizar) return
+    setActualizando(true)
+    try {
+      const r = await obtenerLlamadasTwoChat({ desde, hasta, direccion, actualizar: true })
+      if (id === consultaActual.current) aplicar(r)
+    } catch (err) {
+      console.error('Error actualizando llamadas 2Chat:', err)
+      if (id === consultaActual.current) setErrorSync(err instanceof Error ? err.message : 'No se pudo actualizar desde 2Chat')
+    } finally {
+      if (id === consultaActual.current) setActualizando(false)
     }
   }, [desde, hasta, direccion])
 
@@ -770,7 +805,7 @@ function LlamadasTab() {
             ? `Trae de 2Chat las llamadas nuevas. Última actualización: ${formatFechaHoraART(actualizadoEn)}`
             : 'Trae de 2Chat las llamadas nuevas y muestra el rango'}
         >
-          <RefreshCw size={16} className={loading ? 'tc-girando' : undefined} />
+          <RefreshCw size={16} className={loading || actualizando ? 'tc-girando' : undefined} />
           Consultar
         </button>
         {/* La hora de la última actualización queda en el tooltip de «Consultar» */}

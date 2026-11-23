@@ -171,7 +171,7 @@ adminIntegracionesRouter.get('/tokens', async (req, res) => {
       },
       twochat: {
         api_key: enmascarar(env.TWOCHAT_API_KEY),
-        sync_auto: env.TWOCHAT_SYNC_AUTO === '1' ? 'Activado (cada hora, 9 a 17 h)' : 'Desactivado',
+        sync_auto: env.TWOCHAT_SYNC_AUTO === '1' ? 'Activado (llamadas y mensajes cada hora; contactos nuevos cada 5 min)' : 'Desactivado',
       },
       resend: {
         api_key: env.VITE_RESEND_API_KEY || env.RESEND_API_KEY || null,

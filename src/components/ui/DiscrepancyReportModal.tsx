@@ -12,6 +12,7 @@
 import { useState, useEffect, Fragment, type CSSProperties } from 'react';
 import { X, AlertTriangle, Search, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useSede } from '../../contexts/SedeContext';
 import { normalizeDni, normalizePatente, normalizeCuit } from '../../utils/normalizeDocuments';
 
 // Mismos valores que ReporteFacturacionTab (getCabifyTable / ESTADO_ACTIVO_ID_LOAD)
@@ -73,6 +74,10 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
   const [sinMatch, setSinMatch] = useState<SinMatchRow[]>([]);
   const [hashesSinMapear, setHashesSinMapear] = useState(0);
   const [filter, setFilter] = useState('');
+  const { aplicarFiltroSede } = useSede();
+  // Sede del período si viene; si no, la sede elegida arriba ("todas" = sin Pruebas)
+  const filtrarSede = <T,>(query: T): T =>
+    sedeId ? (query as any).eq('sede_id', sedeId) : aplicarFiltroSede(query);
 
   useEffect(() => {
     loadDiscrepancies();
@@ -106,7 +111,7 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
         qConductores = qConductores.in('id', conductorIds);
       } else {
         qConductores = qConductores.eq('estado_id', ESTADO_ACTIVO_ID);
-        if (sedeId) qConductores = qConductores.eq('sede_id', sedeId);
+        qConductores = filtrarSede(qConductores);
       }
       const { data: conductores, error: errCond } = conductorIds && conductorIds.length === 0
         ? { data: [] as any[], error: null }
@@ -233,16 +238,22 @@ export function DiscrepancyReportModal({ onClose, periodoId, periodoInicio, peri
       }
 
       // 5. Vehiculos vs multas para discrepancias de formato de patente (sin cambios)
-      const { data: vehiculos } = await supabase
-        .from('vehiculos')
-        .select('id, patente')
-        .is('deleted_at', null);
+      const { data: vehiculos } = await filtrarSede(
+        supabase
+          .from('vehiculos')
+          .select('id, patente')
+          .is('deleted_at', null),
+      );
 
-      const { data: multas } = await supabase
-        .from('multas')
-        .select('patente')
-        .not('patente', 'is', null)
-        .limit(2000);
+      // Multas de la sede (la tabla "multas" no existe: las multas están en multas_historico)
+      const { data: multas } = await filtrarSede(
+        supabase
+          .from('multas_historico')
+          .select('patente')
+          .not('patente', 'is', null)
+          .is('deleted_at', null)
+          .limit(2000),
+      );
 
       const multasRawByNorm = new Map<string, Set<string>>();
       for (const m of (multas || [])) {

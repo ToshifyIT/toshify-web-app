@@ -10,9 +10,10 @@
  *
  * La API key vive SOLO en el servidor (nunca con prefijo VITE_):
  *  - TWOCHAT_API_KEY        (obligatoria)  -> header X-User-API-Key
- *  - TWOCHAT_SYNC_AUTO      (opcional)     -> "1" activa la actualización automática de
- *                                             llamadas: todos los días, cada hora en punto
- *                                             de 9 a 17 h de Argentina (ver iniciarSyncAutomatico)
+ *  - TWOCHAT_SYNC_AUTO      (opcional)     -> "1" activa la actualización automática: llamadas y
+ *                                             mensajes cada hora en punto, y alta de contactos cada
+ *                                             5 minutos para los conductores activos que ya tienen
+ *                                             una asignación (ver iniciarSyncAutomatico)
  *  - GEMINI_API_KEY        (opcional)     -> transcribe las llamadas atendidas, detecta el buzón
  *                                             de voz y califica la conversación (ver transcribirPendientes)
  *  - TWOCHAT_CHANNEL_UUID   (opcional)     -> solo si hay un canal de WhatsApp (WPN...). Si está,
@@ -420,13 +421,84 @@ async function guardarRegistro(cfg, registro) {
   if (!res.ok) throw new Error(`No se pudo guardar en twochat_contactos: ${(await res.text()).slice(0, 200)}`)
 }
 
+// Una sola alta de contactos a la vez (evita duplicados entre la automática, un doble clic o dos usuarios)
+let sincronizando = false
+
+/**
+ * Crea en 2Chat los contactos de estas filas (de listarContactos). Si el teléfono
+ * ya existe en 2Chat, lo vincula en vez de crear otro. Guarda el resultado de cada uno.
+ */
+async function crearContactos(cfg, filas, userId = null) {
+  const resultados = []
+  for (const fila of filas) {
+    const existente = await buscarContactoPorTelefono(cfg.apiKey, fila.telefono)
+    let ok = true
+    let uuid = existente
+    let error = null
+    if (!existente) {
+      const r = await twoChat(cfg.apiKey, '/contacts', { method: 'POST', body: payloadContacto(fila, cfg.canal) })
+      ok = r.ok
+      uuid = r.ok ? r.data?.contact?.uuid || null : null
+      error = r.ok ? null : mensajeError2Chat(r)
+    }
+    await guardarRegistro(cfg, {
+      conductor_id: fila.conductor_id,
+      twochat_contact_uuid: uuid,
+      telefono: fila.telefono,
+      estado: ok ? 'creado' : 'error',
+      error,
+      sincronizado_por: userId,
+    })
+    resultados.push({ conductor_id: fila.conductor_id, ok, vinculado: !!existente, twochat_contact_uuid: uuid, error })
+    if (!ok) console.warn(`[2chat] Error creando ${fila.conductor_id}: ${error}`)
+    await esperar(PAUSA_ENTRE_ALTAS_MS)
+  }
+  return resultados
+}
+
+/**
+ * Alta automática: crea en 2Chat a los conductores activos que ya tienen una
+ * asignación (la programación pasó a asignación) y todavía no están cargados.
+ * Los que quedaron con error solo se reintentan con reintentarErrores (una vez por hora).
+ * Solo sedes reales (no Pruebas), mismo criterio que la pantalla.
+ */
+export async function sincronizarContactosNuevos(cfg, { reintentarErrores = false } = {}) {
+  if (sincronizando) return { creados: 0, vinculados: 0, errores: 0, omitido: true }
+  sincronizando = true
+  try {
+    const filas = await listarContactos(cfg)
+    const candidatos = filas.filter(
+      (f) => String(f.estado_conductor || '').toLowerCase() === 'activo' &&
+        (f.estado_sync === 'pendiente' || (reintentarErrores && f.estado_sync === 'error')),
+    )
+    if (candidatos.length === 0) return { creados: 0, vinculados: 0, errores: 0 }
+    const conAsignacion = new Set()
+    for (let i = 0; i < candidatos.length; i += 100) {
+      const ids = candidatos.slice(i, i + 100).map((f) => f.conductor_id).join(',')
+      const filasAsig = await selectTodo(
+        cfg,
+        'asignaciones_conductores?select=conductor_id,asignaciones!inner(estado)' +
+          `&conductor_id=in.(${ids})&estado=neq.cancelado&asignaciones.estado=neq.cancelada`,
+      )
+      for (const a of filasAsig) conAsignacion.add(a.conductor_id)
+    }
+    const aCrear = candidatos.filter((f) => conAsignacion.has(f.conductor_id)).slice(0, MAX_POR_LOTE)
+    const resultados = await crearContactos(cfg, aCrear)
+    return {
+      creados: resultados.filter((r) => r.ok && !r.vinculado).length,
+      vinculados: resultados.filter((r) => r.vinculado).length,
+      errores: resultados.filter((r) => !r.ok).length,
+    }
+  } finally {
+    sincronizando = false
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Llamadas                                                                   */
 /* -------------------------------------------------------------------------- */
 
 let cacheAgentes = { en: 0, mapa: new Map() }
-// Una sola sincronización a la vez (evita duplicados por doble clic o dos usuarios)
-let sincronizando = false
 
 async function mapaAgentes(apiKey) {
   if (Date.now() - cacheAgentes.en < CACHE_AGENTES_MS && cacheAgentes.mapa.size > 0) {
@@ -566,6 +638,10 @@ export async function sincronizarLlamadas(cfg, { forzar = false } = {}) {
   if (forzar) cacheCruce.en = 0
   const inicioSync = Date.now()
   syncEnCurso = (async () => {
+    // El cruce con conductores y leads (leer ~13.000 leads) se arranca en paralelo con
+    // las páginas de 2Chat en vez de esperar a que terminen
+    const crucePromesa = mapasCruce(cfg)
+    crucePromesa.catch(() => {})
     const ultima = await ultimaLlamadaGuardada(cfg)
     // Primera vez (tabla vacía): solo los últimos IMPORT_INICIAL_DIAS, para que no tarde demasiado
     let corte = ultima ? ultima - MARGEN_RESYNC_MS : Date.now() - IMPORT_INICIAL_DIAS * 24 * 60 * 60 * 1000
@@ -589,7 +665,7 @@ export async function sincronizarLlamadas(cfg, { forzar = false } = {}) {
     }
     const aGuardar = cdrs.filter((c) => c.uuid && Date.parse(c.created_at) >= corte)
     if (aGuardar.length === 0) {
-      await recruzarSinCoincidencia(cfg, await mapasCruce(cfg))
+      await recruzarSinCoincidencia(cfg, await crucePromesa)
       return { procesadas: 0 }
     }
 
@@ -607,7 +683,7 @@ export async function sincronizarLlamadas(cfg, { forzar = false } = {}) {
       agentes.set(agenteId, nombre || 'Agente sin nombre')
     }
 
-    const cruce = await mapasCruce(cfg)
+    const cruce = await crucePromesa
     const filas = aGuardar.map((c) => {
       const saliente = c.direction === 'O'
       // Entrantes: el número que llamó viene en `from` (o from_number). caller_id_used
@@ -914,7 +990,7 @@ function leerSedeId(valor) {
 export const twoChatRouter = express()
 twoChatRouter.use(express.json())
 
-/** GET /api/2chat/contactos -> conductores con estado de sincronización */
+/** GET /api/2chat/contactos -> conductores con estado de sincronización (el alta es automática) */
 twoChatRouter.get('/contactos', async (req, res) => {
   try {
     const ctx = await requireUsuario(req, res)
@@ -922,7 +998,12 @@ twoChatRouter.get('/contactos', async (req, res) => {
     const sedeId = leerSedeId(req.query.sede_id)
     if (sedeId === false) return res.status(400).json({ error: 'sede_id inválido' })
     const filas = await listarContactos(ctx.cfg, { sedeId })
-    res.json({ filas, canal_whatsapp: !!ctx.cfg.canal, puede_sincronizar: ctx.isAdmin })
+    res.json({
+      filas,
+      canal_whatsapp: !!ctx.cfg.canal,
+      puede_sincronizar: ctx.isAdmin,
+      alta_automatica: process.env.TWOCHAT_SYNC_AUTO === '1',
+    })
   } catch (error) {
     console.error('[2chat/contactos]', error.message)
     res.status(500).json({ error: error.message })
@@ -957,35 +1038,9 @@ twoChatRouter.post('/sincronizar', async (req, res) => {
       return res.status(409).json({ error: 'Ya hay una sincronización en curso. Esperá a que termine.' })
     }
     sincronizando = true
-    const resultados = []
+    let resultados = []
     try {
-      for (const fila of aCrear) {
-        // 1) Si el teléfono ya existe en 2Chat, se vincula en vez de crear otro contacto
-        const existente = await buscarContactoPorTelefono(ctx.cfg.apiKey, fila.telefono)
-        let ok = true
-        let uuid = existente
-        let error = null
-        if (!existente) {
-          const r = await twoChat(ctx.cfg.apiKey, '/contacts', {
-            method: 'POST',
-            body: payloadContacto(fila, ctx.cfg.canal),
-          })
-          ok = r.ok
-          uuid = r.ok ? r.data?.contact?.uuid || null : null
-          error = r.ok ? null : mensajeError2Chat(r)
-        }
-        await guardarRegistro(ctx.cfg, {
-          conductor_id: fila.conductor_id,
-          twochat_contact_uuid: uuid,
-          telefono: fila.telefono,
-          estado: ok ? 'creado' : 'error',
-          error,
-          sincronizado_por: ctx.userId,
-        })
-        resultados.push({ conductor_id: fila.conductor_id, ok, vinculado: !!existente, twochat_contact_uuid: uuid, error })
-        if (!ok) console.warn(`[2chat] Error creando ${fila.conductor_id}: ${error}`)
-        await esperar(PAUSA_ENTRE_ALTAS_MS)
-      }
+      resultados = await crearContactos(ctx.cfg, aCrear, ctx.userId)
     } finally {
       sincronizando = false
     }
@@ -2085,6 +2140,8 @@ twoChatRouter.get('/seguimiento/:conductorId', async (req, res) => {
 // Todos los días, a cada hora en punto (las 24 horas, hora Argentina)
 const SYNC_AUTO_HORA_DESDE = 0
 const SYNC_AUTO_HORA_HASTA = 23
+// Cada cuántos minutos se revisa si hay conductores recién asignados para crear como contacto
+const CONTACTOS_AUTO_CADA_MIN = 5
 
 /** Hora y minuto actuales en Argentina (UTC-3, sin horario de verano) */
 function horaArgentina() {
@@ -2104,8 +2161,24 @@ export function iniciarSyncAutomatico() {
   globalThis.__twochatSyncAuto = true
   let ultimaHoraCorrida = null
 
+  const revisarContactos = async (minuto) => {
+    if (minuto % CONTACTOS_AUTO_CADA_MIN !== 0) return
+    const cfg = config()
+    if (!cfg.apiKey || !cfg.url || !cfg.serviceKey) return
+    try {
+      // En el primer chequeo de cada hora también se reintentan los que quedaron con error
+      const r = await sincronizarContactosNuevos(cfg, { reintentarErrores: minuto < CONTACTOS_AUTO_CADA_MIN })
+      if (r.creados || r.vinculados || r.errores) {
+        console.log(`[2chat] Contactos automáticos: ${r.creados} creados, ${r.vinculados} vinculados, ${r.errores} con error`)
+      }
+    } catch (err) {
+      console.error('[2chat] Alta automática de contactos falló:', err.message)
+    }
+  }
+
   const revisar = async () => {
     const { dia, hora, minuto } = horaArgentina()
+    await revisarContactos(minuto)
     if (hora < SYNC_AUTO_HORA_DESDE || hora > SYNC_AUTO_HORA_HASTA || minuto > 5) return
     const clave = `${dia} ${hora}`
     if (ultimaHoraCorrida === clave) return

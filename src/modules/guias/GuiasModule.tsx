@@ -775,10 +775,8 @@ export function GuiasModule() {
         .eq('id_guia', guiaId)
         .eq('semana', targetWeek);
 
-      // Aplicar filtro de sede si está seleccionada (Optimización: filtro en DB)
-      if (sedeActualId) {
-        query = query.eq('conductores.sede_id', sedeActualId);
-      }
+      // Filtro de sede en la base (con "todas", solo las sedes reales: sin Pruebas)
+      query = aplicarFiltroSede(query, 'conductores.sede_id');
 
       const { data: historialData, error: historialError } = await query.order("created_at", { ascending: false });
 

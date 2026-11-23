@@ -1,0 +1,419 @@
+/* Mi Espacio del titular. Pensado primero para escritorio (tablero); en pantallas
+   angostas las tablas pasan a tarjetas. Usa las variables del theme system. */
+
+.titular {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.titular-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 32px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.titular-header-logo {
+  width: 112px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.titular-header-quien {
+  display: flex;
+  flex-direction: column;
+  margin-left: auto;
+  text-align: right;
+  min-width: 0;
+}
+
+.titular-header-nombre {
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.titular-header-cuit {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.titular-salir {
+  padding: 8px 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.titular-salir:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.titular-main {
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- KPIs ---------- */
+.titular-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.titular-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+
+.titular-kpi-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.titular-kpi-valor {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.titular-kpi-sub {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.titular-txt-ok { color: var(--color-success); font-weight: 600; }
+.titular-txt-alerta { color: var(--color-warning); font-weight: 600; }
+
+/* ---------- Bloques y tablas ---------- */
+.titular-bloque {
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: 16px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Pestañas arriba (estilo del sistema); debajo, la nota del período a la
+   izquierda y buscador + período a la derecha. */
+.titular-barra .tabs-bar {
+  margin-bottom: 10px;
+}
+
+.titular-subbarra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.titular-subbarra .titular-nota {
+  margin: 0;
+}
+
+.titular-barra-filtros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.titular-buscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  width: 260px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+}
+
+.titular-buscar:focus-within {
+  border-color: var(--color-primary);
+}
+
+.titular-buscar input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+}
+
+/* La tabla scrollea dentro de la tarjeta: la página entra en una sola pantalla. */
+.titular-tabla-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.titular-tabla thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card-bg);
+}
+
+
+
+
+.titular-nota {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.titular-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.titular-tabla th {
+  padding: 10px 8px;
+  text-align: left;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+}
+
+.titular-tabla td {
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--border-primary);
+  vertical-align: middle;
+}
+
+.titular-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.titular-tabla .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Situación: solo texto en color, sin fondo ni pastilla. */
+.titular-sit {
+  display: block;
+  font-weight: 600;
+}
+
+.titular-sit--generando { color: var(--color-success); }
+.titular-sit--disponible { color: var(--color-warning); }
+.titular-sit--preparacion { color: var(--text-secondary); }
+.titular-sit--taller { color: var(--color-warning); }
+.titular-sit--fuera { color: var(--color-danger); }
+
+.titular-sit-detalle {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.titular-vacio {
+  padding: 28px 8px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.titular-login-ayuda {
+  margin: 16px 0 0;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.titular-error {
+  margin: 12px 0 0;
+  font-size: var(--fs-md);
+  color: var(--color-danger);
+}
+
+/* La escala global (styles/tipografia.css) deja las tablas del sistema interno
+   en 9-10 px. Este espacio lo ven clientes externos: se usa la escala de tokens
+   (cabecera y detalle 11, celdas 12). */
+#root .titular .titular-tabla thead th,
+#root .titular .titular-tabla thead th :where(span, div, button, a) {
+  font-size: var(--fs-xs) !important;
+}
+
+#root .titular .titular-tabla tbody td,
+#root .titular .titular-tabla tbody td :where(div, span, p, a, strong, b, small, em, i, label, button, input, select, time) {
+  font-size: var(--fs-sm) !important;
+}
+
+#root .titular .titular-tabla tbody td .titular-sit-detalle,
+#root .titular .titular-tabla tbody td [class*="badge"] {
+  font-size: var(--fs-xs) !important;
+}
+
+#root .titular .titular-tabla tbody td {
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+}
+
+/* ---------- Pantallas medianas ---------- */
+@media (max-width: 1080px) {
+  .titular-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Móvil: tablas como tarjetas ---------- */
+@media (max-width: 720px) {
+  /* En móvil vuelve el scroll normal de página. */
+  .titular {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .titular-main,
+  .titular-bloque,
+  .titular-tabla-scroll {
+    flex: none;
+    overflow: visible;
+  }
+
+  .titular-subbarra,
+  .titular-barra-filtros {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .titular-buscar {
+    width: 100%;
+  }
+
+  .titular-header {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .titular-header-nombre {
+    font-size: var(--fs-sm);
+  }
+
+  .titular-main {
+    padding: 16px 16px 32px;
+    gap: 16px;
+  }
+
+  .titular-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .titular-kpi {
+    padding: 14px;
+  }
+
+  .titular-kpi-valor {
+    font-size: var(--fs-lg);
+  }
+
+  .titular-kpi-sub {
+    white-space: normal;
+  }
+
+  .titular-bloque {
+    padding: 16px 16px 4px;
+  }
+
+
+  .titular-tabla thead {
+    display: none;
+  }
+
+  .titular-tabla,
+  .titular-tabla tbody,
+  .titular-tabla tr,
+  .titular-tabla td {
+    display: block;
+    width: 100%;
+  }
+
+  .titular-tabla tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-primary);
+  }
+
+  .titular-tabla tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .titular-tabla td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding: 4px 0;
+    border-bottom: none;
+    text-align: right;
+  }
+
+  .titular-tabla td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    text-align: left;
+  }
+
+  .titular-tabla td.titular-vacio {
+    display: block;
+    text-align: center;
+  }
+
+  .titular-tabla td.titular-vacio::before {
+    content: none;
+  }
+}

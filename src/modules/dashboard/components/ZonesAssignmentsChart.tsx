@@ -20,7 +20,7 @@ import './ZonesAssignmentsChart.css'
 
 
 export function ZonesAssignmentsChart() {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   
   // Estado para el filtro semanal
   const [selectedWeek, setSelectedWeek] = useState(() => {
@@ -98,10 +98,9 @@ export function ZonesAssignmentsChart() {
           .gte('asignaciones.fecha_inicio', weekStart.toISOString())
           .lte('asignaciones.fecha_inicio', weekEnd.toISOString())
 
-        if (sedeActualId) {
-          zonesQuery = zonesQuery.eq('sede_id', sedeActualId)
-          assignQuery = assignQuery.eq('asignaciones.sede_id', sedeActualId)
-        }
+        // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+        zonesQuery = aplicarFiltroSede(zonesQuery)
+        assignQuery = aplicarFiltroSede(assignQuery, 'asignaciones.sede_id')
 
         const [{ data: allConductores, error: zonesError }, { data: historyData, error: historyError }] = await Promise.all([
           zonesQuery,
@@ -189,7 +188,7 @@ export function ZonesAssignmentsChart() {
     }
 
     fetchData()
-  }, [sedeActualId, selectedWeek])
+  }, [sedeActualId, selectedWeek, aplicarFiltroSede])
 
   if (loading) {
     return (

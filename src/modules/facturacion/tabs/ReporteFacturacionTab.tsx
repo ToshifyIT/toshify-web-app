@@ -1,6 +1,7 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { useColumnasParejas } from '../../../hooks/useColumnasParejas'
 import { supabase } from '../../../lib/supabase'
 import { Alerta } from '../../../components/ui/alertas'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
@@ -747,6 +748,8 @@ export function ReporteFacturacionTab() {
   const { profile } = useAuth()
   const { isAdmin } = usePermissions()
   const { sedeActualId, sedeUsuario, loading: sedeLoading } = useSede()
+  // Indicadores en filas parejas (vista previa y reporte nunca se ven a la vez)
+  const statsReporte = useColumnasParejas<HTMLDivElement>(140)
 
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
@@ -1087,7 +1090,7 @@ export function ReporteFacturacionTab() {
     setVistaPreviaData([])
     setBuscarConductor('')
     cargarFacturacion()
-  }, [semanaActual, sedeActualId, sedeLoading])
+  }, [semanaActual, sedeActualId, sedeLoading, sedeUsuario?.id])
 
   // Saldo anterior separado por conductor (cierre semana previa + pagos de esta semana),
   // para la columna "Saldo Ant." y los Excel. Solo visual: no cambia saldo_anterior.
@@ -1848,12 +1851,15 @@ export function ReporteFacturacionTab() {
       // 0. Verificar si la semana ANTERIOR tiene período cerrado
       const semanaAnt = getISOWeek(subWeeks(semanaActual.inicio, 1))
       const anioAnt = getISOWeekYear(subWeeks(semanaActual.inicio, 1))
+      // Cada sede tiene su período. Con "Todas" se usa la sede del usuario (nunca Pruebas
+      // mezclada con Buenos Aires ni dos períodos para la misma semana).
+      const sedeFacturacion = sedeActualId || sedeUsuario?.id || null
       let qAnt = supabase
         .from('periodos_facturacion')
         .select('id, estado')
         .eq('semana', semanaAnt)
         .eq('anio', anioAnt)
-      if (sedeActualId) qAnt = qAnt.eq('sede_id', sedeActualId)
+      if (sedeFacturacion) qAnt = qAnt.eq('sede_id', sedeFacturacion)
       const { data: periodoAnt } = await qAnt.single()
 
       // La semana anterior está cerrada si: tiene período con estado 'cerrado', es semana 1, o no existe período anterior (sede nueva)
@@ -1866,7 +1872,7 @@ export function ReporteFacturacionTab() {
         .select('*')
         .eq('semana', semana)
         .eq('anio', anio)
-      if (sedeActualId) qPeriodo = qPeriodo.eq('sede_id', sedeActualId)
+      if (sedeFacturacion) qPeriodo = qPeriodo.eq('sede_id', sedeFacturacion)
       const { data: periodoDataDb, error: errPeriodo } = await qPeriodo.single()
 
       if (errPeriodo && errPeriodo.code !== 'PGRST116') {
@@ -7518,10 +7524,14 @@ export function ReporteFacturacionTab() {
 
       // Cargar emails de conductores
       const dnis = [...new Set(baseFacts.map(f => f.conductor_dni).filter(Boolean))]
-      const { data: conductoresData } = await supabase
+      // Solo conductores de la sede del período (el mismo DNI puede estar en la sede Pruebas)
+      const sedeSiFactura = periodo?.sede_id || sedeActualId
+      let qCondSiFactura = supabase
         .from('conductores')
         .select('numero_dni, email, monotributo')
         .in('numero_dni', dnis)
+      if (sedeSiFactura) qCondSiFactura = qCondSiFactura.eq('sede_id', sedeSiFactura)
+      const { data: conductoresData } = await qCondSiFactura
 
       const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
       const monotributoMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.monotributo === true]))
@@ -8111,6 +8121,7 @@ export function ReporteFacturacionTab() {
             total_a_pagar
           )
         `)
+        .eq('facturacion_conductores.periodo_id', periodo.id)
 
       if (error) throw error
 
@@ -8136,9 +8147,13 @@ export function ReporteFacturacionTab() {
 
       // Cargar información de garantías para número de cuota
       // Nota: conductor_id puede ser NULL (importado desde histórico), usamos conductor_nombre como clave
-      const { data: garantias } = await supabase
+      // Solo garantías de la sede del período (o sin sede cargada): la clave es el nombre
+      const sedeGarantiasRIT = periodo.sede_id || sedeActualId
+      let qGarantiasRIT = supabase
         .from('garantias_conductores')
         .select('conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, estado, monto_pagado, monto_total')
+      if (sedeGarantiasRIT) qGarantiasRIT = qGarantiasRIT.or(`sede_id.eq.${sedeGarantiasRIT},sede_id.is.null`)
+      const { data: garantias } = await qGarantiasRIT
 
       const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number; estado: string; monto_pagado: number; monto_total: number }>(
         (garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g])
@@ -8461,11 +8476,13 @@ export function ReporteFacturacionTab() {
             const cuotasPagadas = cuotaActual - 1
 
             const conductorNombreKey = row.conductor.toLowerCase().trim()
-            const { data: garantiaExistente } = await (supabase
+            const sedeGarantiaSync = periodo.sede_id || sedeActualId
+            let qGarantiaSync = (supabase
               .from('garantias_conductores') as any)
               .select('id, cuotas_pagadas, monto_total, monto_pagado')
               .ilike('conductor_nombre', `%${conductorNombreKey.split(' ')[0]}%`)
-              .single()
+            if (sedeGarantiaSync) qGarantiaSync = qGarantiaSync.or(`sede_id.eq.${sedeGarantiaSync},sede_id.is.null`)
+            const { data: garantiaExistente } = await qGarantiaSync.single()
 
             if (garantiaExistente) {
               const nuevoMontoPagado = cuotasPagadas * row.cuotaGarantia
@@ -8965,10 +8982,14 @@ export function ReporteFacturacionTab() {
     try {
       // Obtener emails de conductores
       const dnis = [...new Set(facturacionesBase.map(f => f.conductor_dni).filter(Boolean))]
-      const { data: conductoresData } = await supabase
+      // Solo conductores de la sede del período (el mismo DNI puede estar en la sede Pruebas)
+      const sedeEmailsCabify = per.sede_id || sedeActualId
+      let qCondEmailsCabify = supabase
         .from('conductores')
         .select('numero_dni, email')
         .in('numero_dni', dnis)
+      if (sedeEmailsCabify) qCondEmailsCabify = qCondEmailsCabify.eq('sede_id', sedeEmailsCabify)
+      const { data: conductoresData } = await qCondEmailsCabify
 
       const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [normalizeDni(c.numero_dni), c.email]))
 
@@ -9812,15 +9833,18 @@ export function ReporteFacturacionTab() {
           // Total que se debió cobrar = alquiler + garantía + cargos extra + saldo previo
           const totalAlquiler = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
           const totalGarantia = src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
-          // Cargos "extra" = subtotal_cargos menos alquiler menos garantía (incidencias, multas, etc.)
+          // Toshipass (P027) va dentro de subtotal_cargos: se muestra en su propia fila
+          const totalToshipass = src.reduce((s, f) => s + (f.monto_toshipass || 0), 0)
+          // Cargos "extra" = subtotal_cargos menos alquiler, garantía y Toshipass (incidencias, multas, etc.)
           const totalCargosExtra = src.reduce((s, f) => {
             const cargos = f.subtotal_cargos || 0
             const alq = f.subtotal_alquiler || 0
             const gar = f.subtotal_garantia || 0
-            return s + Math.max(0, cargos - alq - gar)
+            const tp = f.monto_toshipass || 0
+            return s + Math.max(0, cargos - alq - gar - tp)
           }, 0)
           const totalSaldoPrevio = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
-          const importeGenerado = totalAlquiler + totalGarantia + totalCargosExtra + totalSaldoPrevio
+          const importeGenerado = totalAlquiler + totalGarantia + totalToshipass + totalCargosExtra + totalSaldoPrevio
 
           // Pagado por Cabify (Excel cargado en pagos_conductores)
           const totalCobroCabify = src.reduce((s, f) => s + (pagosCabifyMap.get(f.conductor_id) || 0), 0)
@@ -9839,8 +9863,8 @@ export function ReporteFacturacionTab() {
           // Buckets por conductor
           const buckets = { ok: 0, mid: 0, low: 0 }
           for (const f of src) {
-            const debe = (f.subtotal_alquiler || 0) + (f.subtotal_garantia || 0) +
-                         Math.max(0, (f.subtotal_cargos || 0) - (f.subtotal_alquiler || 0) - (f.subtotal_garantia || 0)) +
+            const debe = (f.subtotal_alquiler || 0) + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0) +
+                         Math.max(0, (f.subtotal_cargos || 0) - (f.subtotal_alquiler || 0) - (f.subtotal_garantia || 0) - (f.monto_toshipass || 0)) +
                          Math.max(0, f.saldo_anterior || 0)
             if (debe <= 0) continue
             const pago = pagosCabifyMap.get(f.conductor_id) || 0
@@ -9858,11 +9882,12 @@ export function ReporteFacturacionTab() {
           const componentes: Array<[string, number]> = [
             ['Alquiler de la semana', totalAlquiler],
             ['Garantía (cuota semanal)', totalGarantia],
+            ['Toshipass', totalToshipass],
             ['Incidencias y cargos extra', totalCargosExtra],
             ['Saldo pendiente de la semana anterior', totalSaldoPrevio],
           ]
           const nota = `<div style="margin-top:18px;font-size:11px;line-height:1.5;color:var(--text-tertiary);">
-              Importe generado: lo que se debió cobrar al cierre (alquiler + garantía + cargos + saldo previo),
+              Importe generado: lo que se debió cobrar al cierre (alquiler + garantía + Toshipass + cargos + saldo previo),
               comparado con los pagos cargados desde el Excel de Cabify de esa semana.
             </div>`
 
@@ -10550,7 +10575,9 @@ export function ReporteFacturacionTab() {
           .select('anio, semana, fecha_inicio, fecha_fin, sede_id')
           .order('anio', { ascending: false })
           .order('semana', { ascending: false })
-        if (sedeActualId) q = q.eq('sede_id', sedeActualId)
+        // Mismo criterio que el período: con "Todas", la sede del usuario
+        const sedeFacturacion = sedeActualId || sedeUsuario?.id || null
+        if (sedeFacturacion) q = q.eq('sede_id', sedeFacturacion)
         const { data, error } = await q
         if (error) {
           console.error('[semanas dropdown] error:', error)
@@ -10587,7 +10614,7 @@ export function ReporteFacturacionTab() {
       }
     }
     cargarSemanas()
-  }, [sedeActualId])
+  }, [sedeActualId, sedeUsuario?.id])
 
   // Cerrar dropdown al click fuera
   useEffect(() => {
@@ -11264,7 +11291,11 @@ export function ReporteFacturacionTab() {
           {/* Stats de Vista Previa */}
           {stats && (
             <div className="fact-stats">
-              <div className="fact-stats-grid fact-stats-grid-reporte">
+              <div
+                ref={statsReporte.ref}
+                className="fact-stats-grid fact-stats-grid-reporte fact-stats-grid-parejas"
+                style={statsReporte.columnas ? { gridTemplateColumns: `repeat(${statsReporte.columnas}, minmax(0, 1fr))` } : undefined}
+              >
                 <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
@@ -11428,7 +11459,11 @@ export function ReporteFacturacionTab() {
           {/* Stats */}
           {stats && (
             <div className="fact-stats">
-              <div className="fact-stats-grid fact-stats-grid-reporte">
+              <div
+                ref={statsReporte.ref}
+                className="fact-stats-grid fact-stats-grid-reporte fact-stats-grid-parejas"
+                style={statsReporte.columnas ? { gridTemplateColumns: `repeat(${statsReporte.columnas}, minmax(0, 1fr))` } : undefined}
+              >
                 <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
@@ -11513,11 +11548,7 @@ export function ReporteFacturacionTab() {
                   return (
                     <div className="fact-stat-card"
                       onClick={() => showStatInfo('importe_generado')}
-                      style={{
-                        cursor: 'pointer',
-                        border: '2px solid #16a34a',
-                        background: 'linear-gradient(135deg, rgba(34,197,94,0.10) 0%, var(--bg-primary) 60%)',
-                      }}
+                      style={{ cursor: 'pointer', boxShadow: 'inset 0 0 0 1px #16a34a' }}
                       title="Importe Generado — solo en semanas cerradas"
                     >
                       <DollarSign size={18} className="stat-icon" style={{ color: '#16a34a' }} />

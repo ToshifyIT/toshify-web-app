@@ -55,7 +55,8 @@ export async function fetchCobroData(
   startDate: Date,
   endDate: Date,
   granularity: Granularity,
-  sedeActualId: string | null | undefined
+  sedeActualId: string | null | undefined,
+  aplicarFiltroSede?: <T>(query: T, campo?: string) => T
 ): Promise<ChartDataPoint[]> {
   // Inicializar estructura de datos diaria
   const diasMap = new Map<string, {
@@ -178,6 +179,8 @@ export async function fetchCobroData(
     .select('id, nombres, apellidos, numero_dni, fecha_terminacion')
     .in('numero_dni', dnisList)
   if (sedeActualId) qConductores = qConductores.eq('sede_id', sedeActualId)
+  // "Todas las sedes": solo las sedes reales (deja afuera Pruebas)
+  else if (aplicarFiltroSede) qConductores = aplicarFiltroSede(qConductores)
   const { data: conductoresData } = await qConductores
 
   const conductorInfoMap = new Map<string, any>()
@@ -629,7 +632,7 @@ export function parsePeriodToRange(selectedPeriod: string, granularity: Granular
  * Hook que consume fetchCobroData y maneja el estado de loading/data.
  */
 export function useCobroTeoricoData(granularity: Granularity, selectedPeriod: string | undefined) {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [chartData, setChartData] = useState<ChartDataPoint[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -652,7 +655,7 @@ export function useCobroTeoricoData(granularity: Granularity, selectedPeriod: st
       setLoading(true)
       try {
         const { startDate, endDate } = parsePeriodToRange(selectedPeriod, granularity)
-        const data = await fetchCobroData(startDate, endDate, granularity, sedeActualId)
+        const data = await fetchCobroData(startDate, endDate, granularity, sedeActualId, aplicarFiltroSede)
         if (isMounted) {
           setChartData(data)
           setCache(CACHE_NS, paramsKey, data)
@@ -669,7 +672,7 @@ export function useCobroTeoricoData(granularity: Granularity, selectedPeriod: st
     doFetch()
 
     return () => { isMounted = false }
-  }, [selectedPeriod, granularity, sedeActualId])
+  }, [selectedPeriod, granularity, sedeActualId, aplicarFiltroSede])
 
   return { chartData, loading }
 }

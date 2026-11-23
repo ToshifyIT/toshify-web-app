@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
+import { useSede } from '../contexts/SedeContext'
 
 const CACHE_NS = 'useIncobrabilidadStats'
 
@@ -46,14 +47,16 @@ function parseSemanaLabel(label: string): { semana: number; anio: number } | nul
 async function fetchForPeriod(
   semana: number,
   anio: number,
-  sedeId?: string
+  sedeId: string | undefined,
+  aplicarFiltroSede: <T>(query: T, campo?: string) => T
 ): Promise<IncobrabilidadResult> {
   // 1. Buscar periodo cerrado
   let qPeriodo = (supabase.from('periodos_facturacion') as any)
     .select('id, estado, semana, anio')
     .eq('semana', semana)
     .eq('anio', anio)
-  if (sedeId) qPeriodo = qPeriodo.eq('sede_id', sedeId)
+  // Filtro de sede: la elegida, o las sedes reales si es "Todas" (deja afuera Pruebas)
+  qPeriodo = sedeId ? qPeriodo.eq('sede_id', sedeId) : aplicarFiltroSede(qPeriodo)
   const { data: periodo } = await qPeriodo.single()
 
   if (!periodo || periodo.estado !== 'cerrado') {
@@ -130,6 +133,7 @@ export function useIncobrabilidadStats(
   periodB: string,
   sedeId?: string
 ) {
+  const { aplicarFiltroSede } = useSede()
   const [stats, setStats] = useState<IncobrabilidadStats>({
     dataA: EMPTY_RESULT,
     dataB: EMPTY_RESULT,
@@ -171,8 +175,8 @@ export function useIncobrabilidadStats(
         const parsedB = parseSemanaLabel(periodB)
 
         const [dataA, dataB] = await Promise.all([
-          parsedA ? fetchForPeriod(parsedA.semana, parsedA.anio, sedeId) : Promise.resolve(EMPTY_RESULT),
-          parsedB ? fetchForPeriod(parsedB.semana, parsedB.anio, sedeId) : Promise.resolve(EMPTY_RESULT),
+          parsedA ? fetchForPeriod(parsedA.semana, parsedA.anio, sedeId, aplicarFiltroSede) : Promise.resolve(EMPTY_RESULT),
+          parsedB ? fetchForPeriod(parsedB.semana, parsedB.anio, sedeId, aplicarFiltroSede) : Promise.resolve(EMPTY_RESULT),
         ])
 
         if (isMounted) {
@@ -192,7 +196,7 @@ export function useIncobrabilidadStats(
     return () => {
       isMounted = false
     }
-  }, [granularity, periodA, periodB, sedeId])
+  }, [granularity, periodA, periodB, sedeId, aplicarFiltroSede])
 
   if (paramsChanged) {
     return { ...stats, loading: true }

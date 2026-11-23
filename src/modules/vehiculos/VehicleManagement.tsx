@@ -153,7 +153,7 @@ const PESTANAS_DETALLE_VEHICULO: TabsBarItem<PestanaDetalleVehiculo>[] = [
 ]
 
 export function VehicleManagement() {
-  const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedes: sedesContexto } = useSede()
   const { grupos: gruposFlotaDB } = useGruposFlota()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
   const [loading, setLoading] = useState(true)
@@ -430,6 +430,15 @@ export function VehicleManagement() {
   }, [calculatedStats])
   const fotoAnterior = useFotoSemanaAnterior('vehiculos', valoresTarjetas, !loading && vehiculos.length > 0)
 
+  // Titulares de la sede o sin sede (como el módulo Titulares). Con "todas", las sedes
+  // reales: los de Pruebas no se ofrecen.
+  const filtrarTitularesPorSede = <T,>(query: T): T => {
+    const idsReales = sedesContexto.filter(s => !s.solo_admin).map(s => s.id)
+    if (sedeActualId) return (query as any).or(`sede_id.eq.${sedeActualId},sede_id.is.null`)
+    if (idsReales.length > 0) return (query as any).or(`sede_id.in.(${idsReales.join(',')}),sede_id.is.null`)
+    return query
+  }
+
   // ✅ OPTIMIZADO: Carga TODO en paralelo - SOLO campos necesarios para tabla
   const loadAllData = async () => {
     setLoading(true)
@@ -453,7 +462,7 @@ export function VehicleManagement() {
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion'),
         supabase.from('sedes').select('id, nombre').order('nombre'),
         supabase.from('uss_historico').select('patente').gte('fecha_hora_inicio_gmt3', desde30d),
-        supabase.from('titulares').select('id, tipo, nombres, apellidos, razon_social').eq('estado', 'activo'),
+        filtrarTitularesPorSede(supabase.from('titulares').select('id, tipo, nombres, apellidos, razon_social').eq('estado', 'activo')),
       ])
 
       if (vehiculosRes.error) throw vehiculosRes.error

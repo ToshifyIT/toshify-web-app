@@ -426,11 +426,106 @@ function nombreConductor(r: Pick<ConductorRow, 'apellidos' | 'nombres'>): string
   return nombre || 'Sin nombre'
 }
 
-export async function fetchConductoresMapa(
+// =====================================================
+// Carga en una consulta (sql/distribucion_mapa_carga.sql)
+// =====================================================
+
+/**
+ * true cuando la base todavía no tiene las funciones mapa_conductores /
+ * mapa_leads. La pantalla sigue andando por el camino anterior (varias
+ * consultas, más lento) y avisa que falta correr el SQL.
+ */
+let funcionesCargaFaltantes = false
+export function faltanFuncionesCarga(): boolean {
+  return funcionesCargaFaltantes
+}
+
+/** El error de Supabase dice que la función no existe (no instalada). */
+function esFuncionNoInstalada(error: { code?: string; message?: string }, nombre: string): boolean {
+  if (error.code === 'PGRST202' || error.code === '42883') return true
+  return String(error.message || '').includes(nombre) && /could not find|does not exist/i.test(String(error.message))
+}
+
+/** Lo que hace falta para armar los conductores, venga de donde venga. */
+interface DatosConductores {
+  rows: ConductorRow[]
+  ultimoHorario: Map<string, string | null>
+  asignacionesActivas: Map<string, AsignacionActiva>
+  /** dni (sólo dígitos) -> turno que tenía como lead. */
+  turnoLeadPorDni: Map<string, string | null>
+}
+
+/** Fila de mapa_conductores(): la del conductor más lo ya resuelto en la base. */
+interface ConductorRpcRow extends ConductorRow {
+  ultimo_horario: string | null
+  turno_lead: string | null
+  asignacion_activa: {
+    asignacion_id: string
+    horario_asignacion: string | null
+    horario_conductor: string | null
+    patente: string | null
+    tarifa: string | null
+    diurno: string[] | null
+    nocturno: string[] | null
+  } | null
+}
+
+/** Un pedido: conductores con asignación activa, compañeros y turnos. null si la función falta. */
+async function cargarConductoresRpc(
+  sedesFiltro: string[] | null,
+  sedeActualId?: string | null
+): Promise<DatosConductores | null> {
+  if (funcionesCargaFaltantes) return null
+  const { data, error } = await (supabase as any).rpc('mapa_conductores', {
+    p_sedes: sedesFiltro,
+    p_sede_asignacion: sedeActualId || null,
+  })
+  if (error) {
+    if (esFuncionNoInstalada(error, 'mapa_conductores')) {
+      funcionesCargaFaltantes = true
+      console.warn('[DistribucionMapaV2] Falta instalar sql/distribucion_mapa_carga.sql; se usa la carga anterior.')
+      return null
+    }
+    throw error
+  }
+
+  // Los conductores comodín del equipo interno no van al mapa, la lista ni las métricas.
+  const rows = ((data || []) as ConductorRpcRow[]).filter((r) => !esConductorInterno(r))
+  const ultimoHorario = new Map<string, string | null>()
+  const asignacionesActivas = new Map<string, AsignacionActiva>()
+  const turnoLeadPorDni = new Map<string, string | null>()
+
+  for (const r of rows) {
+    ultimoHorario.set(r.id, r.ultimo_horario || null)
+    const dni = soloDigitos(r.numero_dni)
+    if (dni && r.turno_lead && !turnoLeadPorDni.has(dni)) turnoLeadPorDni.set(dni, r.turno_lead)
+
+    const a = r.asignacion_activa
+    if (!a) continue
+    const diurno = a.diurno || []
+    const nocturno = a.nocturno || []
+    const complementario =
+      a.horario_conductor === 'diurno' ? nocturno : a.horario_conductor === 'nocturno' ? diurno : []
+    asignacionesActivas.set(r.id, {
+      asignacionId: a.asignacion_id,
+      horarioAsignacion: a.horario_asignacion,
+      horarioConductor: a.horario_conductor,
+      patente: a.patente,
+      turnoDiurnoOcupado: diurno.length > 0,
+      turnoNocturnoOcupado: nocturno.length > 0,
+      companeroIds: complementario.filter((id) => id !== r.id),
+      tarifa: (a.tarifa || 'antigua') as TipoTarifa,
+    })
+  }
+
+  return { rows, ultimoHorario, asignacionesActivas, turnoLeadPorDni }
+}
+
+/** Camino anterior: varias consultas encadenadas (sin las funciones SQL). */
+async function cargarConductoresConsultas(
   aplicarFiltroSede: AplicarFiltroSede,
-  sedeActualId?: string | null,
-  zonasPeligrosas: ZonaPeligrosa[] = []
-): Promise<EntidadMapa[]> {
+  sedeActualId?: string | null
+): Promise<DatosConductores> {
   const COLUMNAS =
     'id, nombres, apellidos, numero_dni, preferencia_turno, zona, direccion, direccion_lat, direccion_lng, direccion_pais, direccion_ciudad, estado_id, fecha_nacimiento, numero_licencia, licencia_vencimiento, experiencia_previa, antecedentes_penales, telefono_contacto, fecha_contratacion, conductores_estados(codigo, descripcion)'
 
@@ -455,10 +550,7 @@ export async function fetchConductoresMapa(
   const rows = ((data || []) as ConductorRow[]).filter((r) => !esConductorInterno(r))
 
   const ultimoHorario = await fetchUltimoHorarioPorConductor(rows.map((r) => r.id))
-  const [asignacionesActivas, conceptosTarifa] = await Promise.all([
-    fetchAsignacionesActivas(sedeActualId),
-    cargarConceptosTarifa(),
-  ])
+  const asignacionesActivas = await fetchAsignacionesActivas(sedeActualId)
 
   // Fallback de turno al que tenían como lead, sólo para los que quedarían sin dato.
   const dnisFallback: string[] = []
@@ -468,6 +560,29 @@ export async function fetchConductoresMapa(
     if (!tAsig && !tPref && r.numero_dni) dnisFallback.push(r.numero_dni)
   }
   const turnoLeadPorDni = await fetchTurnoLeadPorDni(dnisFallback)
+
+  return { rows, ultimoHorario, asignacionesActivas, turnoLeadPorDni }
+}
+
+/**
+ * Conductores de la sede para el mapa.
+ * `sedesFiltro` es el mismo filtro que aplica `aplicarFiltroSede`, en forma de
+ * lista para la función SQL (null = sin filtro). `zonasPeligrosas` puede venir
+ * como promesa: así se pide en paralelo con los conductores.
+ */
+export async function fetchConductoresMapa(
+  aplicarFiltroSede: AplicarFiltroSede,
+  sedeActualId?: string | null,
+  zonasPeligrosasEntrada: ZonaPeligrosa[] | Promise<ZonaPeligrosa[]> = [],
+  sedesFiltro: string[] | null = null
+): Promise<EntidadMapa[]> {
+  const [datosRpc, conceptosTarifa] = await Promise.all([
+    cargarConductoresRpc(sedesFiltro, sedeActualId),
+    cargarConceptosTarifa(),
+  ])
+  const { rows, ultimoHorario, asignacionesActivas, turnoLeadPorDni } =
+    datosRpc ?? (await cargarConductoresConsultas(aplicarFiltroSede, sedeActualId))
+  const zonasPeligrosas = await zonasPeligrosasEntrada
 
   // Nombre por id, para resolver el compañero sin otra consulta a la base.
   const nombrePorId = new Map<string, string>()
@@ -653,10 +768,54 @@ function ubicacionDeLead(r: any): { pais: string | null; ciudad: string | null }
 }
 
 
+/** Un pedido: los leads de la sede. null si la función falta. */
+async function cargarLeadsRpc(sedesFiltro: string[] | null): Promise<LeadRow[] | null> {
+  if (funcionesCargaFaltantes) return null
+  const { data, error } = await (supabase as any).rpc('mapa_leads', {
+    p_sedes: sedesFiltro,
+    p_excluidos: [...ESTADOS_LEAD_EXCLUIDOS],
+  })
+  if (error) {
+    if (esFuncionNoInstalada(error, 'mapa_leads')) {
+      funcionesCargaFaltantes = true
+      console.warn('[DistribucionMapaV2] Falta instalar sql/distribucion_mapa_carga.sql; se usa la carga anterior.')
+      return null
+    }
+    throw error
+  }
+  return leadsDesdeRpc(data)
+}
+
+/**
+ * mapa_leads devuelve { columnas, filas } con cada fila como lista de valores
+ * (más liviano). Se rearma cada fila como objeto con esos nombres. Una versión
+ * anterior de la función devolvía la lista de objetos directo: se acepta igual.
+ */
+function leadsDesdeRpc(data: unknown): LeadRow[] {
+  if (Array.isArray(data)) return data as LeadRow[]
+  const { columnas, filas } = (data || {}) as { columnas?: string[]; filas?: unknown[][] }
+  if (!columnas || !filas) return []
+  return filas.map((valores) => {
+    const fila: Record<string, unknown> = {}
+    for (let i = 0; i < columnas.length; i++) fila[columnas[i]] = valores[i]
+    return fila as unknown as LeadRow
+  })
+}
+
+/** Leads para el mapa. Ver fetchConductoresMapa por `sedesFiltro` y las zonas. */
 export async function fetchLeadsMapa(
   aplicarFiltroSede: AplicarFiltroSede,
-  zonasPeligrosas: ZonaPeligrosa[] = []
+  zonasPeligrosasEntrada: ZonaPeligrosa[] | Promise<ZonaPeligrosa[]> = [],
+  sedesFiltro: string[] | null = null
 ): Promise<EntidadMapa[]> {
+  const rowsRpc = await cargarLeadsRpc(sedesFiltro)
+  const rows = rowsRpc ?? (await cargarLeadsConsultas(aplicarFiltroSede))
+  const zonasPeligrosas = await zonasPeligrosasEntrada
+  return armarLeads(rows, zonasPeligrosas)
+}
+
+/** Camino anterior: los leads por páginas de 1000 (sin las funciones SQL). */
+async function cargarLeadsConsultas(aplicarFiltroSede: AplicarFiltroSede): Promise<LeadRow[]> {
   // Sin `.in('estado_de_lead', ...)`: el v2 trae todo el pipeline y la UI decide
   // qué estados mostrar (preseleccionados: los dos de inducción).
   // Los estados excluidos por regla de negocio (Descartado) se filtran ya en la
@@ -677,9 +836,10 @@ export async function fetchLeadsMapa(
     return aplicarFiltroSede(q, 'sede_id').range(desde, hasta)
   })
   if (error) throw error
+  return (data || []) as LeadRow[]
+}
 
-  const rows = (data || []) as LeadRow[]
-
+function armarLeads(rows: LeadRow[], zonasPeligrosas: ZonaPeligrosa[]): EntidadMapa[] {
   return rows.map((r) => {
     const nombre =
       (r.nombre_completo && r.nombre_completo.trim()) ||

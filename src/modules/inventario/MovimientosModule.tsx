@@ -118,7 +118,9 @@ interface ProductoLoteSalida {
 export function MovimientosModule() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { aplicarFiltroSede, sedeActualId } = useSede()
+  const { aplicarFiltroSede, sedeActualId, sedeUsuario } = useSede()
+  // Sede donde se graba. Si no hay ninguna (null), el trigger usa la principal.
+  const sedeEscrituraId = sedeActualId || sedeUsuario?.id || null
   const { canCreateInSubmenu } = usePermissions()
 
   // Permisos específicos para el submenú de movimientos
@@ -193,7 +195,7 @@ export function MovimientosModule() {
         setStockPorProveedor([])
       }
     }
-  }, [productoId, tipoMovimiento, modoLote, vehiculoId])
+  }, [productoId, tipoMovimiento, modoLote, vehiculoId, aplicarFiltroSede])
 
   useEffect(() => {
     // Reset al cambiar tipo de movimiento
@@ -319,7 +321,7 @@ export function MovimientosModule() {
     if (tipoMovimiento === 'devolucion') {
       loadVehiculosConInventario()
     }
-  }, [tipoMovimiento])
+  }, [tipoMovimiento, aplicarFiltroSede])
 
   useEffect(() => {
     if (tipoMovimiento === 'devolucion' && vehiculoId) {
@@ -328,7 +330,7 @@ export function MovimientosModule() {
       setProductosAsignadosVehiculo([])
       setProductoId('')
     }
-  }, [vehiculoId, tipoMovimiento])
+  }, [vehiculoId, tipoMovimiento, aplicarFiltroSede])
 
   // =====================================================
   // FUNCIONES DE CARGA
@@ -355,11 +357,11 @@ export function MovimientosModule() {
           .select('id, patente, marca, modelo')
           .is('deleted_at', null))
           .order('patente'),
-        // Cargar stock disponible por producto
-        supabase
+        // Cargar stock disponible por producto (de la sede)
+        aplicarFiltroSede(supabase
           .from('inventario')
           .select('producto_id, cantidad')
-          .eq('estado', 'disponible')
+          .eq('estado', 'disponible'))
       ])
 
       // Calcular stock disponible por producto
@@ -389,12 +391,12 @@ export function MovimientosModule() {
 
   const loadStockPorProveedor = async (productoId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('inventario')
         .select(`id, proveedor_id, cantidad, proveedores (id, razon_social)`)
         .eq('producto_id', productoId)
         .eq('estado', 'disponible')
-        .gt('cantidad', 0)
+        .gt('cantidad', 0))
 
       if (error) throw error
 
@@ -421,16 +423,17 @@ export function MovimientosModule() {
 
   const loadVehiculosConInventario = async () => {
     try {
-      const { data, error } = await supabase
+      // Solo el stock de la sede elegida (el asignado a un vehículo queda en la sede del vehículo)
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('inventario')
         .select(`
           asignado_a_vehiculo_id,
           productos (es_retornable),
-          vehiculos (id, patente, marca, modelo)
+          vehiculos!inner (id, patente, marca, modelo)
         `)
         .eq('estado', 'en_uso')
         .not('asignado_a_vehiculo_id', 'is', null)
-        .gt('cantidad', 0)
+        .gt('cantidad', 0))
 
       if (error) throw error
 
@@ -460,7 +463,7 @@ export function MovimientosModule() {
 
   const loadProductosAsignadosVehiculo = async (vehiculoId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('inventario')
         .select(`
           id, producto_id, proveedor_id, cantidad,
@@ -469,7 +472,7 @@ export function MovimientosModule() {
         `)
         .eq('asignado_a_vehiculo_id', vehiculoId)
         .eq('estado', 'en_uso')
-        .gt('cantidad', 0)
+        .gt('cantidad', 0))
 
       if (error) throw error
 
@@ -557,7 +560,8 @@ export function MovimientosModule() {
       estado_destino: 'en_transito',
       estado_aprobacion: 'aprobado',
       usuario_aprobador_id: usuarioId,
-      fecha_aprobacion: new Date().toISOString()
+      fecha_aprobacion: new Date().toISOString(),
+      sede_id: sedeEscrituraId
     })
     if (error) throw error
   }
@@ -796,7 +800,8 @@ export function MovimientosModule() {
             p_cantidad: pl.cantidad,
             p_proveedor_id: proveedorId,
             p_usuario_id: user?.id,
-            p_observaciones: observaciones || 'Ingresar varios productos'
+            p_observaciones: observaciones || 'Ingresar varios productos',
+            p_sede_id: sedeEscrituraId
           })
           if (error) throw error
         }
@@ -828,7 +833,8 @@ export function MovimientosModule() {
           observaciones: observaciones || `Retiro de varios productos - ${item.vehiculo?.patente || 'Sin vehículo'}`,
           motivo_salida: motivoSalida,
           estado_aprobacion: 'pendiente',
-          categoria_servicio: motivoSalida === 'consumo_servicio' ? categoriaServicio : null
+          categoria_servicio: motivoSalida === 'consumo_servicio' ? categoriaServicio : null,
+          sede_id: sedeEscrituraId
         }
 
         const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
@@ -888,7 +894,8 @@ export function MovimientosModule() {
           p_motivo_salida: null,
           p_servicio_id: null,
           p_estado_aprobacion: 'aprobado',
-          p_estado_retorno: null
+          p_estado_retorno: null,
+          p_sede_id: sedeEscrituraId
         })
         if (error) throw error
 
@@ -911,7 +918,8 @@ export function MovimientosModule() {
         motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
         estado_aprobacion: 'pendiente',
         estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null,
-        categoria_servicio: categoriaServicioFinal || null
+        categoria_servicio: categoriaServicioFinal || null,
+        sede_id: sedeEscrituraId
       }
 
       const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
@@ -989,12 +997,12 @@ export function MovimientosModule() {
     const prod = productos.find(p => p.id === productoId)
     if (!prod) return
 
-    const { data: stockDisponible, error } = await supabase
+    const { data: stockDisponible, error } = await aplicarFiltroSede(supabase
       .from('inventario')
       .select('id, proveedor_id, cantidad')
       .eq('producto_id', productoId)
       .eq('estado', 'disponible')
-      .gt('cantidad', 0)
+      .gt('cantidad', 0))
       .order('cantidad', { ascending: false })
 
     if (error) {

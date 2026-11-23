@@ -74,6 +74,8 @@
 #root :is(.modal-content, [class*="-modal-content"]) :where(*:not(svg):not(svg *)) {
   font-size: 11px !important;
 }
+/* Monto destacado (ej. Total a pagar del detalle de facturación): queda grande */
+#root :is(.modal-content, [class*="-modal-content"]) .modal-monto-total { font-size: 26px !important; }
 #root :is(.modal-content, [class*="-modal-content"]) :is(.modal-header, [class*="modal-header"]) :is(h2, h3),
 #root :is(.modal-content, [class*="-modal-content"]) > :is(h2, h3),
 #root :is(.modal-content, [class*="-modal-content"]) [class*="modal-title"] { font-size: 15px !important; }
