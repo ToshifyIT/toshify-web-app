@@ -56,6 +56,7 @@ import {
   fetchConductoresMapa,
   fetchLeadsMapa,
   fetchZonasPeligrosas,
+  faltanFuncionesCarga,
   geocodificarFaltantes,
   ESTADOS_LEAD_EXCLUIDOS,
   ESTADOS_LEAD_TODOS,
@@ -93,12 +94,13 @@ import {
   type UbicacionCelda,
 } from './celdasGeograficasService'
 import { MapaCanvas } from './components/MapaCanvas'
-import { colorEntidad } from './components/colores'
+import { colorEntidad, COLOR_TURNO_DIURNO, COLOR_TURNO_NOCTURNO, COLOR_TURNO_SINPREF, COLOR_TURNO_SIN_DATO } from './components/colores'
 import { MenuFiltro } from './components/MenuFiltro'
 import { SugerenciasDrawer } from './components/SugerenciasDrawer'
 import { IconoEntidad } from './components/iconos'
-import { Chip } from './components/ui'
+import { Chip, InfoTip } from './components/ui'
 import { procesarLeadsNuevos } from '../../leads/rutasLeadsService'
+import { showWarning } from '../../../utils/toast'
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 
@@ -233,7 +235,16 @@ const RETARDO_RECALCULO_MS = 1200
 const TRAMOS_PARA_CONFIRMAR = 50
 
 export function DistribucionMapaV2Module() {
-  const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { sedeActualId, aplicarFiltroSede, verTodas, sedes, sedeActual } = useSede()
+  // El mismo filtro que aplicarFiltroSede, como lista para las funciones SQL de
+  // la carga (null = sin filtro). "Todas" son las sedes reales, sin Pruebas.
+  const sedesFiltro = useMemo<string[] | null>(() => {
+    if (verTodas) {
+      const reales = sedes.filter((s) => !s.solo_admin).map((s) => s.id)
+      return reales.length > 0 ? reales : null
+    }
+    return sedeActual?.id ? [sedeActual.id] : null
+  }, [verTodas, sedes, sedeActual])
   const navigate = useNavigate()
   // El módulo ocupa exactamente el alto disponible: el encabezado no se pierde al scrollear.
   const raizRef = useRef<HTMLDivElement | null>(null)
@@ -394,15 +405,23 @@ export function DistribucionMapaV2Module() {
     try {
       // Las zonas peligrosas se resuelven una vez por carga y se inyectan a los
       // fetch, que marcan si el domicilio de cada persona cae dentro de alguna.
-      const zonas = await fetchZonasPeligrosas()
-      setZonasPeligrosas(zonas)
-
-      const [cond, lds] = await Promise.all([
-        fetchConductoresMapa(aplicarFiltroSede, sedeActualId, zonas),
-        fetchLeadsMapa(aplicarFiltroSede, zonas),
+      // Se piden en paralelo con conductores y leads: cada fetch las espera
+      // recién para marcar los domicilios, después de traer sus datos.
+      const zonasP = fetchZonasPeligrosas()
+      const [zonas, cond, lds] = await Promise.all([
+        zonasP,
+        fetchConductoresMapa(aplicarFiltroSede, sedeActualId, zonasP, sedesFiltro),
+        fetchLeadsMapa(aplicarFiltroSede, zonasP, sedesFiltro),
       ])
+      setZonasPeligrosas(zonas)
       setConductores(cond)
       setLeads(lds)
+      if (faltanFuncionesCarga()) {
+        showWarning(
+          'El mapa está cargando por el camino lento',
+          'Falta instalar en la base sql/distribucion_mapa_carga.sql. Los datos son los mismos.'
+        )
+      }
 
       // Geocodificación best-effort (acotada) una vez por carga.
       if (!geocodDoneRef.current) {
@@ -421,8 +440,8 @@ export function DistribucionMapaV2Module() {
           const actualizado = await geocodificarFaltantes(faltantes)
           if (actualizado) {
             const [cond2, lds2] = await Promise.all([
-              fetchConductoresMapa(aplicarFiltroSede, sedeActualId, zonas),
-              fetchLeadsMapa(aplicarFiltroSede, zonas),
+              fetchConductoresMapa(aplicarFiltroSede, sedeActualId, zonas, sedesFiltro),
+              fetchLeadsMapa(aplicarFiltroSede, zonas, sedesFiltro),
             ])
             setConductores(cond2)
             setLeads(lds2)
@@ -435,7 +454,7 @@ export function DistribucionMapaV2Module() {
     } finally {
       setLoading(false)
     }
-  }, [aplicarFiltroSede, sedeActualId])
+  }, [aplicarFiltroSede, sedeActualId, sedesFiltro])
 
   useEffect(() => {
     geocodDoneRef.current = false
@@ -1398,12 +1417,23 @@ export function DistribucionMapaV2Module() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <MapIcon size={20} style={{ color: 'var(--color-primary, #ff0033)' }} />
           <div>
-            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Distribución en mapa
-            </h2>
-            {/* Sólo lo accionable: los totales ya están en las tarjetas de capa. */}
+            {/* El nombre del módulo ya está en el menú: en su lugar va la leyenda (2026-11-23). */}
+            <div style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              Leyenda
+              <InfoTip titulo="Qué significa cada ícono y color" ancho={300} tamano={15}>
+                <LeyendaMapa />
+              </InfoTip>
+            </div>
+            {/* Sólo lo accionable: los totales ya están en las tarjetas de capa.
+                En rojo sólo si hay alguno; 0 es la buena noticia. */}
             {filtros.segmento !== 'leads' && (
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--color-primary, #ff0033)' }}>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  color: conteos.sinCompanero > 0 ? 'var(--color-primary, #ff0033)' : 'var(--text-tertiary)',
+                }}
+              >
                 {conteos.sinCompanero} sin compañero
               </span>
             )}
@@ -2050,24 +2080,24 @@ function ManijaPanel({
         right,
         transform: top === '50%' ? 'translateY(-50%)' : undefined,
         transition: 'left .25s ease, right .25s ease',
-        // Más visible que antes: borde y chevron en el color principal y
-        // sombra más marcada, para que se note sobre el mapa y la lista.
-        width: 26,
-        height: 60,
+        // Gris y más chica (2026-11-23): en rojo competía con la acción
+        // principal y parecía una alerta.
+        width: 22,
+        height: 48,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        border: '1.5px solid var(--color-primary, #ff0033)',
+        border: '1px solid var(--border-primary)',
         borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)',
-        color: 'var(--color-primary, #ff0033)',
-        boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+        color: 'var(--text-secondary)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
         cursor: 'pointer',
         zIndex: 6,
         padding: 0,
       }}
     >
-      {apuntaIzquierda ? <ChevronLeft size={18} strokeWidth={2.5} /> : <ChevronRight size={18} strokeWidth={2.5} />}
+      {apuntaIzquierda ? <ChevronLeft size={16} strokeWidth={2.2} /> : <ChevronRight size={16} strokeWidth={2.2} />}
       {badge !== undefined && (
         <span
           style={{
@@ -2078,8 +2108,8 @@ function ManijaPanel({
             height: 16,
             padding: '0 4px',
             borderRadius: 'var(--radius-full)',
-            background: 'var(--color-primary, #ff0033)',
-            color: '#fff',
+            background: 'var(--text-primary)',
+            color: 'var(--bg-primary)',
             fontSize: 9.5,
             fontWeight: 800,
             display: 'inline-flex',
@@ -2164,14 +2194,14 @@ function FilaLista({
         )}
         {e.tipo === 'conductor' && e.tieneAsignacionActiva && e.tarifaAsignacion && (
           <span title="Tarifa de la asignación activa" style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)' }}>
-            {e.tarifaAsignacion}
+            Tarifa {e.tarifaAsignacion}
           </span>
         )}
         {e.tipo === 'conductor' && e.esBaja && (
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)' }}>Baja</span>
         )}
         {e.documento && (
-          <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.documento}</span>
+          <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>DNI {e.documento}</span>
         )}
         {e.zona && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.zona}</span>}
         {e.estadoCompanero === 'sin_companero' && (
@@ -2194,6 +2224,78 @@ function FilaLista({
           Compañero: <b style={{ color: 'var(--text-secondary)' }}>{e.companeroNombre}</b>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Fila de la leyenda: ícono a la izquierda y explicación. */
+function FilaLeyenda({ icono, children }: { icono: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+      <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{icono}</span>
+      <span>{children}</span>
+    </div>
+  )
+}
+
+/**
+ * Leyenda del mapa (2026-11-23): qué es cada pin, cada color y cada marca.
+ * Los colores salen de components/colores.ts, así no se desfasan del mapa.
+ */
+function LeyendaMapa() {
+  const titulo = (t: string) => (
+    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--text-tertiary)', margin: '8px 0 2px' }}>
+      {t}
+    </div>
+  )
+  return (
+    <div>
+      <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 12 }}>Cómo leer el mapa</div>
+      {titulo('Íconos')}
+      <FilaLeyenda icono={<IconoEntidad tipo="conductor" color={COLOR_TURNO_SIN_DATO} size={16} />}>
+        Auto: conductor
+      </FilaLeyenda>
+      <FilaLeyenda icono={<IconoEntidad tipo="lead" color={COLOR_TURNO_SIN_DATO} size={16} />}>
+        Persona: lead (candidato)
+      </FilaLeyenda>
+      {titulo('Color del conductor')}
+      <FilaLeyenda icono={<IconoEntidad tipo="conductor" color={COLOR_TURNO_DIURNO} size={16} />}>
+        <b style={{ color: COLOR_TURNO_DIURNO }}>Diurno</b> en su asignación activa
+      </FilaLeyenda>
+      <FilaLeyenda icono={<IconoEntidad tipo="conductor" color={COLOR_TURNO_NOCTURNO} size={16} />}>
+        <b style={{ color: COLOR_TURNO_NOCTURNO }}>Nocturno</b> en su asignación activa
+      </FilaLeyenda>
+      <FilaLeyenda icono={<IconoEntidad tipo="conductor" color={COLOR_TURNO_SINPREF} size={16} />}>
+        <b style={{ color: COLOR_TURNO_SINPREF }}>A cargo</b> (todo el día)
+      </FilaLeyenda>
+      <FilaLeyenda icono={<IconoEntidad tipo="conductor" color={COLOR_TURNO_SIN_DATO} size={16} />}>
+        <b style={{ color: COLOR_TURNO_SIN_DATO }}>Sin asignación</b> activa
+      </FilaLeyenda>
+      <FilaLeyenda icono={<span style={{ opacity: 0.5 }}><IconoEntidad tipo="conductor" color={COLOR_TURNO_SIN_DATO} size={16} /></span>}>
+        Más claro: conductor de baja
+      </FilaLeyenda>
+      {titulo('Color del lead')}
+      <div style={{ padding: '2px 0' }}>El color es el de su estado, el mismo que en Leads.</div>
+      {titulo('Marcas en el mapa')}
+      <FilaLeyenda icono={<span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #ff0033', display: 'inline-block' }} />}>
+        Aro rojo: la persona seleccionada
+      </FilaLeyenda>
+      <FilaLeyenda icono={<span style={{ width: 16, height: 0, borderTop: '2px solid #ff0033', display: 'inline-block' }} />}>
+        Línea roja con minutos: par sugerido elegido y tiempo de viaje entre los dos
+      </FilaLeyenda>
+      <FilaLeyenda icono={<span style={{ width: 16, height: 0, borderTop: '2px solid #059669', display: 'inline-block' }} />}>
+        Línea verde: está a menos del tiempo máximo (en &quot;ver todos&quot;)
+      </FilaLeyenda>
+      <FilaLeyenda icono={<span style={{ width: 16, height: 0, borderTop: '2px solid #9CA3AF', display: 'inline-block' }} />}>
+        Línea gris: está más lejos que el tiempo máximo
+      </FilaLeyenda>
+      <FilaLeyenda icono={<span style={{ width: 14, height: 10, background: 'rgba(220,38,38,0.25)', border: '1px solid #DC2626', display: 'inline-block' }} />}>
+        Zona roja: zona restringida (se ve con el botón Zonas restringidas)
+      </FilaLeyenda>
+      {titulo('En la lista')}
+      <div style={{ padding: '2px 0' }}>
+        <b style={{ color: '#b91c1c' }}>Sin compañero</b>: trabaja por turno y el otro turno de su auto está vacío.
+      </div>
     </div>
   )
 }

@@ -5,8 +5,8 @@
 // igual que el resto del módulo de onboarding, para no introducir una
 // dependencia de estilos nueva.
 
-import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, Info } from 'lucide-react'
 
 export type TonoBadge = 'ok' | 'warn' | 'bad' | 'info' | 'neutro'
 
@@ -68,9 +68,11 @@ export function Chip({
         display: 'inline-flex',
         alignItems: 'center',
         gap: 5,
-        border: `1px solid ${activo ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
-        background: activo ? '#fff1f3' : 'var(--bg-primary)',
-        color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)',
+        // Activo en gris oscuro, sin fondo (2026-11-23): el rojo queda para la
+        // acción principal y las alertas.
+        border: `1px solid ${activo ? 'var(--text-primary)' : 'var(--border-primary)'}`,
+        background: 'var(--bg-primary)',
+        color: activo ? 'var(--text-primary)' : 'var(--text-secondary)',
         borderRadius: 'var(--radius-full)',
         padding: '4px 10px',
         fontSize: 10.5,
@@ -127,27 +129,174 @@ export function CheckRow({
   )
 }
 
+/**
+ * Ícono "i" que abre una ventanita con una explicación (2026-11-23: los textos de
+ * ayuda ocupaban lugar fijo en el panel; ahora se leen sólo cuando se piden).
+ * Se abre al pasar el mouse o al tocarlo (celular) y se cierra al tocar afuera
+ * o con Escape. La ventanita va con `position: fixed` para que no la recorten
+ * los paneles laterales, que tienen `overflow: hidden`.
+ */
+export function InfoTip({
+  children,
+  titulo = 'Ayuda',
+  ancho = 240,
+  tamano = 14,
+}: {
+  children: React.ReactNode
+  titulo?: string
+  ancho?: number
+  tamano?: number
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const [fijado, setFijado] = useState(false)
+  const ref = useRef<HTMLSpanElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+
+  const abrir = () => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    const margen = 8
+    const left = Math.min(Math.max(margen, r.left - 12), window.innerWidth - ancho - margen)
+    setPos({ top: r.bottom + 6, left })
+  }
+  const cerrar = () => {
+    setPos(null)
+    setFijado(false)
+  }
+
+  useEffect(() => {
+    if (!pos) return
+    const afuera = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node
+      if (!ref.current?.contains(t) && !panelRef.current?.contains(t)) cerrar()
+    }
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cerrar()
+    }
+    document.addEventListener('mousedown', afuera)
+    document.addEventListener('touchstart', afuera)
+    document.addEventListener('keydown', escape)
+    window.addEventListener('scroll', cerrar, true)
+    window.addEventListener('resize', cerrar)
+    return () => {
+      document.removeEventListener('mousedown', afuera)
+      document.removeEventListener('touchstart', afuera)
+      document.removeEventListener('keydown', escape)
+      window.removeEventListener('scroll', cerrar, true)
+      window.removeEventListener('resize', cerrar)
+    }
+  }, [pos])
+
+  return (
+    <span
+      ref={ref}
+      role="button"
+      tabIndex={0}
+      aria-label={titulo}
+      aria-expanded={!!pos}
+      onClick={(e) => {
+        // Puede estar dentro del botón de un acordeón: no lo abre ni lo cierra.
+        e.stopPropagation()
+        e.preventDefault()
+        if (fijado) cerrar()
+        else {
+          abrir()
+          setFijado(true)
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          if (pos) cerrar()
+          else {
+            abrir()
+            setFijado(true)
+          }
+        }
+      }}
+      onMouseEnter={() => { if (!fijado) abrir() }}
+      onMouseLeave={() => { if (!fijado) setPos(null) }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        color: pos ? 'var(--text-primary)' : 'var(--text-tertiary)',
+        cursor: 'pointer',
+        verticalAlign: 'middle',
+      }}
+    >
+      <Info size={tamano} strokeWidth={2.2} />
+      {pos && (
+        <div
+          ref={panelRef}
+          role="tooltip"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            width: ancho,
+            maxHeight: `calc(100vh - ${pos.top + 12}px)`,
+            overflowY: 'auto',
+            zIndex: 1000,
+            padding: '10px 12px',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
+            color: 'var(--text-secondary)',
+            fontSize: 11,
+            fontWeight: 500,
+            lineHeight: 1.45,
+            textAlign: 'left',
+            textTransform: 'none',
+            letterSpacing: 0,
+            whiteSpace: 'normal',
+            cursor: 'default',
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </span>
+  )
+}
+
+/** Ayuda de un filtro: un ícono "i" que muestra el texto al pedirlo. */
 export function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3, lineHeight: 1.35 }}>
-      {children}
+    <div style={{ marginTop: 3, display: 'flex' }}>
+      <InfoTip>{children}</InfoTip>
     </div>
   )
 }
 
-export function GrupoTitulo({ children, destacado }: { children: React.ReactNode; destacado?: boolean }) {
+export function GrupoTitulo({
+  children,
+  destacado,
+  ayuda,
+}: {
+  children: React.ReactNode
+  destacado?: boolean
+  /** Explicación que se abre con el ícono "i" al lado del título. */
+  ayuda?: React.ReactNode
+}) {
   return (
     <div
       style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
         fontSize: 10.5,
         fontWeight: 800,
         letterSpacing: 0.5,
         textTransform: 'uppercase',
-        color: destacado ? 'var(--color-primary, #ff0033)' : 'var(--text-tertiary)',
+        color: destacado ? 'var(--text-primary)' : 'var(--text-tertiary)',
         marginBottom: 6,
       }}
     >
-      {children}
+      <span>{children}</span>
+      {ayuda && <InfoTip tamano={13}>{ayuda}</InfoTip>}
     </div>
   )
 }
@@ -165,16 +314,20 @@ export function Acordeon({
   resumen,
   destacado,
   defaultAbierto = false,
+  ayuda,
   children,
 }: {
   titulo: string
   resumen?: string
   destacado?: boolean
   defaultAbierto?: boolean
+  /** Explicación que se abre con el ícono "i" al lado del título. */
+  ayuda?: React.ReactNode
   children: React.ReactNode
 }) {
   const [abierto, setAbierto] = useState(defaultAbierto)
-  const color = destacado ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)'
+  // Destacado = el filtro aplica: título en gris oscuro (antes rojo).
+  const color = destacado ? 'var(--text-primary)' : 'var(--text-secondary)'
 
   return (
     <div style={{ borderBottom: '1px solid var(--border-primary)' }}>
@@ -197,7 +350,10 @@ export function Acordeon({
           textAlign: 'left',
         }}
       >
-        <span>{titulo}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {titulo}
+          {ayuda && <InfoTip tamano={13}>{ayuda}</InfoTip>}
+        </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {resumen && (
             <span style={{ fontSize: 10, fontWeight: 600, color: destacado ? color : 'var(--text-tertiary)' }}>

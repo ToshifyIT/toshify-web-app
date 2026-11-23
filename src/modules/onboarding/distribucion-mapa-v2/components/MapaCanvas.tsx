@@ -18,7 +18,17 @@ import {
 } from '../../../../utils/conductorUtils'
 import { TurnoBadge } from '../../../../components/ui/TurnoBadge'
 import { IconoEntidad } from './iconos'
-import { HALO_SOBRE_PUNTA, TAMANO_HALO, URL_HALO_ACTIVO, urlEtiquetaPill, urlIconoMarcador } from './marcadores'
+import {
+  HALO_SOBRE_PUNTA,
+  PIN_ALTO,
+  PIN_ALTO_DESTACADO,
+  PIN_ANCHO,
+  PIN_ANCHO_DESTACADO,
+  TAMANO_HALO,
+  URL_HALO_ACTIVO,
+  urlEtiquetaPill,
+  urlIconoMarcador,
+} from './marcadores'
 import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
 import type { EntidadMapa, ParSugerido, Radar } from '../types'
@@ -121,6 +131,9 @@ export function MapaCanvas({
     setFichaVisible(true)
   }, [entidadActiva, enfoqueTick])
 
+  // Se incrementa cada vez que el mapa queda quieto, para recalcular el lado de la ficha.
+  const [vistaTick, setVistaTick] = useState(0)
+
   // Lado de la ficha flotante (2026-10-22): al costado del pin, del lado CONTRARIO a
   // hacia donde van sus líneas (par, compañero actual, base o "ver todos"), para no
   // tapar a las personas que se están comparando. Sin líneas, hacia el centro del mapa.
@@ -136,13 +149,33 @@ export function MapaCanvas({
     }
     if (baseManual && baseManual.id !== id) otros.push(baseManual)
     if (radar && radar.base.id === id) radar.conexiones.forEach((c) => otros.push(c.entidad))
+    let preferido: 'izquierda' | 'derecha'
     if (otros.length > 0) {
       const alEste = otros.filter((o) => o.lng > entidadActiva.lng).length
-      return alEste > otros.length - alEste ? 'izquierda' : 'derecha'
+      preferido = alEste > otros.length - alEste ? 'izquierda' : 'derecha'
+    } else {
+      const centro = mapRef.current?.getCenter()
+      preferido = centro && entidadActiva.lng > centro.lng() ? 'izquierda' : 'derecha'
     }
-    const centro = mapRef.current?.getCenter()
-    return centro && entidadActiva.lng > centro.lng() ? 'izquierda' : 'derecha'
-  }, [entidadActiva, parDestacado, parActual, baseManual, radar])
+    // Si del lado preferido no entra la ficha (mapa angosto o persona contra el
+    // borde) y del otro sí, se abre del otro lado (2026-11-23: quedaba cortada).
+    const map = mapRef.current
+    const limites = map?.getBounds()
+    const ancho = map?.getDiv().clientWidth || 0
+    if (limites && ancho) {
+      const oeste = limites.getSouthWest().lng()
+      const este = limites.getNorthEast().lng()
+      if (este > oeste) {
+        const x = ((entidadActiva.lng - oeste) / (este - oeste)) * ancho
+        const necesita = ANCHO_FICHA + SEPARACION_FICHA + 8
+        if (preferido === 'izquierda' && x < necesita && ancho - x >= necesita) return 'derecha'
+        if (preferido === 'derecha' && ancho - x < necesita && x >= necesita) return 'izquierda'
+      }
+    }
+    return preferido
+    // `vistaTick` cambia cada vez que el mapa termina de moverse.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entidadActiva, parDestacado, parActual, baseManual, radar, vistaTick])
 
   // true cuando Google Maps terminó de crear el mapa (para el enfoque forzado)
   const [mapaListo, setMapaListo] = useState(false)
@@ -249,9 +282,62 @@ export function MapaCanvas({
     if (bounds && puntos.every((p) => bounds.contains({ lat: p.lat, lng: p.lng }))) return
     const nuevo = new google.maps.LatLngBounds()
     puntos.forEach((p) => nuevo.extend({ lat: p.lat, lng: p.lng }))
-    map.fitBounds(nuevo, margenSeguro(map, 140))
+    // Se reserva el ancho de la ficha del lado donde se abre (2026-11-23): sin
+    // esto el encuadre dejaba a la persona contra el borde y la ficha cortada.
+    const margen = margenSeguro(map, 140)
+    const reserva = Math.min(ANCHO_FICHA + SEPARACION_FICHA, Math.floor((map.getDiv().clientWidth || 0) * 0.45))
+    map.fitBounds(nuevo, {
+      top: margen,
+      bottom: margen,
+      left: ladoFicha === 'izquierda' ? Math.max(margen, reserva) : margen,
+      right: ladoFicha === 'derecha' ? Math.max(margen, reserva) : margen,
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parActual?.id])
+
+  // Mapa angosto (celular): la ficha no entra al costado del pin; va abajo, a
+  // todo el ancho del mapa (2026-11-23). `vistaTick` hace recalcular al moverse.
+  const anchoMapa = mapRef.current?.getDiv().clientWidth || 0
+  const fichaAbajo = anchoMapa > 0 && anchoMapa < ANCHO_FICHA + SEPARACION_FICHA * 2 + 60
+  void vistaTick
+
+  const contenidoFicha = entidadActiva ? (
+      <InfoEntidad
+        entidad={entidadActiva}
+        onCerrar={() => setFichaVisible(false)}
+        onVerFicha={onVerFicha}
+        onSugerirDesde={onSugerirDesde}
+        onVerTodosDesde={onVerTodosDesde}
+        baseManual={baseManual}
+        onFijarBase={onFijarBase}
+        onSoltarBase={onSoltarBase}
+        // Resultado contra la base, sólo si el par dibujado toca a esta persona.
+        parConBase={
+          baseManual &&
+          parDestacado &&
+          (parDestacado.a.id === entidadActiva.id || parDestacado.b.id === entidadActiva.id) &&
+          entidadActiva.id !== baseManual.id
+            ? parDestacado
+            : null
+        }
+        midiendo={midiendoManual && entidadActiva.id !== baseManual?.id}
+        onCopiarPar={onCopiarPar}
+        onProgramarPar={onProgramarPar}
+        parActual={
+          parActual &&
+          (parActual.a.id === entidadActiva.id || parActual.b.id === entidadActiva.id)
+            ? parActual
+            : null
+        }
+        parEnCurso={
+          parDestacado &&
+          (parDestacado.a.id === entidadActiva.id || parDestacado.b.id === entidadActiva.id)
+            ? parDestacado
+            : null
+        }
+        onLimpiarPar={onLimpiarPar}
+      />
+  ) : null
 
   // La línea del compañero actual se dibuja salvo que ese mismo par ya esté
   // dibujado como sugerencia, o que esté activo el modo "Ver todos en mapa".
@@ -281,11 +367,18 @@ export function MapaCanvas({
         center={MAP_CENTER}
         zoom={11}
         onLoad={onMapLoad}
+        onIdle={() => setVistaTick((t) => t + 1)}
         options={{
           streetViewControl: false,
           // Sin los lugares de Google (plazas, comercios): al tocarlos abrían un
           // cartel "No se ha podido cargar la información del sitio"
           clickableIcons: false,
+          // Sin comercios, plazas ni paradas dibujados (2026-11-23): tapaban los
+          // pines de conductores y leads sin aportar nada.
+          styles: [
+            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+            { featureType: 'transit', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+          ],
           mapTypeControl: false,
           fullscreenControl: false,
           zoomControl: true,
@@ -452,8 +545,8 @@ export function MapaCanvas({
             zIndex={20}
             icon={{
               url: urlIconoMarcador(companeroActual.tipo, colorEntidad(companeroActual), false, false),
-              scaledSize: new google.maps.Size(28, 36),
-              anchor: new google.maps.Point(14, 36),
+              scaledSize: new google.maps.Size(PIN_ANCHO, PIN_ALTO),
+              anchor: new google.maps.Point(PIN_ANCHO / 2, PIN_ALTO / 2),
             }}
           />
         )}
@@ -490,14 +583,14 @@ export function MapaCanvas({
               zIndex={destacado ? 999 : 10}
               icon={{
                 url: urlIconoMarcador(e.tipo, colorEntidad(e), destacado, atenuado),
-                scaledSize: new google.maps.Size(destacado ? 34 : 28, destacado ? 44 : 36),
-                anchor: new google.maps.Point(destacado ? 17 : 14, destacado ? 44 : 36),
+                scaledSize: new google.maps.Size(destacado ? PIN_ANCHO_DESTACADO : PIN_ANCHO, destacado ? PIN_ALTO_DESTACADO : PIN_ALTO),
+                anchor: new google.maps.Point(destacado ? PIN_ANCHO_DESTACADO / 2 : PIN_ANCHO / 2, destacado ? PIN_ALTO_DESTACADO / 2 : PIN_ALTO / 2),
               }}
             />
           )
         })}
 
-        {entidadActiva && fichaVisible && (
+        {entidadActiva && fichaVisible && !fichaAbajo && (
           // Ficha propia en lugar del InfoWindow de Google: el InfoWindow siempre se
           // abre ARRIBA del punto y tapaba a los conductores cercanos. Esta va al
           // costado (ver ladoFicha), centrada en la cabeza del pin, con ancho fijo.
@@ -509,46 +602,32 @@ export function MapaCanvas({
               y: -alto / 2 - HALO_SOBRE_PUNTA,
             })}
           >
-            <FichaFlotante lado={ladoFicha}>
-            <InfoEntidad
-              entidad={entidadActiva}
-              onCerrar={() => setFichaVisible(false)}
-              onVerFicha={onVerFicha}
-              onSugerirDesde={onSugerirDesde}
-              onVerTodosDesde={onVerTodosDesde}
-              baseManual={baseManual}
-              onFijarBase={onFijarBase}
-              onSoltarBase={onSoltarBase}
-              // Resultado contra la base, sólo si el par dibujado toca a esta persona.
-              parConBase={
-                baseManual &&
-                parDestacado &&
-                (parDestacado.a.id === entidadActiva.id || parDestacado.b.id === entidadActiva.id) &&
-                entidadActiva.id !== baseManual.id
-                  ? parDestacado
-                  : null
-              }
-              midiendo={midiendoManual && entidadActiva.id !== baseManual?.id}
-              onCopiarPar={onCopiarPar}
-              onProgramarPar={onProgramarPar}
-              parActual={
-                parActual &&
-                (parActual.a.id === entidadActiva.id || parActual.b.id === entidadActiva.id)
-                  ? parActual
-                  : null
-              }
-              parEnCurso={
-                parDestacado &&
-                (parDestacado.a.id === entidadActiva.id || parDestacado.b.id === entidadActiva.id)
-                  ? parDestacado
-                  : null
-              }
-              onLimpiarPar={onLimpiarPar}
-            />
-            </FichaFlotante>
+            <FichaFlotante lado={ladoFicha}>{contenidoFicha}</FichaFlotante>
           </OverlayViewF>
         )}
       </GoogleMap>
+
+      {entidadActiva && fichaVisible && fichaAbajo && (
+        <div
+          style={{
+            position: 'absolute',
+            left: 8,
+            right: 8,
+            bottom: 8,
+            zIndex: 7,
+            maxHeight: '60%',
+            overflowY: 'auto',
+            boxSizing: 'border-box',
+            padding: '10px 12px 12px',
+            background: '#fff',
+            border: '1px solid #E5E7EB',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+          }}
+        >
+          {contenidoFicha}
+        </div>
+      )}
 
       {/* La barra "Emparejando" de abajo se quitó (2026-10-22): el par ya se ve en
           el mapa (línea + etiqueta km/min) y se quita desde la ficha ("Quitar"). */}
@@ -920,22 +999,24 @@ function InfoEntidad({
         </div>
       )}
 
-      {/* Acciones en una fila: la principal destacada, la ficha como secundaria y
-          las de mapa (base / ver todos) como íconos con su texto al pasar el mouse. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
+      {/* Acciones: la principal y la ficha en la primera fila; las de mapa
+          (base / ver todos) abajo, con texto (2026-11-23: antes eran íconos
+          sueltos que no se entendían y uno caía solo a otra línea). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9 }}>
         <BotonPrimario onClick={() => onSugerirDesde(e)}>Sugerir compañero</BotonPrimario>
         <BotonSecundario onClick={() => onVerFicha(e)}>Ver ficha →</BotonSecundario>
-        <span style={{ flex: 1 }} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 7, flexWrap: 'wrap' }}>
         {esBase ? (
           <BotonSoltarBase onClick={onSoltarBase} />
         ) : (
-          <BotonIcono title="Fijar como base (medir distancias desde esta persona)" onClick={() => onFijarBase(e)}>
-            <Pin size={14} />
-          </BotonIcono>
+          <BotonTexto title="Medir distancias desde esta persona" onClick={() => onFijarBase(e)}>
+            <Pin size={13} /> Fijar como base
+          </BotonTexto>
         )}
-        <BotonIcono title="Ver todos en mapa (líneas hacia los candidatos)" onClick={() => onVerTodosDesde(e)}>
-          <Network size={14} />
-        </BotonIcono>
+        <BotonTexto title="Dibuja líneas hacia todos los candidatos con su tiempo de viaje" onClick={() => onVerTodosDesde(e)}>
+          <Network size={13} /> Ver todos en mapa
+        </BotonTexto>
       </div>
     </div>
   )
@@ -952,12 +1033,10 @@ function BotonSoltarBase({ onClick }: { onClick: () => void }) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 5,
-        height: 26,
-        padding: '0 10px',
+        padding: 0,
         flexShrink: 0,
-        border: '1px solid var(--color-primary, #ff0033)',
-        borderRadius: 'var(--radius-md)',
-        background: '#fff1f3',
+        border: 'none',
+        background: 'transparent',
         color: 'var(--color-primary, #ff0033)',
         fontSize: 11,
         fontWeight: 700,
@@ -970,16 +1049,14 @@ function BotonSoltarBase({ onClick }: { onClick: () => void }) {
   )
 }
 
-/** Botón cuadrado solo con ícono (acciones secundarias de la ficha del mapa). */
-function BotonIcono({
+/** Acción secundaria de la ficha: ícono + texto en gris, sin borde ni fondo. */
+function BotonTexto({
   onClick,
   title,
-  activo,
   children,
 }: {
   onClick: () => void
   title: string
-  activo?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -987,19 +1064,19 @@ function BotonIcono({
       type="button"
       onClick={onClick}
       title={title}
-      aria-label={title}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        width: 26,
-        height: 26,
+        gap: 5,
+        padding: 0,
         flexShrink: 0,
-        border: `1px solid ${activo ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
-        borderRadius: 'var(--radius-md)',
-        background: activo ? '#fff1f3' : 'var(--bg-primary)',
-        color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-secondary)',
+        border: 'none',
+        background: 'transparent',
+        color: 'var(--text-secondary)',
+        fontSize: 11,
+        fontWeight: 650,
         cursor: 'pointer',
+        whiteSpace: 'nowrap',
       }}
     >
       {children}
