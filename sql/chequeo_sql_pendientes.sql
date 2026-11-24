@@ -1,6 +1,7 @@
 -- Chequeo de SQL pendientes (SOLO LECTURA: no cambia nada).
 -- Correr en Supabase > SQL Editor. Muestra, por archivo de sql/ del último mes, si lo que
 -- crea (tablas, columnas, funciones, vistas, índices, crons, menús) ya existe en la base.
+-- Al agregar un sql/ nuevo, sumar acá sus filas (última actualización: 2026-11-24).
 -- Mirar primero la columna "pendiente": los archivos con algo en 'FALTA' no se corrieron (o se corrieron a medias).
 -- Si da error por "cron.job", borrar las filas de tipo 'cron' y volver a correrlo.
 -- Ojo: algunos objetos se crearon y después se sacaron a propósito con otro archivo
@@ -319,7 +320,29 @@ WITH chequeo(archivo, tipo, objeto, existe) AS (VALUES
   ('vehiculos_notas.sql', 'funcion', 'trg_vehiculos_notas_nombre', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='trg_vehiculos_notas_nombre'))),
   ('vehiculos_notas.sql', 'funcion', 'trg_vehiculos_notas_ultima', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='trg_vehiculos_notas_ultima'))),
   ('vehiculos_notas.sql', 'funcion', 'trg_vehiculos_nota_alta', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='trg_vehiculos_nota_alta'))),
-  ('vehiculos_notas.sql', 'indice', 'vehiculos_notas_vehiculo', (to_regclass('public.vehiculos_notas_vehiculo') IS NOT NULL))
+  ('vehiculos_notas.sql', 'indice', 'vehiculos_notas_vehiculo', (to_regclass('public.vehiculos_notas_vehiculo') IS NOT NULL)),
+  -- 2026-11-23 / 24
+  ('agentes_menu_principal_ocultar.sql', 'menu', 'menus.agentes inactivo', (NOT EXISTS (SELECT 1 FROM menus WHERE name='agentes' AND is_active))),
+  ('bcra_umbrales_situacion.sql', 'columna', 'bcra_umbrales.situacion_amarilla_desde', (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bcra_umbrales' AND column_name='situacion_amarilla_desde'))),
+  ('calculadora_neto.sql', 'tabla', 'calculadora_referencia_cabify', (to_regclass('public.calculadora_referencia_cabify') IS NOT NULL)),
+  ('conceptos_vigencia.sql', 'columna', 'conceptos_nomina.tiene_vigencia', (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='conceptos_nomina' AND column_name='tiene_vigencia'))),
+  ('conceptos_vigencia.sql', 'columna', 'conceptos_nomina.vigente_desde', (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='conceptos_nomina' AND column_name='vigente_desde'))),
+  ('conceptos_vigencia.sql', 'columna', 'conceptos_nomina.periodo', (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='conceptos_nomina' AND column_name='periodo'))),
+  ('conductores_bcra.sql', 'columna', 'conductores.bcra_nivel', (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='conductores' AND column_name='bcra_nivel'))),
+  ('conductores_bcra.sql', 'funcion', 'conductores_bcra_reset', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='conductores_bcra_reset'))),
+  ('conductores_bcra.sql', 'funcion', 'conductores_bcra_nivel', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='conductores_bcra_nivel'))),
+  ('distribucion_mapa_carga.sql', 'funcion', 'mapa_conductores', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='mapa_conductores'))),
+  ('distribucion_mapa_carga.sql', 'funcion', 'mapa_leads', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='mapa_leads'))),
+  ('herramientas_facturas_correo.sql', 'columna', 'herramientas.remitentes_factura', (EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='herramientas' AND column_name='remitentes_factura'))),
+  ('herramientas_facturas_correo.sql', 'tabla', 'herramientas_facturas_correo', (to_regclass('public.herramientas_facturas_correo') IS NOT NULL)),
+  ('herramientas_facturas_correo.sql', 'indice', 'idx_herr_fact_correo_herr', (to_regclass('public.idx_herr_fact_correo_herr') IS NOT NULL)),
+  ('herramientas_drive_carpetas.sql', 'tabla', 'herramientas_drive_carpetas', (to_regclass('public.herramientas_drive_carpetas') IS NOT NULL)),
+  ('homologar_si_no_dispuesto_d1.sql', 'trigger', 'trg_leads_homologar_si_no', (EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='trg_leads_homologar_si_no' AND tgrelid='public.leads'::regclass))),
+  ('leads_capitan_por_actividad.sql', 'funcion', 'leads_capitan_por_actividad', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='leads_capitan_por_actividad'))),
+  ('leads_capitan_por_actividad.sql', 'trigger', 'trg_leads_capitan_por_actividad', (EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='trg_leads_capitan_por_actividad' AND tgrelid='public.leads'::regclass))),
+  ('leads_realtime.sql', 'publicacion', 'supabase_realtime: leads', (EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='leads'))),
+  ('parametros_menu_nombres.sql', 'menu', 'submenus.label=Conceptos de facturación', (EXISTS (SELECT 1 FROM submenus WHERE label='Conceptos de facturación'))),
+  ('regularizar_saldos_facturas_a_favor.sql', 'datos', 'control_saldos: regularización S17 y S12', ((SELECT count(*) FROM control_saldos WHERE referencia LIKE 'Regularización de saldo S1_/2026 - Descuentos a favor') >= 2))
 )
 SELECT archivo,
        CASE WHEN bool_and(existe) THEN 'ok' ELSE 'FALTA' END AS pendiente,
@@ -347,7 +370,6 @@ ORDER BY (bool_and(existe)) ASC, archivo;
 --   sql/permisos_asignaciones_onboarding.sql
 --   sql/promocion_b1_quitar_pase_saldos.sql
 --   sql/redistribuir_guias_conductores.sql
---   sql/regularizar_saldos_facturas_a_favor.sql
 --   sql/rendimiento_agentes_quitar.sql
 --   sql/siniestros_borrar_pago_prueba.sql
 --   sql/siniestros_gestionado_por_relleno.sql

@@ -23,7 +23,7 @@ import { nombreMes } from '../../../utils/meses'
 import type { ConsumoDia, Cotizacion, EstadoPago, Herramienta, Moneda, PagoHerramienta } from './types'
 import { BUCKET_FACTURAS, MONEDAS, PERIODICIDADES, aUsd } from './types'
 import { CotizacionesModal, PagoDetalleModal, PagoModal } from './Modales'
-import { ConsumoPorUso } from './ConsumoPorUso'
+import { ConsumoDetalle } from './ConsumoPorUso'
 import '../../vehiculos/VehicleManagement.css'
 
 const SUBMENU = 'consumo-herramientas'
@@ -79,6 +79,8 @@ export function ConsumoHerramientasModule() {
   const [pagos, setPagos] = useState<PagoHerramienta[]>([])
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([])
   const [consumo, setConsumo] = useState<ConsumoDia[]>([])
+  /** Carpeta de Drive (HERRAMIENTAS/AAAA-MM) de cada mes */
+  const [carpetasDrive, setCarpetasDrive] = useState<Map<string, string>>(new Map())
   const [modalCotizaciones, setModalCotizaciones] = useState(false)
   const [detallePago, setDetallePago] = useState<PagoHerramienta | null>(null)
   const [cargando, setCargando] = useState(true)
@@ -102,13 +104,17 @@ export function ConsumoHerramientasModule() {
       // Sin sql/consumo_herramientas_consumo.sql la función no existe y el panel no se muestra.
       const { error: errCons } = await supabase.rpc('herramientas_actualizar_consumo_2chat')
       if (errCons) console.warn('Consumo de 2Chat sin actualizar:', errCons.message)
-      const [rh, rp, rc, rk] = await Promise.all([
+      const [rh, rp, rc, rk, rd] = await Promise.all([
         supabase.from('herramientas').select('*').order('nombre'),
         supabase.from('herramientas_pagos').select('*').order('fecha_vencimiento', { ascending: true, nullsFirst: false }),
         supabase.from('herramientas_cotizaciones').select('*'),
         supabase.from('herramientas_consumo').select('*')
           .gte('fecha', sumarDias(`${mesGenerar < mesActual ? mesGenerar : mesActual}-01`, -DIAS_CONSUMO)),
+        // Carpeta de Drive de cada mes (sql/herramientas_drive_carpetas.sql; sin el SQL, "Ver" abre el PDF)
+        supabase.from('herramientas_drive_carpetas').select('periodo, carpeta_id'),
       ])
+      setCarpetasDrive(new Map(rd.error ? [] : ((rd.data || []) as { periodo: string; carpeta_id: string }[])
+        .map(c => [c.periodo, c.carpeta_id])))
       setConsumo(rk.error ? [] : ((rk.data || []) as ConsumoDia[]))
       // Sin la tabla de cotizaciones (SQL de monedas sin correr) se muestra sin equivalente
       setCotizaciones(rc.error ? [] : ((rc.data || []) as Cotizacion[]))
@@ -235,7 +241,19 @@ export function ConsumoHerramientasModule() {
     if (url) window.open(url, '_blank', 'noopener,noreferrer')
   }
 
+  /** Mes del pago: el período si es mensual ('2026-11'); el del vencimiento si es anual ('2026') */
+  const mesDelPago = (p: PagoHerramienta) => (p.periodo.length === 7 ? p.periodo : (p.fecha_vencimiento || '').slice(0, 7))
+  /** Carpeta de Drive del mes, solo si el pago tiene algo para ver (pagado o con factura) */
+  const carpetaDelPago = (p: PagoHerramienta) =>
+    (p.estado === 'Pagado' || p.factura_path ? carpetasDrive.get(mesDelPago(p)) ?? null : null)
+
   const verFactura = async (p: PagoHerramienta) => {
+    // Primero la carpeta del mes en Drive: ahí están todas las facturas (plan, recargas, ajustes)
+    const carpeta = carpetaDelPago(p)
+    if (carpeta) {
+      window.open(`https://drive.google.com/drive/folders/${carpeta}`, '_blank', 'noopener,noreferrer')
+      return
+    }
     if (!p.factura_path) return
     const { data, error } = await supabase.storage.from(BUCKET_FACTURAS).createSignedUrl(p.factura_path, 300)
     if (error || !data) { showError('No se pudo abrir la factura'); return }
@@ -342,10 +360,11 @@ export function ConsumoHerramientasModule() {
     {
       id: 'factura',
       header: 'Factura',
-      accessorFn: r => (r.factura_path ? 'si' : 'no'),
-      cell: ({ row }) => row.original.factura_path ? (
+      accessorFn: r => (r.factura_path || carpetaDelPago(r) ? 'si' : 'no'),
+      cell: ({ row }) => row.original.factura_path || carpetaDelPago(row.original) ? (
         <button type="button" className="dt-btn-action" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 6px' }}
-          onClick={() => verFactura(row.original)} title={row.original.factura_nombre || 'Ver factura'}>
+          onClick={() => verFactura(row.original)}
+          title={carpetaDelPago(row.original) ? `Abrir HERRAMIENTAS/${mesDelPago(row.original)} en Drive` : (row.original.factura_nombre || 'Ver factura')}>
           <FileText size={13} /> Ver
         </button>
       ) : <span style={{ color: 'var(--text-tertiary)' }}>-</span>,
@@ -388,7 +407,9 @@ export function ConsumoHerramientasModule() {
         )
       },
     },
-  ], [porId, hoy, puedeEditar, equivalenteUsd, idsAtrasados, listaPagos])
+  // verFactura y carpetaDelPago solo dependen de carpetasDrive
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [porId, hoy, puedeEditar, equivalenteUsd, idsAtrasados, listaPagos, carpetasDrive])
   // esEstimado es una función pura sobre el id: no hace falta como dependencia
 
   const sel = { height: 32, fontSize: 12, padding: '0 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', background: 'var(--bg-primary)', color: 'var(--text-primary)' } as const
@@ -480,9 +501,6 @@ export function ConsumoHerramientasModule() {
         </div>
       </div>
 
-      <ConsumoPorUso herramientas={herramientas} consumo={consumo} mes={mes} tasas={tasas}
-        puedeEditar={puedeEditar} onGuardado={() => cargar(mes)} />
-
       <DataTable
         data={listaPagos}
         columns={columnasPagos}
@@ -505,6 +523,13 @@ export function ConsumoHerramientasModule() {
             ? aUsd(Number(detallePago.monto), detallePago.moneda, tasas) : null}
           onVerFactura={() => verFactura(detallePago)}
           onClose={() => setDetallePago(null)}
+          consumo={(() => {
+            // Consumo real (2Chat – Créditos, Google Cloud) en el detalle, no arriba de la tabla
+            const h = porId.get(detallePago.herramienta_id)
+            return h?.fuente_consumo && detallePago.periodo.length === 7
+              ? <ConsumoDetalle herramienta={h} consumo={consumo} mes={detallePago.periodo} tasas={tasas} />
+              : null
+          })()}
         />
       )}
       {modalCotizaciones && (
