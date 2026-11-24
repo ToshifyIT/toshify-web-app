@@ -66,6 +66,12 @@ import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatNumero } from '../../utils/format'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
 
+// La calculadora de neto queda solo para uso interno en local (24/11/2026): en
+// app.toshify.com.ar no se ve el botón ni se precargan sus datos. El código queda.
+const CALCULADORA_VISIBLE =
+  typeof window !== 'undefined' &&
+  ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+
 // =====================================================
 // GOOGLE MAPS GEOCODING
 // =====================================================
@@ -1184,6 +1190,7 @@ export function LeadsModule() {
   // Calculadora de neto: se carga en segundo plano al entrar (y al cambiar de sede) para que
   // el botón la abra al instante. Espera un poco para no competir con la carga de la lista.
   useEffect(() => {
+    if (!CALCULADORA_VISIBLE) return
     const t = setTimeout(() => precargarDatosCalculadora(sedeActualId), 1500)
     return () => clearTimeout(t)
   }, [sedeActualId])
@@ -4217,14 +4224,16 @@ export function LeadsModule() {
             )}
             {/* La calculadora ocupa el lugar del botón "Ver Lead/Conductores" (23/11/2026).
                 Esa vista (components/LeadsConductoresModal.tsx) queda sin acceso desde acá. */}
-            <button
-              className="btn-secondary btn-sm"
-              onClick={() => setVerCalculadora(true)}
-              aria-label="Calculadora de neto"
-              title="Calculadora de neto del conductor: cuánto le queda según los días y las horas que maneje"
-            >
-              <Calculator size={14} /> <span className="leads-btn-label leads-btn-label--sec">Calculadora</span>
-            </button>
+            {CALCULADORA_VISIBLE && (
+              <button
+                className="btn-secondary btn-sm"
+                onClick={() => setVerCalculadora(true)}
+                aria-label="Calculadora de neto"
+                title="Calculadora de neto del conductor: cuánto le queda según los días y las horas que maneje"
+              >
+                <Calculator size={14} /> <span className="leads-btn-label leads-btn-label--sec">Calculadora</span>
+              </button>
+            )}
           </div>
         }
         externalFilters={externalFilters}
@@ -4355,7 +4364,7 @@ export function LeadsModule() {
         <ChatLeadModal leadId={chatLead.id} nombre={chatLead.nombre} onClose={() => setChatLead(null)} />
       )}
 
-      {verCalculadora && <CalculadoraNetoModal onClose={() => setVerCalculadora(false)} />}
+      {CALCULADORA_VISIBLE && verCalculadora && <CalculadoraNetoModal onClose={() => setVerCalculadora(false)} />}
     </div>
   )
 }
