@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  CARTAS OFERTA (DocuSeal) -> carpeta del conductor en Drive   (v4, 2026-11-23)
+ *  CARTAS OFERTA (DocuSeal) -> carpeta del conductor en Drive   (v5, 2026-11-23)
  * =====================================================================
  *
  * Cada 1 minuto, en la casilla de josue.caride@toshify.com.ar:
@@ -431,6 +431,116 @@ function logResumen(r, soloPrueba) {
     soloPrueba ? null : `PDF guardados: ${r.archivos}`,
     soloPrueba ? null : `PDF que ya existían: ${r.yaExistian}`,
   ].filter(Boolean).join('\n'));
+}
+
+// =====================================================================
+// MIGRACIÓN ÚNICA (v5): cartas guardadas antes en "Ver documentos" -> carpeta de contratos
+// =====================================================================
+
+/**
+ * Ejecutar UNA vez a mano. Recorre TODAS las cartas oferta de DocuSeal de la casilla y
+ * guarda sus PDF en la carpeta de contratos del conductor ("Ver historial contratos" /
+ * Carta oferta completada). Lo que ya está ahí no se duplica.
+ * No borra nada de las carpetas de "Ver documentos" (las copias viejas quedan).
+ * No toca la memoria del proceso normal ni manda un aviso por carta: al terminar manda
+ * UN resumen a Slack. Trabaja en tandas: se programa sola cada 5 minutos hasta terminar
+ * y después borra ese disparador.
+ */
+function migrarCartasAnteriores() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MIGRACION_TERMINADA') === 'si') {
+    quitarDisparadorMigracion();
+    Logger.log('La migración ya terminó. Para repetirla: ejecutar "reiniciarMigracion" y después esta función.');
+    return;
+  }
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'migrarCartasAnteriores')) {
+    ScriptApp.newTrigger('migrarCartasAnteriores').timeBased().everyMinutes(5).create();
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(60000)) {
+    Logger.log('Hay otra ejecución en curso; la migración sigue en la próxima tanda.');
+    return;
+  }
+  const inicio = Date.now();
+  const sinTiempo = () => Date.now() - inicio > CONFIG.MAX_SEGUNDOS * 1000;
+  let desde = Number(props.getProperty('MIGRACION_DESDE') || 0);
+  const tot = JSON.parse(props.getProperty('MIGRACION_TOTALES') ||
+    '{"cartas":0,"guardados":0,"yaEstaban":0,"fallidas":[],"inicio":' + Date.now() + '}');
+  let terminado = false;
+
+  try {
+    while (!sinTiempo()) {
+      const hilos = GmailApp.search(CONFIG.BUSQUEDA, desde, CONFIG.MAX_CORREOS);
+      let hechos = 0;
+      for (const hilo of hilos) {
+        if (sinTiempo()) break;
+        for (const m of hilo.getMessages()) {
+          if (!esCartaCompletada(m)) continue;
+          tot.cartas++;
+          const asunto = m.getSubject();
+          const resp = consultarToshibase(asunto);
+          if (!resp.ok) {
+            const linea = `${nombreDelConductor(asunto) || asunto}: ${resp.detalle || resp.motivo}`;
+            if (tot.fallidas.length < 40 && !tot.fallidas.includes(linea)) tot.fallidas.push(linea.slice(0, 160));
+            Logger.log(`[MIGRACIÓN] "${asunto}" -> NO: ${resp.detalle || resp.motivo}`);
+            continue;
+          }
+          const destino = subcarpeta(DriveApp.getFolderById(resp.folderId), CONFIG.NOMBRE_SUBCARPETA);
+          m.getAttachments({ includeInlineImages: false })
+            .filter(a => CONFIG.EXTENSIONES.includes(extension(a.getName())))
+            .forEach(a => { if (guardarSiNoExiste(destino, a)) tot.guardados++; else tot.yaEstaban++; });
+          Logger.log(`[MIGRACIÓN] "${asunto}" -> ${resp.carpeta} / ${CONFIG.NOMBRE_SUBCARPETA}`);
+        }
+        hechos++;
+      }
+      desde += hechos;
+      if (hechos < hilos.length) break; // se cortó por tiempo: sigue en la próxima tanda
+      if (hilos.length < CONFIG.MAX_CORREOS) { terminado = true; break; }
+    }
+  } finally {
+    props.setProperty('MIGRACION_DESDE', String(desde));
+    props.setProperty('MIGRACION_TOTALES', JSON.stringify(tot));
+    lock.releaseLock();
+  }
+
+  Logger.log(`[MIGRACIÓN] conversaciones revisadas: ${desde} | cartas: ${tot.cartas} | ` +
+    `PDF guardados: ${tot.guardados} | ya estaban: ${tot.yaEstaban} | sin carpeta: ${tot.fallidas.length}` +
+    (terminado ? ' | TERMINADA' : ' | sigue en la próxima tanda (en 5 minutos)'));
+
+  if (terminado) {
+    props.setProperty('MIGRACION_TERMINADA', 'si');
+    quitarDisparadorMigracion();
+    avisarSlack(mensajeSlack(tot.fallidas.length
+      ? '⚠️ *Migración de cartas oferta terminada (con pendientes)*'
+      : '✅ *Migración de cartas oferta terminada*', [
+      'Se copiaron las cartas firmadas a la carpeta de contratos de cada conductor ' +
+        '("Ver historial contratos" / Carta oferta completada).',
+      `📨 *Cartas revisadas:* ${tot.cartas}`,
+      `📎 *PDF copiados:* ${tot.guardados}`,
+      `📎 *Ya estaban:* ${tot.yaEstaban}`,
+      tot.fallidas.length
+        ? `❌ *No se pudieron copiar (${tot.fallidas.length}):*\n• ${tot.fallidas.join('\n• ')}\n` +
+          '🛠️ *Cómo se arregla:* corregir la ficha del conductor (link de "Ver historial contratos") ' +
+          'o cargarlo en Toshibase, y repetir con "reiniciarMigracion" + "migrarCartasAnteriores".'
+        : null,
+      '🗂️ Las copias viejas en las carpetas de "Ver documentos" no se tocaron.',
+    ]));
+  }
+}
+
+/** Permite volver a correr la migración desde cero (lo ya copiado no se duplica). */
+function reiniciarMigracion() {
+  const props = PropertiesService.getScriptProperties();
+  ['MIGRACION_TERMINADA', 'MIGRACION_DESDE', 'MIGRACION_TOTALES'].forEach(k => props.deleteProperty(k));
+  quitarDisparadorMigracion();
+  Logger.log('Listo: ejecutá "migrarCartasAnteriores" para empezar de nuevo.');
+}
+
+function quitarDisparadorMigracion() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'migrarCartasAnteriores')
+    .forEach(t => ScriptApp.deleteTrigger(t));
 }
 
 // =====================================================================
