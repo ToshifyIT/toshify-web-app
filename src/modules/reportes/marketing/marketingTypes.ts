@@ -9,7 +9,7 @@ export type Perfil = 'Cumple' | 'Medio' | 'No cumple' | 'Sin datos'
 
 export const FILTROS_SEGMENTO: { id: FiltroSegmento; label: string; info: string }[] = [
   { id: 'Pauta redes', label: 'Pauta redes', info: 'Solo los leads linkeados a un anuncio (traen el link o el canal del anuncio).' },
-  { id: 'Web', label: 'Web (orgánico)', info: 'Leads del formulario del sitio web, los que no traen el link de un anuncio (no se detecta que vengan de la pauta) y los referidos por un conductor (se muestran también aparte).' },
+  { id: 'Web', label: 'Web / Orgánico', info: 'Leads del formulario del sitio web, los que no traen el link de un anuncio (no se detecta que vengan de la pauta) y los referidos por un conductor (se muestran también aparte).' },
   { id: 'Todos', label: 'Todos', info: 'Todas las fuentes, incluidos referidos y leads sin fuente cargada.' },
 ]
 
@@ -96,6 +96,19 @@ export interface FilaDescarteDetalle {
   causal: string | null
 }
 
+/** Un lead referido del período, con el conductor que lo recomendó. */
+export interface FilaReferido {
+  nombre: string
+  ingreso: string
+  /** Estado actual del lead, como figura en Leads */
+  estado: string
+  /** Conductor embajador (null si no está cargado) */
+  embajador: string | null
+  descartado: boolean
+  con_auto: boolean
+  primer_auto: string | null
+}
+
 export interface FilaCausal extends FilaDescarte {
   causal: string
 }
@@ -158,6 +171,8 @@ export interface MarketingRaw {
   descartes: FilaDescarte[]
   /** Puede faltar si la función SQL es vieja */
   descartes_detalle?: FilaDescarteDetalle[]
+  /** Quiénes llegaron referidos en el período (puede faltar si la función SQL es vieja) */
+  referidos_detalle?: FilaReferido[]
   causales: FilaCausal[]
   control: FilaControl[]
   nuevos_conductores: NuevosConductores
@@ -165,7 +180,7 @@ export interface MarketingRaw {
 
 // ───────────── Filtro por segmento ─────────────
 
-/** "Web (orgánico)" incluye a los referidos: no vienen de la pauta. */
+/** "Web / Orgánico" incluye a los referidos: no vienen de la pauta. */
 export function enSegmento(segmento: Segmento, filtro: FiltroSegmento): boolean {
   return filtro === 'Todos' || segmento === filtro || (filtro === 'Web' && segmento === 'Referidos')
 }
@@ -289,8 +304,8 @@ export const GLOSARIO: { termino: string; definicion: string }[] = [
   { termino: 'Fuera de rango', definicion: 'Recibieron su primer auto en el período pero entraron como lead antes: no corresponden a la pauta del período filtrado y se muestran aparte.' },
   { termino: 'Conversión', definicion: 'Conductores nuevos ÷ leads del período (los dos sobre los mismos leads).' },
   { termino: 'Perfil del lead', definicion: 'Se mide sobre los leads que llegaron a la propuesta: antes el chatbot no preguntó licencia, monotributo ni experiencia. Cumple: 21+, licencia D1, monotributo y experiencia. Medio: 21+ con parte de los requisitos. No cumple: menor de 21, sin licencia o sin experiencia.' },
-  { termino: 'Pauta redes / Web', definicion: 'Pauta redes: leads con el link o el canal de un anuncio. Web (orgánico): formulario del sitio, leads sin link de anuncio y referidos; se mide aparte.' },
-  { termino: 'Referidos', definicion: 'Leads que llegaron recomendados por un conductor (Referido = Sí, con su embajador, o fuente "Referido"). Cuentan dentro de Web (orgánico) y se muestran aparte.' },
+  { termino: 'Pauta redes / Web', definicion: 'Pauta redes: leads con el link o el canal de un anuncio. Web / Orgánico: formulario del sitio, leads sin link de anuncio y referidos; se mide aparte.' },
+  { termino: 'Referidos', definicion: 'Leads que llegaron recomendados por un conductor (Referido = Sí, con su embajador, o fuente "Referido"). Cuentan dentro de Web / Orgánico y se muestran aparte.' },
   { termino: 'Sin canal identificado', definicion: 'Lead de pauta sin el link del anuncio, así que no se sabe si vino de Facebook o Instagram. El link llega en la carga masiva de Sellium.' },
 ]
 

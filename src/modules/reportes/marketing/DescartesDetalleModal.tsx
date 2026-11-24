@@ -28,11 +28,14 @@ export function DescartesDetalleModal({ motivo, filas, onClose }: {
   const grupos = useMemo(() => {
     const mapa = new Map<string, { clave: string; anuncio: string; canal: string; leads: FilaDescarteDetalle[] }>()
     for (const f of filas) {
-      const clave = f.anuncio || '__sin__'
+      // Solo Pauta redes se agrupa por anuncio; los orgánicos nunca muestran link
+      const esPauta = f.segmento === 'Pauta redes'
+      const anuncio = esPauta ? f.anuncio : ''
+      const clave = anuncio || `__sin__${esPauta ? 'pauta' : f.segmento}`
       const g = mapa.get(clave) ?? {
         clave,
-        anuncio: f.anuncio,
-        canal: f.anuncio ? f.canal : f.segmento === 'Pauta redes' ? 'Pauta sin link' : f.segmento,
+        anuncio,
+        canal: anuncio ? f.canal : esPauta ? 'Pauta sin link' : f.segmento,
         leads: [],
       }
       g.leads.push(f)
@@ -49,7 +52,7 @@ export function DescartesDetalleModal({ motivo, filas, onClose }: {
           <div>
             <h2 id="mkt-desc-titulo">Descartados · {motivo}</h2>
             <p>
-              {filas.length} {filas.length === 1 ? 'lead' : 'leads'} del período, agrupados por el anuncio del que vinieron.
+              {filas.length} {filas.length === 1 ? 'lead' : 'leads'} del período, agrupados por el anuncio del que vinieron (los orgánicos, por su origen).
             </p>
           </div>
           <button type="button" className="mkt-modal-cerrar" onClick={onClose} aria-label="Cerrar">
@@ -76,10 +79,10 @@ export function DescartesDetalleModal({ motivo, filas, onClose }: {
                         >
                           {anuncioCorto(g.anuncio)}
                         </a>
-                      ) : (
+                      ) : g.canal === 'Pauta sin link' ? (
                         <span className="ddir-muted">Sin link del anuncio</span>
-                      )}
-                      <span className="ddir-muted">{g.canal}</span>
+                      ) : null}
+                      <span className={g.anuncio || g.canal === 'Pauta sin link' ? 'ddir-muted' : undefined}>{g.canal}</span>
                     </span>
                     <span className="mkt-anuncio-n">
                       {g.leads.length} {g.leads.length === 1 ? 'lead' : 'leads'}

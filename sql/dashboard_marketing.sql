@@ -23,7 +23,7 @@
 --                 a los que no se les detecta el anuncio.
 --   Referidos   : los marcó un conductor embajador (Referido = Sí en el lead) o
 --                 la fuente es "Referido". Gana sobre los demás: es lo que cargó la
---                 persona que lo atendió. (2026-11-24) En la pantalla, "Web (orgánico)"
+--                 persona que lo atendió. (2026-11-24) En la pantalla, "Web / Orgánico"
 --                 los incluye y los muestra aparte.
 --   Otras fuentes / Sin fuente.
 --   Canal (solo pauta): Facebook, Instagram, TikTok, Estado; si no se puede
@@ -127,6 +127,37 @@ BEGIN
 END;
 $fn$;
 
+-- Mismo cálculo que punto_en_zona_restringida, para UNA zona ya leída como listas de
+-- latitudes y longitudes (rendimiento 2026-11-24: el dashboard lee las zonas una sola
+-- vez en lugar de releer las 130 por cada lead).
+CREATE OR REPLACE FUNCTION punto_en_poligono(
+  p_lat double precision, p_lng double precision,
+  p_lats double precision[], p_lngs double precision[]
+)
+RETURNS boolean
+LANGUAGE plpgsql
+IMMUTABLE
+AS $fn$
+DECLARE
+  n integer := COALESCE(array_length(p_lats, 1), 0);
+  j integer;
+  dentro boolean := false;
+BEGIN
+  IF p_lat IS NULL OR p_lng IS NULL OR n < 3 THEN
+    RETURN false;
+  END IF;
+  j := n;
+  FOR i IN 1..n LOOP
+    IF ((p_lats[i] > p_lat) <> (p_lats[j] > p_lat))
+       AND p_lng < (p_lngs[j] - p_lngs[i]) * (p_lat - p_lats[i]) / NULLIF(p_lats[j] - p_lats[i], 0) + p_lngs[i] THEN
+      dentro := NOT dentro;
+    END IF;
+    j := i;
+  END LOOP;
+  RETURN dentro;
+END;
+$fn$;
+
 CREATE OR REPLACE FUNCTION get_dashboard_marketing(
   p_sede_id uuid DEFAULT NULL,
   p_desde date DEFAULT NULL,
@@ -159,6 +190,78 @@ rangos AS (
          desde - (CEIL((hasta - desde + 1) / 7.0) * 7)::int,
          hasta - (CEIL((hasta - desde + 1) / 7.0) * 7)::int
   FROM p
+),
+
+-- Zonas restringidas activas, leídas una sola vez, con el rectángulo que las encierra:
+-- un punto fuera del rectángulo no puede estar dentro de la zona, así que el cálculo
+-- fino solo corre para las zonas cercanas al domicilio (rendimiento 2026-11-24).
+-- MATERIALIZED: sin esto Postgres vuelve a armar la lista por cada lead (20 ms × lead).
+zonas_poly AS MATERIALIZED (
+  SELECT
+    array_agg((e.pt ->> 'lat')::double precision ORDER BY e.ord) AS lats,
+    array_agg((e.pt ->> 'lng')::double precision ORDER BY e.ord) AS lngs,
+    MIN((e.pt ->> 'lat')::double precision) AS min_lat,
+    MAX((e.pt ->> 'lat')::double precision) AS max_lat,
+    MIN((e.pt ->> 'lng')::double precision) AS min_lng,
+    MAX((e.pt ->> 'lng')::double precision) AS max_lng
+  FROM zonas_peligrosas z
+  CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(z.poligono::jsonb) = 'array' THEN z.poligono::jsonb ELSE '[]'::jsonb END
+  ) WITH ORDINALITY AS e(pt, ord)
+  WHERE z.activo
+  GROUP BY z.id
+  HAVING COUNT(*) >= 3
+),
+
+-- ───────────── Primer auto de cada conductor ─────────────
+-- (Va antes que los leads: solo se leen los leads del período, los marcados como
+-- reingreso y los de personas que ya tuvieron auto. Rendimiento 2026-11-24.)
+cond_base AS (
+  SELECT
+    c.id,
+    regexp_replace(COALESCE(c.numero_dni, ''), '\D', '', 'g') AS dni,
+    -- La zona de la ficha se calcula después, solo para los conductores nuevos
+    c.zona AS zona_raw, c.direccion_lat::double precision AS lat,
+    c.direccion_lng::double precision AS lng, c.direccion
+  FROM conductores c
+  WHERE (p_sede_id IS NULL OR c.sede_id = p_sede_id)
+    -- Conductores internos (apellido INTERNO): no son conductores reales (2026-11-06)
+    AND COALESCE(c.apellidos, '') NOT ILIKE 'interno'
+),
+turnos AS (
+  SELECT
+    ac.conductor_id AS id,
+    (COALESCE(ac.fecha_inicio, a.fecha_inicio_real, a.fecha_inicio) AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS fecha,
+    LOWER(COALESCE(NULLIF(ac.horario, ''), a.horario, '')) AS horario
+  FROM asignaciones_conductores ac
+  JOIN asignaciones a ON a.id = ac.asignacion_id
+  JOIN cond_base cb ON cb.id = ac.conductor_id
+  CROSS JOIN h
+  WHERE COALESCE(ac.estado, '') <> 'cancelado'
+    AND COALESCE(a.estado, '') <> 'cancelada'
+    AND COALESCE(ac.fecha_inicio, a.fecha_inicio_real, a.fecha_inicio) IS NOT NULL
+    AND (COALESCE(ac.fecha_inicio, a.fecha_inicio_real, a.fecha_inicio) AT TIME ZONE 'America/Argentina/Buenos_Aires')::date <= h.hoy
+),
+primer_turno AS (
+  SELECT DISTINCT ON (t.id) t.id, cb.dni, cb.zona_raw, cb.lat, cb.lng, cb.direccion, t.fecha, t.horario
+  FROM turnos t
+  JOIN cond_base cb ON cb.id = t.id
+  ORDER BY t.id, t.fecha
+),
+-- Asignaciones por DNI (para los reingresos: auto recibido después del lead)
+turnos_dni AS (
+  SELECT cb.dni, array_agg(DISTINCT t.fecha ORDER BY t.fecha) AS fechas
+  FROM turnos t
+  JOIN cond_base cb ON cb.id = t.id
+  WHERE length(cb.dni) >= 7
+  GROUP BY cb.dni
+),
+-- Primer auto por DNI (una persona puede tener más de un registro de conductor)
+primer_auto_dni AS (
+  SELECT DISTINCT ON (dni) dni, fecha AS primer_turno, horario, zona_raw, lat, lng, direccion
+  FROM primer_turno
+  WHERE dni <> ''
+  ORDER BY dni, fecha
 ),
 
 -- ───────────── Leads (todos los usados: período, anterior y origen de conductores) ─────────────
@@ -198,13 +301,21 @@ leads_base AS (
       ''), '\s+', ' ', 'g')), '') AS causal,
     COALESCE(l.latitud, l.direccion_latitud)::double precision AS lat,
     COALESCE(l.longitud, l.direccion_longitud)::double precision AS lng,
-    dashboard_directivo_zona(
-      l.zona,
-      COALESCE(l.latitud, l.direccion_latitud)::double precision,
-      COALESCE(l.longitud, l.direccion_longitud)::double precision,
-      l.direccion) AS zona
+    -- La zona se calcula en leads_v, solo para los leads del período
+    l.zona AS zona_raw,
+    l.direccion,
+    btrim(COALESCE(l.estado_de_lead, '')) AS estado_label,
+    l.embajador_id
   FROM leads l
+  CROSS JOIN (SELECT MIN(desde) AS desde, MAX(hasta) AS hasta FROM rangos) rg
   WHERE l.created_at IS NOT NULL
+    -- Solo los leads que algún cálculo usa: los de los dos períodos, los marcados como
+    -- reingreso y los de personas que ya recibieron auto (reingresos y fuera de rango).
+    -- Antes se procesaban todos los leads de la historia (rendimiento 2026-11-24).
+    AND ((l.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date BETWEEN rg.desde AND rg.hasta
+         OR LOWER(COALESCE(l.proceso, '')) = 'reingreso'
+         OR LOWER(btrim(COALESCE(l.estado_de_lead, ''))) = 'reingreso'
+         OR regexp_replace(COALESCE(l.dni, ''), '\D', '', 'g') IN (SELECT dni FROM primer_auto_dni))
     AND (p_sede_id IS NULL OR l.sede_id = p_sede_id)
     -- «Auto del pueblo» (dueños de auto, formulario «Registrá tu auto») no es parte
     -- del embudo de conductores: no cuenta como lead ni como descartado (2026-11-17)
@@ -262,61 +373,14 @@ leads_n AS (
   FROM leads_base lb
 ),
 
--- ───────────── Primer auto de cada conductor ─────────────
-cond_base AS (
-  SELECT
-    c.id,
-    regexp_replace(COALESCE(c.numero_dni, ''), '\D', '', 'g') AS dni,
-    COALESCE(dashboard_directivo_zona(c.zona, c.direccion_lat::double precision, c.direccion_lng::double precision, c.direccion), 'Sin dato') AS zona_ficha
-  FROM conductores c
-  WHERE (p_sede_id IS NULL OR c.sede_id = p_sede_id)
-    -- Conductores internos (apellido INTERNO): no son conductores reales (2026-11-06)
-    AND COALESCE(c.apellidos, '') NOT ILIKE 'interno'
-),
-turnos AS (
-  SELECT
-    ac.conductor_id AS id,
-    (COALESCE(ac.fecha_inicio, a.fecha_inicio_real, a.fecha_inicio) AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS fecha,
-    LOWER(COALESCE(NULLIF(ac.horario, ''), a.horario, '')) AS horario,
-    COALESCE(dashboard_directivo_zona(a.zona, NULL, NULL, NULL), 'Sin dato') AS zona_auto
-  FROM asignaciones_conductores ac
-  JOIN asignaciones a ON a.id = ac.asignacion_id
-  JOIN cond_base cb ON cb.id = ac.conductor_id
-  CROSS JOIN h
-  WHERE COALESCE(ac.estado, '') <> 'cancelado'
-    AND COALESCE(a.estado, '') <> 'cancelada'
-    AND COALESCE(ac.fecha_inicio, a.fecha_inicio_real, a.fecha_inicio) IS NOT NULL
-    AND (COALESCE(ac.fecha_inicio, a.fecha_inicio_real, a.fecha_inicio) AT TIME ZONE 'America/Argentina/Buenos_Aires')::date <= h.hoy
-),
-primer_turno AS (
-  SELECT DISTINCT ON (t.id) t.id, cb.dni, cb.zona_ficha, t.fecha, t.horario, t.zona_auto
-  FROM turnos t
-  JOIN cond_base cb ON cb.id = t.id
-  ORDER BY t.id, t.fecha
-),
--- Asignaciones por DNI (para los reingresos: auto recibido después del lead)
-turnos_dni AS (
-  SELECT cb.dni, array_agg(DISTINCT t.fecha ORDER BY t.fecha) AS fechas
-  FROM turnos t
-  JOIN cond_base cb ON cb.id = t.id
-  WHERE length(cb.dni) >= 7
-  GROUP BY cb.dni
-),
--- Primer auto por DNI (una persona puede tener más de un registro de conductor)
-primer_auto_dni AS (
-  SELECT DISTINCT ON (dni) dni, fecha AS primer_turno, horario, zona_ficha
-  FROM primer_turno
-  WHERE dni <> ''
-  ORDER BY dni, fecha
-),
-
 -- ───────────── Leads del período con etapas, perfil y motivo ─────────────
 leads_v AS (
   SELECT
     r.rango,
     ln.id, ln.nombre, ln.dni, ln.ingreso, ln.segmento, ln.canal, ln.id_fuente, ln.descartado, ln.causal, ln.estado, ln.edad,
-    COALESCE(ln.zona, 'Sin dato') AS zona,
-    (ln.zona IS NULL) AS sin_zona,
+    ln.estado_label, ln.embajador_id,
+    COALESCE(zz.zona, 'Sin dato') AS zona,
+    (zz.zona IS NULL) AS sin_zona,
     -- Edad: con la edad cargada (o calculada de la fecha de nacimiento) manda la edad;
     -- sin edad, el estado del chatbot ("Edad aprobada" o más). Así cuentan también
     -- los leads de la web, que no pasan por el chatbot.
@@ -329,8 +393,17 @@ leads_v AS (
     -- de Leads).
     ln.convertido OR (NOT ln.descartado
       AND CASE WHEN ln.edad IS NOT NULL THEN ln.edad >= 21 ELSE COALESCE(ln.nivel_estado, 0) >= 1.1 END
-      AND (COALESCE(ln.nivel_estado, 0) >= 1.2
-           OR (ln.lat IS NOT NULL AND ln.lng IS NOT NULL AND NOT COALESCE(punto_en_zona_restringida(ln.lat, ln.lng), false)))
+      -- CASE: el cálculo del polígono solo corre cuando el estado no alcanza
+      AND CASE
+        WHEN COALESCE(ln.nivel_estado, 0) >= 1.2 THEN true
+        WHEN ln.lat IS NULL OR ln.lng IS NULL THEN false
+        ELSE NOT EXISTS (
+          SELECT 1 FROM zonas_poly z
+          WHERE ln.lat BETWEEN z.min_lat AND z.max_lat
+            AND ln.lng BETWEEN z.min_lng AND z.max_lng
+            AND punto_en_poligono(ln.lat, ln.lng, z.lats, z.lngs)
+        )
+      END
     ) AS filtros,
     (NOT ln.descartado AND COALESCE(ln.nivel_estado, 0) >= 1.5) OR ln.convertido AS acepta,
     (NOT ln.descartado AND COALESCE(ln.nivel_estado, 0) >= 2) OR ln.convertido AS video,
@@ -342,7 +415,10 @@ leads_v AS (
     -- persona (DNI) tiene varios leads en el rango, cuenta solo en el último.
     (ln.dni <> '' AND NOT ln.marcado_reingreso AND pad.primer_turno IS NOT NULL AND pad.primer_turno >= ln.ingreso
       AND ROW_NUMBER() OVER (PARTITION BY r.rango, ln.dni ORDER BY ln.created_at DESC) = 1) AS con_auto,
-    pad.primer_turno, pad.horario AS horario_auto, pad.zona_ficha,
+    pad.primer_turno, pad.horario AS horario_auto,
+    CASE WHEN pad.dni IS NOT NULL
+      THEN COALESCE(dashboard_directivo_zona(pad.zona_raw, pad.lat, pad.lng, pad.direccion), 'Sin dato')
+    END AS zona_ficha,
     -- Reingreso: ya era conductor (primer auto ANTES del lead, solo por DNI) y volvió a
     -- recibir auto después de entrar como lead. Una vez por persona (su último lead).
     (length(ln.dni) >= 7 AND pad.primer_turno IS NOT NULL AND pad.primer_turno < ln.ingreso
@@ -376,6 +452,9 @@ leads_v AS (
     END AS motivo
   FROM leads_n ln
   JOIN rangos r ON ln.ingreso BETWEEN r.desde AND r.hasta
+  CROSS JOIN LATERAL (
+    SELECT dashboard_directivo_zona(ln.zona_raw, ln.lat, ln.lng, ln.direccion) AS zona
+  ) zz
   LEFT JOIN primer_auto_dni pad ON pad.dni = ln.dni
   LEFT JOIN turnos_dni td ON td.dni = ln.dni AND pad.primer_turno < ln.ingreso
   LEFT JOIN LATERAL (
@@ -525,6 +604,19 @@ SELECT jsonb_build_object(
     FROM leads_act WHERE descartado
   ),
 
+  -- Quiénes llegaron referidos en el período (bloque Referidos, 2026-11-24): estado
+  -- actual del lead, el conductor embajador que lo recomendó y si ya recibió auto.
+  'referidos_detalle', (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'nombre', la.nombre, 'ingreso', la.ingreso, 'estado', la.estado_label,
+      'embajador', NULLIF(btrim(concat_ws(' ', c.nombres, c.apellidos)), ''),
+      'descartado', la.descartado, 'con_auto', la.con_auto, 'primer_auto', la.primer_turno)
+      ORDER BY la.ingreso DESC, la.nombre), '[]'::jsonb)
+    FROM leads_act la
+    LEFT JOIN conductores c ON c.id = la.embajador_id
+    WHERE la.segmento = 'Referidos'
+  ),
+
   'causales', (
     -- Causales más frecuentes, para revisar la clasificación. Los códigos en
     -- inglés que manda el chatbot se muestran traducidos (disagreement, price,
@@ -584,7 +676,7 @@ SELECT jsonb_build_object(
     'dias_mediana', (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) FROM leads_act WHERE con_auto),
     -- Time to driver del período anterior, para comparar
     'dias_mediana_anterior', (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) FROM leads_v WHERE rango = 'anterior' AND con_auto),
-    -- Por filtro de la pantalla: Referidos va con Web ("Web (orgánico)" los incluye)
+    -- Por filtro de la pantalla: Referidos va con Web ("Web / Orgánico" los incluye)
     'dias_mediana_segmento_anterior', (
       SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'mediana', mediana)), '[]'::jsonb)
       FROM (
