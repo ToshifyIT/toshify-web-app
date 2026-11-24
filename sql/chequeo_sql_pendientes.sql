@@ -341,6 +341,8 @@ WITH chequeo(archivo, tipo, objeto, existe) AS (VALUES
   ('leads_capitan_por_actividad.sql', 'funcion', 'leads_capitan_por_actividad', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='leads_capitan_por_actividad'))),
   ('leads_capitan_por_actividad.sql', 'trigger', 'trg_leads_capitan_por_actividad', (EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='trg_leads_capitan_por_actividad' AND tgrelid='public.leads'::regclass))),
   ('leads_realtime.sql', 'publicacion', 'supabase_realtime: leads', (EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='leads'))),
+  ('panel_conductores_cuentas_cabify.sql', 'funcion', 'panel_cuentas_cabify', (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='panel_cuentas_cabify'))),
+  ('panel_conductores_cuentas_cabify.sql', 'indice', 'idx_cabify_historico_fecha_inicio', (to_regclass('public.idx_cabify_historico_fecha_inicio') IS NOT NULL)),
   ('parametros_menu_nombres.sql', 'menu', 'submenus.label=Conceptos de facturación', (EXISTS (SELECT 1 FROM submenus WHERE label='Conceptos de facturación'))),
   ('regularizar_saldos_facturas_a_favor.sql', 'datos', 'control_saldos: regularización S17 y S12', ((SELECT count(*) FROM control_saldos WHERE referencia LIKE 'Regularización de saldo S1_/2026 - Descuentos a favor') >= 2))
 )

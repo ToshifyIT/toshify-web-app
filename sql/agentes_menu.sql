@@ -1,4 +1,8 @@
 -- =====================================================
+-- OBSOLETO: NO VOLVER A CORRER. Vuelve a mostrar "Agentes" como menú principal.
+-- La pantalla ahora es Onboarding > Capitanes (sql/agentes_submenu_onboarding.sql).
+-- Si el menú principal reaparece: sql/agentes_menu_principal_ocultar.sql
+-- =====================================================
 -- Menú nuevo "Agentes" (/agentes) — 2026-11-04
 -- =====================================================
 -- Misma vista que Estado de Flota pero por agente de ventas (guía): responsable de

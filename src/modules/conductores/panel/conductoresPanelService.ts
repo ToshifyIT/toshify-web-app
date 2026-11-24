@@ -160,6 +160,36 @@ async function fetchAll<T>(build: (from: number, to: number) => any): Promise<T[
   return out
 }
 
+interface CuentaCabify {
+  dni: string | null
+  nombre: string | null
+  apellido: string | null
+}
+
+// Cuentas de Cabify (dni ya traducido, nombre, apellido) con actividad desde `desde`.
+// Rápido: la función panel_cuentas_cabify (sql/panel_conductores_cuentas_cabify.sql)
+// devuelve una fila por cuenta. Si todavía no existe, se baja el histórico completo
+// de la ventana y se traducen los hash acá, como antes. Si todo falla, sin cuentas.
+async function cargarCuentasCabify(desde: string): Promise<CuentaCabify[]> {
+  try {
+    return await fetchAll<CuentaCabify>((from, to) =>
+      (supabase.rpc as any)('panel_cuentas_cabify', { p_desde: desde }).range(from, to))
+  } catch {
+    const [historico, mapeo] = await Promise.all([
+      fetchAll<CuentaCabify>((from, to) =>
+        supabase.from('cabify_historico').select('dni, nombre, apellido')
+          .gte('fecha_inicio', desde).order('fecha_inicio').range(from, to)).catch(() => []),
+      fetchAll<{ cabify_hash: string; dni_real: string | null }>((from, to) =>
+        supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real').range(from, to)).catch(() => []),
+    ])
+    const dniDeHash = new Map(mapeo.map(m => [m.cabify_hash, m.dni_real]))
+    return historico.map(c => ({
+      ...c,
+      dni: c.dni?.startsWith('CABIFY_') ? dniDeHash.get(c.dni) || null : c.dni,
+    }))
+  }
+}
+
 interface RawConductor {
   id: string
   nombres: string | null
@@ -380,16 +410,7 @@ export async function cargarPanelConductores(
   // Cabify que se sincronizan) en las últimas 9 semanas, la misma ventana que DiDi.
   // Algunos vienen con el DNI como hash (CABIFY_...): se traducen con cabify_dni_mapeo.
   const desdeCabify = new Date(Date.now() - 63 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  const [cuentasCabify, mapeoCabify] = opciones?.appsPago
-    ? await Promise.all([
-        fetchAll<{ dni: string | null; nombre: string | null; apellido: string | null }>((from, to) =>
-          supabase.from('cabify_historico').select('dni, nombre, apellido')
-            .gte('fecha_inicio', desdeCabify).order('fecha_inicio').range(from, to)).catch(() => []),
-        fetchAll<{ cabify_hash: string; dni_real: string | null }>((from, to) =>
-          supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real').range(from, to)).catch(() => []),
-      ])
-    : [[], []]
-  const dniDeHash = new Map(mapeoCabify.map(m => [m.cabify_hash, m.dni_real]))
+  const cuentasCabify = opciones?.appsPago ? await cargarCuentasCabify(desdeCabify) : []
   const guiaPorConductor = new Map(guias.map(g => [g.id, g.guia]))
 
   // 13. Embajador (quién lo refirió). El nombre sale de los conductores ya cargados; los
@@ -454,8 +475,7 @@ export async function cargarPanelConductores(
     porNombre.get(normalizeNombre(`${d.name || ''} ${d.surname || ''}`))
   const conCuentaCabify = new Set<string>()
   for (const cta of cuentasCabify) {
-    const dni = cta.dni?.startsWith('CABIFY_') ? dniDeHash.get(cta.dni) || null : cta.dni
-    const cid = conductorDeCabify({ nationalIdNumber: dni, name: cta.nombre, surname: cta.apellido })
+    const cid = conductorDeCabify({ nationalIdNumber: cta.dni, name: cta.nombre, surname: cta.apellido })
     if (cid) conCuentaCabify.add(cid)
   }
   if (cabifyDrivers) {
