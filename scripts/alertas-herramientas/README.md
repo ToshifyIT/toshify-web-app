@@ -120,3 +120,104 @@ Línea del crontab (09:00 Argentina, mismo formato que los demás):
 
 `estado-cron.sh` la detecta sola (clave `alertas-herramientas/main.py`) y la muestra en
 Configuración › Integraciones & Tokens con la descripción cargada por el SQL.
+
+## Facturas y pagos leídos del correo (`facturas_correo.py`)
+
+Lo que tiene API sigue por API (arriba). Lo que ninguna API entrega (si se pagó y la
+factura) se cruza con el correo: dos veces por día, a las 14 y a las 17, el script lee **info@**, **maria.f@** (ex techspec) y **josue.caride@** (DocuSeal) con la API de Gmail (solo lectura) y revisa los correos de los remitentes de
+cada herramienta (`herramientas.remitentes_factura`):
+
+- **Factura o recibo**: marca el pago del mes como *Pagado* con la fecha del correo y le
+  adjunta el PDF. Si el monto del correo no coincide con el del pago, no toca nada y avisa.
+- **Pago rechazado** ("no pudimos renovar", "problema de pago"): no toca nada y avisa.
+- **Otra factura del mismo mes** (recarga de créditos de 2Chat, cargo extra): la suma al
+  pago del mes, deja la nota en observaciones y guarda el PDF. Si el correo no trae un
+  monto claro (varios importes), avisa.
+- **Herramienta por uso sin pago ese mes** (recarga de Anticaptcha, pack): crea el pago
+  como Pagado con el monto del correo.
+- **No se puede cruzar seguro** (sin pago del mes en una mensual, monto distinto): avisa.
+
+Lo que cargó solo y lo que hay que revisar llega en un correo a los mismos destinatarios
+(solo si hubo algo). Cada correo queda registrado en
+`herramientas_facturas_correo` y no se vuelve a procesar. El script no marca correos como
+leídos, no los mueve ni los borra, y no mira otros remitentes. Requiere
+`sql/herramientas_facturas_correo.sql`.
+
+**Permiso de cada casilla (una sola vez, desde una computadora con navegador):**
+
+1. En Google Cloud › APIs y servicios: habilitar **Gmail API** y crear un *ID de cliente
+   de OAuth* de tipo **App de escritorio** (si pide pantalla de consentimiento: interna).
+2. Con las variables del cliente exportadas, correr y entrar con cada casilla:
+
+```bash
+export HERRAMIENTAS_GMAIL_CLIENT_ID="...apps.googleusercontent.com"
+export HERRAMIENTAS_GMAIL_CLIENT_SECRET="..."
+python3 facturas_correo.py autorizar info@toshify.com.ar
+python3 facturas_correo.py autorizar maria.f@toshify.com.ar
+python3 facturas_correo.py autorizar josue.caride@toshify.com.ar
+```
+
+3. Guardar los dos tokens en el servidor, en `/opt/toshify-sync/secretos/gmail-tokens.json`
+   (permisos 600):
+
+```json
+{ "info@toshify.com.ar": "1//...", "techspec@toshify.com.ar": "1//..." }
+```
+
+4. En `env.sh`:
+
+```bash
+export HERRAMIENTAS_GMAIL_CLIENT_ID="...apps.googleusercontent.com"
+export HERRAMIENTAS_GMAIL_CLIENT_SECRET="..."
+export HERRAMIENTAS_GMAIL_TOKENS="/opt/toshify-sync/secretos/gmail-tokens.json"
+export HERRAMIENTAS_GMAIL_DESDE="2026-11-25"   # día de instalación: lo anterior ya está cargado a mano
+# export HERRAMIENTAS_GMAIL_DIAS=10   # días hacia atrás que revisa
+```
+
+Se pueden sumar más casillas agregando su token al mismo archivo: no hay que tocar el script.
+Las facturas de **DocuSeal** llegan a josue.caride@ por Stripe. De info@docuseal.com llegan las
+cartas oferta firmadas: por eso el remitente de DocuSeal es solo stripe.com con asunto "DocuSeal".
+Cada herramienta se busca con su asunto en la misma búsqueda de Gmail: los correos de un remitente
+compartido que no son de esa herramienta no se abren.
+
+Cada token solo permite leer esa casilla. Se revoca desde la cuenta de Google de la casilla
+(Seguridad › Conexiones con apps de terceros).
+
+**Confirmar los remitentes** antes de dejarlo andar: lista quién mandó PDF en los últimos
+180 días en cada casilla, para completar o corregir `remitentes_factura`:
+
+```bash
+python3 facturas_correo.py descubrir
+python3 facturas_correo.py --dry-run     # muestra qué haría con cada correo, sin escribir
+```
+
+Líneas del crontab (14:00 y 17:00 Argentina; la segunda toma lo que llegó a la tarde):
+
+```cron
+0 * * * * H=$(TZ=America/Argentina/Buenos_Aires date +\%H); [ "$H" = "14" -o "$H" = "17" ] && cd /opt/toshify-sync/alertas-herramientas && . /opt/toshify-sync/env.sh && . /opt/toshify-sync/resolve-supabase.sh && python3 facturas_correo.py >> /var/log/facturas-correo.log 2>&1
+```
+
+`facturas_correo.py` usa funciones de `main.py`: copiar los dos archivos a la misma carpeta.
+
+### Copia en Drive y botón "Ver"
+
+Cada factura que adjunta el lector también se sube a Drive, en **HERRAMIENTAS/AAAA-MM** (la carpeta
+de maria.f@ compartida con la contadora), con el mismo formato de nombre que las subidas a mano:
+`2026-11 · Slack - <archivo>.pdf`. Si ya hay un archivo con ese nombre, no lo repite. Si falta la
+carpeta del mes, la crea. En la pantalla, "Ver" abre la carpeta del mes del pago (ahí están todas las
+facturas: plan, recargas, ajustes). Requiere `sql/herramientas_drive_carpetas.sql`.
+
+La subida usa la casilla dueña de la carpeta, autorizada con Drive además de Gmail:
+
+```bash
+python3 facturas_correo.py autorizar maria.f@toshify.com.ar --drive
+python3 facturas_correo.py carpetas      # una vez: registra las carpetas de meses que ya existen
+```
+
+```bash
+# export HERRAMIENTAS_DRIVE_CUENTA="maria.f@toshify.com.ar"            # por defecto
+# export HERRAMIENTAS_DRIVE_CARPETA="17-IiBh9qIWLxFRcuvFwIK-3EnnVsPO4I"  # HERRAMIENTAS, por defecto
+```
+
+La cuenta de servicio de la web no sirve para esto: la carpeta está en "Mi unidad" y Google no deja
+que una cuenta de servicio cree archivos ahí.

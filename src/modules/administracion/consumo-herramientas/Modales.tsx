@@ -606,6 +606,8 @@ interface PagoDetalleModalProps {
   equivalenteUsd: number | null
   onVerFactura: () => void
   onClose: () => void
+  /** Consumo real del mes (herramientas por uso con API): va debajo del pago */
+  consumo?: React.ReactNode
 }
 
 function Dato({ label, children }: { label: string; children: React.ReactNode }) {
@@ -619,7 +621,7 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
 
 const grilla = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 } as const
 
-export function PagoDetalleModal({ pago, herramienta: h, equivalenteUsd, onVerFactura, onClose }: PagoDetalleModalProps) {
+export function PagoDetalleModal({ pago, herramienta: h, equivalenteUsd, onVerFactura, onClose, consumo }: PagoDetalleModalProps) {
   const enlace = (url: string | null) => (url
     ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)' }}>{url}</a>
     : null)
@@ -656,6 +658,7 @@ export function PagoDetalleModal({ pago, herramienta: h, equivalenteUsd, onVerFa
               <Dato label="Registrado">{pago.pagado_en ? formatFechaHora(pago.pagado_en) : null}</Dato>
             </div>
           </Seccion>
+          {consumo && <Seccion titulo="Consumo del mes">{consumo}</Seccion>}
           <Seccion titulo="Observaciones">
             <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>{pago.observaciones || '-'}</div>
           </Seccion>

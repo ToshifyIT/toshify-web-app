@@ -1,117 +1,72 @@
-/* Consumo real de las herramientas por uso (2Chat, Google Cloud) */
+/* Consumo real del mes (2Chat – Créditos, Google Cloud), en el detalle del pago */
 
-.cpu-panel {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  padding: 12px;
-}
-
-.cpu-titulo {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.cpu-titulo h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.cpu-titulo span {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.cpu-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-}
-
-.cpu-card {
+.cpu-detalle {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  min-width: 0;
 }
 
-.cpu-card-head {
+.cpu-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 16px;
+}
+
+.cpu-col {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
-.cpu-nombre {
+.cpu-col strong {
   font-size: 13px;
+  color: var(--text-primary);
   font-weight: 600;
-  color: var(--text-primary);
-}
-
-.cpu-total {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.cpu-sub {
+.cpu-label {
   font-size: 11px;
   color: var(--text-tertiary);
 }
 
-.cpu-filas {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.cpu-sub {
   font-size: 12px;
+  color: var(--text-tertiary);
 }
 
-.cpu-fila {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--text-secondary);
-}
-
-.cpu-fila strong {
-  color: var(--text-primary);
+.cpu-var {
+  font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.cpu-prepago {
-  border-top: 1px solid var(--border-primary);
-  padding-top: 8px;
 }
 
 .cpu-alerta {
   color: var(--color-danger) !important;
-  font-weight: 600;
 }
 
-.cpu-link {
-  background: none;
-  border: 0;
-  padding: 0;
+.cpu-conceptos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.cpu-concepto {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
   font-size: 12px;
-  color: var(--color-primary);
-  cursor: pointer;
-  text-align: left;
-  min-height: 24px;
+  color: var(--text-secondary);
 }
 
-.cpu-link:hover {
-  text-decoration: underline;
+.cpu-concepto strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
