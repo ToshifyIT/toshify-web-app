@@ -324,6 +324,8 @@ export function ConductoresPanelModule() {
       'DNI': c.dni || '',
       'CUIT': c.ruc || '',
       'Capitán': c.guia || '',
+      'Referido': c.referido ? 'Sí' : 'No',
+      'Referido por': c.embajador || '',
       'App (pagó)': c.apps?.join(' + ') || '',
       'Riesgo deuda': riesgos?.get(c.id) ? NIVEL_RIESGO_LABEL[riesgos.get(c.id)!.nivel] : '',
       'Deuda (semanas de alquiler)': riesgos?.get(c.id) ? Number(riesgos.get(c.id)!.semanasDeuda.toFixed(1)) : '',
@@ -600,6 +602,26 @@ export function ConductoresPanelModule() {
       cell: ({ row }) => row.original.guia
         ? <span>{row.original.guia}</span>
         : <span className="cpanel-num cpanel-nulo">—</span>,
+    },
+    {
+      id: 'referido',
+      accessorFn: (r) => (r.referido ? (r.embajador || 'Sí') : 'No'),
+      header: 'Referido',
+      // Filtro Sí / No; el nombre del embajador se busca arriba o se ordena.
+      meta: {
+        filterValue: (r: ConductorPanelRow) => (r.referido ? 'Sí' : 'No'),
+        filterOrder: ['Sí', 'No'],
+      },
+      cell: ({ row }) => row.original.referido
+        ? (
+          <div>
+            <span style={{ fontWeight: 600 }}>Sí</span>
+            <div style={{ fontSize: 11, marginTop: 2, color: 'var(--text-tertiary, #9ca3af)' }}>
+              {row.original.embajador ? `por ${row.original.embajador}` : 'Sin embajador'}
+            </div>
+          </div>
+        )
+        : <span className="cpanel-num cpanel-nulo">No</span>,
     },
     {
       id: 'patente',
