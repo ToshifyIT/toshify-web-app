@@ -25,6 +25,7 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 import './ConductorDetalleModal.css'
 import { PatenteBadge } from '../../../components/ui/PatenteBadge'
 import { BitacoraSeguimiento } from './BitacoraSeguimiento'
+import { BcraConductor } from './BcraConductor'
 import { formatFecha } from '../../../utils/format'
 import { hoyART } from '../../../utils/fechaArgentina'
 
@@ -507,8 +508,12 @@ export function ConductorDetalleModal({
         <div className="cdet-body">
           {/* Historial de saldo: kardex de control_saldos (mismo modal que Facturación > Saldos, solo lectura). */}
           {tab === 'cobranza' ? (
-            // Bitácora de seguimiento: notas de cobranza + llamadas de 2Chat desde que tiene asignación
-            <BitacoraSeguimiento conductorId={conductor.id} />
+            // Situación en el BCRA y, abajo, la bitácora de seguimiento: notas de cobranza +
+            // llamadas de 2Chat desde que tiene asignación
+            <>
+              <BcraConductor conductorId={conductor.id} />
+              <BitacoraSeguimiento conductorId={conductor.id} />
+            </>
           ) : tab === 'calificacion' ? (
             <CalificacionTab conductorId={conductor.id} enCurso={calificacion} />
           ) : tab === 'incidencias' ? (

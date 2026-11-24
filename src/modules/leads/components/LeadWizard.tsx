@@ -15,6 +15,7 @@ import { estadoMonotributo, faltantesMonotributo } from '../monotributo'
 import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, estadoLicencia, faltantesLicencia } from '../licenciaLead'
 import { AlertasLicencia } from './AlertasLicencia'
 import { unirNombre } from '../nombreLead'
+import { FUENTE_SELLIUM } from '../cargaMasivaSellium'
 
 /** Cabecera de cada nota de la bitácora: "[02/11/2026 16:40 · Maria Flores]" */
 const RE_CABECERA = /^\[(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}[^\]]*)\]\s*/
@@ -903,9 +904,13 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
               </div>
               <div className="lead-wizard-field">
                 <label>Fuente del Lead</label>
-                <select value={formData.fuente_de_lead || 'Intercom'} onChange={e => updateField('fuente_de_lead', e.target.value)}>
-                  <option value="Intercom">Intercom</option>
-                  <option value="Sellium">Sellium</option>
+                {/* Por defecto Sellium (Intercom ya no se usa: queda solo para los leads viejos).
+                    Se guarda como SELLIUM, igual que la carga masiva. */}
+                <select
+                  value={/^sellium$/i.test(formData.fuente_de_lead || '') ? FUENTE_SELLIUM : (formData.fuente_de_lead || FUENTE_SELLIUM)}
+                  onChange={e => updateField('fuente_de_lead', e.target.value)}
+                >
+                  <option value={FUENTE_SELLIUM}>Sellium</option>
                   <option value="Damaro">Damaro</option>
                   <option value="Facebook">Facebook</option>
                   <option value="Instagram">Instagram</option>
@@ -913,6 +918,11 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="Referido">Referido</option>
                   <option value="Web">Web</option>
                   <option value="Otro">Otro</option>
+                  {/* Fuente que ya no se ofrece (Intercom, fuente_Sellium...): se conserva para no perderla */}
+                  {formData.fuente_de_lead && !/^sellium$/i.test(formData.fuente_de_lead)
+                    && !['Damaro', 'Facebook', 'Instagram', 'WhatsApp', 'Referido', 'Web', 'Otro'].includes(formData.fuente_de_lead) && (
+                    <option value={formData.fuente_de_lead}>{formData.fuente_de_lead}</option>
+                  )}
                 </select>
               </div>
             </div>
