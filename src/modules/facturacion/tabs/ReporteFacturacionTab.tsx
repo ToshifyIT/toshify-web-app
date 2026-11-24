@@ -1888,20 +1888,20 @@ export function ReporteFacturacionTab() {
         .eq('semana', semanaAnt)
         .eq('anio', anioAnt)
       if (sedeFacturacion) qAnt = qAnt.eq('sede_id', sedeFacturacion)
-      const { data: periodoAnt } = await qAnt.single()
 
-      // La semana anterior está cerrada si: tiene período con estado 'cerrado', es semana 1, o no existe período anterior (sede nueva)
-      const anteriorCerrado = semana === 1 || !periodoAnt || (periodoAnt?.estado === 'cerrado')
-      setPeriodoAnteriorCerrado(anteriorCerrado)
-
-      // 1. Buscar el período para esta semana
+      // 1. Buscar el período para esta semana (en paralelo con el de la semana anterior)
       let qPeriodo = supabase
         .from('periodos_facturacion')
         .select('*')
         .eq('semana', semana)
         .eq('anio', anio)
       if (sedeFacturacion) qPeriodo = qPeriodo.eq('sede_id', sedeFacturacion)
-      const { data: periodoDataDb, error: errPeriodo } = await qPeriodo.single()
+      const [{ data: periodoAnt }, { data: periodoDataDb, error: errPeriodo }] =
+        await Promise.all([qAnt.single(), qPeriodo.single()])
+
+      // La semana anterior está cerrada si: tiene período con estado 'cerrado', es semana 1, o no existe período anterior (sede nueva)
+      const anteriorCerrado = semana === 1 || !periodoAnt || (periodoAnt?.estado === 'cerrado')
+      setPeriodoAnteriorCerrado(anteriorCerrado)
 
       if (errPeriodo && errPeriodo.code !== 'PGRST116') {
         throw errPeriodo
@@ -2012,21 +2012,102 @@ export function ReporteFacturacionTab() {
 
       // Cargar asignaciones para determinar si tienen asignación al cierre de la semana y horario
       const conductorIdsLoad = (facturacionesData || []).map((f: any) => f.conductor_id).filter(Boolean)
-      const { data: asignacionesLoad } = conductorIdsLoad.length > 0 ? await (supabase
-        .from('asignaciones_conductores') as any)
-        .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin, vehiculos(patente, grupo_flota))')
-        .in('conductor_id', conductorIdsLoad)
-        .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
-      : { data: [] }
+      const hayConductores = conductorIdsLoad.length > 0
+      const sinFilas = Promise.resolve({ data: [] as any[] })
+      const fechaFinActualLoad = (periodoData as any).fecha_fin as string
+      const periodoIdActualLoad = (periodoData as any).id as string
 
-      // Estado REAL de la garantia por conductor (garantias_conductores).
-      // facturacion_conductores NO persiste este estado, asi que lo cruzamos aca para
-      // que la columna "Gar." distinga COMPLETADA del resto.
-      const { data: garantiasLoad } = conductorIdsLoad.length > 0 ? await (supabase
-        .from('garantias_conductores') as any)
-        .select('conductor_id, estado, monto_total')
-        .in('conductor_id', conductorIdsLoad)
-      : { data: [] }
+      // Rendimiento (2026-11-25): todo lo que solo depende del período y de sus conductores
+      // se pide de una vez, en paralelo. Antes eran ~10 tandas una detrás de otra.
+      // Cabify, pagos y detalle se arrancan acá y se esperan más abajo, donde se usan.
+      const periodoInicio = (periodoData as any).fecha_inicio
+      const periodoFin = (periodoData as any).fecha_fin
+      const peajesInicioSemAnt = format(subWeeks(parseISO(periodoInicio), 1), 'yyyy-MM-dd')
+      const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
+      // Obtener datos de Cabify incluyendo cobro_app para barras de cobertura
+      // + mapeo de hash CABIFY_xxx → DNI real (Cabify a veces devuelve el DNI hasheado)
+      // + licencias de conductores para fallback de match cuando hash no está mapeado
+      const cabifyTable = getCabifyTable((periodoData as any).sede_id || sedeActualId)
+      const cabifyPromesa = Promise.all([
+        supabase.from(cabifyTable)
+          .select('dni, licencia, nombre, apellido, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio, viajes_finalizados, horas_conectadas')
+          .gte('fecha_inicio', periodoInicio + 'T00:00:00')
+          .lte('fecha_inicio', periodoFin + 'T23:59:59'),
+        supabase.from(cabifyTable)
+          .select('dni, licencia, nombre, apellido, peajes, fecha_inicio, cabify_driver_id, cabify_company_id')
+          .gte('fecha_inicio', peajesInicioSemAnt + 'T00:00:00')
+          .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59'),
+        supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
+        hayConductores
+          ? (supabase.from('conductores') as any)
+              .select('id, numero_dni, numero_cuit, numero_licencia, nombres, apellidos')
+              .in('id', conductorIdsLoad)
+          : sinFilas,
+        // Identidad Cabify reciente (30 días previos al período): fallback para el botón
+        // de efectivo (rayito) cuando el conductor no tiene registros esta semana
+        supabase.from(cabifyTable)
+          .select('dni, licencia, nombre, apellido, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio, viajes_finalizados, horas_conectadas')
+          .gte('fecha_inicio', format(subWeeks(parseISO(periodoInicio), 4), 'yyyy-MM-dd') + 'T00:00:00')
+          .lt('fecha_inicio', periodoInicio + 'T00:00:00')
+          .order('fecha_inicio', { ascending: false })
+          .limit(5000),
+      ])
+      cabifyPromesa.catch(() => {})
+      // Pagos, detalle y excesos de un período guardado (en Vista Previa se arman más abajo)
+      const facIdsLoad = (facturacionesData || []).map((f: any) => f.id)
+      const codigosAlquiler = ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']
+      const pagosDetallePromesa = simulacion ? null : Promise.all([
+        (supabase.from('pagos_conductores') as any)
+          .select('referencia_id, monto, fecha_pago')
+          .eq('tipo_cobro', 'facturacion_semanal')
+          .in('referencia_id', facIdsLoad),
+        (supabase.from('facturacion_detalle') as any)
+          .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento, referencia_tipo, descripcion')
+          .in('facturacion_id', facIdsLoad),
+        (supabase.from('excesos_kilometraje') as any)
+          .select('id, conductor_id, km_exceso, monto_total, aplicado')
+          .eq('periodo_id', periodoIdActualLoad),
+        (supabase.from('facturacion_detalle') as any)
+          .select('facturacion_id, precio_unitario, concepto_codigo')
+          .in('facturacion_id', facIdsLoad)
+          .in('concepto_codigo', codigosAlquiler),
+      ])
+      pagosDetallePromesa?.catch(() => {})
+
+      const [
+        { data: asignacionesLoad },
+        // Estado REAL de la garantia por conductor (garantias_conductores).
+        // facturacion_conductores NO persiste este estado, asi que lo cruzamos aca para
+        // que la columna "Gar." distinga COMPLETADA del resto.
+        { data: garantiasLoad },
+        // IDs de todos los períodos hasta este (inclusive) por fecha_fin
+        { data: periodosHastaLoad },
+        // Todos los cobros de garantía de estos conductores (sin filtro de fecha). De acá
+        // salen el acumulado hasta este período y si tiene cobros en períodos POSTERIORES.
+        { data: garantiaHistGlobalLoad },
+      ] = await Promise.all([
+        hayConductores ? (supabase
+          .from('asignaciones_conductores') as any)
+          .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin, vehiculos(patente, grupo_flota))')
+          .in('conductor_id', conductorIdsLoad)
+          .or(FILTRO_FILAS_CONDUCTOR_QUE_CUENTAN)
+        : sinFilas,
+        hayConductores ? (supabase
+          .from('garantias_conductores') as any)
+          .select('conductor_id, estado, monto_total')
+          .in('conductor_id', conductorIdsLoad)
+        : sinFilas,
+        (supabase
+          .from('periodos_facturacion') as any)
+          .select('id, semana, anio')
+          .lte('fecha_fin', fechaFinActualLoad),
+        hayConductores ? (supabase
+          .from('facturacion_conductores') as any)
+          .select('conductor_id, subtotal_garantia, periodo_id')
+          .in('conductor_id', conductorIdsLoad)
+          .gt('subtotal_garantia', 0)
+        : sinFilas,
+      ])
       const garantiaEstadoMapLoad = new Map<string, string>(
         (garantiasLoad || []).map((g: any) => [g.conductor_id, g.estado])
       )
@@ -2037,35 +2118,17 @@ export function ReporteFacturacionTab() {
       // Acumulado histórico de garantía por conductor HASTA este período (inclusive).
       // facturacion_conductores NO tiene semana/anio directamente, se filtra por periodo_id
       // usando fecha_fin del período actual como referencia.
-      const fechaFinActualLoad = (periodoData as any).fecha_fin as string
-      const periodoIdActualLoad = (periodoData as any).id as string
-      // Obtener IDs de todos los períodos hasta este (inclusive) por fecha_fin
-      const { data: periodosHastaLoad } = await (supabase
-        .from('periodos_facturacion') as any)
-        .select('id, semana, anio')
-        .lte('fecha_fin', fechaFinActualLoad)
       const periodoIdsHastaLoad = ((periodosHastaLoad || []) as any[]).map((p: any) => p.id)
       const periodoIdsHastaSet = new Set(periodoIdsHastaLoad)
       const periodoSemanaAnioMap = new Map<string, { semana: number; anio: number }>(
         ((periodosHastaLoad || []) as any[]).map((p: any) => [p.id, { semana: Number(p.semana), anio: Number(p.anio) }])
       )
-      const { data: garantiaHistLoad } = conductorIdsLoad.length > 0 && periodoIdsHastaLoad.length > 0 ? await (supabase
-        .from('facturacion_conductores') as any)
-        .select('conductor_id, subtotal_garantia, periodo_id')
-        .in('conductor_id', conductorIdsLoad)
-        .in('periodo_id', periodoIdsHastaLoad)
-        .gt('subtotal_garantia', 0)
-      : { data: [] }
+      // Los cobros hasta este período: los del historial completo cuyo período está en la lista
+      const garantiaHistLoad = ((garantiaHistGlobalLoad || []) as any[])
+        .filter((f: any) => periodoIdsHastaSet.has(f.periodo_id))
 
-      // Query global (sin filtro de fecha) para detectar si el conductor tiene cobros
-      // en períodos POSTERIORES al visualizado. Si los tiene, el período actual NO es
+      // Cobros en períodos POSTERIORES al visualizado. Si los tiene, el período actual NO es
       // el período de completado real (aunque sea el último cobro dentro del rango visualizado).
-      const { data: garantiaHistGlobalLoad } = conductorIdsLoad.length > 0 ? await (supabase
-        .from('facturacion_conductores') as any)
-        .select('conductor_id, periodo_id')
-        .in('conductor_id', conductorIdsLoad)
-        .gt('subtotal_garantia', 0)
-      : { data: [] }
       const conductoresConCobrosFuturos = new Set<string>()
       for (const f of (garantiaHistGlobalLoad || []) as any[]) {
         if (f.conductor_id && !periodoIdsHastaSet.has(f.periodo_id)) {
@@ -2222,46 +2285,14 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // 2.5 Cargar ganancias de Cabify (semana actual) y peajes (semana ANTERIOR)
-      const periodoInicio = (periodoData as any).fecha_inicio
-      const periodoFin = (periodoData as any).fecha_fin
-      const peajesInicioSemAnt = format(subWeeks(parseISO(periodoInicio), 1), 'yyyy-MM-dd')
-      const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
-
-      // Obtener datos de Cabify incluyendo cobro_app para barras de cobertura
-      // + mapeo de hash CABIFY_xxx → DNI real (Cabify a veces devuelve el DNI hasheado)
-      // + licencias de conductores para fallback de match cuando hash no está mapeado
-      const cabifyTable = getCabifyTable((periodoData as any).sede_id || sedeActualId)
+      // 2.5 Ganancias de Cabify (semana actual) y peajes (semana ANTERIOR): pedidas arriba
       const [
         { data: cabifyGanancias },
         { data: cabifyPeajes },
         { data: dniMapeoData },
         { data: conductoresLicData },
         { data: cabifyHistoricoReciente },
-      ] = await Promise.all([
-        supabase.from(cabifyTable)
-          .select('dni, licencia, nombre, apellido, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio, viajes_finalizados, horas_conectadas')
-          .gte('fecha_inicio', periodoInicio + 'T00:00:00')
-          .lte('fecha_inicio', periodoFin + 'T23:59:59'),
-        supabase.from(cabifyTable)
-          .select('dni, licencia, nombre, apellido, peajes, fecha_inicio, cabify_driver_id, cabify_company_id')
-          .gte('fecha_inicio', peajesInicioSemAnt + 'T00:00:00')
-          .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59'),
-        supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
-        conductorIdsLoad.length > 0
-          ? (supabase.from('conductores') as any)
-              .select('id, numero_dni, numero_cuit, numero_licencia, nombres, apellidos')
-              .in('id', conductorIdsLoad)
-          : Promise.resolve({ data: [] as any[] }),
-        // Identidad Cabify reciente (30 días previos al período): fallback para el botón
-        // de efectivo (rayito) cuando el conductor no tiene registros esta semana
-        supabase.from(cabifyTable)
-          .select('dni, licencia, nombre, apellido, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio, viajes_finalizados, horas_conectadas')
-          .gte('fecha_inicio', format(subWeeks(parseISO(periodoInicio), 4), 'yyyy-MM-dd') + 'T00:00:00')
-          .lt('fecha_inicio', periodoInicio + 'T00:00:00')
-          .order('fecha_inicio', { ascending: false })
-          .limit(5000),
-      ])
+      ] = await cabifyPromesa
 
       // Mapa de hash Cabify → DNI real (configurado manualmente en cabify_dni_mapeo)
       const cabifyHashMapCarga = new Map<string, string>(
@@ -2399,8 +2430,7 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // 2.6 + 2.7 + 3. Cargar pagos, detalles y excesos en paralelo (independientes entre sí)
-      const facIds = facturacionesTransformadas.map((f: any) => f.id)
+      // 2.6 + 2.7 + 3. Pagos, detalles y excesos (pedidos arriba, en paralelo)
       const [
         { data: pagosData },
         { data: detallesData },
@@ -2424,22 +2454,7 @@ export function ReporteFacturacionTab() {
             { data: simulacion.detalles.filter((d: any) => codigosAlquilerSim.includes(d.concepto_codigo)) },
           ]
         })()
-        : await Promise.all([
-          (supabase.from('pagos_conductores') as any)
-            .select('referencia_id, monto, fecha_pago')
-            .eq('tipo_cobro', 'facturacion_semanal')
-            .in('referencia_id', facIds),
-          (supabase.from('facturacion_detalle') as any)
-            .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento, referencia_tipo, descripcion')
-            .in('facturacion_id', facIds),
-          (supabase.from('excesos_kilometraje') as any)
-            .select('id, conductor_id, km_exceso, monto_total, aplicado')
-            .eq('periodo_id', (periodoData as any).id),
-          (supabase.from('facturacion_detalle') as any)
-            .select('facturacion_id, precio_unitario, concepto_codigo')
-            .in('facturacion_id', facIds)
-            .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
-        ])
+        : await pagosDetallePromesa!
 
       // Agrupar pagos por referencia_id (puede haber pagos parciales)
       const pagosMap = new Map<string, { monto: number; fecha_pago: string | null }>()
@@ -2617,6 +2632,31 @@ export function ReporteFacturacionTab() {
         (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
       )
 
+      // Pagos Cabify/DiDi del período cerrado y pagos sin vincular: se piden ya, en paralelo
+      // con los datos de los vehículos (se usan al final). Ver los comentarios de abajo.
+      const esPeriodoCerrado = ((periodoData as any).estado || '').toLowerCase() === 'cerrado'
+      const semRef = `S${(periodoData as any).semana}/${(periodoData as any).anio}`
+      const factIdsPeriodo = facturacionesTransformadas.map((f: any) => f.id).filter(Boolean)
+      const conductorIdsPeriodo = [...new Set(facturacionesTransformadas.map((f: any) => f.conductor_id).filter(Boolean))]
+      const pagosCabifyPromesa = !simulacion && esPeriodoCerrado
+        ? Promise.all(Array.from({ length: Math.ceil(factIdsPeriodo.length / 200) }, (_, k) =>
+            (supabase.from('pagos_conductores') as any)
+              .select('conductor_id, monto')
+              .eq('tipo_cobro', 'facturacion_semanal')
+              .in('referencia_id', factIdsPeriodo.slice(k * 200, k * 200 + 200))
+              // Cabify y DiDi: los dos cuentan como cobrado de la semana
+              .or(`referencia.ilike.Pago Cabify ${semRef}*,referencia.ilike.Pago DiDi ${semRef}*`)))
+        : null
+      pagosCabifyPromesa?.catch(() => {})
+      const pagosSinVincularPromesa = !simulacion && conductorIdsPeriodo.length > 0
+        ? (supabase.from('pagos_conductores') as any)
+            .select('id, conductor_id, conductor_nombre, referencia_id, monto, referencia')
+            .eq('tipo_cobro', 'facturacion_semanal')
+            .in('conductor_id', conductorIdsPeriodo)
+            .ilike('referencia', `%S${(periodoData as any).semana}/${(periodoData as any).anio}%`)
+        : null
+      ;(pagosSinVincularPromesa as Promise<unknown> | null)?.then(() => {}, () => {})
+
       // Cruzar patentes con tabla vehiculos para obtener flags actuales (GNC/Telepase)
       const patentesUnicasLoad = [...new Set(facturacionesTransformadas.map((f: any) => f.vehiculo_patente).filter(Boolean))]
       if (patentesUnicasLoad.length > 0) {
@@ -2663,22 +2703,13 @@ export function ReporteFacturacionTab() {
 
       // Si el período está cerrado, cargar los pagos Cabify del Excel (tabla pagos_conductores)
       // para alimentar el nuevo indicador "Importe Generado"
-      const esPeriodoCerrado = ((periodoData as any).estado || '').toLowerCase() === 'cerrado'
-      if (esPeriodoCerrado) {
+      if (pagosCabifyPromesa) {
         // Primero se cierra la semana y después llega el Cabify/DiDi de ESA semana. La columna
         // `semana` del pago es la del día en que se cargó (la semana siguiente), así que no
         // sirve: se buscan los pagos que apuntan a las facturas de este período y cuya
         // referencia lleva esta semana ("Pago Cabify S46/2026").
-        const semRef = `S${(periodoData as any).semana}/${(periodoData as any).anio}`
-        const factIdsPeriodo = facturacionesTransformadas.map((f: any) => f.id).filter(Boolean)
         const pagosData: Array<{ conductor_id: string; monto: number }> = []
-        for (let i = 0; i < factIdsPeriodo.length; i += 200) {
-          const { data } = await (supabase.from('pagos_conductores') as any)
-            .select('conductor_id, monto')
-            .eq('tipo_cobro', 'facturacion_semanal')
-            .in('referencia_id', factIdsPeriodo.slice(i, i + 200))
-            // Cabify y DiDi: los dos cuentan como cobrado de la semana
-            .or(`referencia.ilike.Pago Cabify ${semRef}*,referencia.ilike.Pago DiDi ${semRef}*`)
+        for (const { data } of await pagosCabifyPromesa) {
           pagosData.push(...((data || []) as Array<{ conductor_id: string; monto: number }>))
         }
         const mapa = new Map<string, number>()
@@ -2696,14 +2727,9 @@ export function ReporteFacturacionTab() {
       // de la facturación, así que no sirve para esto. Se acota a los
       // conductores de este período para no mezclar otras sedes.
       try {
-        const conductorIdsPeriodo = [...new Set(facturacionesTransformadas.map((f: any) => f.conductor_id).filter(Boolean))]
-        if (conductorIdsPeriodo.length > 0) {
+        if (pagosSinVincularPromesa) {
           const idsActuales = new Set(facturacionesTransformadas.map((f: any) => String(f.id)))
-          const { data: pagosPeriodo } = await (supabase.from('pagos_conductores') as any)
-            .select('id, conductor_id, conductor_nombre, referencia_id, monto, referencia')
-            .eq('tipo_cobro', 'facturacion_semanal')
-            .in('conductor_id', conductorIdsPeriodo)
-            .ilike('referencia', `%S${(periodoData as any).semana}/${(periodoData as any).anio}%`)
+          const { data: pagosPeriodo } = await pagosSinVincularPromesa
           setPagosSinVincular(((pagosPeriodo || []) as any[])
             .filter(pg => !idsActuales.has(String(pg.referencia_id)))
             .map(pg => ({
