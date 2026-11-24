@@ -112,6 +112,35 @@ import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 import { cargarAppsPagoSemana, type AppsPago } from '../../../services/appsPagoService'
 import { quitarDiasPromocion } from '../../../utils/conceptoLabels'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
+// Promociones y descuentos de la semana de un conductor (columna "Promos/Desc."):
+// descuento del referido (5% primera semana) y las promociones con código (PRM...),
+// incluidos los pagos diarios de licencia B1. Factura guardada: sale de sus líneas;
+// Vista Previa: de lo que calculó la vista previa.
+const PREFIJO_DESCUENTO_REFERIDO = 'Descuento 5% primera semana'
+function promosDescuentosDe(f: FacturacionConductor): { etiqueta: string; monto: number }[] {
+  const items: { etiqueta: string; monto: number }[] = []
+  const detalles = (f as { _detalles?: any[] })._detalles || []
+  if (detalles.length > 0) {
+    for (const d of detalles) {
+      const monto = Math.abs(Number(d.total) || 0)
+      if (monto <= 0) continue
+      if (d.referencia_tipo === REFERENCIA_PROMOCION) {
+        items.push({ etiqueta: textoLineaPromocion(d.concepto_codigo || '', d.concepto_descripcion || 'Promoción'), monto })
+      } else if (String(d.concepto_descripcion || '').startsWith(PREFIJO_DESCUENTO_REFERIDO)) {
+        items.push({ etiqueta: `Referido · ${d.concepto_descripcion}`, monto })
+      }
+    }
+    return items
+  }
+  if ((f.monto_descuento_referido || 0) > 0) {
+    items.push({ etiqueta: `Referido · ${descripcionDescuentoReferido(f.dias_descuento_referido || 0)}`, monto: f.monto_descuento_referido! })
+  }
+  for (const l of f.promo_lineas || []) {
+    if (l.monto > 0) items.push({ etiqueta: textoLineaPromocion(l.codigo, l.descripcion), monto: l.monto })
+  }
+  return items
+}
+
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
 function parseImporteMulta(val: string): number {
   let s = val.replace(/[$\s]/g, '')
@@ -10416,6 +10445,28 @@ export function ReporteFacturacionTab() {
               -{formatCurrency(montoTickets)}
             </span>
           </button>
+        )
+      },
+      enableSorting: true,
+    },
+    {
+      id: 'promos_descuentos',
+      header: 'Promos/Desc.',
+      accessorFn: (row) => promosDescuentosDe(row).reduce((s, i) => s + i.monto, 0),
+      meta: { filterValue: (row: FacturacionConductor) => (promosDescuentosDe(row).length > 0 ? 'Tiene' : 'N/A') },
+      cell: ({ row }) => {
+        const items = promosDescuentosDe(row.original)
+        if (items.length === 0) {
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>N/A</span>
+        }
+        const total = items.reduce((s, i) => s + i.monto, 0)
+        return (
+          <div title={items.map(i => `${i.etiqueta}: ${formatCurrency(i.monto)}`).join('\n')} style={{ lineHeight: 1.25 }}>
+            <div style={{ fontWeight: 600, color: '#059669', fontSize: '12px' }}>{formatCurrency(total)}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary, #9ca3af)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
+              {items.map(i => i.etiqueta.startsWith('Referido') ? 'Referido' : i.etiqueta.split(' - ')[0]).filter((v, i, a) => a.indexOf(v) === i).join(' · ')}
+            </div>
+          </div>
         )
       },
       enableSorting: true,

@@ -54,6 +54,8 @@ export interface ConductorPanelRow {
   telefono: string | null           // el de WhatsApp (conductores.telefono_contacto)
   telefonoSecundario: string | null // conductores.telefono_secundario
   guia: string | null               // guía del lead de origen o quien lo convirtió (conductores.guia)
+  referido: boolean                 // conductores.referido
+  embajador: string | null          // nombre de quien lo refirió (conductores.embajador_id)
   estadoCodigo: string | null
   activo: boolean
   categoriaLicencia: string | null       // B1 / D1 / Otros (conductores.categoria_licencia)
@@ -169,6 +171,8 @@ interface RawConductor {
   numero_licencia: string | null
   categoria_licencia?: string | null
   categoria_licencia_otra?: string | null
+  referido?: boolean | null
+  embajador_id?: string | null
   conductores_estados: { codigo: string | null } | null
 }
 
@@ -268,7 +272,7 @@ export async function cargarPanelConductores(
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, telefono_contacto, telefono_secundario, numero_licencia, categoria_licencia, categoria_licencia_otra, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, telefono_contacto, telefono_secundario, numero_licencia, categoria_licencia, categoria_licencia_otra, referido, embajador_id, conductores_estados(codigo)').not(...FILTRO_SIN_INTERNOS)
         .range(from, to)
       q = filtrarSede(q, sedeId, reales)
       return q
@@ -387,6 +391,23 @@ export async function cargarPanelConductores(
     : [[], []]
   const dniDeHash = new Map(mapeoCabify.map(m => [m.cabify_hash, m.dni_real]))
   const guiaPorConductor = new Map(guias.map(g => [g.id, g.guia]))
+
+  // 13. Embajador (quién lo refirió). El nombre sale de los conductores ya cargados; los
+  // de otra sede se piden aparte. Tolerante: si falla, queda "Sí" sin nombre.
+  const nombreConductor = (c: { nombres: string | null; apellidos: string | null }) =>
+    `${c.nombres || ''} ${c.apellidos || ''}`.replace(/\s+/g, ' ').trim()
+  const nombrePorId = new Map(conductores.map(c => [c.id, nombreConductor(c)]))
+  const faltanEmbajadores = [...new Set(conductores
+    .map(c => (c.referido ? c.embajador_id : null))
+    .filter((id): id is string => !!id && !nombrePorId.has(id)))]
+  for (let i = 0; i < faltanEmbajadores.length; i += 200) {
+    const { data } = await (supabase.from('conductores') as any)
+      .select('id, nombres, apellidos')
+      .in('id', faltanEmbajadores.slice(i, i + 200))
+    for (const c of (data || []) as { id: string; nombres: string | null; apellidos: string | null }[]) {
+      nombrePorId.set(c.id, nombreConductor(c))
+    }
+  }
 
   // Ultimo saldo por conductor: primera aparicion en el kardex ya ordenado desc.
   const ultimoSaldoPorConductor = new Map<string, number>()
@@ -656,6 +677,8 @@ export async function cargarPanelConductores(
       telefono: c.telefono_contacto ?? null,
       telefonoSecundario: c.telefono_secundario ?? null,
       guia: guiaPorConductor.get(c.id) || null,
+      referido: c.referido === true,
+      embajador: c.referido && c.embajador_id ? nombrePorId.get(c.embajador_id) || null : null,
       estadoCodigo,
       activo: estadoCodigo === 'activo',
       categoriaLicencia: c.categoria_licencia || null,
