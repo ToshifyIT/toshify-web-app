@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown, Wallet, Banknote, MessageCircle } from 'lucide-react'
+import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown, Wallet, Banknote, MessageCircle, ShieldX } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -34,6 +34,12 @@ import { LlamadaConductor } from '../../integraciones/twochat/LlamadaConductor'
 import { useLineaVoz } from '../../integraciones/twochat/useLineaVoz'
 import { ElegirNumeroLlamada } from '../../integraciones/twochat/ElegirNumeroLlamada'
 import { ChatLeadModal } from '../../leads/components/ChatLeadModal'
+import { InfoSituacionesBcra } from '../../leads/components/InfoSituacionesBcra'
+import { situacionBcra } from '../../leads/bcraSituaciones'
+import {
+  cargarBcraConductores, grupoBcraConductor, situacionBcraConductor,
+  OPCIONES_BCRA_CONDUCTOR, COLOR_BCRA_CONDUCTOR, type BcraConductor,
+} from '../../guias/bcraConductores'
 import { telefonosParaLlamar, type TelefonoLlamada, type TipoTelefono } from '../../integraciones/twochat/telefonosConductor'
 
 // Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
@@ -45,7 +51,7 @@ function fmtKm(v: number): string {
 /** Tarjeta «Deuda mayor a $ 100.000»: Saldo pendiente por encima de esto */
 const DEUDA_ALTA = 100000
 
-type CardKey = 'conAuto' | 'sinCubrir' | 'deuda100' | 'pendientes' | 'alertaKm' | 'riesgoAlto'
+type CardKey = 'conAuto' | 'sinCubrir' | 'deuda100' | 'pendientes' | 'alertaKm' | 'riesgoAlto' | 'bcraRojo'
 
 const CARD_LABELS: Record<CardKey, string> = {
   conAuto: 'Con Auto Asignado',
@@ -54,6 +60,7 @@ const CARD_LABELS: Record<CardKey, string> = {
   pendientes: 'Con Multas Pendientes',
   alertaKm: 'Bajo Aprovechamiento',
   riesgoAlto: 'Riesgo de deuda alto',
+  bcraRojo: 'BCRA en mora',
 }
 
 // ALERTA DE USO OCIOSO DEL VEHICULO
@@ -255,6 +262,18 @@ export function ConductoresPanelModule() {
     return () => { activo = false }
   }, [sedeActualId, reloadKey])
 
+  // Situación en el BCRA (sql/conductores_bcra.sql; el color, de Parámetros > Riesgo BCRA).
+  // null mientras carga; si falla, las columnas quedan en "Pendiente".
+  const [bcra, setBcra] = useState<Map<string, BcraConductor> | null>(null)
+  useEffect(() => {
+    if (!rowsBase.length) return
+    let activo = true
+    setBcra(null)
+    cargarBcraConductores(rowsBase.map(r => r.id)).then(m => { if (activo) setBcra(m) })
+    return () => { activo = false }
+  }, [rowsBase])
+  const esBcraRojo = (id: string) => grupoBcraConductor(bcra?.get(id)) === 'Rojo'
+
   // Base de las demás tarjetas: con «Con Auto Asignado» prendido, solo los que tienen auto
   const base = useMemo(() => (soloConAuto ? rows.filter(c => c.tieneAsignacion) : rows), [rows, soloConAuto])
 
@@ -265,7 +284,9 @@ export function ConductoresPanelModule() {
     pendientes: base.filter(c => c.montoPendiente > 0).length,
     alertaKm: base.filter(tieneAlertaKm).length,
     riesgoAlto: base.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto').length,
-  }), [rows, base, riesgos, sinCubrir])
+    bcraRojo: base.filter(c => esBcraRojo(c.id)).length,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [rows, base, riesgos, sinCubrir, bcra])
 
   const filteredRows = useMemo(() => {
     switch (activeCard) {
@@ -274,9 +295,11 @@ export function ConductoresPanelModule() {
       case 'pendientes': return base.filter(c => c.montoPendiente > 0)
       case 'alertaKm': return base.filter(tieneAlertaKm)
       case 'riesgoAlto': return base.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto')
+      case 'bcraRojo': return base.filter(c => esBcraRojo(c.id))
       default: return base
     }
-  }, [base, activeCard, riesgos, sinCubrir])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, activeCard, riesgos, sinCubrir, bcra])
 
   const handleCard = (card: CardKey) => {
     if (card === 'conAuto') setSoloConAuto(v => !v)
@@ -304,6 +327,8 @@ export function ConductoresPanelModule() {
       'App (pagó)': c.apps?.join(' + ') || '',
       'Riesgo deuda': riesgos?.get(c.id) ? NIVEL_RIESGO_LABEL[riesgos.get(c.id)!.nivel] : '',
       'Deuda (semanas de alquiler)': riesgos?.get(c.id) ? Number(riesgos.get(c.id)!.semanasDeuda.toFixed(1)) : '',
+      'BCRA': grupoBcraConductor(bcra?.get(c.id)),
+      'Sit. BCRA': situacionBcraConductor(bcra?.get(c.id)) ?? '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
       'Licencia': etiquetaLicencia(c.categoriaLicencia, c.categoriaLicenciaOtra) || '',
       'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
@@ -348,6 +373,8 @@ export function ConductoresPanelModule() {
       { wch: 14 }, // App
       { wch: 12 }, // Riesgo deuda
       { wch: 14 }, // Deuda (semanas)
+      { wch: 11 }, // BCRA
+      { wch: 9 },  // Sit. BCRA
       { wch: 12 }, // Estado
       { wch: 16 }, // Patente Asignada
       { wch: 14 }, // Grupo de Flota
@@ -504,6 +531,64 @@ export function ConductoresPanelModule() {
         return (
           <span className={`cpanel-badge riesgo-${x.nivel}`} title={textoRiesgo(x)}>
             {NIVEL_RIESGO_LABEL[x.nivel]}
+          </span>
+        )
+      },
+    },
+    {
+      // Nivel de riesgo BCRA, igual que en Leads. Solo texto en color; el motivo, al pasar el mouse
+      id: 'bcra',
+      accessorFn: (r) => grupoBcraConductor(bcra?.get(r.id)),
+      header: 'BCRA',
+      meta: {
+        info: 'Situación en la Central de Deudores del BCRA. Se consulta una vez por mes a los conductores activos; el color sale de Parámetros > Riesgo BCRA',
+        filterValue: (r: ConductorPanelRow) => grupoBcraConductor(bcra?.get(r.id)),
+        filterOrder: OPCIONES_BCRA_CONDUCTOR,
+      },
+      sortingFn: (a, b) => {
+        const orden: Record<string, number> = { Rojo: 4, Amarillo: 3, 'Sin validar': 2, Verde: 1 }
+        return (orden[grupoBcraConductor(bcra?.get(a.original.id))] ?? 0) - (orden[grupoBcraConductor(bcra?.get(b.original.id))] ?? 0)
+      },
+      cell: ({ row }) => {
+        if (bcra === null) return <span className="cpanel-num cpanel-nulo">…</span>
+        const b = bcra.get(row.original.id)
+        const grupo = grupoBcraConductor(b)
+        const color = COLOR_BCRA_CONDUCTOR[grupo]
+        const detalle = b?.bcra_error || b?.bcra_nivel_motivo || ''
+        return (
+          <span
+            title={detalle || undefined}
+            style={{ whiteSpace: 'nowrap', color: color ?? 'var(--text-tertiary)', fontWeight: color ? 600 : 400 }}
+          >
+            {grupo}
+          </span>
+        )
+      },
+    },
+    {
+      // Situación 0 a 6; la "i" explica cada una
+      id: 'bcra_situacion',
+      accessorFn: (r) => situacionBcraConductor(bcra?.get(r.id)) ?? -1,
+      header: () => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+          Sit. BCRA <InfoSituacionesBcra />
+        </span>
+      ),
+      enableColumnFilter: false,
+      cell: ({ row }) => {
+        if (bcra === null) return <span className="cpanel-num cpanel-nulo">…</span>
+        const b = bcra.get(row.original.id)
+        const valor = situacionBcraConductor(b)
+        if (valor === null) return <span className="cpanel-num cpanel-nulo">—</span>
+        const sit = situacionBcra(valor)
+        const color = COLOR_BCRA_CONDUCTOR[grupoBcraConductor(b)]
+        return (
+          <span
+            className="cpanel-num"
+            title={sit ? `${valor} · ${sit.nombre}: ${sit.detalle}` : undefined}
+            style={{ fontWeight: 700, color: color ?? 'var(--text-primary)' }}
+          >
+            {valor}
           </span>
         )
       },
@@ -875,7 +960,7 @@ export function ConductoresPanelModule() {
         />
       ),
     },
-  ], [rangoCabifyLabel, calificaciones, kmGeoCargando, llamada, riesgos, sinLinea])
+  ], [rangoCabifyLabel, calificaciones, kmGeoCargando, llamada, riesgos, sinLinea, bcra])
 
   return (
     <div className="cond-module">
@@ -914,6 +999,15 @@ export function ConductoresPanelModule() {
             <div className="stat-content">
               <span className="stat-value">{riesgos === null ? '…' : stats.riesgoAlto}</span>
               <span className="stat-label">Riesgo de Deuda Alto</span>
+            </div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeCard === 'bcraRojo' ? 'stat-card-active' : ''}`}
+            onClick={() => handleCard('bcraRojo')}
+            title="Conductores con deudas en mora en el BCRA: situación 3 o peor (más de 90 días de atraso), proceso judicial, cheques rechazados o mucha deuda atrasada. Criterio de Parámetros > Riesgo BCRA; se consulta una vez por mes">
+            <ShieldX size={18} className="stat-icon" style={{ color: 'var(--color-danger)' }} />
+            <div className="stat-content">
+              <span className="stat-value">{bcra === null ? '…' : stats.bcraRojo}</span>
+              <span className="stat-label">BCRA en Mora</span>
             </div>
           </div>
           <div className={`stat-card stat-card-clickable ${activeCard === 'sinCubrir' ? 'stat-card-active' : ''}`}

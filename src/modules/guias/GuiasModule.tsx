@@ -23,6 +23,7 @@ import {
   Triangle,
   X,
   Edit2,
+  ShieldX,
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
@@ -53,6 +54,12 @@ import { formatPlata, formatNumero } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { TurnoBadge } from '../../components/ui/TurnoBadge'
 import { formatFecha } from '../../utils/format'
+import { situacionBcra } from '../leads/bcraSituaciones'
+import { InfoSituacionesBcra } from '../leads/components/InfoSituacionesBcra'
+import {
+  cargarBcraConductores, grupoBcraConductor, situacionBcraConductor,
+  OPCIONES_BCRA_CONDUCTOR, COLOR_BCRA_CONDUCTOR, type BcraConductor,
+} from './bcraConductores'
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
 };
@@ -118,10 +125,28 @@ export function GuiasModule() {
   // Estado para filtro por métricas (solo semana actual)
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null)
 
+  // BCRA de cada conductor (sql/conductores_bcra.sql), igual que en Leads
+  const [bcraPorConductor, setBcraPorConductor] = useState<Map<string, BcraConductor>>(new Map())
+  const [bcraFilter, setBcraFilter] = useState<string[]>([])
+
   // Resetear filtro de métricas al cambiar de semana
   useEffect(() => {
     setActiveStatFilter(null);
   }, [selectedWeek]);
+
+  // BCRA: se pide aparte para no tocar la consulta principal (y si falta el SQL, no rompe)
+  const idsConBcra = useMemo(
+    () => [...new Set([...drivers, ...currentWeekDrivers].map((d: any) => d.id).filter(Boolean))].sort().join(','),
+    [drivers, currentWeekDrivers],
+  )
+  useEffect(() => {
+    if (!idsConBcra) return
+    let vigente = true
+    void cargarBcraConductores(idsConBcra.split(',')).then(mapa => {
+      if (vigente) setBcraPorConductor(mapa)
+    })
+    return () => { vigente = false }
+  }, [idsConBcra]);
   
   // Estados para modal de anotaciones (Editor - Semana Actual)
   const [anotacionesModalOpen, setAnotacionesModalOpen] = useState(false)
@@ -1966,6 +1991,9 @@ export function GuiasModule() {
         case 'totalConductores':
           // No filter (show all)
           break;
+        case 'bcraRojo':
+          result = result.filter(d => bcraPorConductor.get(d.id)?.bcra_nivel === 'rojo' && !bcraPorConductor.get(d.id)?.bcra_error);
+          break;
         case 'totalFacturado':
           result = result.filter(d => (Number(d.facturacion_total) || 0) > 0);
           break;
@@ -2037,6 +2065,11 @@ export function GuiasModule() {
       }
     }
 
+    if (bcraFilter.length > 0) {
+      const bcraSet = new Set(bcraFilter);
+      result = result.filter(c => bcraSet.has(grupoBcraConductor(bcraPorConductor.get(c.id))));
+    }
+
     if (sinGncFilter) {
       result = result.filter(c => {
         const vehiculo = (c as any).vehiculo_asignado;
@@ -2052,7 +2085,7 @@ export function GuiasModule() {
     }
 
     return result;
-  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter, cabifyDataFilter, sinGncFilter, conSaldoFilter, showAllDrivers]);
+  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter, cabifyDataFilter, sinGncFilter, conSaldoFilter, showAllDrivers, bcraFilter, bcraPorConductor]);
 
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
@@ -2616,6 +2649,65 @@ export function GuiasModule() {
         size: 65,
       },
       {
+        // Nivel de riesgo BCRA (Parámetros > Riesgo BCRA). Solo texto en color; el motivo, al pasar el mouse
+        id: 'bcra',
+        accessorFn: (row: any) => grupoBcraConductor(bcraPorConductor.get(row.id)),
+        header: () => (
+          <ExcelColumnFilter
+            label="BCRA"
+            options={OPCIONES_BCRA_CONDUCTOR}
+            selectedValues={bcraFilter}
+            onSelectionChange={setBcraFilter}
+            filterId="conductor_bcra"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
+        cell: ({ row }: any) => {
+          const b = bcraPorConductor.get(row.original.id)
+          const grupo = grupoBcraConductor(b)
+          const color = COLOR_BCRA_CONDUCTOR[grupo]
+          const detalle = b?.bcra_error || b?.bcra_nivel_motivo || ''
+          return (
+            <span
+              title={detalle || undefined}
+              style={{ fontSize: '11px', whiteSpace: 'nowrap', color: color ?? 'var(--text-tertiary)', fontWeight: color ? 600 : 400 }}
+            >
+              {grupo}
+            </span>
+          )
+        },
+        enableSorting: true,
+        size: 95,
+      },
+      {
+        // Situación en el BCRA (0 a 6); la "i" explica cada una
+        id: 'bcra_situacion',
+        accessorFn: (row: any) => situacionBcraConductor(bcraPorConductor.get(row.id)) ?? -1,
+        header: () => (
+          <span style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            Sit. BCRA <InfoSituacionesBcra />
+          </span>
+        ),
+        cell: ({ row }: any) => {
+          const b = bcraPorConductor.get(row.original.id)
+          const valor = situacionBcraConductor(b)
+          if (valor === null) return <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>-</span>
+          const sit = situacionBcra(valor)
+          const color = COLOR_BCRA_CONDUCTOR[grupoBcraConductor(b)]
+          return (
+            <span
+              title={sit ? `${valor} · ${sit.nombre}: ${sit.detalle}` : undefined}
+              style={{ fontSize: '12px', fontWeight: 700, color: color ?? 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}
+            >
+              {valor}
+            </span>
+          )
+        },
+        enableSorting: true,
+        size: 90,
+      },
+      {
         id: "acciones",
         header: "Acciones",
         cell: ({ row }) => {
@@ -2675,7 +2767,7 @@ export function GuiasModule() {
       categoriaFilter, asignacionFilter, openColumnFilter,
       nombresUnicos, cuilsFiltrados, uniqueCategorias, uniqueEstados,
       cbuSearch, selectedWeek, seguimientoRules, accionesImplementadas,
-      efectivoFilter, appFilter, totalFilter, cabifyDataFilter
+      efectivoFilter, appFilter, totalFilter, cabifyDataFilter, bcraPorConductor, bcraFilter
     ]
   );
 
@@ -2688,6 +2780,7 @@ export function GuiasModule() {
     setAppFilter([]);
     setTotalFilter([]);
     setCabifyDataFilter([]);
+    setBcraFilter([]);
     setActiveStatFilter(null);
     setSinGncFilter(false);
     setGlobalSearch('');
@@ -2732,6 +2825,9 @@ export function GuiasModule() {
                   
                   // Métrica Conductores en Escuela
                   const conductoresEscuelaCount = currentWeekDrivers.filter(d => !!d.fecha_escuela).length;
+
+                  // BCRA en rojo (Parámetros > Riesgo BCRA)
+                  const bcraRojoCount = currentWeekDrivers.filter(d => grupoBcraConductor(bcraPorConductor.get(d.id)) === 'Rojo').length;
 
                   const llamadasRealizadas = currentWeekDrivers.filter(d => !!d.fecha_llamada).length;
                   const llamadasPendientes = currentWeekDrivers.filter(d => !d.fecha_llamada).length;
@@ -2799,8 +2895,9 @@ export function GuiasModule() {
                     return formatPlata(val);
                   };
 
+                  // 16 indicadores: 4 filas de 4 (con BCRA en mora ya no entran parejos en 5 columnas)
                   return (
-                    <div className="guias-stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                    <div className="guias-stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {/* Fila 1 */}
                       <div 
                         className={statCardClass}
@@ -2850,6 +2947,17 @@ export function GuiasModule() {
                         <div className="stat-content">
                           <span className="stat-value">{conductoresEscuelaCount}</span>
                           <span className="stat-label">CONDUCTORES EN ESCUELA</span>
+                        </div>
+                      </div>
+                      <div
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('bcraRojo')}
+                        title="Conductores con deudas en mora en el BCRA: situación 3 o peor (más de 90 días de atraso), proceso judicial, cheques rechazados o mucha deuda atrasada. Criterio de Parámetros > Riesgo BCRA; se consulta una vez por mes"
+                      >
+                        <ShieldX className="stat-icon" size={18} style={{ color: 'var(--color-danger)' }} />
+                        <div className="stat-content">
+                          <span className="stat-value">{bcraRojoCount}</span>
+                          <span className="stat-label">BCRA EN MORA</span>
                         </div>
                       </div>
 
@@ -3104,7 +3212,7 @@ export function GuiasModule() {
                 </div>
 
                 {/* Filtros Activos */}
-                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || cabifyDataFilter.length > 0 || activeStatFilter || sinGncFilter || conSaldoFilter || showAllDrivers) && (
+                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || cabifyDataFilter.length > 0 || bcraFilter.length > 0 || activeStatFilter || sinGncFilter || conSaldoFilter || showAllDrivers) && (
                   <div className="active-filters-container">
                     <div className="active-filters-label">
                       <Triangle size={8} fill="var(--color-primary)" stroke="var(--color-primary)" style={{ transform: 'rotate(180deg)' }} />
@@ -3145,6 +3253,13 @@ export function GuiasModule() {
                       </span>
                     ))}
 
+                    {bcraFilter.map(f => (
+                      <span key={`bcra-${f}`} className="active-filter-tag">
+                        BCRA: {f}
+                        <button onClick={() => setBcraFilter(prev => prev.filter(x => x !== f))} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
                     {sinGncFilter && (
                       <span className="active-filter-tag">
                         Sin GNC
@@ -3171,6 +3286,7 @@ export function GuiasModule() {
                         Métrica: {
                           {
                             'totalConductores': 'Total Conductores',
+                            'bcraRojo': 'BCRA en mora',
                             'totalFacturado': 'Total Facturado',
                             'totalEfectivo': 'Facturación Efectivo',
                             'totalApp': 'Facturación App',

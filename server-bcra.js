@@ -21,6 +21,10 @@
  * BCRA_CONSULTA_AUTO=0 la apaga. La arranca server.js (producción); el dev server
  * de vite no, para no duplicar las consultas.
  *
+ * Conductores (sql/conductores_bcra.sql): en la misma vuelta, después de los leads, se
+ * consultan los conductores ACTIVOS sin consulta o con la última de hace más de 30 días
+ * (el BCRA informa una vez por mes). Se ven en Seguimiento de conductores.
+ *
  * Además, POST /api/bcra/consultar/:id consulta un lead en el momento (la ficha lo
  * llama al guardar un lead con DNI o CUIT nuevo o cambiado). La vuelta de 5 minutos
  * queda de respaldo para los que entran por otro lado o si el BCRA corta.
@@ -233,6 +237,46 @@ async function actualizarLead(cfg, id, cambios) {
   if (!res.ok) throw new Error(`Supabase PATCH lead ${res.status}: ${await res.text()}`)
 }
 
+// ---------- Conductores ----------
+const ESTADO_CONDUCTOR_ACTIVO = 'ACTIVO'
+const DIAS_VIGENCIA_CONDUCTOR = 30
+const COLUMNAS_CONDUCTOR = 'id,numero_cuit,numero_dni,nombres,apellidos,bcra_intentos,conductores_estados!inner(codigo)'
+
+/** Conductores activos sin consulta o con una de hace más de 30 días (los sin consulta primero). */
+async function conductoresPendientes(cfg, limite) {
+  const vence = new Date(Date.now() - DIAS_VIGENCIA_CONDUCTOR * 24 * 60 * 60 * 1000).toISOString()
+  const q = new URLSearchParams({
+    select: COLUMNAS_CONDUCTOR,
+    'conductores_estados.codigo': `eq.${ESTADO_CONDUCTOR_ACTIVO}`,
+    or: `(bcra_consultado_at.is.null,bcra_consultado_at.lt.${vence})`,
+    order: 'bcra_consultado_at.asc.nullsfirst',
+    limit: String(limite),
+  })
+  const res = await fetchConTimeout(`${cfg.url}/rest/v1/conductores?${q}`, { headers: headersServicio(cfg) })
+  if (!res.ok) throw new Error(`Supabase conductores ${res.status}: ${await res.text()}`)
+  const filas = await res.json()
+  // Mismo formato que un lead para buscarEnBcra. Un CUIT mal cargado (p. ej. con un dígito
+  // de más) no frena la consulta: se arma el CUIL desde el DNI.
+  return filas
+    .filter((c) => String(c.numero_cuit ?? '').trim() || String(c.numero_dni ?? '').trim())
+    .map((c) => ({
+      id: c.id,
+      cuit: normalizarCuit(c.numero_cuit) ? c.numero_cuit : null,
+      dni: c.numero_dni,
+      nombre_completo: `${c.nombres ?? ''} ${c.apellidos ?? ''}`.trim(),
+      bcra_intentos: c.bcra_intentos,
+    }))
+}
+
+async function actualizarConductor(cfg, id, cambios) {
+  const res = await fetchConTimeout(`${cfg.url}/rest/v1/conductores?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { ...headersServicio(cfg), Prefer: 'return=minimal' },
+    body: JSON.stringify(cambios),
+  })
+  if (!res.ok) throw new Error(`Supabase PATCH conductor ${res.status}: ${await res.text()}`)
+}
+
 /**
  * Busca el resultado del BCRA para el lead: con el CUIT cargado o, si no hay, con el
  * CUIL armado desde el DNI. Devuelve { resultado, cuil, origen } o { error }.
@@ -287,12 +331,15 @@ async function buscarEnBcra(lead) {
  * Consulta un lead y guarda el resultado (o el error).
  * Devuelve 'ok' | 'invalido' | 'reintentar' | 'limite' (el BCRA cortó: no cuenta como intento).
  */
-async function procesarLead(cfg, lead) {
+async function procesarLead(cfg, lead, tabla = 'leads') {
   const ahora = new Date().toISOString()
+  const guardar = tabla === 'conductores'
+    ? (id, cambios) => actualizarConductor(cfg, id, cambios)
+    : (id, cambios) => actualizarLead(cfg, id, cambios)
   try {
     const b = await buscarEnBcra(lead)
     if (b.error) {
-      await actualizarLead(cfg, lead.id, {
+      await guardar(lead.id, {
         bcra_consultado_at: ahora,
         bcra_error: b.error,
         bcra_nombre: b.nombre ?? null,
@@ -315,17 +362,19 @@ async function procesarLead(cfg, lead) {
       bcra_error: null,
       bcra_intentos: 0,
     }
-    // El texto `bcra` se completa solo si está vacío o tenía el resumen automático anterior
-    const textoActual = (lead.bcra ?? '').trim()
-    if (!textoActual || textoActual === (lead.bcra_resumen ?? '').trim()) cambios.bcra = r.resumen
-    await actualizarLead(cfg, lead.id, cambios)
+    // El texto `bcra` (solo leads) se completa si está vacío o tenía el resumen automático anterior
+    if (tabla === 'leads') {
+      const textoActual = (lead.bcra ?? '').trim()
+      if (!textoActual || textoActual === (lead.bcra_resumen ?? '').trim()) cambios.bcra = r.resumen
+    }
+    await guardar(lead.id, cambios)
     return 'ok'
   } catch (err) {
     if (err.limite) return 'limite'
     const intentos = (lead.bcra_intentos ?? 0) + 1
     const cambios = { bcra_intentos: intentos, bcra_error: err.message }
     if (intentos >= MAX_INTENTOS) cambios.bcra_consultado_at = ahora
-    await actualizarLead(cfg, lead.id, cambios)
+    await guardar(lead.id, cambios)
     return 'reintentar'
   }
 }
@@ -335,13 +384,27 @@ export { buscarEnBcra }
 
 export async function consultarPendientes(cfg = config()) {
   const leads = await leadsPendientes(cfg)
+  // Los leads van primero; si sobra lugar en la vuelta, conductores activos
+  let conductores = []
+  if (leads.length < MAX_POR_TURNO) {
+    try {
+      conductores = await conductoresPendientes(cfg, MAX_POR_TURNO - leads.length)
+    } catch (err) {
+      // Sin sql/conductores_bcra.sql todavía: los leads siguen igual
+      console.error('[bcra] Conductores pendientes:', err.message)
+    }
+  }
+  const cola = [
+    ...leads.map((registro) => ({ tabla: 'leads', registro })),
+    ...conductores.map((registro) => ({ tabla: 'conductores', registro })),
+  ]
   const r = { revisados: 0, ok: 0, invalidos: 0, fallidos: 0, limitado: false }
-  for (const lead of leads) {
+  for (const { tabla, registro: lead } of cola) {
     if (enCurso.has(lead.id)) continue
     enCurso.add(lead.id)
     let estado
     try {
-      estado = await procesarLead(cfg, lead)
+      estado = await procesarLead(cfg, lead, tabla)
     } finally {
       enCurso.delete(lead.id)
     }
@@ -391,7 +454,7 @@ export function iniciarConsultaAutomaticaBcra() {
     }
   }
   setInterval(() => { void revisar() }, 60 * 1000).unref?.()
-  console.log(`[bcra] Consulta automática activa: leads con CUIT o DNI, cada ${CADA_MIN} minutos`)
+  console.log(`[bcra] Consulta automática activa: leads con CUIT o DNI y conductores activos, cada ${CADA_MIN} minutos`)
 }
 
 // =====================================================

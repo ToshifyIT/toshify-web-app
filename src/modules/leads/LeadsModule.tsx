@@ -15,7 +15,7 @@ import {
   Eye, Edit2, Trash2, Users, UserPlus, Link2,
   AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
   Handshake, CalendarCheck, MessageCircle, Truck,
-  MapPin, CreditCard, Calculator,
+  MapPin, CreditCard, Calculator, ShieldCheck,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -670,7 +670,8 @@ function formDataToDbFields(fd: LeadFormData): Record<string, unknown> {
 
 const emptyFormData: LeadFormData = {
   nombre_completo: '',
-  fuente_de_lead: 'Intercom',
+  // Lead cargado a mano: Sellium por defecto (Intercom ya no se usa)
+  fuente_de_lead: FUENTE_SELLIUM,
 }
 
 function formatDate(dateStr: string | undefined | null): string {
@@ -1622,9 +1623,9 @@ export function LeadsModule() {
           }
         }
 
-        // --- Fuente: asignar Intercom si está vacía ---
+        // --- Fuente: asignar Sellium si está vacía (Intercom ya no se usa) ---
         if (!lead.fuente_de_lead) {
-          updateData.fuente_de_lead = 'Intercom'
+          updateData.fuente_de_lead = FUENTE_SELLIUM
         }
 
         // --- Turno: normalizar valores sucios ---
@@ -1874,6 +1875,8 @@ export function LeadsModule() {
       // Solo las parejas cerca (violeta, hasta 25 min). Las grises (más lejos) se ven en
       // la etiqueta para tenerlas en cuenta, pero no entran en la tarjeta ni el filtro.
       case 'conLicencia': return siNoParaFiltro(l.licencia) === 'Si'
+      // Consultado en el BCRA sin error y en verde (Parámetros > Riesgo BCRA)
+      case 'bcraVerde': return !!l.bcra_consultado_at && !l.bcra_error && l.bcra_nivel === 'verde'
       case 'conPareja': return parejaPorLead.get(l.id)?.nivel === 'cerca'
       case 'descartados': return l.estado_de_lead === 'Descartado'
       // 'todos': vista general para busquedas. No filtra por estado, por lo que
@@ -2001,6 +2004,7 @@ export function LeadsModule() {
       exConductor: contar('exConductor'),
       conPareja: contar('conPareja'),
       conLicencia: contar('conLicencia'),
+      bcraVerde: contar('bcraVerde'),
       // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
       todos: sinTarjeta.length,
     }
@@ -3998,6 +4002,7 @@ export function LeadsModule() {
         exConductor: 'Ya fue conductor',
         conPareja: 'Con pareja cerca (≤ 25 min)',
         conLicencia: 'Con licencia',
+        bcraVerde: 'BCRA al día',
         descartados: 'Descartados',
         todos: 'Todos (incluye descartados)',
       }
@@ -4040,6 +4045,17 @@ export function LeadsModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.conLicencia}</span>
               <span className="stat-label">Con licencia</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${esActiva('bcraVerde') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('bcraVerde')}
+            title="Leads consultados en el BCRA sin deudas o con todas las deudas al día (situación 0 o 1, sin cheques rechazados ni proceso judicial). Criterio de Parámetros > Riesgo BCRA"
+          >
+            <ShieldCheck size={18} className="stat-icon" style={{ color: 'var(--color-success)' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.bcraVerde}</span>
+              <span className="stat-label">BCRA al día</span>
             </div>
           </div>
           <div
