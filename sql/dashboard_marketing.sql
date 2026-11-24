@@ -21,7 +21,11 @@
 --                 Sellium, Intercom o red social aunque no trajeran el link.)
 --   Web         : formulario del sitio (orgánico) y los de Sellium / Intercom / redes
 --                 a los que no se les detecta el anuncio.
---   Referidos / Otras fuentes / Sin fuente.
+--   Referidos   : los marcó un conductor embajador (Referido = Sí en el lead) o
+--                 la fuente es "Referido". Gana sobre los demás: es lo que cargó la
+--                 persona que lo atendió. (2026-11-24) En la pantalla, "Web (orgánico)"
+--                 los incluye y los muestra aparte.
+--   Otras fuentes / Sin fuente.
 --   Canal (solo pauta): Facebook, Instagram, TikTok, Estado; si no se puede
 --   identificar: 'Sin canal identificado'.
 --
@@ -185,6 +189,7 @@ leads_base AS (
     btrim(COALESCE(l.fuente_de_lead, '')) AS fuente,
     btrim(COALESCE(l.fuente_pauta, '')) AS fuente_pauta,
     btrim(COALESCE(l.id_fuente, '')) AS id_fuente,
+    COALESCE(l.referido, false) AS es_referido,
     COALESCE(l.cerrado_timeout_wpp, false) AS timeout_wpp,
     NULLIF(btrim(regexp_replace(COALESCE(
       NULLIF(btrim(l.causal_de_cierre), ''),
@@ -232,9 +237,9 @@ leads_n AS (
     ((lb.estado IN ('descartado', 'no le interesa', 'no cumple edad', 'no apto - hireflix', 'auto del pueblo')
       OR lb.timeout_wpp) AND NOT lb.convertido) AS descartado,
     CASE
+      WHEN lb.es_referido OR lb.fuente ~* 'referid' THEN 'Referidos'
       WHEN lb.fuente_pauta <> '' OR lb.id_fuente <> '' THEN 'Pauta redes'
       WHEN lb.fuente ~* '(web|p[aá]gina|portal|formulario|sellium|intercom|facebook|instagram|tiktok|meta|whatsapp|pauta|redes)' THEN 'Web'
-      WHEN lb.fuente ~* 'referid' THEN 'Referidos'
       WHEN lb.fuente = '' THEN 'Sin fuente'
       ELSE 'Otras fuentes'
     END AS segmento,
@@ -579,18 +584,21 @@ SELECT jsonb_build_object(
     'dias_mediana', (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) FROM leads_act WHERE con_auto),
     -- Time to driver del período anterior, para comparar
     'dias_mediana_anterior', (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) FROM leads_v WHERE rango = 'anterior' AND con_auto),
+    -- Por filtro de la pantalla: Referidos va con Web ("Web (orgánico)" los incluye)
     'dias_mediana_segmento_anterior', (
       SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'mediana', mediana)), '[]'::jsonb)
       FROM (
-        SELECT segmento, percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) AS mediana
-        FROM leads_v WHERE rango = 'anterior' AND con_auto GROUP BY segmento
+        SELECT seg_filtro AS segmento, percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) AS mediana
+        FROM (SELECT *, CASE WHEN segmento = 'Referidos' THEN 'Web' ELSE segmento END AS seg_filtro FROM leads_v) lv
+        WHERE rango = 'anterior' AND con_auto GROUP BY seg_filtro
       ) x
     ),
     'dias_mediana_segmento', (
       SELECT COALESCE(jsonb_agg(jsonb_build_object('segmento', segmento, 'mediana', mediana)), '[]'::jsonb)
       FROM (
-        SELECT segmento, percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) AS mediana
-        FROM leads_act WHERE con_auto GROUP BY segmento
+        SELECT seg_filtro AS segmento, percentile_cont(0.5) WITHIN GROUP (ORDER BY primer_turno - ingreso) AS mediana
+        FROM (SELECT *, CASE WHEN segmento = 'Referidos' THEN 'Web' ELSE segmento END AS seg_filtro FROM leads_act) la
+        WHERE con_auto GROUP BY seg_filtro
       ) x
     ),
     'por_zona', (
