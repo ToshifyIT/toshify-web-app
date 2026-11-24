@@ -258,6 +258,48 @@ function Kpis({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
   )
 }
 
+/** Referidos por un conductor: van dentro de "Web (orgánico)" y acá se ven aparte. */
+function Referidos({ d }: { d: MarketingRaw }) {
+  const a = embudoDe(d, 'actual', 'Referidos')
+  const b = embudoDe(d, 'anterior', 'Referidos')
+  const web = embudoDe(d, 'actual', 'Web')
+  const items: { label: string; valor: string; sub?: string; v?: Variacion | null }[] = [
+    {
+      label: 'Leads referidos',
+      valor: fmtInt(a.leads),
+      sub: `${fmtPct(ratio(a.leads, web.leads))} de los leads orgánicos`,
+      v: variacion(a.leads, b.leads, 'num', true),
+    },
+    { label: 'Llegaron a documentación', valor: fmtInt(a.documentacion), sub: `${fmtPct(ratio(a.documentacion, a.leads))} de los referidos` },
+    { label: 'Aptos', valor: fmtInt(a.aptos), sub: `${fmtPct(ratio(a.aptos, a.leads))} de los referidos` },
+    {
+      label: 'Conductores nuevos',
+      valor: fmtInt(a.nuevos),
+      sub: `Conversión ${fmtPct(ratio(a.nuevos, a.leads))}`,
+      v: variacion(a.nuevos, b.nuevos, 'num', true),
+    },
+  ]
+  return (
+    <Card
+      title="Referidos"
+      subtitle="Leads recomendados por un conductor embajador. Están incluidos en los números de Web (orgánico)."
+      info="Cuenta los leads con Referido = Sí (con su conductor embajador) o con fuente Referido. El dato se carga en el lead, en el paso Proceso, y es obligatorio para pasarlo a conductor."
+    >
+      <div className="ddir-mini-grid">
+        {items.map(it => (
+          <div className="ddir-mini" key={it.label}>
+            <span className="ddir-mini-label">{it.label}</span>
+            <span className="ddir-mini-value">{it.valor}</span>
+            {it.v ? <span className={`ddir-kpi-var ddir-kpi-var--${it.v.tono}`}>{it.v.texto}</span> : null}
+            {it.sub && a.leads > 0 ? <span className="ddir-muted">{it.sub}</span> : null}
+          </div>
+        ))}
+      </div>
+      {a.leads === 0 ? <p className="ddir-muted">Ningún lead referido en el período.</p> : null}
+    </Card>
+  )
+}
+
 function Embudo({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
   const a = embudoDe(d, 'actual', filtro)
   const etapas = [
@@ -813,6 +855,7 @@ export function DashboardMarketingModule() {
           <Calidad d={data} filtro={filtro} />
         </div>
         {filtro === 'Pauta redes' ? <Canales d={data} /> : null}
+        {filtro === 'Web' ? <Referidos d={data} /> : null}
         <NuevosConductores d={data} filtro={filtro} />
         <Zonas d={data} filtro={filtro} />
         <div className="ddir-row ddir-row--half">
