@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  CARTAS OFERTA (DocuSeal) -> carpeta del conductor en Drive   (v2, 2026-11-23)
+ *  CARTAS OFERTA (DocuSeal) -> carpeta del conductor en Drive   (v5, 2026-11-23)
  * =====================================================================
  *
  * Cada 1 minuto, en la casilla de josue.caride@toshify.com.ar:
@@ -10,7 +10,7 @@
  *         ha sido completado por ..."
  *      Los "Tu copia del documento" se ignoran (son el mismo PDF).
  *   2. Le pregunta a Toshibase (API /api/carpeta-carta-oferta) cuál es el conductor
- *      y su carpeta: la MISMA que abre el botón "Ver documentos" de su ficha.
+ *      y su carpeta: la MISMA que abre el botón "Ver historial contratos" de su ficha.
  *      Toshibase lo identifica por la carta generada (N° + turno + nombre), por el
  *      email de quien firmó o por el nombre exacto.
  *   3. Dentro de esa carpeta crea (si no existe) "Carta oferta completada" y guarda
@@ -19,14 +19,25 @@
  * CAMBIO RESPECTO DE LA v1: ya no busca la carpeta por nombre dentro de Documentación
  * (fallaba cuando había dos carpetas con el mismo nombre, p. ej. MARTIN SEBASTIAN
  * MARTINEZ). Ahora usa la carpeta vinculada en la ficha del conductor.
+ * v4: la carpeta es la de contratos ("Ver historial contratos", la misma donde
+ * Toshibase genera las cartas), ya no la de "Ver documentos". Se guarda en la
+ * subcarpeta "Carta oferta completada" porque la carta firmada se llama igual que
+ * el PDF que genera Toshibase (sin subcarpeta, no se guardaría por "ya existía").
  *
  * Si Toshibase no encuentra al conductor, encuentra varios posibles, o la ficha no
  * tiene carpeta, NO guarda nada: lo anota en el registro y lo vuelve a intentar en
  * cada vuelta (durante DIAS_REINTENTAR días). Se arregla completando la ficha en
- * Toshibase (por ejemplo, el link de "Ver documentos").
+ * Toshibase (por ejemplo, el link de "Ver historial contratos").
  *
  * PRIMERA VEZ: revisa TODAS las cartas oferta de la casilla, en tandas.
  * Después, solo las nuevas. Cada ejecución toma primero lo nuevo.
+ *
+ * AVISOS EN SLACK (canal it-log-bots, v3):
+ *   ✅ cada carta guardada (conductor, carpeta, archivos).
+ *   ⚠️ cada carta que no se pudo guardar, UNA vez (motivo y cómo se arregla); los
+ *      reintentos no vuelven a avisar. Si después se guarda, llega el ✅.
+ *   🛑 Toshibase no responde / clave rechazada / error del script (como mucho uno
+ *      por hora del mismo tipo), y cartas que se dejaron de reintentar.
  *
  * NO MODIFICA EL CORREO: no pone etiquetas, no marca como leído, no archiva.
  * Un archivo con el mismo nombre en la carpeta "Carta oferta completada" no
@@ -37,7 +48,9 @@
  *   b. Configuración del proyecto (engranaje) -> Propiedades del script -> Agregar:
  *        Propiedad: TOSHIFY_API_KEY   Valor: (la clave que te pasa el equipo de sistemas;
  *        es la misma CARTAS_OFERTA_API_KEY del servidor de Toshibase)
- *      La clave NO va en el código.
+ *        Propiedad: SLACK_BOT_TOKEN   Valor: (token del bot de Slack de las alertas; xoxb-...)
+ *      Las claves NO van en el código.
+ *      (Opcional) Ejecutar "probarSlack": manda un mensaje de prueba al canal.
  *   c. Zona horaria del proyecto: (GMT-03:00) Buenos Aires.
  *   d. (Opcional) Ejecutar "probarUltimosCorreos": muestra en el registro qué haría
  *      con las últimas cartas oferta, SIN guardar nada.
@@ -52,7 +65,7 @@
 // =====================================================================
 
 const CONFIG = {
-  // Toshibase: devuelve la carpeta del conductor ("Ver documentos").
+  // Toshibase: devuelve la carpeta de contratos del conductor ("Ver historial contratos").
   API_URL: 'https://app.toshify.com.ar/api/carpeta-carta-oferta',
 
   // Carpeta que se crea dentro de la del conductor.
@@ -70,7 +83,13 @@ const CONFIG = {
 
   // Cada cuántos minutos revisa (1, 5, 10, 15 o 30).
   MINUTOS: 1,
+
+  // Slack: canal it-log-bots (el token va en la propiedad del script SLACK_BOT_TOKEN).
+  SLACK_CANAL: 'C0A7C2U5ABY',
 };
+
+// Avisos de "Toshibase no responde" / error del script: como mucho uno por hora del mismo tipo.
+const MINUTOS_ENTRE_ALERTAS = 60;
 
 const BUSQUEDA_RECIENTES = `${CONFIG.BUSQUEDA} newer_than:7d`;
 
@@ -152,10 +171,12 @@ function ejecutar(soloPrueba) {
 
   let procesados = null;
   let pendientes = null;
+  let alertados = null;
   try {
     procesados = leerProcesados();
     pendientes = leerPendientes();
-    const ctx = { procesados, pendientes, soloPrueba, resumen, inicio, nuevosPendientes: {} };
+    alertados = leerAlertados();
+    const ctx = { procesados, pendientes, alertados, soloPrueba, resumen, inicio, nuevosPendientes: {} };
 
     if (soloPrueba) {
       // Las últimas cartas, de cualquier fecha
@@ -183,10 +204,18 @@ function ejecutar(soloPrueba) {
     }
   } catch (e) {
     Logger.log('Error: ' + e.message);
+    if (!soloPrueba) {
+      alertarGeneral('script', '🛑 *Error en el script de Cartas Oferta*', [
+        `❌ *Error:* ${e.message}`,
+        '🛠️ *Qué hacer:* revisar "Ejecuciones" en el Apps Script (cuenta josue.caride). ' +
+          'Lo que no se llegó a guardar se vuelve a intentar en la próxima ejecución.',
+      ]);
+    }
     throw e; // queda en "Ejecuciones"; Google avisa por mail si falla seguido
   } finally {
     if (!soloPrueba && procesados) guardarProcesados(procesados);
     if (!soloPrueba && pendientes) guardarPendientes(pendientes);
+    if (!soloPrueba && alertados && pendientes) guardarAlertados(alertados, pendientes);
     lock.releaseLock();
     logResumen(resumen, soloPrueba);
   }
@@ -225,6 +254,15 @@ function reintentarPendientes(ctx) {
     if (ctx.nuevosPendientes[id]) continue; // recién anotado en esta ejecución
     if (ctx.pendientes[id] < limite) {
       delete ctx.pendientes[id]; // ya no se reintenta
+      let asunto = id;
+      try { asunto = GmailApp.getMessageById(id).getSubject(); } catch (e) { /* el correo ya no existe */ }
+      avisarSlack(mensajeSlack('🛑 *Carta oferta: se dejó de reintentar*', [
+        `👤 *Conductor:* ${nombreDelConductor(asunto) || '?'}`,
+        `📄 *Carta:* ${asunto}`,
+        `❌ *Motivo:* pasaron ${DIAS_REINTENTAR} días sin poder guardarla.`,
+        '🛠️ *Qué hacer:* guardar el PDF a mano en la carpeta del conductor, o corregir la ficha ' +
+          'y ejecutar "revisarTodoDeNuevo" en el Apps Script.',
+      ]));
       continue;
     }
     let mensaje = null;
@@ -252,13 +290,23 @@ function procesarMensaje(mensaje, ctx) {
     if (resp.motivo === 'sin_nombre') {
       r.sinNombre++;
       Logger.log(`${prefijo} -> no se pudo sacar el nombre del conductor del asunto`);
-      if (!ctx.soloPrueba) ctx.procesados[mensaje.getId()] = diaDe(mensaje.getDate());
+      if (!ctx.soloPrueba) {
+        ctx.procesados[mensaje.getId()] = diaDe(mensaje.getDate());
+        avisarSlack(mensajeSlack('⚠️ *Atención:* Carta oferta NO guardada', [
+          `📄 *Carta:* ${asunto}`,
+          `📬 *Correo del:* ${fechaHora(mensaje.getDate())}`,
+          '❌ *Error:* no se pudo leer el nombre del conductor en el asunto del correo ' +
+            '(se esperaba "... - NOMBRE ha sido completado por ...").',
+          '🛠️ *Qué hacer:* guardar el PDF a mano en la carpeta del conductor. Esta carta no se reintenta.',
+        ]));
+      }
       return;
     }
     const lista = resp.motivo === 'ambiguo' ? r.ambiguos
       : resp.motivo === 'sin_carpeta' || resp.motivo === 'carpeta_invalida' ? r.sinCarpeta
         : r.noEncontrados;
-    if (MOTIVOS_REINTENTAR.includes(resp.motivo)) {
+    const reintentable = MOTIVOS_REINTENTAR.includes(resp.motivo);
+    if (reintentable) {
       if (!lista.includes(nombre)) lista.push(nombre);
     } else {
       r.erroresApi++; // Toshibase caído, clave mal, etc.: también se reintenta
@@ -267,6 +315,22 @@ function procesarMensaje(mensaje, ctx) {
     if (!ctx.soloPrueba) {
       ctx.pendientes[mensaje.getId()] = mensaje.getDate().getTime();
       ctx.nuevosPendientes[mensaje.getId()] = true;
+      if (!reintentable) {
+        alertarErrorToshibase(resp);
+      } else if (!ctx.alertados[mensaje.getId()]) {
+        // Una sola vez por carta: los reintentos no vuelven a avisar
+        if (avisarSlack(mensajeSlack('⚠️ *Atención:* Carta oferta NO guardada', [
+          `👤 *Conductor:* ${resp.conductor ? `${resp.conductor.nombre} (DNI ${resp.conductor.dni || '?'})` : nombre}`,
+          `📄 *Carta:* ${asunto}`,
+          `📬 *Correo del:* ${fechaHora(mensaje.getDate())}`,
+          `❌ *Error:* ${explicarMotivo(resp)}`,
+          `🛠️ *Cómo se arregla:* ${comoSeArregla(resp)}`,
+          `🔁 Se reintenta sola cada ${CONFIG.MINUTOS} minuto(s) durante ${DIAS_REINTENTAR} días: ` +
+            'apenas se corrija, se guarda y llega el aviso ✅.',
+        ]))) {
+          ctx.alertados[mensaje.getId()] = Date.now();
+        }
+      }
     }
     return;
   }
@@ -279,11 +343,32 @@ function procesarMensaje(mensaje, ctx) {
   if (ctx.soloPrueba) return;
 
   const destino = subcarpeta(DriveApp.getFolderById(resp.folderId), CONFIG.NOMBRE_SUBCARPETA);
+  const nuevos = [];
+  const existian = [];
   adjuntos.forEach(a => {
-    if (guardarSiNoExiste(destino, a)) r.archivos++;
-    else r.yaExistian++;
+    if (guardarSiNoExiste(destino, a)) {
+      r.archivos++;
+      nuevos.push(a.getName());
+    } else {
+      r.yaExistian++;
+      existian.push(a.getName());
+    }
   });
   ctx.procesados[mensaje.getId()] = diaDe(mensaje.getDate());
+
+  // Solo si guardó algo (si todo ya existía, ya se avisó antes)
+  if (nuevos.length) {
+    const habiaFallado = !!ctx.alertados[mensaje.getId()];
+    avisarSlack(mensajeSlack('✅ *Carta oferta guardada*' + (habiaFallado ? ' (antes había fallado, ya está resuelto)' : ''), [
+      `👤 *Conductor:* ${resp.conductor.nombre} (DNI ${resp.conductor.dni || '?'})`,
+      `📄 *Carta:* ${asunto}`,
+      `📁 *Carpeta:* <${destino.getUrl()}|${resp.carpeta} / ${CONFIG.NOMBRE_SUBCARPETA}>`,
+      `📎 *Archivos guardados (${nuevos.length}):* ${nuevos.join(', ')}`,
+      existian.length ? `📎 *Ya estaban:* ${existian.join(', ')}` : null,
+      `🔎 *Cómo se identificó al conductor:* ${resp.motivo}`,
+    ]));
+  }
+  delete ctx.alertados[mensaje.getId()];
 }
 
 /**
@@ -340,12 +425,226 @@ function logResumen(r, soloPrueba) {
     `Con carpeta del conductor: ${r.guardadas}`,
     r.noEncontrados.length ? `Conductor no encontrado en Toshibase (${r.noEncontrados.length}): ${r.noEncontrados.join(', ')}` : null,
     r.ambiguos.length ? `Varios conductores posibles (${r.ambiguos.length}): ${r.ambiguos.join(', ')}` : null,
-    r.sinCarpeta.length ? `Ficha sin carpeta en "Ver documentos" (${r.sinCarpeta.length}): ${r.sinCarpeta.join(', ')}` : null,
+    r.sinCarpeta.length ? `Ficha sin carpeta en "Ver historial contratos" (${r.sinCarpeta.length}): ${r.sinCarpeta.join(', ')}` : null,
     r.erroresApi ? `No se pudo consultar Toshibase: ${r.erroresApi} (se reintenta)` : null,
     r.sinNombre ? `Sin nombre en el asunto: ${r.sinNombre}` : null,
     soloPrueba ? null : `PDF guardados: ${r.archivos}`,
     soloPrueba ? null : `PDF que ya existían: ${r.yaExistian}`,
   ].filter(Boolean).join('\n'));
+}
+
+// =====================================================================
+// MIGRACIÓN ÚNICA (v5): cartas guardadas antes en "Ver documentos" -> carpeta de contratos
+// =====================================================================
+
+/**
+ * Ejecutar UNA vez a mano. Recorre TODAS las cartas oferta de DocuSeal de la casilla y
+ * guarda sus PDF en la carpeta de contratos del conductor ("Ver historial contratos" /
+ * Carta oferta completada). Lo que ya está ahí no se duplica.
+ * No borra nada de las carpetas de "Ver documentos" (las copias viejas quedan).
+ * No toca la memoria del proceso normal ni manda un aviso por carta: al terminar manda
+ * UN resumen a Slack. Trabaja en tandas: se programa sola cada 5 minutos hasta terminar
+ * y después borra ese disparador.
+ */
+function migrarCartasAnteriores() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MIGRACION_TERMINADA') === 'si') {
+    quitarDisparadorMigracion();
+    Logger.log('La migración ya terminó. Para repetirla: ejecutar "reiniciarMigracion" y después esta función.');
+    return;
+  }
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'migrarCartasAnteriores')) {
+    ScriptApp.newTrigger('migrarCartasAnteriores').timeBased().everyMinutes(5).create();
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(60000)) {
+    Logger.log('Hay otra ejecución en curso; la migración sigue en la próxima tanda.');
+    return;
+  }
+  const inicio = Date.now();
+  const sinTiempo = () => Date.now() - inicio > CONFIG.MAX_SEGUNDOS * 1000;
+  let desde = Number(props.getProperty('MIGRACION_DESDE') || 0);
+  const tot = JSON.parse(props.getProperty('MIGRACION_TOTALES') ||
+    '{"cartas":0,"guardados":0,"yaEstaban":0,"fallidas":[],"inicio":' + Date.now() + '}');
+  let terminado = false;
+
+  try {
+    while (!sinTiempo()) {
+      const hilos = GmailApp.search(CONFIG.BUSQUEDA, desde, CONFIG.MAX_CORREOS);
+      let hechos = 0;
+      for (const hilo of hilos) {
+        if (sinTiempo()) break;
+        for (const m of hilo.getMessages()) {
+          if (!esCartaCompletada(m)) continue;
+          tot.cartas++;
+          const asunto = m.getSubject();
+          const resp = consultarToshibase(asunto);
+          if (!resp.ok) {
+            const linea = `${nombreDelConductor(asunto) || asunto}: ${resp.detalle || resp.motivo}`;
+            if (tot.fallidas.length < 40 && !tot.fallidas.includes(linea)) tot.fallidas.push(linea.slice(0, 160));
+            Logger.log(`[MIGRACIÓN] "${asunto}" -> NO: ${resp.detalle || resp.motivo}`);
+            continue;
+          }
+          const destino = subcarpeta(DriveApp.getFolderById(resp.folderId), CONFIG.NOMBRE_SUBCARPETA);
+          m.getAttachments({ includeInlineImages: false })
+            .filter(a => CONFIG.EXTENSIONES.includes(extension(a.getName())))
+            .forEach(a => { if (guardarSiNoExiste(destino, a)) tot.guardados++; else tot.yaEstaban++; });
+          Logger.log(`[MIGRACIÓN] "${asunto}" -> ${resp.carpeta} / ${CONFIG.NOMBRE_SUBCARPETA}`);
+        }
+        hechos++;
+      }
+      desde += hechos;
+      if (hechos < hilos.length) break; // se cortó por tiempo: sigue en la próxima tanda
+      if (hilos.length < CONFIG.MAX_CORREOS) { terminado = true; break; }
+    }
+  } finally {
+    props.setProperty('MIGRACION_DESDE', String(desde));
+    props.setProperty('MIGRACION_TOTALES', JSON.stringify(tot));
+    lock.releaseLock();
+  }
+
+  Logger.log(`[MIGRACIÓN] conversaciones revisadas: ${desde} | cartas: ${tot.cartas} | ` +
+    `PDF guardados: ${tot.guardados} | ya estaban: ${tot.yaEstaban} | sin carpeta: ${tot.fallidas.length}` +
+    (terminado ? ' | TERMINADA' : ' | sigue en la próxima tanda (en 5 minutos)'));
+
+  if (terminado) {
+    props.setProperty('MIGRACION_TERMINADA', 'si');
+    quitarDisparadorMigracion();
+    avisarSlack(mensajeSlack(tot.fallidas.length
+      ? '⚠️ *Migración de cartas oferta terminada (con pendientes)*'
+      : '✅ *Migración de cartas oferta terminada*', [
+      'Se copiaron las cartas firmadas a la carpeta de contratos de cada conductor ' +
+        '("Ver historial contratos" / Carta oferta completada).',
+      `📨 *Cartas revisadas:* ${tot.cartas}`,
+      `📎 *PDF copiados:* ${tot.guardados}`,
+      `📎 *Ya estaban:* ${tot.yaEstaban}`,
+      tot.fallidas.length
+        ? `❌ *No se pudieron copiar (${tot.fallidas.length}):*\n• ${tot.fallidas.join('\n• ')}\n` +
+          '🛠️ *Cómo se arregla:* corregir la ficha del conductor (link de "Ver historial contratos") ' +
+          'o cargarlo en Toshibase, y repetir con "reiniciarMigracion" + "migrarCartasAnteriores".'
+        : null,
+      '🗂️ Las copias viejas en las carpetas de "Ver documentos" no se tocaron.',
+    ]));
+  }
+}
+
+/** Permite volver a correr la migración desde cero (lo ya copiado no se duplica). */
+function reiniciarMigracion() {
+  const props = PropertiesService.getScriptProperties();
+  ['MIGRACION_TERMINADA', 'MIGRACION_DESDE', 'MIGRACION_TOTALES'].forEach(k => props.deleteProperty(k));
+  quitarDisparadorMigracion();
+  Logger.log('Listo: ejecutá "migrarCartasAnteriores" para empezar de nuevo.');
+}
+
+function quitarDisparadorMigracion() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'migrarCartasAnteriores')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+}
+
+// =====================================================================
+// SLACK
+// =====================================================================
+
+/** Manda un mensaje de prueba al canal. */
+function probarSlack() {
+  const ok = avisarSlack(mensajeSlack('🧪 *Prueba de avisos de Cartas Oferta*', [
+    'Si ves este mensaje, los avisos del script de Cartas Oferta (DocuSeal) llegan bien a este canal.',
+  ]));
+  Logger.log(ok ? 'Mensaje enviado a Slack.' : 'No se pudo enviar (ver el detalle arriba).');
+}
+
+/** Arma el mensaje con el estilo de las otras alertas. Las líneas null se omiten. */
+function mensajeSlack(titulo, lineas) {
+  return [titulo, ...lineas.filter(Boolean), `📅 *Fecha y Hora:* ${fechaHora(new Date())}`].join('\n');
+}
+
+/** Publica en el canal. Devuelve true si Slack lo aceptó. Nunca corta el proceso. */
+function avisarSlack(texto) {
+  const token = PropertiesService.getScriptProperties().getProperty('SLACK_BOT_TOKEN');
+  if (!token) {
+    Logger.log('Slack: falta la propiedad del script SLACK_BOT_TOKEN (no se avisó).');
+    return false;
+  }
+  try {
+    const res = UrlFetchApp.fetch('https://slack.com/api/chat.postMessage', {
+      method: 'post',
+      contentType: 'application/json; charset=utf-8',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify({ channel: CONFIG.SLACK_CANAL, text: texto, unfurl_links: false }),
+      muteHttpExceptions: true,
+    });
+    const cuerpo = JSON.parse(res.getContentText() || '{}');
+    if (!cuerpo.ok) Logger.log('Slack rechazó el mensaje: ' + (cuerpo.error || res.getResponseCode()));
+    return !!cuerpo.ok;
+  } catch (e) {
+    Logger.log('Slack: no se pudo enviar: ' + e.message);
+    return false;
+  }
+}
+
+/** Aviso general (no de una carta): como mucho uno por hora del mismo tipo. */
+function alertarGeneral(tipo, titulo, lineas) {
+  const props = PropertiesService.getScriptProperties();
+  const clave = 'ALERTA_' + tipo;
+  const ultima = Number(props.getProperty(clave) || 0);
+  if (Date.now() - ultima < MINUTOS_ENTRE_ALERTAS * 60 * 1000) return;
+  if (avisarSlack(mensajeSlack(titulo, lineas))) props.setProperty(clave, String(Date.now()));
+}
+
+/** Toshibase caído, clave rechazada, etc. Las cartas quedan pendientes y se reintentan. */
+function alertarErrorToshibase(resp) {
+  const porMotivo = {
+    no_autorizado: 'Toshibase rechazó la clave: la propiedad TOSHIFY_API_KEY del script no coincide con ' +
+      'CARTAS_OFERTA_API_KEY del servidor.',
+    sin_clave: 'Falta la propiedad del script TOSHIFY_API_KEY.',
+    sin_configurar: 'Al servidor de Toshibase le falta la variable CARTAS_OFERTA_API_KEY (Dokploy).',
+    error_conexion: 'No se pudo conectar con Toshibase (app.toshify.com.ar caído o sin red).',
+  };
+  alertarGeneral('toshibase_' + resp.motivo, '🛑 *Cartas Oferta: no se pudo consultar Toshibase*', [
+    `❌ *Error:* ${porMotivo[resp.motivo] || 'Toshibase respondió con un error.'}`,
+    resp.detalle ? `🧾 *Detalle técnico:* ${resp.detalle}` : null,
+    '🔁 Las cartas quedan pendientes y se guardan solas cuando Toshibase vuelva a responder. ' +
+      `(Este aviso se repite como mucho cada ${MINUTOS_ENTRE_ALERTAS} minutos.)`,
+  ]);
+}
+
+/** Por qué no se pudo guardar, en palabras. */
+function explicarMotivo(resp) {
+  switch (resp.motivo) {
+    case 'no_encontrado':
+      return 'no hay ningún conductor en Toshibase que coincida con esta carta ' +
+        '(ni por N° de carta generada, ni por el email de quien firmó, ni por nombre exacto).';
+    case 'ambiguo':
+      return `hay más de un conductor posible en Toshibase. ${resp.detalle || ''}`.trim();
+    case 'sin_carpeta':
+      return 'la ficha del conductor en Toshibase no tiene link en "Ver historial contratos".';
+    case 'carpeta_invalida':
+      return 'el link de "Ver historial contratos" de la ficha no abre una carpeta válida ' +
+        `(fue borrada, está en la papelera o no hay acceso). Detalle: ${resp.detalle || resp.motivo}`;
+    default:
+      return resp.detalle || resp.motivo;
+  }
+}
+
+/** Qué hay que hacer para que se guarde. */
+function comoSeArregla(resp) {
+  switch (resp.motivo) {
+    case 'no_encontrado':
+      return 'revisar que el conductor esté cargado en Toshibase con el mismo nombre que figura en la carta.';
+    case 'ambiguo':
+      return 'revisar si el conductor está duplicado en Toshibase y dejar una sola ficha.';
+    case 'sin_carpeta':
+    case 'carpeta_invalida':
+      return 'en la ficha del conductor, corregir el link de "Ver historial contratos" con el de su carpeta de contratos en Drive (Carta Oferta - Buenos Aires).';
+    default:
+      return 'avisar a sistemas.';
+  }
+}
+
+function fechaHora(fecha) {
+  return Utilities.formatDate(fecha, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
 }
 
 // =====================================================================
@@ -406,6 +705,19 @@ function leerPendientes() {
 
 function guardarPendientes(pendientes) {
   PropertiesService.getScriptProperties().setProperty('PENDIENTES', JSON.stringify(pendientes));
+}
+
+/** Cartas pendientes que ya se avisaron en Slack: { idCorreo: cuándo (ms) }. */
+function leerAlertados() {
+  const raw = PropertiesService.getScriptProperties().getProperty('ALERTADOS');
+  return raw ? JSON.parse(raw) : {};
+}
+
+/** Solo se recuerdan las que siguen pendientes (las guardadas o descartadas se olvidan). */
+function guardarAlertados(alertados, pendientes) {
+  const vigentes = {};
+  Object.keys(alertados).filter(id => pendientes[id]).forEach(id => { vigentes[id] = alertados[id]; });
+  PropertiesService.getScriptProperties().setProperty('ALERTADOS', JSON.stringify(vigentes));
 }
 
 /** Muestra las cartas que todavía no se pudieron guardar y por qué. */
