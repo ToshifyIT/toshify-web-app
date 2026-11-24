@@ -12,7 +12,7 @@ import { construirSaldosAnteriores } from '../utils/saldoAnterior'
 import { acumularCuentaCabify, elegirCuentaCabify, type CuentasCabifyPorConductor } from '../utils/cuentaCabify'
 import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
-import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE } from '../utils/descuentoReferido'
+import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE, esLineaDescuentoReferido } from '../utils/descuentoReferido'
 import {
   cargarPromocionesSemana, descuentoPromoAlquiler, descuentoPromoToshipass, leerCalculoPromocion,
   esPagoPromocionB1, lineasPromocionConductor, REFERENCIA_PROMOCION, textoLineaPagoB1, textoLineaPromocion,
@@ -51,7 +51,6 @@ import {
   ZapOff,
   Ticket,
   Tag,
-  GitCompare,
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -2502,7 +2501,9 @@ export function ReporteFacturacionTab() {
           })
         }
         const entry = detallesMap.get(d.facturacion_id)!
-        if (d.concepto_codigo === 'P004') {
+        if (d.concepto_codigo === 'P004' && esLineaDescuentoReferido(d.concepto_descripcion)) {
+          // Descuento del referido: va en la columna Promos/Desc., no en Tickets Fav.
+        } else if (d.concepto_codigo === 'P004') {
           entry.monto_tickets += Math.abs(parseFloat(d.total) || 0)
           entry.tickets_detalle.push({ monto: Math.abs(parseFloat(d.total) || 0), detalle: d.concepto_descripcion || 'Ticket' })
         } else if (d.concepto_codigo === 'P005') {
@@ -2726,148 +2727,6 @@ export function ReporteFacturacionTab() {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // COMPARADOR DE CÁLCULO (solo desarrollo, solo lectura)
-  // Calcula la semana del período con la Vista Previa y la compara, conductor por conductor
-  // y concepto por concepto, con lo que guardó el recálculo. No escribe nada. Sirve para ver
-  // dónde se separan las dos copias del cálculo antes y después de unificarlas.
-  // ═══════════════════════════════════════════════════════════════════
-  const [comparandoCalculo, setComparandoCalculo] = useState(false)
-  async function compararCalculo() {
-    if (!periodo || modoVistaPrevia) return
-    setComparandoCalculo(true)
-    try {
-      // Recálculo simulado (mismo cálculo que guarda) contra lo guardado en la base
-      const calc = await calcularFacturacionSemana({
-        periodoId: periodo.id,
-        fechaInicio: periodo.fecha_inicio,
-        fechaFin: periodo.fecha_fin,
-        semanaNum: periodo.semana,
-        anioNum: periodo.anio,
-        sedeDelPeriodo: periodo.sede_id || sedeActualId,
-        simular: true,
-        latido: () => {},
-      })
-      const pendientes = calc.sinConductores ? [] : calc.pendientesGuardar
-      const conCodigos = (fila: any, detalles: any[]) => {
-        const porCodigo: Record<string, number> = {}
-        for (const d of detalles) {
-          const k = String(d.concepto_codigo || 'OTRO')
-          porCodigo[k] = (porCodigo[k] || 0) + (Number(d.total) || 0) * (d.es_descuento ? -1 : 1)
-        }
-        return { ...fila, _porCodigo: porCodigo }
-      }
-      const calculado = pendientes.map(pg => conCodigos(pg.fila, pg.detalles))
-      const { data: filasGuardadas, error: errGuardadas } = await (supabase.from('facturacion_conductores') as any)
-        .select('*').eq('periodo_id', periodo.id)
-      if (errGuardadas) throw errGuardadas
-      const idsGuardadas = ((filasGuardadas || []) as any[]).map(f => f.id)
-      const detallesGuardados: any[] = []
-      for (let i = 0; i < idsGuardadas.length; i += 200) {
-        const { data, error } = await (supabase.from('facturacion_detalle') as any)
-          .select('facturacion_id, concepto_codigo, total, es_descuento').in('facturacion_id', idsGuardadas.slice(i, i + 200))
-        if (error) throw error
-        detallesGuardados.push(...(data || []))
-      }
-      const guardado = ((filasGuardadas || []) as any[]).map(f => conCodigos(f, detallesGuardados.filter(d => d.facturacion_id === f.id)))
-      const n = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100
-      const dias = (f: any) => n(f.turnos_cobrados)
-      // info: no cuenta como diferencia de cálculo. El saldo anterior cambia con los pagos
-      // cargados después de guardar la semana (ej. Pago Cabify de esa semana), no por el cálculo.
-      const campos: Array<{ nombre: string; vp: (f: any) => number; rec: (f: any) => number; info?: boolean }> = [
-        { nombre: 'Días', vp: dias, rec: f => n(f.turnos_cobrados) },
-        { nombre: 'Alquiler', vp: f => n(f.subtotal_alquiler), rec: f => n(f.subtotal_alquiler) },
-        { nombre: 'Garantía', vp: f => n(f.subtotal_garantia), rec: f => n(f.subtotal_garantia) },
-        { nombre: 'Toshipass', vp: f => n(f.monto_toshipass), rec: f => n(f.monto_toshipass) },
-        { nombre: 'Peajes', vp: f => n(f.monto_peajes), rec: f => n(f.monto_peajes) },
-        { nombre: 'Penalidades', vp: f => n(f.monto_penalidades), rec: f => n(f.monto_penalidades) },
-        { nombre: 'Cargos', vp: f => n(f.subtotal_cargos), rec: f => n(f.subtotal_cargos) },
-        { nombre: 'Descuentos', vp: f => n(f.subtotal_descuentos), rec: f => n(f.subtotal_descuentos) },
-        { nombre: 'Total sin saldo anterior', vp: f => n((f.total_a_pagar || 0) - (f.saldo_anterior || 0)), rec: f => n((f.total_a_pagar || 0) - (f.saldo_anterior || 0)) },
-        { nombre: 'Saldo anterior', vp: f => n(f.saldo_anterior), rec: f => n(f.saldo_anterior), info: true },
-      ]
-      // Además de los totales, cada concepto (código) por separado
-      const codigos = [...new Set([...calculado, ...guardado].flatMap((f: any) => Object.keys(f._porCodigo || {})))].sort()
-      for (const codigo of codigos) {
-        campos.push({ nombre: `Concepto ${codigo}`, vp: (f: any) => n(f._porCodigo?.[codigo]), rec: (f: any) => n(f._porCodigo?.[codigo]) })
-      }
-      const porIdVp = new Map(calculado.map(f => [f.conductor_id, f]))
-      const porIdRec = new Map(guardado.map(f => [f.conductor_id, f]))
-      const ids = [...new Set([...porIdVp.keys(), ...porIdRec.keys()])]
-      const filas: Array<{ nombre: string; concepto: string; vp: string; rec: string; info?: boolean }> = []
-      const conteoPorConcepto = new Map<string, number>()
-      let soloVp = 0
-      let soloRec = 0
-      for (const id of ids) {
-        const a = porIdVp.get(id)
-        const b = porIdRec.get(id)
-        const nombre = (a || b)?.conductor_nombre || id
-        if (!a || !b) {
-          if (a) soloVp++
-          else soloRec++
-          filas.push({ nombre, concepto: a ? 'Solo en el cálculo' : 'Solo en lo guardado', vp: a ? formatCurrency(n(a.total_a_pagar)) : '-', rec: b ? formatCurrency(n(b.total_a_pagar)) : '-' })
-          continue
-        }
-        for (const c of campos) {
-          const va = c.vp(a)
-          const vb = c.rec(b)
-          const tolerancia = c.nombre === 'Días' ? 0.01 : TOLERANCIA_PESOS
-          if (Math.abs(va - vb) < tolerancia) continue
-          const fmt = (v: number) => c.nombre === 'Días' ? String(v) : formatCurrency(v)
-          if (!c.info) conteoPorConcepto.set(c.nombre, (conteoPorConcepto.get(c.nombre) || 0) + 1)
-          filas.push({ nombre, concepto: c.nombre, vp: fmt(va), rec: fmt(vb), info: c.info })
-        }
-      }
-      const esc = (t: string) => t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
-      const difCalculo = filas.filter(f => !f.info)
-      const difInfo = filas.filter(f => f.info)
-      const conductoresConDif = new Set(difCalculo.map(f => f.nombre)).size
-      const resumen = [...conteoPorConcepto.entries()].map(([k, v]) => `${k}: ${v}`).join(' · ')
-      const td = 'padding:6px;border-bottom:1px solid var(--border-primary);'
-      const th = 'padding:6px;border-bottom:1px solid var(--border-primary);font-size:11px;font-weight:600;color:var(--text-secondary);'
-      console.table(filas)
-      await Alerta.fire({
-        title: `Comparar cálculo · S${periodo.semana}/${periodo.anio}`,
-        width: 'min(96vw, 760px)',
-        confirmButtonText: 'Cerrar',
-        html: `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-          <div style="font-size:11px;color:var(--text-secondary);">Recálculo simulado ahora (sin guardar) contra lo guardado en la base</div>
-          <div style="font-size:22px;font-weight:700;margin:4px 0;color:${difCalculo.length === 0 ? '#16a34a' : '#d97706'};">
-            ${difCalculo.length === 0 ? 'Sin diferencias de cálculo' : `${conductoresConDif} de ${ids.length} conductores con diferencias`}
-          </div>
-          ${resumen ? `<div style="font-size:12px;color:var(--text-secondary);">${esc(resumen)}${soloVp || soloRec ? ` · Solo en el cálculo: ${soloVp} · Solo guardados: ${soloRec}` : ''}</div>` : ''}
-          ${difInfo.length > 0 ? `<div style="font-size:12px;color:var(--text-tertiary);margin-top:4px;">Saldo anterior distinto en ${difInfo.length} conductores (informativo: suele ser por pagos cargados después de guardar la semana).</div>` : ''}
-          ${filas.length > 0 ? `<div style="max-height:55vh;overflow:auto;margin-top:14px;">
-            <table style="display:table;width:100%;border-collapse:collapse;font-size:12px;">
-              <thead><tr>
-                <th style="${th}text-align:left;">Conductor</th>
-                <th style="${th}text-align:left;">Concepto</th>
-                <th style="${th}text-align:right;">Calculado ahora</th>
-                <th style="${th}text-align:right;">Guardado</th>
-              </tr></thead>
-              <tbody>${[...difCalculo, ...difInfo].map(f => `<tr style="${f.info ? 'color:var(--text-tertiary);' : ''}">
-                <td style="${td}">${esc(f.nombre)}</td>
-                <td style="${td}">${esc(f.concepto)}</td>
-                <td style="${td}text-align:right;font-variant-numeric:tabular-nums;">${f.vp}</td>
-                <td style="${td}text-align:right;font-variant-numeric:tabular-nums;">${f.rec}</td>
-              </tr>`).join('')}</tbody>
-            </table>
-          </div>` : ''}
-          <div style="margin-top:14px;font-size:11px;line-height:1.5;color:var(--text-tertiary);">
-            Solo lectura: no se guarda nada. En una semana abierta los días se cuentan hasta hoy, así
-            que compará contra un recálculo hecho hoy. En una semana cerrada las diferencias pueden venir
-            de cambios posteriores (pagos, garantías completadas, asignaciones editadas). Detalle en la consola.
-          </div>
-        </div>`,
-      })
-    } catch (error) {
-      console.error('[Facturación] No se pudo comparar el cálculo:', error)
-      showError('Error', 'No se pudo comparar el cálculo')
-    } finally {
-      setComparandoCalculo(false)
-    }
-  }
-
   // Función pública para recalcular
   function cargarVistaPrevia() {
     // Vista Previa = recálculo simulado + la misma carga que una semana guardada
@@ -2988,9 +2847,14 @@ export function ReporteFacturacionTab() {
     if (!pid) return
 
     let respaldo: ReturnType<typeof setInterval> | null = null
+    // Al salir de la pantalla (o cambiar de período) se cierra el canal, y ese
+    // cierre llega acá como 'CLOSED'. Sin esta marca arrancaba el polling de
+    // respaldo después del desmontaje y nadie lo apagaba: cada visita a
+    // Facturación dejaba una consulta cada 5 s andando hasta recargar la página.
+    let cerrado = false
 
     const aplicarFila = (fila: any) => {
-      if (!fila) return
+      if (cerrado || !fila) return
       const estadoPrevio = periodoEstadoRef.current
       setPeriodo(prev => (prev && prev.id === fila.id ? { ...prev, ...fila } : prev))
       periodoEstadoRef.current = fila.estado
@@ -3015,6 +2879,7 @@ export function ReporteFacturacionTab() {
         (payload: any) => aplicarFila(payload.new)
       )
       .subscribe((status: string) => {
+        if (cerrado) return
         if (status === 'SUBSCRIBED') {
           if (respaldo) { clearInterval(respaldo); respaldo = null }
         } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
@@ -3024,7 +2889,9 @@ export function ReporteFacturacionTab() {
       })
 
     return () => {
-      if (respaldo) clearInterval(respaldo)
+      // Primero la marca: removeChannel avisa 'CLOSED' al callback de arriba.
+      cerrado = true
+      if (respaldo) { clearInterval(respaldo); respaldo = null }
       void supabase.removeChannel(canal)
     }
   }, [periodo?.id])
@@ -10453,7 +10320,17 @@ export function ReporteFacturacionTab() {
       id: 'promos_descuentos',
       header: 'Promos/Desc.',
       accessorFn: (row) => promosDescuentosDe(row).reduce((s, i) => s + i.monto, 0),
-      meta: { filterValue: (row: FacturacionConductor) => (promosDescuentosDe(row).length > 0 ? 'Tiene' : 'N/A') },
+      // Filtro por tipo: cualquier promoción (PRM...) cuenta como Promo. El filtro de la
+      // tabla admite un valor por fila, así que quien tiene los dos va en «Referido + Promo».
+      meta: {
+        filterValue: (row: FacturacionConductor) => {
+          const items = promosDescuentosDe(row)
+          const referido = items.some(i => i.etiqueta.startsWith('Referido'))
+          const promo = items.some(i => !i.etiqueta.startsWith('Referido'))
+          return referido && promo ? 'Referido + Promo' : referido ? 'Referido' : promo ? 'Promo' : 'N/A'
+        },
+        filterOrder: ['N/A', 'Referido', 'Promo', 'Referido + Promo'],
+      },
       cell: ({ row }) => {
         const items = promosDescuentosDe(row.original)
         if (items.length === 0) {
@@ -11300,18 +11177,6 @@ export function ReporteFacturacionTab() {
               Reabrir Período
             </button>
            )}
-          {/* Comparador de cálculo: solo en desarrollo, con un período guardado */}
-          {import.meta.env.DEV && periodo && !modoVistaPrevia && (
-            <button
-              className="fact-btn-primary fact-btn--discrepancias"
-              onClick={compararCalculo}
-              disabled={comparandoCalculo}
-              title="Compara lo guardado con la Vista Previa de la misma semana (solo lectura)"
-            >
-              {comparandoCalculo ? <Loader2 size={14} className="spinning" /> : <GitCompare size={14} />}
-              Comparar cálculo
-            </button>
-          )}
           {/* Botón Discrepancias - siempre visible */}
           <button
             className="fact-btn-primary fact-btn--discrepancias"

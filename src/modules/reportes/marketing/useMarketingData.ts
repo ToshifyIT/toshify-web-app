@@ -19,11 +19,18 @@ export function useMarketingData(desde: string, hasta: string) {
     async function cargar() {
       setIsLoading(true)
       try {
-        const { data: result, error: err } = await supabase.rpc('get_dashboard_marketing', {
+        const consultar = () => supabase.rpc('get_dashboard_marketing', {
           p_sede_id: sedeActualId ?? null,
           p_desde: desde,
           p_hasta: hasta,
         })
+        let { data: result, error: err } = await consultar()
+        // La función tarda 3 a 5 s; con la base cargada puede pasar el límite de 8 s
+        // (57014) o fallar la red. Se reintenta una vez antes de mostrar el error.
+        if (err && err.code !== 'PGRST202' && isMounted) {
+          console.warn('[DashboardMarketing] Reintentando tras error', err.code, err.message)
+          ;({ data: result, error: err } = await consultar())
+        }
         if (!isMounted) return
         if (err) {
           console.error('[DashboardMarketing] Error cargando indicadores', err)

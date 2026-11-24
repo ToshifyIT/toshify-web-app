@@ -7,10 +7,12 @@
 // muestran solo los conductores con auto asignado; las stat-cards actuan de filtro.
 // Cada fila tiene "Ver mis datos" (portal Mi Espacio embebido).
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Eye, Car, AlertTriangle, Clock, Users, Download, Gauge, RefreshCw, Phone, TrendingDown, Wallet, Banknote, MessageCircle, ShieldX } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
+import { useAuth } from '../../../contexts/AuthContext'
+import { GUIAS_ACTIVOS, agenteDelUsuario, claveEmail, homologarGuia } from '../../leads/guias'
 import { formatPlata, formatNumero } from '../../../utils/format'
 import { DataTable } from '../../../components/ui/DataTable'
 import { cabifyService } from '../../../services/cabifyService'
@@ -139,6 +141,17 @@ export function ConductoresPanelModule() {
   // tarjetas (p. ej. Bajo Aprovechamiento solo de los que tienen auto), hasta que
   // se apaga a mano. Las demás tarjetas son de a una.
   const [soloConAuto, setSoloConAuto] = useState(true)
+  // Filtro por capitán. '' = todos. Si quien entra es un capitán (Ali, Carla, Eunice),
+  // arranca con sus conductores y puede elegir «Todos», como en Programación.
+  const { user, profile } = useAuth()
+  const [capitanFiltro, setCapitanFiltro] = useState(() => agenteDelUsuario(user?.email, profile?.full_name))
+  const capitanElegidoAMano = useRef(false)
+  // El perfil puede llegar después del primer render
+  useEffect(() => {
+    if (capitanElegidoAMano.current) return
+    const propio = agenteDelUsuario(user?.email, profile?.full_name)
+    if (propio) setCapitanFiltro(propio)
+  }, [user?.email, profile?.full_name])
   const [activeCard, setActiveCard] = useState<Exclude<CardKey, 'conAuto'> | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [detalle, setDetalle] = useState<{ fila: ConductorPanelRow; tab: 'facturacion' | 'calificacion' } | null>(null)
@@ -274,11 +287,21 @@ export function ConductoresPanelModule() {
   }, [rowsBase])
   const esBcraRojo = (id: string) => grupoBcraConductor(bcra?.get(id)) === 'Rojo'
 
+  // Conductores del capitán elegido (el guía puede estar cargado como «Carla» o «Carla Noguera»)
+  const rowsCapitan = useMemo(() => {
+    if (!capitanFiltro) return rows
+    const clave = claveEmail(capitanFiltro)
+    return rows.filter(c => claveEmail(homologarGuia(c.guia) || '') === clave)
+  }, [rows, capitanFiltro])
+
   // Base de las demás tarjetas: con «Con Auto Asignado» prendido, solo los que tienen auto
-  const base = useMemo(() => (soloConAuto ? rows.filter(c => c.tieneAsignacion) : rows), [rows, soloConAuto])
+  const base = useMemo(
+    () => (soloConAuto ? rowsCapitan.filter(c => c.tieneAsignacion) : rowsCapitan),
+    [rowsCapitan, soloConAuto],
+  )
 
   const stats = useMemo(() => ({
-    conAuto: rows.filter(c => c.tieneAsignacion).length,
+    conAuto: rowsCapitan.filter(c => c.tieneAsignacion).length,
     sinCubrir: base.filter(c => !!sinCubrir?.has(c.id)).length,
     deuda100: base.filter(c => c.saldoPendiente > DEUDA_ALTA).length,
     pendientes: base.filter(c => c.montoPendiente > 0).length,
@@ -286,7 +309,7 @@ export function ConductoresPanelModule() {
     riesgoAlto: base.filter(c => c.tieneAsignacion && riesgos?.get(c.id)?.nivel === 'alto').length,
     bcraRojo: base.filter(c => esBcraRojo(c.id)).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [rows, base, riesgos, sinCubrir, bcra])
+  }), [rowsCapitan, base, riesgos, sinCubrir, bcra])
 
   const filteredRows = useMemo(() => {
     switch (activeCard) {
@@ -1068,7 +1091,20 @@ export function ConductoresPanelModule() {
         onClearAllFilters={() => { setActiveCard(null); setSoloConAuto(true) }}
         onFilteredDataChange={setVisibles}
         headerAction={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+            <select
+              className="cpanel-capitan-select"
+              value={capitanFiltro}
+              onChange={e => {
+                capitanElegidoAMano.current = true
+                setCapitanFiltro(e.target.value)
+              }}
+              aria-label="Filtrar por capitán"
+              title="Capitán del conductor"
+            >
+              <option value="">Todos los capitanes</option>
+              {GUIAS_ACTIVOS.map(g => <option key={g} value={g}>{g.split(' ')[0]}</option>)}
+            </select>
             <button
               className="btn-secondary"
               onClick={handleExportar}

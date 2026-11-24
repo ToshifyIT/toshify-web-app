@@ -132,3 +132,8 @@ export async function cargarDiasDescuentoReferido(
 
   return resultado
 }
+
+/** Línea P004 de la factura que es el descuento del referido (y no un ticket a favor). */
+export function esLineaDescuentoReferido(descripcion: string | null | undefined): boolean {
+  return (descripcion || '').startsWith('Descuento 5% primera semana')
+}

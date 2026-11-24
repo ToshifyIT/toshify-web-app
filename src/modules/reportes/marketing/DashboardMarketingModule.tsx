@@ -38,6 +38,7 @@ import {
 import type { FiltroSegmento, FilaRendimiento, MarketingRaw, Perfil } from './marketingTypes'
 import { useMarketingData } from './useMarketingData'
 import { DescartesDetalleModal } from './DescartesDetalleModal'
+import { ReferidosDetalleModal } from './ReferidosDetalleModal'
 import '../directivo/DashboardDirectivoModule.css'
 import '../DashboardKpisModule.css'
 import './DashboardMarketingModule.css'
@@ -258,8 +259,9 @@ function Kpis({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegmento }) {
   )
 }
 
-/** Referidos por un conductor: van dentro de "Web (orgánico)" y acá se ven aparte. */
+/** Referidos por un conductor: van dentro de "Web / Orgánico" y acá se ven aparte. */
 function Referidos({ d }: { d: MarketingRaw }) {
+  const [verLista, setVerLista] = useState(false)
   const a = embudoDe(d, 'actual', 'Referidos')
   const b = embudoDe(d, 'anterior', 'Referidos')
   const web = embudoDe(d, 'actual', 'Web')
@@ -282,7 +284,7 @@ function Referidos({ d }: { d: MarketingRaw }) {
   return (
     <Card
       title="Referidos"
-      subtitle="Leads recomendados por un conductor embajador. Están incluidos en los números de Web (orgánico)."
+      subtitle="Leads recomendados por un conductor embajador. Están incluidos en los números de Web / Orgánico."
       info="Cuenta los leads con Referido = Sí (con su conductor embajador) o con fuente Referido. El dato se carga en el lead, en el paso Proceso, y es obligatorio para pasarlo a conductor."
     >
       <div className="ddir-mini-grid">
@@ -296,6 +298,12 @@ function Referidos({ d }: { d: MarketingRaw }) {
         ))}
       </div>
       {a.leads === 0 ? <p className="ddir-muted">Ningún lead referido en el período.</p> : null}
+      {a.leads > 0 && d.referidos_detalle ? (
+        <button type="button" className="mkt-ref-ver" onClick={() => setVerLista(true)}>
+          <Eye size={14} /> Ver quiénes son
+        </button>
+      ) : null}
+      {verLista ? <ReferidosDetalleModal filas={d.referidos_detalle ?? []} onClose={() => setVerLista(false)} /> : null}
     </Card>
   )
 }
@@ -626,16 +634,19 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
     ? n.dias_mediana
     : (n.dias_mediana_segmento ?? []).find(m => m.segmento === filtro)?.mediana ?? null
   const v = variacion(a.nuevos, b.nuevos, 'num', true)
-  // Agrupados por anuncio (cada conductor aparece una sola vez); los que no
-  // tienen link del anuncio van juntos al final. Cada grupo se despliega.
+  // Pauta redes: agrupados por anuncio (cada conductor una sola vez). Los orgánicos
+  // (Web, Referidos y otras fuentes) nunca se muestran con link: van agrupados por
+  // su origen. Los grupos sin link van al final. Cada grupo se despliega.
   const gruposAnuncio = (() => {
     const mapa = new Map<string, { clave: string; anuncio: string; canal: string; conductores: NonNullable<typeof n.detalle> }>()
     for (const c of (n.detalle ?? []).filter(x => enSegmento(x.segmento, filtro))) {
-      const clave = c.anuncio || '__sin__'
+      const esPauta = c.segmento === 'Pauta redes'
+      const anuncio = esPauta ? c.anuncio : ''
+      const clave = anuncio || `__sin__${esPauta ? 'pauta' : c.segmento}`
       const g = mapa.get(clave) ?? {
         clave,
-        anuncio: c.anuncio,
-        canal: c.anuncio ? c.canal : c.segmento === 'Pauta redes' ? 'Pauta sin link' : c.segmento,
+        anuncio,
+        canal: anuncio ? c.canal : esPauta ? 'Pauta sin link' : c.segmento,
         conductores: [],
       }
       g.conductores.push(c)
@@ -702,7 +713,9 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
       </div>
       {gruposAnuncio.length > 0 ? (
         <>
-          <span className="ddir-causales-title mkt-nuevos-titulo">De qué anuncio vinieron</span>
+          <span className="ddir-causales-title mkt-nuevos-titulo">
+            {filtro === 'Web' ? 'Quiénes son' : 'De qué anuncio vinieron'}
+          </span>
           <div className="mkt-anuncios-grupos">
             {gruposAnuncio.map(g => (
               <details key={g.clave} className="mkt-anuncio-grupo">
@@ -719,10 +732,10 @@ function NuevosConductores({ d, filtro }: { d: MarketingRaw; filtro: FiltroSegme
                       >
                         {anuncioCorto(g.anuncio)}
                       </a>
-                    ) : (
+                    ) : g.canal === 'Pauta sin link' ? (
                       <span className="ddir-muted">Sin link del anuncio</span>
-                    )}
-                    <span className="ddir-muted">{g.canal}</span>
+                    ) : null}
+                    <span className={g.anuncio || g.canal === 'Pauta sin link' ? 'ddir-muted' : undefined}>{g.canal}</span>
                   </span>
                   <span className="mkt-anuncio-n">
                     {fmtInt(g.conductores.length)} {g.conductores.length === 1 ? 'conductor' : 'conductores'}
