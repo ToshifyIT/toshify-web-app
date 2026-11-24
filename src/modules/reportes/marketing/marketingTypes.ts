@@ -9,7 +9,7 @@ export type Perfil = 'Cumple' | 'Medio' | 'No cumple' | 'Sin datos'
 
 export const FILTROS_SEGMENTO: { id: FiltroSegmento; label: string; info: string }[] = [
   { id: 'Pauta redes', label: 'Pauta redes', info: 'Solo los leads linkeados a un anuncio (traen el link o el canal del anuncio).' },
-  { id: 'Web', label: 'Web (orgánico)', info: 'Leads del formulario del sitio web y los que no traen el link de un anuncio (no se detecta que vengan de la pauta).' },
+  { id: 'Web', label: 'Web (orgánico)', info: 'Leads del formulario del sitio web, los que no traen el link de un anuncio (no se detecta que vengan de la pauta) y los referidos por un conductor (se muestran también aparte).' },
   { id: 'Todos', label: 'Todos', info: 'Todas las fuentes, incluidos referidos y leads sin fuente cargada.' },
 ]
 
@@ -165,8 +165,9 @@ export interface MarketingRaw {
 
 // ───────────── Filtro por segmento ─────────────
 
+/** "Web (orgánico)" incluye a los referidos: no vienen de la pauta. */
 export function enSegmento(segmento: Segmento, filtro: FiltroSegmento): boolean {
-  return filtro === 'Todos' || segmento === filtro
+  return filtro === 'Todos' || segmento === filtro || (filtro === 'Web' && segmento === 'Referidos')
 }
 
 const ETAPAS_VACIAS: EtapasEmbudo = {
@@ -174,9 +175,9 @@ const ETAPAS_VACIAS: EtapasEmbudo = {
   convertidos: 0, con_auto: 0, descartados: 0, calificables: 0, nuevos: 0,
 }
 
-export function embudoDe(d: MarketingRaw, rango: 'actual' | 'anterior', filtro: FiltroSegmento): EtapasEmbudo {
+export function embudoDe(d: MarketingRaw, rango: 'actual' | 'anterior', filtro: FiltroSegmento | 'Referidos'): EtapasEmbudo {
   const out = d.embudo
-    .filter(f => f.rango === rango && enSegmento(f.segmento, filtro))
+    .filter(f => f.rango === rango && (filtro === 'Referidos' ? f.segmento === 'Referidos' : enSegmento(f.segmento, filtro)))
     .reduce<EtapasEmbudo>((acc, f) => {
       const suma = { ...acc }
       for (const k of Object.keys(ETAPAS_VACIAS) as (keyof EtapasEmbudo)[]) suma[k] = acc[k] + (Number(f[k]) || 0)
@@ -288,7 +289,8 @@ export const GLOSARIO: { termino: string; definicion: string }[] = [
   { termino: 'Fuera de rango', definicion: 'Recibieron su primer auto en el período pero entraron como lead antes: no corresponden a la pauta del período filtrado y se muestran aparte.' },
   { termino: 'Conversión', definicion: 'Conductores nuevos ÷ leads del período (los dos sobre los mismos leads).' },
   { termino: 'Perfil del lead', definicion: 'Se mide sobre los leads que llegaron a la propuesta: antes el chatbot no preguntó licencia, monotributo ni experiencia. Cumple: 21+, licencia D1, monotributo y experiencia. Medio: 21+ con parte de los requisitos. No cumple: menor de 21, sin licencia o sin experiencia.' },
-  { termino: 'Pauta redes / Web', definicion: 'Pauta redes: leads con canal o link de anuncio, o que entraron por Sellium / Intercom. Web: formulario del sitio (orgánico), se mide aparte.' },
+  { termino: 'Pauta redes / Web', definicion: 'Pauta redes: leads con el link o el canal de un anuncio. Web (orgánico): formulario del sitio, leads sin link de anuncio y referidos; se mide aparte.' },
+  { termino: 'Referidos', definicion: 'Leads que llegaron recomendados por un conductor (Referido = Sí, con su embajador, o fuente "Referido"). Cuentan dentro de Web (orgánico) y se muestran aparte.' },
   { termino: 'Sin canal identificado', definicion: 'Lead de pauta sin el link del anuncio, así que no se sabe si vino de Facebook o Instagram. El link llega en la carga masiva de Sellium.' },
 ]
 
