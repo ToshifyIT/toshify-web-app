@@ -1775,6 +1775,11 @@ function describeCron(cron: string): string {
     }
     return `Todos los días ${hhmm(hour, min)}`;
   }
+  // Varias horas por día ("0 9,12,15 * * *"): "Todos los días 09:00, 12:00 y 15:00"
+  if (/^\d+$/.test(min) && /^\d+(,\d+)+$/.test(hour) && dow === '*') {
+    const horas = hour.split(',').map(h => hhmm(h, min));
+    return `Todos los días ${horas.slice(0, -1).join(', ')} y ${horas[horas.length - 1]}`;
+  }
   return cron;
 }
 
