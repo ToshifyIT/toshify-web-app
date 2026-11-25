@@ -148,6 +148,8 @@ export interface Lead {
   estado_manual_at?: string | null
   fase_de_preguntas?: string | null
   causal_de_cierre?: string | null
+  // Categoría al descartar (lista fija en modules/leads/motivoDescarte.ts)
+  motivo_descarte?: string | null
   motivo_desinteres?: string | null
 
   // Asignaciones
@@ -272,6 +274,7 @@ export interface LeadFormData {
   induccion?: string
   disponibilidad?: string
   estado_de_lead?: string
+  motivo_descarte?: string
   direccion?: string
   direccion_complementaria?: string
   zona?: string

@@ -10,7 +10,7 @@ import type { LeadFormData } from '../../../types/leads.types'
 import { normalizarCelularAR, validarCelularAR } from '../../../utils/validacionesCampos'
 import { LABELS_CUENTA_APP } from '../cuentasApps'
 import { useAuth } from '../../../contexts/AuthContext'
-import { ESTADO_DESCARTADO, pedirMotivoDescarte } from '../motivoDescarte'
+import { ESTADO_DESCARTADO, pedirMotivoDescarte, textoDescarte } from '../motivoDescarte'
 import { estadoMonotributo, faltantesMonotributo } from '../monotributo'
 import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, estadoLicencia, faltantesLicencia } from '../licenciaLead'
 import { AlertasLicencia } from './AlertasLicencia'
@@ -879,13 +879,13 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                     const v = e.target.value
                     // Descartado: motivo obligatorio; si se cancela, el estado no cambia
                     if (v === ESTADO_DESCARTADO && formData.estado_de_lead !== ESTADO_DESCARTADO) {
-                      const motivo = await pedirMotivoDescarte(formData.nombre_completo)
-                      if (!motivo) return
+                      const descarte = await pedirMotivoDescarte(formData.nombre_completo)
+                      if (!descarte) return
                       setFormData(prev => ({
                         ...prev,
                         estado_de_lead: v,
-                        causal_de_cierre: motivo,
-                        observaciones: agregarNota(prev.observaciones || '', `Descartado: ${motivo}`, profile?.full_name),
+                        motivo_descarte: descarte.motivo,
+                        observaciones: agregarNota(prev.observaciones || '', textoDescarte(descarte), profile?.full_name),
                       }))
                       return
                     }

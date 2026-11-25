@@ -15,7 +15,7 @@ import {
   Eye, Edit2, Trash2, Users, UserPlus, Link2,
   AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
   Handshake, CalendarCheck, MessageCircle, Truck,
-  MapPin, CreditCard, Calculator, ShieldCheck,
+  MapPin, CreditCard, Calculator, ShieldCheck, FileClock, FileCheck,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -489,7 +489,7 @@ const COLUMNAS_LISTA = [
   'direccion_geocode_estado', 'direccion_geocode_fecha',
   'licencia', 'categoria_licencia', 'categoria_licencia_otra', 'turno', 'cuenta_cabify', 'cuenta_didi', 'cochera', 'experiencia_previa', 'experiencia_manejo',
   'disponibilidad', 'proceso', 'entrevista_ia', 'estado_de_lead', 'estado_manual_at', 'fase_de_preguntas',
-  'causal_de_cierre', 'entrevistador_asignado', 'observaciones', 'referido', 'embajador_id', 'ayuda_entrevista',
+  'causal_de_cierre', 'motivo_descarte', 'entrevistador_asignado', 'observaciones', 'referido', 'embajador_id', 'ayuda_entrevista',
   'url_folder', 'fuente_de_lead', 'companero', 'patente',
   // tipo: lo usa calcularEstadoLead ('auto' → Auto del pueblo, 'flota' → Gestión flota)
   'tipo',
@@ -748,6 +748,13 @@ function displayEstadoLead(estado: string | undefined | null): string {
   return estado || '-'
 }
 
+// Motivo de descarte a mostrar: solo si el lead está descartado (si volvió a otro
+// estado, el motivo viejo queda guardado pero no se muestra).
+function motivoDescarteVisible(l: Lead): string {
+  if (l.estado_de_lead !== 'Descartado' && l.estado_de_lead !== 'No cumple edad') return ''
+  return l.motivo_descarte || ''
+}
+
 // =====================================================
 // LEADS MODULE
 // =====================================================
@@ -785,6 +792,8 @@ const GRUPO_TARJETA: Record<string, 'estado' | 'zona' | 'fuente' | 'vista'> = {
   convocatoria: 'estado',
   autoPueblo: 'estado',
   gestionFlota: 'estado',
+  docsEnCurso: 'estado',
+  docsCompletados: 'estado',
   zonaSegura: 'zona',
   zonaRestringida: 'zona',
   intercom: 'fuente',
@@ -1022,11 +1031,11 @@ export function LeadsModule() {
     let extra: Partial<Lead> = {}
     if (nuevoEstado === ESTADO_DESCARTADO) {
       const lead = leads.find(l => l.id === leadId)
-      const motivo = await pedirMotivoDescarte(lead?.nombre_completo)
-      if (!motivo) return
-      const linea = lineaDescarte(motivo, profile?.full_name)
+      const descarte = await pedirMotivoDescarte(lead?.nombre_completo)
+      if (!descarte) return
+      const linea = lineaDescarte(descarte, profile?.full_name)
       const previas = (lead?.observaciones || '').trim()
-      extra = { causal_de_cierre: motivo, observaciones: previas ? `${previas}\n${linea}` : linea }
+      extra = { motivo_descarte: descarte.motivo, observaciones: previas ? `${previas}\n${linea}` : linea }
     }
     try {
       const now = new Date().toISOString()
@@ -1877,6 +1886,9 @@ export function LeadsModule() {
       case 'damaro': return (l.fuente_de_lead || '').toLowerCase() === 'damaro'
       case 'autoPueblo': return l.estado_de_lead === 'Auto del pueblo'
       case 'gestionFlota': return l.estado_de_lead === ESTADO_GESTION_FLOTA
+      // Envío de documentos: en curso (faltan) y completados (ya los mandó)
+      case 'docsEnCurso': return l.estado_de_lead === 'Documentos pendientes'
+      case 'docsCompletados': return l.estado_de_lead === 'Documentos enviados'
       case 'recontacto': return tieneAlertaRecontacto(l.observaciones)
       case 'exConductor': return leadsConductorPrevio.has(l.id)
       // Solo las parejas cerca (violeta, hasta 25 min). Las grises (más lejos) se ven en
@@ -2006,6 +2018,8 @@ export function LeadsModule() {
       damaro: contar('damaro'),
       autoPueblo: contar('autoPueblo'),
       gestionFlota: contar('gestionFlota'),
+      docsEnCurso: contar('docsEnCurso'),
+      docsCompletados: contar('docsCompletados'),
       descartados: contar('descartados'),
       recontacto: contar('recontacto'),
       exConductor: contar('exConductor'),
@@ -2037,6 +2051,8 @@ export function LeadsModule() {
     autoPueblo: stats.autoPueblo,
     gestionFlota: stats.gestionFlota,
     recontacto: stats.recontacto,
+    docsEnCurso: stats.docsEnCurso,
+    docsCompletados: stats.docsCompletados,
   }, !loading && leads.length > 0 && vistaPorDefecto)
   const fotoAnterior = vistaPorDefecto ? fotoAnteriorLeads : null
 
@@ -2502,6 +2518,7 @@ export function LeadsModule() {
           'Estado de Lead': l.estado_de_lead ? displayEstadoLead(l.estado_de_lead) : '',
           'Motivo Desinterés': l.estado_de_lead === 'No le interesa' ? clasificarMotivoDesinteres(l.causal_de_cierre) : '',
           'Detalle Motivo Desinterés': l.motivo_desinteres || '',
+          'Motivo Descarte': motivoDescarteVisible(l),
           'Causal de Cierre': l.causal_de_cierre || '',
           'Capitán': l.entrevistador_asignado || '',
           'Detalle Hireflix': l.resumen_hireflix || '',
@@ -3510,6 +3527,21 @@ export function LeadsModule() {
       size: 130,
       enableSorting: true,
     },
+    {
+      // Categoría elegida al descartar (lista fija). El detalle está en Observaciones.
+      // Solo se muestra en las vistas Descartados / Todos (ver más abajo).
+      id: 'motivo_descarte',
+      accessorFn: (row) => motivoDescarteVisible(row) || '-',
+      header: 'Motivo descarte',
+      cell: ({ row }) => {
+        const v = motivoDescarteVisible(row.original)
+        return v
+          ? <span style={{ fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap' }} title={v}>{v}</span>
+          : '-'
+      },
+      size: 170,
+      enableSorting: true,
+    },
     /* Columnas Proceso y Entrevista IA ocultas */
     /* Columna Disponibilidad oculta */
     {
@@ -3942,8 +3974,9 @@ export function LeadsModule() {
     },
     ]
 
-
-    return leadColumns.map(column => ({
+    // "Motivo descarte" solo tiene dato en los descartados: se ve en esas vistas.
+    const conMotivo = activeStatCards.includes('descartados') || activeStatCards.includes('todos')
+    return leadColumns.filter(c => conMotivo || c.id !== 'motivo_descarte').map(column => ({
       ...column,
       meta: {
         ...(column.meta as Record<string, unknown> | undefined),
@@ -3951,7 +3984,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, categoriaLicFilter, bcraFilter, opcionesBcra, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, categoriaLicFilter, bcraFilter, opcionesBcra, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, uniqueGuias, embajadorPorId, leadsConductorPrevio, verConductorPrevio, parejaPorLead, programaciones, activeStatCards])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
@@ -4013,6 +4046,8 @@ export function LeadsModule() {
         zonaRestringida: 'Zona Restringida',
         autoPueblo: 'Auto del pueblo',
         gestionFlota: 'Gestión flota',
+        docsEnCurso: 'Documentos en curso',
+        docsCompletados: 'Documentos completados',
         exConductor: 'Ya fue conductor',
         conPareja: 'Con pareja cerca (≤ 25 min)',
         conLicencia: 'Con licencia',
@@ -4038,7 +4073,7 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <StatsGrid className="leads-stats-grid" storageKey="LeadsModule" max={9}>
+        <StatsGrid className="leads-stats-grid" storageKey="LeadsModule" max={9} maxFilas={3}>
           <div
             className={`stat-card stat-card-clickable ${esActiva('contactadoSellium') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('contactadoSellium')}
@@ -4071,6 +4106,30 @@ export function LeadsModule() {
               <span className="stat-value">{stats.bcraVerde}</span>
               <span className="stat-label">BCRA al día</span>
             </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${esActiva('docsEnCurso') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('docsEnCurso')}
+            title="Leads con el envío de documentos en curso (estado Documentos pendientes)"
+          >
+            <FileClock size={18} className="stat-icon" style={{ color: '#d97706' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.docsEnCurso}</span>
+              <span className="stat-label">Docs. en curso</span>
+            </div>
+            <ComparacionSemana actual={stats.docsEnCurso} anterior={fotoAnterior?.docsEnCurso} />
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${esActiva('docsCompletados') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('docsCompletados')}
+            title="Leads que ya mandaron todos los documentos (estado Documentos enviados)"
+          >
+            <FileCheck size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.docsCompletados}</span>
+              <span className="stat-label">Docs. completados</span>
+            </div>
+            <ComparacionSemana actual={stats.docsCompletados} anterior={fotoAnterior?.docsCompletados} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${esActiva('listoEmparejar') ? 'stat-card-active' : ''}`}

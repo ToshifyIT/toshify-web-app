@@ -251,6 +251,7 @@ const ConductorDetallePage = lazy(() => import('./conductores/ConductorDetallePa
 const LeadsPage = lazy(() => import('./leads/LeadsPage').then(m => ({ default: m.LeadsPage })))
 const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
 const ConsumoHerramientasPage = lazy(() => import('./administracion/ConsumoHerramientasPage').then(m => ({ default: m.ConsumoHerramientasPage })))
+const CresiumConductoresPage = lazy(() => import('./administracion/CresiumConductoresPage').then(m => ({ default: m.CresiumConductoresPage })))
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
 const ProgramacionV2Page = lazy(() => import('./onboarding/ProgramacionV2Page'))
 const DistribucionMapaV2Page = lazy(() => import('./onboarding/DistribucionMapaV2Page'))
@@ -2306,6 +2307,12 @@ export function HomePage() {
                   <LazyPage>
                     <FacturacionPage />
                   </LazyPage>
+                </ProtectedRoute>
+              } />
+              {/* Cresium conductores: movimientos de Cresium cruzados con conductores (sql/cresium_conductores_menu.sql) */}
+              <Route path="/administracion/cresium-conductores" element={
+                <ProtectedRoute submenuName="cresium-conductores" action="view">
+                  <LazyPage><CresiumConductoresPage /></LazyPage>
                 </ProtectedRoute>
               } />
               {/* Consumo herramientas: suscripciones pagas de IT (sql/consumo_herramientas.sql) */}
