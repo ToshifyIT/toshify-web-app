@@ -15,7 +15,7 @@ import {
   Eye, Edit2, Trash2, Users, UserPlus, Link2,
   AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, IdCard, UserCheck,
   Handshake, CalendarCheck, MessageCircle, Truck,
-  MapPin, CreditCard, Calculator, ShieldCheck,
+  MapPin, CreditCard, Calculator, ShieldCheck, FileClock, FileCheck,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -792,6 +792,8 @@ const GRUPO_TARJETA: Record<string, 'estado' | 'zona' | 'fuente' | 'vista'> = {
   convocatoria: 'estado',
   autoPueblo: 'estado',
   gestionFlota: 'estado',
+  docsEnCurso: 'estado',
+  docsCompletados: 'estado',
   zonaSegura: 'zona',
   zonaRestringida: 'zona',
   intercom: 'fuente',
@@ -1884,6 +1886,9 @@ export function LeadsModule() {
       case 'damaro': return (l.fuente_de_lead || '').toLowerCase() === 'damaro'
       case 'autoPueblo': return l.estado_de_lead === 'Auto del pueblo'
       case 'gestionFlota': return l.estado_de_lead === ESTADO_GESTION_FLOTA
+      // Envío de documentos: en curso (faltan) y completados (ya los mandó)
+      case 'docsEnCurso': return l.estado_de_lead === 'Documentos pendientes'
+      case 'docsCompletados': return l.estado_de_lead === 'Documentos enviados'
       case 'recontacto': return tieneAlertaRecontacto(l.observaciones)
       case 'exConductor': return leadsConductorPrevio.has(l.id)
       // Solo las parejas cerca (violeta, hasta 25 min). Las grises (más lejos) se ven en
@@ -2013,6 +2018,8 @@ export function LeadsModule() {
       damaro: contar('damaro'),
       autoPueblo: contar('autoPueblo'),
       gestionFlota: contar('gestionFlota'),
+      docsEnCurso: contar('docsEnCurso'),
+      docsCompletados: contar('docsCompletados'),
       descartados: contar('descartados'),
       recontacto: contar('recontacto'),
       exConductor: contar('exConductor'),
@@ -2044,6 +2051,8 @@ export function LeadsModule() {
     autoPueblo: stats.autoPueblo,
     gestionFlota: stats.gestionFlota,
     recontacto: stats.recontacto,
+    docsEnCurso: stats.docsEnCurso,
+    docsCompletados: stats.docsCompletados,
   }, !loading && leads.length > 0 && vistaPorDefecto)
   const fotoAnterior = vistaPorDefecto ? fotoAnteriorLeads : null
 
@@ -4037,6 +4046,8 @@ export function LeadsModule() {
         zonaRestringida: 'Zona Restringida',
         autoPueblo: 'Auto del pueblo',
         gestionFlota: 'Gestión flota',
+        docsEnCurso: 'Documentos en curso',
+        docsCompletados: 'Documentos completados',
         exConductor: 'Ya fue conductor',
         conPareja: 'Con pareja cerca (≤ 25 min)',
         conLicencia: 'Con licencia',
@@ -4062,7 +4073,7 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <StatsGrid className="leads-stats-grid" storageKey="LeadsModule" max={9}>
+        <StatsGrid className="leads-stats-grid" storageKey="LeadsModule" max={9} maxFilas={3}>
           <div
             className={`stat-card stat-card-clickable ${esActiva('contactadoSellium') ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('contactadoSellium')}
@@ -4095,6 +4106,30 @@ export function LeadsModule() {
               <span className="stat-value">{stats.bcraVerde}</span>
               <span className="stat-label">BCRA al día</span>
             </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${esActiva('docsEnCurso') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('docsEnCurso')}
+            title="Leads con el envío de documentos en curso (estado Documentos pendientes)"
+          >
+            <FileClock size={18} className="stat-icon" style={{ color: '#d97706' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.docsEnCurso}</span>
+              <span className="stat-label">Docs. en curso</span>
+            </div>
+            <ComparacionSemana actual={stats.docsEnCurso} anterior={fotoAnterior?.docsEnCurso} />
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${esActiva('docsCompletados') ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('docsCompletados')}
+            title="Leads que ya mandaron todos los documentos (estado Documentos enviados)"
+          >
+            <FileCheck size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.docsCompletados}</span>
+              <span className="stat-label">Docs. completados</span>
+            </div>
+            <ComparacionSemana actual={stats.docsCompletados} anterior={fotoAnterior?.docsCompletados} />
           </div>
           <div
             className={`stat-card stat-card-clickable ${esActiva('listoEmparejar') ? 'stat-card-active' : ''}`}
