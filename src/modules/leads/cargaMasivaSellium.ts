@@ -52,6 +52,7 @@
 import { inferirSedeDeLead, normalizarTexto, type SedeRef } from '../../utils/sedeMatch'
 import { homologarGuia } from './guias'
 import { estadoLicencia } from './licenciaLead'
+import { ESTADO_DESCARTADO, motivoDesdeCausalSellium } from './motivoDescarte'
 
 /** Valor de fuente_de_lead para los leads creados Y actualizados por esta carga. */
 export const FUENTE_SELLIUM = 'SELLIUM'
@@ -675,6 +676,7 @@ function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unkno
   }
   if (f.estado.estado) p.estado_de_lead = f.estado.estado
   if (f.causal) p.observaciones = lineaCausal(f.causal)
+  if (f.causal && p.estado_de_lead === ESTADO_DESCARTADO) p.motivo_descarte = motivoDesdeCausalSellium(f.causal)
   if (f.casillas.acepta_oferta) p.acepta_oferta = true
   // Casilla "Licencia D1": tiene licencia y su categoría es D1 (ver licenciaLead.ts).
   // Sin la casilla no se deduce nada: puede tener B1 o no tener licencia.
@@ -755,6 +757,8 @@ function payloadActualizacion(
     if (estadoProtegido(l.estado_de_lead) || retrocedeDeDocumentos(l.estado_de_lead, nuevo)) estadoBloqueado = true
     else p.estado_de_lead = nuevo
   }
+  // Pasa a Descartado por la causal de Sellium: se guarda también la categoría.
+  if (f.causal && p.estado_de_lead === ESTADO_DESCARTADO) p.motivo_descarte = motivoDesdeCausalSellium(f.causal)
 
   if (esRecontacto) {
     // Se AGREGA a las observaciones que ya tenga (no se pisan), con la causal si viene.
