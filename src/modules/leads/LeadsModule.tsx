@@ -2229,6 +2229,11 @@ export function LeadsModule() {
         }
       }
       const recalcular = aplicarReglaUbicacion(fields, selectedLead)
+      // Estado cambiado a mano desde el formulario: igual que el selector de la lista, se marca
+      // estado_manual_at para que ni el cálculo automático ni el bot de documentos lo pisen.
+      if ('estado_de_lead' in fields && (fields.estado_de_lead || null) !== (selectedLead.estado_de_lead || null)) {
+        fields.estado_manual_at = new Date().toISOString()
+      }
       const { error: err } = await supabase.from('leads').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', selectedLead.id)
       if (err) throw err
       showSuccess('Lead actualizado', 'Los cambios se guardaron correctamente')
@@ -2363,6 +2368,7 @@ export function LeadsModule() {
           ? `El conductor fue reactivado (ACTIVO) y el lead "${nombre}" quedó como Reingreso.`
           : `El lead "${nombre}" ya era un conductor activo: se completaron sus datos.`
       showSuccess(!esFusion ? 'Convertido' : res.reactivado ? 'Reingreso' : 'Ya era conductor', msgExito)
+      if (res.avisoCarpeta) showWarning('Documentos de Drive', res.avisoCarpeta)
       loadLeads()
     } catch (err) {
       if (esFusion) Alerta.close()
@@ -2416,7 +2422,7 @@ export function LeadsModule() {
     if (!r.isConfirmed) return
     setSaving(true)
     try {
-      await convertirLeadAConductor({
+      const res = await convertirLeadAConductor({
         lead,
         catalogos: { estadosLicencia, tiposLicencia, nacionalidades, estadosCiviles, categoriasLicencia },
         usuario: profile?.full_name || 'Sistema',
@@ -2424,6 +2430,7 @@ export function LeadsModule() {
         conductorExistente: c,
       })
       showSuccess('Conductor reactivado', `${lead.nombre_completo || 'El lead'} quedó como Reingreso`)
+      if (res.avisoCarpeta) showWarning('Documentos de Drive', res.avisoCarpeta)
       loadLeads()
     } catch (err) {
       showError('Error', err instanceof Error ? err.message : 'No se pudo reactivar')

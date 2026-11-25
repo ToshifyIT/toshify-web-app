@@ -219,9 +219,37 @@ export interface Lead {
   resumen_hireflix?: string | null
   id_hireflix?: string | null
 
+  // Verificación de documentos (la escribe el bot de documentos del servidor)
+  verificacion_documentos?: VerificacionDocumentos | null
+
   // Sistema
   created_at: string
   updated_at?: string | null
+}
+
+/** Un documento revisado en la carpeta de Drive del lead. */
+export interface DocumentoVerificado {
+  encontrado: boolean
+  observaciones: string[]
+}
+
+/**
+ * leads.verificacion_documentos: resultado del bot de documentos (scripts/leads-documentos),
+ * que lee la carpeta de Sellium Docs del lead. La reemplaza en cada revisión con novedades.
+ */
+export interface VerificacionDocumentos {
+  actualizado: string
+  carpeta?: string | null
+  documentos: {
+    dni: DocumentoVerificado
+    licencia: DocumentoVerificado
+    antecedentes: DocumentoVerificado
+    certificado: DocumentoVerificado
+  }
+  /** Lo que no es de un documento en particular (archivos que no son ninguno de los 4, etc.) */
+  generales?: string[]
+  /** Último cambio de estado que hizo el bot (no lo hace si el estado se cambió a mano). */
+  estado_auto?: { de: string | null; a: string; fecha: string } | null
 }
 
 // Formulario (mismas keys que Lead para evitar mapeos, salvo nombre_completo requerido)

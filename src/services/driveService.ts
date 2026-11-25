@@ -120,6 +120,69 @@ export async function createLeadDriveFolder(
   }
 }
 
+/** La copia recorre todos los archivos de la carpeta: necesita más que el tope general. */
+const TIMEOUT_COPIA_MS = 120000
+
+interface CopiaDocumentosResponse extends CreateFolderResponse {
+  /** true = la carpeta del lead no es de Sellium Docs: no se copió nada. */
+  omitido?: boolean
+  copiados?: number
+  omitidos?: number
+}
+
+/**
+ * Copia los documentos de la carpeta de Sellium Docs del lead a la carpeta del conductor
+ * (la de siempre por NOMBRE COMPLETO, o destinoUrl si el conductor ya tenía una).
+ * La carpeta de Sellium queda intacta.
+ */
+export async function copiarDocumentosLeadAConductor(
+  leadNombre: string,
+  origenUrl: string,
+  destinoUrl?: string | null
+): Promise<CopiaDocumentosResponse> {
+  try {
+    let signal: AbortSignal | undefined
+    try {
+      signal = AbortSignal.timeout(TIMEOUT_COPIA_MS)
+    } catch {
+      signal = undefined
+    }
+    const response = await fetch('/api/copiar-documentos-lead-conductor', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ leadNombre, origenUrl, destinoUrl: destinoUrl || undefined }),
+      signal
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error || 'Error al copiar los documentos del lead'
+      }
+    }
+
+    return {
+      success: !!data.success,
+      omitido: !!data.omitido,
+      folderId: data.folderId,
+      folderUrl: data.folderUrl,
+      folderName: data.folderName,
+      copiados: data.copiados,
+      omitidos: data.omitidos,
+      error: data.error
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Error desconocido al copiar los documentos del lead'
+    }
+  }
+}
+
 /**
  * Abre la carpeta de Drive del conductor en una nueva pestaña
  * @param folderUrl - URL de la carpeta en Drive

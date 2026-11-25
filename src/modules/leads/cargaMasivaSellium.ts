@@ -73,6 +73,22 @@ function estadoProtegido(estado: unknown): boolean {
   return ESTADOS_PROTEGIDOS.some(x => normalizarTexto(x) === e)
 }
 
+/**
+ * Estados anteriores a los documentos (2026-11-24). El bot de documentos del servidor
+ * (scripts/leads-documentos) pasa a "Documentos pendientes" a los leads que ya subieron
+ * documentos: Sellium no los devuelve a uno de estos (si no, se pisarían en cada carga).
+ * Sí los puede llevar a Documentos enviados, Descartado, Auto del pueblo, etc.
+ */
+export const ESTADOS_PREVIOS_A_DOCUMENTOS = [
+  'Inicio conversación', 'Contactado Sellium', 'Edad aprobada', 'Zona aprobada', 'Propuesta enviada',
+  'Acepta oferta', 'Video recibido', 'Pendiente - Hireflix', 'Ayuda - Hireflix', 'Apto - Hireflix',
+] as const
+
+function retrocedeDeDocumentos(actual: unknown, nuevo: string): boolean {
+  if (normalizarTexto(String(actual ?? '')) !== normalizarTexto('Documentos pendientes')) return false
+  return ESTADOS_PREVIOS_A_DOCUMENTOS.some(x => normalizarTexto(x) === normalizarTexto(nuevo))
+}
+
 // ───────────────────────── Lectura del archivo ─────────────────────────
 
 /**
@@ -736,7 +752,7 @@ function payloadActualizacion(
   let estadoBloqueado = false
   const nuevo = f.estado.estado
   if (nuevo && l.estado_de_lead !== nuevo) {
-    if (estadoProtegido(l.estado_de_lead)) estadoBloqueado = true
+    if (estadoProtegido(l.estado_de_lead) || retrocedeDeDocumentos(l.estado_de_lead, nuevo)) estadoBloqueado = true
     else p.estado_de_lead = nuevo
   }
 

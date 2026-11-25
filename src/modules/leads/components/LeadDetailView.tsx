@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
-import type { Lead } from '../../../types/leads.types'
+import type { Lead, VerificacionDocumentos } from '../../../types/leads.types'
 import { TabsBar, type TabsBarItem } from '../../../components/ui/TabsBar'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 import { useConductoresEmbajador } from '../../../hooks/useConductoresEmbajador'
@@ -122,16 +122,91 @@ function displayEstadoLead(estado: string | undefined | null): string {
   return estado || '-'
 }
 
-type PestanaFicha = 'personal' | 'contacto' | 'documentos' | 'operativo' | 'proceso'
+type PestanaFicha = 'personal' | 'contacto' | 'documentos' | 'verificacion' | 'operativo' | 'proceso'
 
-/** Mismas partes y orden que el formulario de carga (LeadWizard). */
+/** Mismas partes y orden que el formulario de carga (LeadWizard), más la verificación del bot. */
 const PESTANAS_FICHA: TabsBarItem<PestanaFicha>[] = [
   { id: 'personal', label: 'Personal' },
   { id: 'contacto', label: 'Contacto' },
   { id: 'documentos', label: 'Documentos' },
+  { id: 'verificacion', label: 'Verificación documentos' },
   { id: 'operativo', label: 'Operativo' },
   { id: 'proceso', label: 'Proceso' },
 ]
+
+const DOCUMENTOS_VERIFICADOS: { clave: keyof VerificacionDocumentos['documentos']; label: string }[] = [
+  { clave: 'dni', label: 'DNI' },
+  { clave: 'licencia', label: 'Licencia de conducir' },
+  { clave: 'antecedentes', label: 'Antecedentes penales' },
+  { clave: 'certificado', label: 'Certificado de domicilio' },
+]
+
+/** Observaciones una debajo de la otra, con guion. */
+function ListaObservaciones({ items }: { items: string[] }) {
+  if (!items.length) return null
+  return (
+    <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none', fontSize: '12px', color: 'var(--text-secondary)' }}>
+      {items.map((o, i) => <li key={i} style={{ marginTop: '2px' }}>- {o}</li>)}
+    </ul>
+  )
+}
+
+/** Pestaña "Verificación documentos": qué encontró el bot en la carpeta de Drive del lead. */
+function VerificacionDocumentosVista({ verificacion }: { verificacion: VerificacionDocumentos | null | undefined }) {
+  if (!verificacion?.documentos) {
+    return (
+      <Tarjeta titulo="Verificación documentos">
+        <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+          Todavía no se revisaron los documentos de este lead (el bot revisa la carpeta de Sellium Docs cada 30 minutos).
+        </div>
+      </Tarjeta>
+    )
+  }
+  return (
+    <>
+      <Tarjeta titulo="Documentos en la carpeta">
+        {DOCUMENTOS_VERIFICADOS.map(({ clave, label }) => {
+          const doc = verificacion.documentos[clave]
+          return (
+            <div key={clave} className="lead-detail-item lead-detail-item--largo">
+              <span className="lead-detail-item-label">{label}</span>
+              <span className="lead-detail-item-value">
+                <span style={{ fontWeight: 600, color: doc?.encontrado ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                  {doc?.encontrado ? 'Sí' : 'No'}
+                </span>
+                <ListaObservaciones items={doc?.observaciones || []} />
+              </span>
+            </div>
+          )
+        })}
+      </Tarjeta>
+      <Tarjeta titulo="Revisión">
+        <Item label="Última revisión" valor={formatFechaHora(verificacion.actualizado, { segundos: false })} />
+        {verificacion.estado_auto ? (
+          <Item
+            label="Estado (automático)"
+            valor={`${verificacion.estado_auto.de || 'Sin estado'} → ${verificacion.estado_auto.a} · ${formatFechaHora(verificacion.estado_auto.fecha, { segundos: false })}`}
+            largo
+          />
+        ) : null}
+        <Item
+          label="Carpeta"
+          valor={verificacion.carpeta ? (
+            <a href={verificacion.carpeta} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)' }}>
+              Abrir en Drive <ExternalLink size={11} style={{ verticalAlign: 'middle' }} />
+            </a>
+          ) : null}
+        />
+        {verificacion.generales?.length ? (
+          <div className="lead-detail-item lead-detail-item--largo">
+            <span className="lead-detail-item-label">Otras observaciones</span>
+            <span className="lead-detail-item-value"><ListaObservaciones items={verificacion.generales} /></span>
+          </div>
+        ) : null}
+      </Tarjeta>
+    </>
+  )
+}
 
 const siNo = (v: boolean | null | undefined) => (v === true ? 'Sí' : v === false ? 'No' : null)
 
@@ -569,6 +644,8 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             </Tarjeta>
           </>
         )}
+
+        {pestana === 'verificacion' && <VerificacionDocumentosVista verificacion={lead.verificacion_documentos} />}
 
         {pestana === 'operativo' && (
           <Tarjeta titulo="Datos operativos">
