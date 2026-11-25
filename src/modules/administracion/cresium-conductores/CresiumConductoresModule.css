@@ -1,0 +1,195 @@
+/* Administración > Cresium conductores (mismo lenguaje visual que Contabilidad > Cresium) */
+
+.crc-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.crc-stats {
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+}
+
+.crc-stats .stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.crc-stats .stat-card {
+  min-width: 0;
+}
+
+.crc-stats .stat-value,
+.crc-stats .stat-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crc-stats .stat-card.active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.crc-filtros {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.crc-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.crc-campo .form-input {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+  min-width: 150px;
+}
+
+.crc-cbu {
+  margin-left: auto;
+}
+
+.crc-cbu-fila {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crc-cbu-fila .form-input {
+  width: 240px;
+  font-variant-numeric: tabular-nums;
+}
+
+.crc-filtros .btn-primary,
+.crc-filtros .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  white-space: nowrap;
+}
+
+/* Celdas */
+.crc-celda {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.crc-nombre {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.crc-muted {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.crc-mono {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+.crc-importe {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Acción dentro de una celda: texto con color, sin fondo */
+.crc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.crc-link:hover {
+  text-decoration: underline;
+}
+
+.crc-acciones-celda {
+  display: inline-flex;
+  gap: 12px;
+}
+
+/* Modal de asignación */
+.crc-modal {
+  max-width: 480px;
+}
+
+.crc-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.crc-modal-pago {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.crc-modal-body .crc-campo .form-input {
+  width: 100%;
+}
+
+.crc-modal-nota {
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Solo el importe va en color */
+.crc-entrada { color: #15803d; }
+
+[data-theme="dark"] .crc-entrada { color: #4ade80; }
+
+@media (max-width: 768px) {
+  .crc-stats .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .crc-filtros .crc-campo {
+    width: 100%;
+  }
+
+  .crc-campo select.form-input {
+    width: 100%;
+  }
+
+  .crc-cbu {
+    margin-left: 0;
+  }
+
+  .crc-cbu-fila .form-input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+}
