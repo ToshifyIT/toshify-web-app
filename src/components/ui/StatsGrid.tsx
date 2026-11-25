@@ -16,6 +16,8 @@ interface StatsGridProps {
   className?: string
   /** Se mantienen por compatibilidad; ya no se ocultan tarjetas. */
   max?: number
+  /** Máximo de filas: si hace falta, se agregan columnas (tarjetas más angostas) para no pasarse. */
+  maxFilas?: number
   storageKey?: string
   children: ReactNode
 }
@@ -39,7 +41,7 @@ function medirEnUnaFila<T>(el: HTMLDivElement, medir: () => T): T {
 }
 
 /** Columnas iguales para `n` tarjetas, o null si entran todas en una línea. */
-function columnasParejas(el: HTMLDivElement): number | null {
+function columnasParejas(el: HTMLDivElement, maxFilas?: number): number | null {
   const tarjetas = Array.from(el.children) as HTMLElement[]
   const n = tarjetas.length
   if (n === 0) return null
@@ -53,11 +55,12 @@ function columnasParejas(el: HTMLDivElement): number | null {
     const total = anchos.reduce((s, w) => s + w, 0) + GAP_PX * (n - 1)
     if (total <= disponible) return null
   }
-  const filas = Math.ceil(n / Math.min(entran, n))
+  let filas = Math.ceil(n / Math.min(entran, n))
+  if (maxFilas && filas > maxFilas) filas = maxFilas
   return Math.ceil(n / filas)
 }
 
-export function StatsGrid({ className = '', children }: StatsGridProps) {
+export function StatsGrid({ className = '', maxFilas, children }: StatsGridProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
@@ -65,7 +68,7 @@ export function StatsGrid({ className = '', children }: StatsGridProps) {
     if (!el) return
     const ajustar = () => {
       // Una línea (flex) o varias con columnas iguales (grid)
-      const cols = columnasParejas(el)
+      const cols = columnasParejas(el, maxFilas)
       if (cols) {
         el.classList.add('stats-grid-columnas')
         el.style.setProperty('--stats-cols', String(cols))
