@@ -1780,6 +1780,14 @@ function describeCron(cron: string): string {
     const horas = hour.split(',').map(h => hhmm(h, min));
     return `Todos los días ${horas.slice(0, -1).join(', ')} y ${horas[horas.length - 1]}`;
   }
+  // Varias veces por hora en horas seguidas ("0,30 8,...,19 * * *"): "Cada 30 min de 08:00 a 19:30"
+  const mins = min.split(',').map(Number);
+  const hs = hour.split(',').map(Number);
+  if (/^\d+(,\d+)+$/.test(min) && /^\d+(,\d+)+$/.test(hour) && dow === '*'
+    && hs.every((h, i) => i === 0 || h === hs[i - 1] + 1)
+    && mins.every((m, i) => m === mins[0] + i * (mins[1] - mins[0])) && 60 % (mins[1] - mins[0]) === 0) {
+    return `Cada ${mins[1] - mins[0]} min de ${hhmm(String(hs[0]), String(mins[0]))} a ${hhmm(String(hs[hs.length - 1]), String(mins[mins.length - 1]))}`;
+  }
   return cron;
 }
 

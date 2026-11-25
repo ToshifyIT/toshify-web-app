@@ -13,7 +13,7 @@
 // cada pantalla la muestra a su manera.
 
 import { supabase } from '../../lib/supabase'
-import { createLeadDriveFolder } from '../../services/driveService'
+import { copiarDocumentosLeadAConductor, createLeadDriveFolder } from '../../services/driveService'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
 import { cargarGoogleMaps, ubicacionDeComponentes, ubicacionDesdeCoordenadas } from '../../utils/ubicacionGoogle'
 import type { UbicacionDireccion } from '../../utils/ubicacionGoogle'
@@ -81,6 +81,8 @@ export interface ResultadoConversion {
   esFusion: boolean
   /** true = el conductor existente no estaba ACTIVO y se reactivó (reingreso). */
   reactivado: boolean
+  /** Problema al copiar los documentos de Sellium Docs a la carpeta del conductor (la conversión se hizo igual). */
+  avisoCarpeta?: string
 }
 
 /**
@@ -410,6 +412,7 @@ async function convertirLeadAConductorSinFreno(
 
     let conductorId: string
     let reactivado = false
+    let avisoCarpeta: string | undefined
 
     if (esFusion && conductorExistente) {
       // FUSION: solo actualizar campos vacios/nulos del conductor existente
@@ -533,23 +536,40 @@ async function convertirLeadAConductorSinFreno(
       conductorId = createdConductor.id
     }
 
-    // Buscar o crear carpeta en Drive
+    // Carpeta de Drive del conductor
     let folderUrl = lead.url_folder?.trim() || null
     if (conductorId) {
-      if (!folderUrl) {
-        const nombreCompleto = (lead.nombre_completo || '').trim()
-        if (nombreCompleto) {
+      const existingUrl = esFusion
+        ? (conductorExistente?.url_documentacion || conductorExistente?.drive_folder_url) as string | null | undefined
+        : null
+      const nombreCompleto = (lead.nombre_completo || '').trim()
+      // url_folder de Sellium Docs (la carga el bot de documentos): se COPIAN los documentos a
+      // la carpeta del conductor (la que ya tenía o la de siempre por nombre) y el conductor
+      // queda con esa. Si la copia falla del todo se deja el link de Sellium y se avisa.
+      let carpetaResuelta = false
+      if (folderUrl && nombreCompleto) {
+        const copia = await copiarDocumentosLeadAConductor(nombreCompleto, folderUrl, existingUrl)
+        if (copia.folderUrl) {
+          carpetaResuelta = true
+          if (copia.folderUrl !== existingUrl) {
+            await supabase.from('conductores').update({ url_documentacion: copia.folderUrl }).eq('id', conductorId)
+          }
+          if (!copia.success) avisoCarpeta = copia.error || 'No se pudieron copiar todos los documentos.'
+        } else if (!copia.omitido) {
+          avisoCarpeta = `No se pudieron copiar los documentos de Sellium Docs a la carpeta del conductor: ${copia.error || 'error desconocido'}`
+        }
+      }
+      if (!carpetaResuelta) {
+        // Buscar o crear carpeta en Drive (sin carpeta de Sellium: como siempre)
+        if (!folderUrl && nombreCompleto) {
           const driveResult = await createLeadDriveFolder(lead.id, nombreCompleto)
           if (driveResult.success && driveResult.folderUrl) {
             folderUrl = driveResult.folderUrl
             await supabase.from('leads').update({ url_folder: folderUrl }).eq('id', lead.id)
           }
         }
-      }
-      // Solo guardar URL si el conductor no tiene una
-      if (folderUrl) {
-        const existingUrl = esFusion ? (conductorExistente?.url_documentacion || conductorExistente?.drive_folder_url) : null
-        if (!existingUrl) {
+        // Solo guardar URL si el conductor no tiene una
+        if (folderUrl && !existingUrl) {
           await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', conductorId)
         }
       }
@@ -598,5 +618,5 @@ async function convertirLeadAConductorSinFreno(
         },
     ).eq('id', lead.id)
 
-  return { conductorId, esFusion, reactivado }
+  return { conductorId, esFusion, reactivado, avisoCarpeta }
 }
