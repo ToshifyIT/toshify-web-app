@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Loader2, AlertTriangle, ChevronLeft, User, IdCard, Phone, Briefcase, FileText } from 'lucide-react'
 import { TabsBar, type TabsBarItem } from '../../../../components/ui/TabsBar'
 import { supabase } from '../../../../lib/supabase'
+import { showWarning } from '../../../../utils/toast'
 import {
   buscarConductorExistente,
   convertirLeadAConductor,
@@ -428,7 +429,7 @@ export function ConvertirLeadModal({
 
       setPaso('Creando conductor...')
 
-      const { conductorId, esFusion } = await convertirLeadAConductor({
+      const { conductorId, esFusion, avisoCarpeta } = await convertirLeadAConductor({
         lead,
         catalogos,
         usuario,
@@ -436,6 +437,7 @@ export function ConvertirLeadModal({
         conductorExistente,
       })
 
+      if (avisoCarpeta) showWarning('Documentos de Drive', avisoCarpeta)
       onConvertido(conductorId, lead.nombre_completo || 'Conductor', esFusion)
     } catch (e) {
       // El error se muestra DENTRO del modal, no en un Swal: asi el operador
