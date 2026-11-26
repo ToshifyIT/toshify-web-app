@@ -439,6 +439,134 @@ app.post('/api/create-lead-drive-folder', async (req, res) => {
   }
 })
 
+// Al convertir un lead a conductor: COPIA los documentos de su carpeta de "Sellium Docs"
+// (la carga el bot de documentos en leads.url_folder) a la carpeta del conductor, que se
+// busca o crea igual que /api/create-lead-drive-folder (NOMBRE COMPLETO en mayúsculas
+// dentro de GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID). Si se pasa destinoUrl (conductor que ya
+// tenía carpeta) copia ahí. La carpeta de Sellium queda intacta. No copia dos veces un
+// archivo con el mismo nombre. Si la carpeta de origen no es de Sellium Docs: omitido.
+const SELLIUM_DOCS_FOLDER_ID = process.env.GOOGLE_DRIVE_SELLIUM_DOCS_FOLDER_ID || '1y7yCvVxPwm1LRfTECxyK8BSM7q_uAxV3'
+const idCarpetaDrive = (url) => (String(url || '').match(/folders\/([\w-]{10,})/) || [])[1] || null
+
+app.post('/api/copiar-documentos-lead-conductor', async (req, res) => {
+  try {
+    const { leadNombre, origenUrl, destinoUrl } = req.body
+    const parentFolderId = process.env.GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID
+    if (!parentFolderId) {
+      return res.status(500).json({ error: 'Falta configurar GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID' })
+    }
+    const origenId = idCarpetaDrive(origenUrl)
+    if (!leadNombre || !origenId) {
+      return res.status(400).json({ error: 'Faltan parametros: leadNombre y origenUrl (carpeta de Drive)' })
+    }
+
+    const drive = getDriveServiceFull()
+    const comun = { supportsAllDrives: true, includeItemsFromAllDrives: true }
+    const CARPETA = 'application/vnd.google-apps.folder'
+
+    const origen = await drive.files.get({ fileId: origenId, fields: 'id, parents, mimeType', supportsAllDrives: true })
+    if (origen.data.mimeType !== CARPETA || !(origen.data.parents || []).includes(SELLIUM_DOCS_FOLDER_ID)) {
+      return res.json({ success: false, omitido: true, motivo: 'La carpeta del lead no es de Sellium Docs' })
+    }
+
+    const listar = async (carpetaId) => {
+      const archivos = []
+      let pageToken
+      do {
+        const r = await drive.files.list({
+          q: `'${carpetaId}' in parents and trashed=false`,
+          fields: 'nextPageToken, files(id, name, mimeType)',
+          pageSize: 200,
+          pageToken,
+          ...comun
+        })
+        archivos.push(...(r.data.files || []))
+        pageToken = r.data.nextPageToken
+      } while (pageToken)
+      return archivos
+    }
+    const buscarOCrearCarpeta = async (nombre, padreId, compartir) => {
+      const escapado = nombre.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+      const r = await drive.files.list({
+        q: `name='${escapado}' and '${padreId}' in parents and mimeType='${CARPETA}' and trashed=false`,
+        fields: 'files(id, webViewLink)',
+        pageSize: 1,
+        ...comun
+      })
+      if (r.data.files?.[0]) return { ...r.data.files[0], creada: false }
+      const c = await drive.files.create({
+        requestBody: { name: nombre, mimeType: CARPETA, parents: [padreId] },
+        fields: 'id, webViewLink',
+        supportsAllDrives: true
+      })
+      if (compartir) {
+        try {
+          await drive.permissions.create({
+            fileId: c.data.id,
+            requestBody: { role: 'writer', type: 'domain', domain: 'toshify.com.ar' },
+            supportsAllDrives: true,
+            sendNotificationEmail: false
+          })
+        } catch (permErr) {
+          console.warn(`[copiar-documentos-lead-conductor] No se pudo compartir carpeta: ${permErr.message}`)
+        }
+      }
+      return { ...c.data, creada: true }
+    }
+
+    // Carpeta destino: la que ya tenía el conductor o la de siempre por nombre
+    const folderName = leadNombre.toUpperCase().trim().replace(/\s+/g, ' ')
+    let destino = null
+    const destinoId = idCarpetaDrive(destinoUrl)
+    if (destinoId) {
+      try {
+        const d = await drive.files.get({ fileId: destinoId, fields: 'id, webViewLink, mimeType, trashed', supportsAllDrives: true })
+        if (d.data.mimeType === CARPETA && !d.data.trashed && d.data.id !== origenId) destino = { ...d.data, creada: false }
+      } catch (e) {
+        console.warn(`[copiar-documentos-lead-conductor] Carpeta del conductor no accesible (${e.message}), se usa la de siempre`)
+      }
+    }
+    if (!destino) destino = await buscarOCrearCarpeta(folderName, parentFolderId, true)
+
+    // Copia recursiva (las subcarpetas se recrean con el mismo nombre)
+    const conteo = { copiados: 0, omitidos: 0, errores: [] }
+    const copiar = async (desdeId, haciaId) => {
+      const yaEstan = new Set((await listar(haciaId)).filter(f => f.mimeType !== CARPETA).map(f => f.name))
+      for (const f of await listar(desdeId)) {
+        if (f.mimeType === CARPETA) {
+          const sub = await buscarOCrearCarpeta(f.name, haciaId, false)
+          await copiar(f.id, sub.id)
+        } else if (yaEstan.has(f.name)) {
+          conteo.omitidos++
+        } else {
+          try {
+            await drive.files.copy({ fileId: f.id, requestBody: { name: f.name, parents: [haciaId] }, fields: 'id', supportsAllDrives: true })
+            conteo.copiados++
+          } catch (e) {
+            conteo.errores.push(`${f.name}: ${e.message}`)
+          }
+        }
+      }
+    }
+    await copiar(origenId, destino.id)
+
+    const folderUrl = destino.webViewLink || `https://drive.google.com/drive/folders/${destino.id}`
+    console.log(`[copiar-documentos-lead-conductor] '${folderName}' -> ${destino.id} (${destino.creada ? 'creada' : 'existente'}): ` +
+      `${conteo.copiados} copiados, ${conteo.omitidos} ya estaban, ${conteo.errores.length} errores`)
+    res.json({
+      success: conteo.errores.length === 0,
+      folderId: destino.id,
+      folderUrl,
+      folderName,
+      ...conteo,
+      error: conteo.errores.length ? `No se pudieron copiar ${conteo.errores.length} archivo(s): ${conteo.errores.join('; ')}` : undefined
+    })
+  } catch (error) {
+    console.error('[copiar-documentos-lead-conductor] Error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // El token de Cabify ahora lo entrega /api/cabify/token (server-cabify.js).
 // Se quitó /cabify-auth: recibía usuario y contraseña desde el navegador.
 
