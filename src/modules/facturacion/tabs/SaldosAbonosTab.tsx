@@ -3,7 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
-import { Alerta } from '../../../components/ui/alertas'
+import { Alerta, confirmar } from '../../../components/ui/alertas'
 import { showError, showSuccess, showWarning } from '../../../utils/toast'
 import {
   Wallet,
@@ -1362,7 +1362,7 @@ export function SaldosAbonosTab() {
             <div id="swal-tr-recordar" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #E5E7EB;">
               <label style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: #374151; cursor: pointer;">
                 <input id="swal-tr-recordar-check" type="checkbox" style="margin-top: 2px;">
-                <span>Recordar que esta persona paga por este conductor (sus próximas transferencias entran solas)</span>
+                <span id="swal-tr-recordar-texto">Recordar que esta persona paga por este conductor (sus próximas transferencias entran solas)</span>
               </label>
               <select id="swal-tr-vinculo" class="swal2-select" style="font-size: 13px; margin: 6px 0 0; width: 100%; padding: 6px 8px;" disabled>
                 <option value="">Vínculo (opcional)</option>
@@ -1420,6 +1420,11 @@ export function SaldosAbonosTab() {
             }).join('')
           lista.querySelectorAll<HTMLButtonElement>('button[data-i]').forEach(b => b.addEventListener('click', () => {
             elegida = encontradas[Number(b.dataset.i)]
+            // Se recuerda el CUIT/CUIL (el nombre de Cresium no es confiable); sin CUIT, la cuenta
+            const dato = elegida.cuit ? `el CUIT/CUIL ${elegida.cuit}` : elegida.cuenta_contraparte ? `la cuenta ${elegida.cuenta_contraparte}` : null
+            q<HTMLSpanElement>('swal-tr-recordar-texto').textContent = dato
+              ? `Recordar ${dato}: sus próximas transferencias entran solas a este conductor`
+              : 'Recordar que esta persona paga por este conductor (sus próximas transferencias entran solas)'
             recordar.style.display = ''
             pintar(encontradas)
           }))
@@ -1488,6 +1493,16 @@ export function SaldosAbonosTab() {
 
     // Transferencia de Cresium: monto, fecha y semana salen de la transferencia
     if (formValues.modo === 'cresium') {
+      const t = formValues.transferencia
+      const nombre = formatNombreCompleto(saldo.conductor_nombre)
+      // No hay desenlazar: una vez cargada en un saldo, la transferencia no se puede volver a usar
+      const ok = await confirmar({
+        titulo: 'Enlazar transferencia',
+        texto: `${formatCurrency(t.importe)} de ${t.contraparte || 'Cresium'} entra en el saldo de ${nombre}. `
+          + 'Revisá que sea de este conductor: después no se puede pasar a otro.',
+        confirmar: 'Sí, enlazar',
+      })
+      if (!ok) return
       try {
         const nuevoSaldo = await registrarTransferencia(
           saldo.conductor_id,
