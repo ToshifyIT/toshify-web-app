@@ -2,31 +2,25 @@
 // Facturación > Licencia B1: conductores de la promoción de licencia B1 (PRM02) y sus pagos
 // diarios de $15.000. Son adelantos de su facturación semanal, no deudas: lo que no adelanta
 // se cobra igual al facturar, y cada semana empieza en cero (las anteriores quedan como
-// historial). Cada día se llena solo con los depósitos de Cresium (44 Dreams y
-// Grupo CG) del CUIT/CUIL del conductor; lo que paga un tercero se agrega a mano desde el
-// modal (carga manual o buscando el depósito en Cresium). Reglas en utils/pagosB1.ts.
+// historial). Es solo seguimiento: cada día se llena con los depósitos de Cresium (44 Dreams
+// y Grupo CG) del conductor o de quien paga por él (Cresium conductores), y con los pagos en
+// efectivo cargados en Saldos > Registrar Pago con el tilde B1. Reglas en utils/pagosB1.ts.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { getISOWeek } from 'date-fns'
-import { AlertTriangle, CheckCircle, Edit2, Eye, Landmark, Plus, Search, Trash2, UserX, Users, Wallet, X } from 'lucide-react'
+import { AlertTriangle, CalendarCheck, CheckCircle, Eye, Landmark, UserX, Users, Wallet, X } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useAuth } from '../../../contexts/AuthContext'
-import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
-import { confirmar } from '../../../components/ui/alertas'
-import { showError, showSuccess, showWarning } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { formatFecha } from '../../../utils/format'
+import { semanaISO } from '../../../utils/semanaISO'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { formatFechaHoraART, hoyART, sumarDiasISO } from '../../../utils/fechaArgentina'
 import { cargarConductoresLicenciaB1, lunesDe } from '../utils/licenciaB1Service'
 import type { FilaB1, PromoB1 } from '../utils/licenciaB1Service'
-import {
-  agregarPagoManualB1, asignarDepositoCresiumB1, buscarDepositosCresium, editarPagoB1, ETIQUETA_EMPRESA_CRESIUM,
-  PROMO_B1_PAGO_DIARIO, quitarPagoB1,
-} from '../utils/pagosB1'
-import type { DepositoBuscado, DiaB1, EstadoDiaB1, EstadoSemanaB1, PagoB1, ResumenB1, SemanaB1 } from '../utils/pagosB1'
+import { ETIQUETA_EMPRESA_CRESIUM, PROMO_B1_PAGO_DIARIO } from '../utils/pagosB1'
+import type { DiaB1, EstadoDiaB1, EstadoSemanaB1, PagoB1, ResumenB1, SemanaB1 } from '../utils/pagosB1'
 import { DataTable } from '../../../components/ui/DataTable'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../../components/ui/DataTable/ExcelDateRangeFilter'
@@ -34,13 +28,12 @@ import { ExcelNumberRangeFilter } from '../../../components/ui/DataTable/ExcelNu
 import { StatsGrid } from '../../../components/ui/StatsGrid'
 import { TabsBar } from '../../../components/ui/TabsBar'
 import { LicenciaBadge } from '../../../components/ui/LicenciaBadge'
-import { Spinner } from '../../../components/ui/LoadingOverlay'
 import '../../../styles/modules.css'
 import './LicenciaB1Tab.css'
 
 type Filtro = 'todos' | 'al_dia' | 'un_dia' | 'faltan'
 
-/** Activos: los que siguen en la promoción. Bajas: dados de baja (solo para consultar). */
+/** Activos: los que siguen con B1. Bajas: dados de baja (solo para consultar). */
 type Vista = 'activos' | 'bajas'
 
 const ETIQUETA_ESTADO_DIA: Record<EstadoDiaB1, string> = {
@@ -79,11 +72,6 @@ const ORIGEN_CORTO: Record<PagoB1['origen'], string> = {
   manual: 'Manual',
 }
 
-/** Días que mira "Buscar en Cresium" (hoy incluido). */
-const DIAS_BUSQUEDA_CRESIUM = 7
-
-const FORM_VACIO = { modo: 'cresium' as 'manual' | 'cresium', fecha: '', monto: '', pagador: '', cuit: '', nota: '' }
-
 function diaSemana(fecha: string): string {
   const texto = new Date(`${fecha}T12:00:00Z`).toLocaleDateString('es-AR', { weekday: 'short', timeZone: 'UTC' })
   return texto.charAt(0).toUpperCase() + texto.slice(1).replace('.', '')
@@ -120,6 +108,16 @@ const TITULO_SEMAFORO: Record<Semaforo, string> = {
   rojo: 'Esta semana le faltan adelantar 2 días o más',
 }
 
+/**
+ * Estado de una semana de un conductor de baja: la de la baja ya no está "en curso" (no paga
+ * más días), así que se muestra como cerrada con lo que llegó a adelantar.
+ */
+function estadoSemanaHistorial(sem: SemanaB1): EstadoSemanaB1 {
+  if (sem.estado !== 'en_curso') return sem.estado
+  if (sem.diasVencidos === 0) return 'sin_dias'
+  return sem.faltante === 0 ? 'completa' : sem.pagado > 0 ? 'parcial' : 'sin_pago'
+}
+
 /** Columna que se filtra por el valor que muestra la celda (lista). */
 type ColumnaValor = 'dias' | 'anteriores'
 
@@ -150,14 +148,11 @@ type RangoFecha = { inicio: string | null; fin: string | null }
 const RANGOS_FECHA_VACIOS: Record<ColumnaFecha, RangoFecha> = {
   desde: { inicio: null, fin: null }, hasta: { inicio: null, fin: null }, baja: { inicio: null, fin: null },
 }
-const ETIQUETA_FECHA: Record<ColumnaFecha, string> = { desde: 'Desde', hasta: 'Hasta', baja: 'Fecha de baja' }
+const ETIQUETA_FECHA: Record<ColumnaFecha, string> = { desde: 'Inicio', hasta: 'Hasta', baja: 'Fecha de baja' }
 const fechaDeFila = (f: FilaB1, col: ColumnaFecha) => (col === 'desde' ? f.ingreso : col === 'hasta' ? f.pagaHasta : f.fechaBaja || '')
 
-const TEXTO_HASTA: Record<FilaB1['motivoHasta'], string> = {
-  d1: 'Obtuvo la D1',
-  baja: 'Baja',
-  fin: 'Fin de la promoción',
-}
+/** Día de la semana corto para la columna de inicio ("desde el vie 21/11"). */
+const DIA_CORTO = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 
 /** Columnas de monto con filtro de rango. */
 type ColumnaMonto = 'pagado' | 'falta'
@@ -181,51 +176,36 @@ const OPCIONES_ESTADO = [
   { value: 'sin_dias', label: 'Sin días aún' },
 ]
 
-/** Monto escrito como "15000", "15.000" o "15.000,50". */
-function leerMonto(texto: string): number {
-  const t = texto.trim().replace(/[$\s]/g, '')
-  return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t)
+/**
+ * Depósito de Cresium que quedó como registro 'cresium' en la prueba del paso de los pagos B1
+ * al saldo (25/11/2026 21:58, created_by_name 'Automático'): nadie lo asignó a mano, así que
+ * se muestra como Cresium y no como "a mano".
+ */
+function esPaseDePrueba(p: PagoB1): boolean {
+  return p.origen === 'cresium' && p.cargadoPor === 'Automático'
+}
+
+/** Clase de color y etiqueta corta del origen (lista de pagos del día). */
+function origenDeLista(p: PagoB1): { clase: PagoB1['origen']; texto: string } {
+  return esPaseDePrueba(p) ? { clase: 'auto', texto: 'Cresium' } : { clase: p.origen, texto: ORIGEN_CORTO[p.origen] }
 }
 
 function origenPago(p: PagoB1): string {
   const empresa = p.empresa ? ` ${ETIQUETA_EMPRESA_CRESIUM[p.empresa] || p.empresa}` : ''
+  if (esPaseDePrueba(p)) return `Cresium${empresa}`
   return `${ETIQUETA_ORIGEN[p.origen]}${p.origen === 'manual' ? '' : empresa}`
 }
 
-/** Texto de una semana para el tooltip: "S46 (10/11 al 16/11): adelantó $60.000 de $105.000". */
-function textoSemana(sem: SemanaB1): string {
-  const rango = `${formatFecha(sem.lunes).slice(0, 5)} al ${formatFecha(sem.domingo).slice(0, 5)}`
-  const detalle = sem.faltante > 0
-    ? `adelantó ${formatCurrency(sem.pagado)} de ${formatCurrency(sem.aPagar)} (faltaron ${formatCurrency(sem.faltante)})`
-    : `adelantó ${formatCurrency(sem.pagado)} de ${formatCurrency(sem.aPagar)}`
-  return `S${sem.numero} (${rango}): ${detalle}`
+/** Quién lo cargó, como texto corto para la lista de pagos del día. */
+function cargadoPorCorto(p: PagoB1): string {
+  if (p.origen === 'auto') return 'Automático'
+  if (esPaseDePrueba(p)) return 'Pasado al saldo (prueba)'
+  return p.cargadoPor || '-'
 }
 
-/**
- * Marcas de las semanas anteriores (✓ completa, ◐ una parte, ✗ nada) con lo que faltó.
- * Es historial: lo que faltó ya se cobró en la facturación de esa semana.
- */
-function MarcasSemanas({ resumen, incluirActual = false }: { resumen: ResumenB1; incluirActual?: boolean }) {
-  const lista = incluirActual ? resumen.semanas.filter(s => s.diasVencidos > 0) : semanasAnteriores(resumen)
-  if (lista.length === 0) return <span className="lb1-kardex-tenue" style={{ fontSize: '11px' }}>-</span>
-  return (
-    <div className="lb1-semanas-marcas" title={lista.map(textoSemana).join('\n')}>
-      {lista.map(sem => (
-        <span key={sem.lunes} className={`lb1-semana-marca lb1-semana-marca-${sem.estado}`}>
-          S{sem.numero} {MARCA_SEMANA[sem.estado]}
-          {sem.faltante > 0 && <> −{formatCurrency(sem.faltante)}</>}
-        </span>
-      ))}
-    </div>
-  )
-}
 
 export function LicenciaB1Tab() {
-  const { user, profile } = useAuth()
-  const { canEditInTab } = usePermissions()
   const { sedeActualId, aplicarFiltroSede } = useSede()
-  const puedeEditar = canEditInTab('facturacion:licencia_b1')
-  const usuario = { id: user?.id ?? null, nombre: profile?.full_name || profile?.email || null }
 
   const [promo, setPromo] = useState<PromoB1 | null>(null)
   const [filas, setFilas] = useState<FilaB1[]>([])
@@ -248,21 +228,8 @@ export function LicenciaB1Tab() {
   /** Día cuyo modal "Registros del día" está abierto (yyyy-MM-dd). */
   const [diaVer, setDiaVer] = useState<string | null>(null)
 
-  // Modal "Agregar registro"
-  const [agregando, setAgregando] = useState(false)
-  const [form, setForm] = useState(FORM_VACIO)
-  const [busqueda, setBusqueda] = useState('')
-  const [buscando, setBuscando] = useState(false)
-  const [resultados, setResultados] = useState<DepositoBuscado[] | null>(null)
-  const [elegido, setElegido] = useState<DepositoBuscado | null>(null)
-  const [guardando, setGuardando] = useState(false)
-  /** Recargando los datos después de una acción (se muestra en el modal del conductor). */
-  const [actualizando, setActualizando] = useState(false)
-
-  // Detalle / edición de un pago
+  // Detalle de un pago (solo consulta)
   const [pagoVer, setPagoVer] = useState<PagoB1 | null>(null)
-  const [editandoPago, setEditandoPago] = useState(false)
-  const [formPago, setFormPago] = useState({ fecha: '', monto: '', pagador: '', cuit: '', nota: '' })
 
   // Última vez que la sincronización guardó movimientos de Cresium (se muestra fijo abajo)
   const [cresiumActualizado, setCresiumActualizado] = useState<string | null>(null)
@@ -317,6 +284,28 @@ export function LicenciaB1Tab() {
     cobrado: filas.reduce((s, f) => s + f.resumen.totalPagado, 0),
     bajas: bajas.length,
   }), [filas, activos, bajas])
+
+  // Métricas de Bajas: de la promoción B1, solo los conductores de baja de la sede. Se toman
+  // las semanas hasta la de la baja (lo adelantado y los días que tenía que adelantar).
+  const statsBajas = useMemo(() => {
+    let adelantado = 0
+    let diasAdelantados = 0
+    let diasAAdelantar = 0
+    let sinAdelantos = 0
+    for (const f of bajas) {
+      const lunesFin = lunesDe(f.pagaHasta)
+      let adelantadoConductor = 0
+      for (const s of f.resumen.semanas) {
+        if (s.lunes > lunesFin) continue
+        adelantadoConductor += s.pagado
+        diasAdelantados += s.diasPagados
+        diasAAdelantar += s.diasVencidos
+      }
+      adelantado += adelantadoConductor
+      if (adelantadoConductor <= 0) sinAdelantos++
+    }
+    return { total: bajas.length, adelantado, diasAdelantados, diasAAdelantar, sinAdelantos }
+  }, [bajas])
 
   function limpiarFiltrosColumna() {
     setConductorFilter([]); setEstadoFilter([]); setFiltrosValor(FILTROS_VALOR_VACIOS)
@@ -384,7 +373,11 @@ export function LicenciaB1Tab() {
       if (max !== null && monto > max) return false
     }
     return true
-  }), [filasVista, vista, filtro, conductorFilter, estadoFilter, filtrosValor, rangosFecha, rangosMonto])
+  })
+    // Por inicio de asignación, del más reciente al más viejo (mismo día: por nombre).
+    // Clic en un encabezado ordena por esa columna.
+    .sort((a, b) => b.ingreso.localeCompare(a.ingreso) || a.nombre.localeCompare(b.nombre)),
+  [filasVista, vista, filtro, conductorFilter, estadoFilter, filtrosValor, rangosFecha, rangosMonto])
 
   /** Encabezado con filtro de rango de fechas (Desde / Hasta). */
   const encabezadoFecha = (col: ColumnaFecha) => (
@@ -454,6 +447,10 @@ export function LicenciaB1Tab() {
   )
 
   const detalle = filas.find(f => f.id === detalleId) || null
+  // De baja: el modal es solo historial (sin detalle por día); sirve de referencia si vuelve
+  const esHistorial = !!detalle?.esBaja
+  const estadoSemana = (sem: SemanaB1): EstadoSemanaB1 => (esHistorial ? estadoSemanaHistorial(sem) : sem.estado)
+  const lunesBaja = detalle?.fechaBaja ? lunesDe(detalle.fechaBaja) : null
 
   // Mismo formato que la tabla de Saldos: filtros tipo Excel, ⓘ de ayuda, letras y badges fact-*
   // Encabezados con filtro: las columnas los leen de esta ref. Así las columnas no se
@@ -517,34 +514,25 @@ export function LicenciaB1Tab() {
     {
       id: 'ingreso',
       accessorKey: 'ingreso',
-      meta: { info: 'Primer día de turno (o del reingreso) dentro de la promoción. Desde ese día paga $15.000 por día.' },
+      meta: { info: 'Cuándo empezó su asignación (o el reingreso) dentro de la habilitación B1: semana y día. Desde ese día paga $15.000 por día. Hasta cuándo paga está en la (i) de la pestaña.' },
       header: () => encabezadosRef.current.desde,
-      cell: ({ row }) => (
-        <div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{formatFecha(row.original.ingreso)}</span>
-          {row.original.esReingreso && <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Reingreso</div>}
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'pagaHasta',
-      meta: { info: 'Último día que paga por día: el día antes de obtener la D1, la fecha de baja o el fin de la promoción.' },
-      header: () => encabezadosRef.current.hasta,
-      cell: ({ row }) => (
-        <div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{formatFecha(row.original.pagaHasta)}</span>
-          <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{TEXTO_HASTA[row.original.motivoHasta]}</div>
-        </div>
-      ),
-    },
-    {
-      id: 'dias',
-      meta: { info: 'Esta semana: días cerrados (hasta ayer) cubiertos con lo adelantado, sobre los días que ya tenía que adelantar. Hoy no cuenta hasta que termina. Cada lunes empieza de cero.' },
-      header: () => encabezadosRef.current.dias,
-      accessorFn: f => f.resumen.diasPagados,
       cell: ({ row }) => {
-        const r = row.original.resumen
-        return <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{r.diasPagados} de {r.diasVencidos}</span>
+        const f = row.original
+        const sem = semanaISO(f.ingreso)
+        // Debajo, solo lo que cambia la cuenta: reingreso o D1 ya obtenida (la baja tiene su
+        // propia columna en Bajas)
+        const nota = f.motivoHasta === 'd1'
+          ? `Con D1: pagó hasta ${formatFecha(f.pagaHasta).slice(0, 5)}`
+          : f.esReingreso ? 'Reingreso' : null
+        return (
+          <div>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>Semana {sem.semana}</span>
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+              desde el {DIA_CORTO[new Date(`${f.ingreso}T12:00:00Z`).getUTCDay()]} {formatFecha(f.ingreso).slice(0, 5)}
+            </div>
+            {nota && <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{nota}</div>}
+          </div>
+        )
       },
     },
     {
@@ -553,7 +541,7 @@ export function LicenciaB1Tab() {
       header: () => encabezadosRef.current.pagado,
       accessorFn: f => f.resumen.pagadoSemana,
       cell: ({ row }) => (
-        <span className="fact-precio" style={{ fontWeight: 700 }} title={`Total en la promoción: ${formatCurrency(row.original.resumen.totalPagado)}`}>
+        <span className="fact-precio" style={{ fontWeight: 700 }} title={`Total pagado en B1: ${formatCurrency(row.original.resumen.totalPagado)}`}>
           {formatCurrency(row.original.resumen.pagadoSemana)}
         </span>
       ),
@@ -573,16 +561,9 @@ export function LicenciaB1Tab() {
       },
     },
     {
-      id: 'anteriores',
-      accessorFn: f => f.resumen.faltanteAnteriores,
-      meta: { info: 'Semanas anteriores: ✓ adelantó todo, ◐ adelantó una parte, ✗ no adelantó nada (con lo que faltó). Es historial: lo que faltó ya se cobró en la facturación de esa semana.' },
-      header: () => encabezadosRef.current.anteriores,
-      cell: ({ row }) => <MarcasSemanas resumen={row.original.resumen} />,
-    },
-    {
       id: 'estado',
       accessorFn: f => estadoFila(f.resumen),
-      meta: { info: 'Esta semana: al día (verde), falta 1 día (ámbar) o faltan 2 o más días (rojo). Solo cuentan los días cerrados.' },
+      meta: { info: 'Esta semana: al día (verde), falta 1 día (ámbar) o faltan 2 o más días (rojo), y cuántos días pagó de los que ya tenía que adelantar. Solo cuentan los días cerrados (hoy no cuenta hasta que termina). Cada lunes empieza de cero.' },
       header: () => encabezadosRef.current.estado,
       cell: ({ row }) => {
         const r = row.original.resumen
@@ -590,10 +571,16 @@ export function LicenciaB1Tab() {
         const color = semaforo(r)
         const dias = diasSinAdelantar(r)
         const clase = color === 'verde' ? 'fact-badge-green' : color === 'amarillo' ? 'fact-badge-yellow' : 'fact-badge-red'
+        // Debajo, los días pagados (antes era una columna aparte que repetía lo mismo)
         return (
-          <span className={`fact-badge ${clase}`} title={TITULO_SEMAFORO[color]}>
-            {dias === 0 ? 'Al día' : textoFaltan(dias)}
-          </span>
+          <div>
+            <span className={`fact-badge ${clase}`} title={TITULO_SEMAFORO[color]}>
+              {dias === 0 ? 'Al día' : textoFaltan(dias)}
+            </span>
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+              {r.diasPagados} de {r.diasVencidos} {r.diasVencidos === 1 ? 'día pagado' : 'días pagados'}
+            </div>
+          </div>
         )
       },
     },
@@ -658,13 +645,8 @@ export function LicenciaB1Tab() {
         id: 'pagadoTotal',
         accessorFn: f => f.resumen.totalPagado,
         header: 'Pagado',
-        meta: { info: 'Total adelantado en la promoción.' },
+        meta: { info: 'Total adelantado en B1.' },
         cell: ({ row }) => <span className="fact-precio" style={{ fontWeight: 700 }}>{formatCurrency(row.original.resumen.totalPagado)}</span>,
-      },
-      {
-        ...deActivos('anteriores'),
-        // En bajas se ven todas sus semanas (también la de la baja si es la actual)
-        cell: ({ row }) => <MarcasSemanas resumen={row.original.resumen} incluirActual />,
       },
       deActivos('acciones'),
     ]
@@ -699,142 +681,6 @@ export function LicenciaB1Tab() {
     : semanaSel
   const semanasVisibles = semanas.filter(s => s.lunes === semanaMostrada)
 
-  /**
-   * Después de agregar, editar o quitar: recarga los datos con "Actualizando..." en el
-   * modal y avisa recién cuando ya se ven los datos nuevos.
-   */
-  async function actualizarTrasAccion(mensaje?: string) {
-    setActualizando(true)
-    try {
-      await cargar({ silencioso: true })
-      if (mensaje) showSuccess(mensaje)
-    } finally {
-      setActualizando(false)
-    }
-  }
-
-  function abrirAgregar() {
-    if (!detalle) return
-    // Siempre vacío: el usuario elige el día que corresponde (también desde el + de un día)
-    setForm({ ...FORM_VACIO })
-    setBusqueda('')
-    setResultados(null)
-    setElegido(null)
-    setAgregando(true)
-  }
-
-  async function buscar() {
-    if (busqueda.replace(/\D/g, '').length < 5) {
-      showWarning('Escribí al menos 5 dígitos del CUIT/CUIL')
-      return
-    }
-    setBuscando(true)
-    setElegido(null)
-    try {
-      setResultados(await buscarDepositosCresium(busqueda, rangoBusqueda()))
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'No se pudo buscar en Cresium')
-    } finally {
-      setBuscando(false)
-    }
-  }
-
-  /** La búsqueda en Cresium mira 7 días: hoy y los 6 anteriores (hora Argentina). */
-  function rangoBusqueda(): { desde: string; hasta: string } {
-    const hoy = hoyART()
-    return { desde: sumarDiasISO(hoy, -(DIAS_BUSQUEDA_CRESIUM - 1)), hasta: hoy }
-  }
-
-  // No copia la fecha del depósito: el día al que corresponde se elige a mano
-  function elegirDeposito(m: DepositoBuscado) {
-    setElegido(m)
-  }
-
-  async function guardarRegistro() {
-    if (!detalle) return
-    if (!form.fecha) {
-      showWarning('Elegí el día al que corresponde el pago')
-      return
-    }
-    setGuardando(true)
-    try {
-      if (form.modo === 'manual') {
-        const monto = leerMonto(form.monto)
-        if (!monto || monto <= 0) {
-          showWarning('Ingresá un monto mayor a 0')
-          return
-        }
-        await agregarPagoManualB1(detalle.id, { fecha: form.fecha, monto, pagador: form.pagador, cuit: form.cuit, nota: form.nota }, usuario)
-      } else {
-        if (!elegido) {
-          showWarning('Elegí un depósito de la lista')
-          return
-        }
-        await asignarDepositoCresiumB1(detalle.id, elegido, { fecha: form.fecha, nota: form.nota }, usuario)
-      }
-      setAgregando(false)
-      await actualizarTrasAccion('Pago agregado')
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'No se pudo guardar el pago')
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  function abrirPago(p: PagoB1) {
-    setPagoVer(p)
-    setEditandoPago(false)
-    setFormPago({
-      fecha: p.fecha, monto: String(p.monto), pagador: p.pagador || '', cuit: p.cuit || '', nota: p.nota || '',
-    })
-  }
-
-  async function guardarEdicionPago() {
-    if (!detalle || !pagoVer) return
-    if (!formPago.fecha) {
-      showWarning('Elegí el día al que corresponde el pago')
-      return
-    }
-    const monto = pagoVer.origen === 'manual'
-      ? leerMonto(formPago.monto)
-      : pagoVer.monto
-    if (!monto || monto <= 0) {
-      showWarning('Ingresá un monto mayor a 0')
-      return
-    }
-    setGuardando(true)
-    try {
-      await editarPagoB1(detalle.id, pagoVer, { ...formPago, monto }, usuario)
-      setPagoVer(null)
-      await actualizarTrasAccion('Pago actualizado')
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'No se pudo editar el pago')
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  async function quitar(pago: PagoB1) {
-    if (!detalle) return
-    const texto = pago.origen === 'auto'
-      ? `El depósito de ${formatCurrency(pago.monto)} del ${formatFecha(pago.fecha)} deja de contar como pago diario de este conductor (queda registrado quién lo quitó).`
-      : `Se anula el registro de ${formatCurrency(pago.monto)} del ${formatFecha(pago.fecha)} (queda registrado quién lo quitó).`
-    if (!await confirmar({ titulo: 'Quitar pago', texto, peligro: true })) return
-    try {
-      await quitarPagoB1(detalle.id, pago, usuario)
-      setPagoVer(null)
-      await actualizarTrasAccion('Pago quitado')
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'No se pudo quitar el pago')
-    }
-  }
-
-  // Depósitos que ya cuentan solos para este conductor (no se pueden volver a asignar)
-  const movimientosDelConductor = useMemo(
-    () => new Set((detalle?.pagos || []).map(p => p.movimientoId).filter(Boolean) as string[]),
-    [detalle],
-  )
-
   // Totales de la semana que se ve en el modal del conductor (días cerrados)
   const semanaResumen = detalle?.resumen.semanas.find(sem => sem.lunes === semanaMostrada) || null
   const filaDiaVer = diaVer ? semanas.flatMap(sem => sem.filas).find(f => f.fecha === diaVer) || null : null
@@ -844,7 +690,7 @@ export function LicenciaB1Tab() {
       {promo && !promo.activa && (
         <div className="lb1-aviso">
           <AlertTriangle size={15} />
-          La promoción {promo.codigo} está desactivada: estos pagos no restan en la facturación hasta activarla en Parámetros &gt; Promociones.
+          La habilitación B1 está desactivada en Parámetros &gt; Promociones: la factura no muestra la línea Licencia B1 hasta activarla.
         </div>
       )}
 
@@ -853,18 +699,50 @@ export function LicenciaB1Tab() {
           { id: 'activos', label: 'Activos', icon: Users, count: activos.length },
           {
             id: 'bajas', label: 'Bajas', icon: UserX, count: stats.bajas,
-            countTitle: 'Conductores de la promoción dados de baja (solo para consultar)',
+            countTitle: 'Conductores B1 dados de baja (solo para consultar)',
           },
         ]}
         active={vista}
         onChange={cambiarVista}
         className="tabs-bar--modal lb1-vistas"
-        ariaLabel="Conductores de la promoción"
+        ariaLabel="Conductores B1"
       />
 
-      {/* Stats (mismo formato que Saldos; cada tarjeta filtra la tabla) */}
+      {/* Stats (mismo formato que Saldos). Activos: cada tarjeta filtra la tabla. Bajas: métricas propias. */}
       <div className="fact-stats">
-        <StatsGrid className="fact-stats-grid" storageKey="LicenciaB1Tab">
+        {vista === 'bajas' ? (
+          <StatsGrid key="bajas" className="fact-stats-grid" storageKey="LicenciaB1TabBajas">
+            <div className="fact-stat-card" title="Conductores B1 dados de baja">
+              <UserX size={18} className="fact-stat-icon" />
+              <div className="fact-stat-content">
+                <span className="fact-stat-value">{statsBajas.total}</span>
+                <span className="fact-stat-label">Conductores B1 de baja</span>
+              </div>
+            </div>
+            <div className="fact-stat-card" title="Lo que adelantaron en B1 hasta la semana de la baja (todos sumados)">
+              <Wallet size={18} className="fact-stat-icon" style={{ color: '#16a34a' }} />
+              <div className="fact-stat-content">
+                <span className="fact-stat-value">{formatCurrency(statsBajas.adelantado)}</span>
+                <span className="fact-stat-label">Total adelantado</span>
+              </div>
+            </div>
+            <div className="fact-stat-card" title="Días adelantados sobre los días que tenían que adelantar hasta la baja (todos sumados)">
+              <CalendarCheck size={18} className="fact-stat-icon" />
+              <div className="fact-stat-content">
+                <span className="fact-stat-value">{statsBajas.diasAdelantados} de {statsBajas.diasAAdelantar} días</span>
+                <span className="fact-stat-label">Días adelantados</span>
+              </div>
+            </div>
+            <div className="fact-stat-card" title="Se dieron de baja sin haber adelantado nunca">
+              <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#dc2626' }} />
+              <div className="fact-stat-content">
+                <span className="fact-stat-value">{statsBajas.sinAdelantos}</span>
+                <span className="fact-stat-label">Sin ningún adelanto</span>
+              </div>
+            </div>
+          </StatsGrid>
+        ) : (
+        <StatsGrid key="activos" className="fact-stats-grid" storageKey="LicenciaB1Tab">
           <div className={`fact-stat-card lb1-stat ${vista === 'activos' && filtro === 'todos' ? 'lb1-stat-activa' : ''}`} onClick={() => elegirTarjeta('todos')}>
             <Users size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
@@ -901,13 +779,9 @@ export function LicenciaB1Tab() {
             </div>
           </div>
         </StatsGrid>
+        )}
       </div>
 
-      {vista === 'bajas' && (
-        <div className="lb1-bajas-barra">
-          Conductores de la promoción dados de baja, solo para consultar lo que adelantaron semana por semana.
-        </div>
-      )}
 
       <DataTable
         key={vista}
@@ -925,23 +799,18 @@ export function LicenciaB1Tab() {
         mostrarTablaSinDatos={filtrosActivos.length > 0 || (vista === 'activos' && filtro !== 'todos')}
         onClearAllFilters={limpiarFiltrosColumna}
         emptyIcon={vista === 'activos' ? <Wallet size={48} /> : <UserX size={48} />}
-        emptyTitle={vista === 'activos' ? 'Sin conductores en la promoción' : 'Sin bajas'}
+        emptyTitle={vista === 'activos' ? 'Sin conductores con B1' : 'Sin bajas'}
         emptyDescription={vista === 'activos'
-          ? 'Aparecen los conductores con licencia B1 que ingresaron o reingresaron dentro del período de la promoción'
-          : 'Aparecen los conductores de la promoción que se dieron de baja'}
+          ? 'Aparecen los conductores con licencia B1 que ingresaron o reingresaron dentro de la habilitación B1'
+          : 'Aparecen los conductores B1 que se dieron de baja'}
       />
 
       {/* Modal del conductor: mismo diseño que "Control de Saldos" */}
       {detalle && (
-        <div className="fact-modal-overlay" onClick={() => !agregando && !pagoVer && !diaVer && !actualizando && setDetalleId(null)}>
+        <div className="fact-modal-overlay" onClick={() => !pagoVer && !diaVer && setDetalleId(null)}>
           <div className="fact-modal-content lb1-modal" style={{ maxWidth: '1100px' }} onClick={e => e.stopPropagation()}>
-            {actualizando && (
-              <div className="lb1-actualizando" aria-live="polite">
-                <Spinner size="md" message="Actualizando datos..." />
-              </div>
-            )}
             <div className="fact-modal-header">
-              <h2>Pagos Licencia B1</h2>
+              <h2>Pagos Licencia B1{esHistorial ? ' · Historial' : ''}</h2>
               <button className="fact-modal-close" onClick={() => setDetalleId(null)}><X size={20} /></button>
             </div>
             <div className="fact-modal-body" style={{ padding: '16px' }}>
@@ -955,45 +824,52 @@ export function LicenciaB1Tab() {
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px' }}>
                     DNI: {detalle.dni || '-'} &middot; CUIT: {detalle.cuit || 'sin cargar'}
                     {' '}&middot; Desde: <strong>{formatFecha(detalle.ingreso)}</strong>{detalle.esReingreso ? ' (reingreso)' : ''}
-                    {' '}&middot; Hasta: <strong>{formatFecha(detalle.pagaHasta)}</strong>{detalle.motivoHasta === 'baja' ? ' (baja)' : ''}
-                    {' '}&middot; Días pagados esta semana: <strong>{detalle.resumen.diasPagados} de {detalle.resumen.diasVencidos}</strong>
+                    {detalle.motivoHasta !== 'baja' && <>{' '}&middot; Hasta: <strong>{formatFecha(detalle.pagaHasta)}</strong></>}
+                    {esHistorial ? (
+                      <>
+                        {' '}&middot; Días pagados:{' '}
+                        <strong>
+                          {detalle.resumen.semanas.reduce((n, s) => n + s.diasPagados, 0)} de {detalle.resumen.semanas.reduce((n, s) => n + s.diasVencidos, 0)}
+                        </strong>
+                      </>
+                    ) : null}
                   </div>
                   {detalle.esBaja && (
                     <div className="lb1-baja-info">
-                      <span className="fact-badge fact-badge-red">Baja</span>
-                      {detalle.fechaBaja ? formatFecha(detalle.fechaBaja) : 'sin fecha'}
+                      <span className="lb1-baja-etiqueta">Baja {detalle.fechaBaja ? formatFecha(detalle.fechaBaja) : 'sin fecha'}</span>
                       {detalle.motivoBaja && <> &middot; {detalle.motivoBaja}</>}
                     </div>
                   )}
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '3px' }}>
-                    {detalle.resumen.faltante > 0 ? 'Falta adelantar esta semana' : 'Esta semana'}
-                  </div>
-                  <div style={{
-                    fontSize: '20px', fontWeight: 700, lineHeight: 1,
-                    color: detalle.resumen.faltante > 0 ? '#b45309' : '#16a34a',
-                  }}>
-                    {formatCurrency(detalle.resumen.faltante > 0 ? detalle.resumen.faltante : detalle.resumen.adelantado)}
-                  </div>
-                  <span className={`fact-badge ${detalle.resumen.faltante > 0 ? (semaforo(detalle.resumen) === 'rojo' ? 'fact-badge-red' : 'fact-badge-yellow') : 'fact-badge-green'}`} style={{ marginTop: '4px', fontSize: '10px', padding: '2px 8px' }}>
-                    {detalle.resumen.faltante > 0
-                      ? textoFaltan(diasSinAdelantar(detalle.resumen))
-                      : detalle.resumen.adelantado > 0 ? 'Adelantó de más' : 'Al día'}
-                  </span>
-                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                    Total pagado en la promoción: <strong style={{ color: '#16a34a' }}>{formatCurrency(detalle.resumen.totalPagado)}</strong>
+                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '3px' }}>Total pagado en B1</div>
+                  <div style={{ fontSize: '20px', fontWeight: 700, lineHeight: 1, color: detalle.resumen.totalPagado > 0 ? '#16a34a' : 'var(--text-primary)' }}>
+                    {formatCurrency(detalle.resumen.totalPagado)}
                   </div>
                 </div>
               </div>
 
-              {/* Semanas: lo adelantado en cada una (historial; la actual empieza de cero) */}
+              {/* Activos: se elige la semana (la actual de entrada) y se ve solo esa, así la tabla
+                  no crece con las semanas. De baja (historial): todas las semanas. */}
+              {!esHistorial && semanas.length > 0 && (
+                <div className="lb1-barra">
+                  <select className="lb1-barra-select" value={semanaMostrada} onChange={e => setSemanaSel(e.target.value)} title="Semana a mostrar">
+                    {semanas.map(sem => (
+                      <option key={sem.lunes} value={sem.lunes}>
+                        {sem.lunes.slice(0, 4)} S{String(sem.numero).padStart(2, '0')} · {formatFecha(sem.lunes).slice(0, 5)} al {formatFecha(sem.domingo).slice(0, 5)}
+                        {sem.lunes === lunesHoy ? ' (actual)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {detalle.resumen.semanas.length > 0 && (
                 <div className="lb1-kardex lb1-semanas">
                   <table>
                     <thead>
                       <tr>
-                        <th>Semana</th>
+                        {esHistorial && <th>Semana</th>}
                         <th className="lb1-der">Días</th>
                         <th className="lb1-der">A adelantar</th>
                         <th className="lb1-der">Adelantado</th>
@@ -1002,18 +878,15 @@ export function LicenciaB1Tab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...detalle.resumen.semanas].reverse().map(sem => (
-                        <tr
-                          key={sem.lunes}
-                          className={sem.lunes === semanaMostrada ? 'lb1-semana-elegida' : ''}
-                          onClick={() => setSemanaSel(sem.lunes)}
-                          title="Ver los días de esta semana"
-                        >
-                          <td className="lb1-kardex-dia">
-                            S{String(sem.numero).padStart(2, '0')} · {formatFecha(sem.lunes).slice(0, 5)} al {formatFecha(sem.domingo).slice(0, 5)}
-                            {sem.esActual && <span className="lb1-kardex-tag">Actual</span>}
-                          </td>
-                          <td className="lb1-der">{sem.esActual ? `${sem.diasVencidos} cerrados` : sem.diasVencidos}</td>
+                      {[...detalle.resumen.semanas].reverse().filter(sem => esHistorial || sem.lunes === semanaMostrada).map(sem => (
+                        <tr key={sem.lunes} style={{ cursor: 'default' }}>
+                          {esHistorial && (
+                            <td className="lb1-kardex-dia">
+                              S{String(sem.numero).padStart(2, '0')} · {formatFecha(sem.lunes).slice(0, 5)} al {formatFecha(sem.domingo).slice(0, 5)}
+                              {sem.lunes === lunesBaja && <span className="lb1-semana-baja">Semana de la baja</span>}
+                            </td>
+                          )}
+                          <td className="lb1-der">{sem.esActual && !esHistorial ? `${sem.diasVencidos} cerrados` : sem.diasVencidos}</td>
                           <td className="lb1-der lb1-kardex-monto">{formatCurrency(sem.aPagar)}</td>
                           <td className="lb1-der lb1-kardex-monto" style={{ color: sem.pagado > 0 ? '#16a34a' : 'var(--text-tertiary)' }}>
                             {sem.pagado > 0 ? `+${formatCurrency(sem.pagado)}` : formatCurrency(0)}
@@ -1022,8 +895,8 @@ export function LicenciaB1Tab() {
                             {formatCurrency(sem.faltante)}
                           </td>
                           <td>
-                            <span className={`lb1-semana-marca lb1-semana-marca-${sem.estado}`}>
-                              {MARCA_SEMANA[sem.estado]} {ETIQUETA_ESTADO_SEMANA[sem.estado]}
+                            <span className={`lb1-semana-marca lb1-semana-marca-${estadoSemana(sem)}`}>
+                              {MARCA_SEMANA[estadoSemana(sem)]} {ETIQUETA_ESTADO_SEMANA[estadoSemana(sem)]}
                             </span>
                           </td>
                         </tr>
@@ -1033,26 +906,12 @@ export function LicenciaB1Tab() {
                 </div>
               )}
 
-              {/* Barra de filtros */}
-              <div className="lb1-barra">
-                <span className="lb1-barra-info">CUIT/CUIL para el cruce con Cresium: {detalle.cuit || 'sin cargar'} · DNI {detalle.dni || '-'}</span>
-                {semanas.length > 0 && (
-                  <select className="lb1-barra-select" value={semanaMostrada} onChange={e => setSemanaSel(e.target.value)} title="Semana a mostrar">
-                    {semanas.map(sem => (
-                      <option key={sem.lunes} value={sem.lunes}>
-                        {sem.lunes.slice(0, 4)} S{String(sem.numero).padStart(2, '0')} · {formatFecha(sem.lunes).slice(0, 5)} al {formatFecha(sem.domingo).slice(0, 5)}
-                        {sem.lunes === lunesHoy ? ' (actual)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {puedeEditar && (
-                  <button className="lb1-barra-btn lb1-barra-btn-primario" onClick={() => abrirAgregar()}>
-                    <Plus size={12} /> Agregar registro
-                  </button>
-                )}
-              </div>
+              {esHistorial && detalle.resumen.semanas.length === 0 && (
+                <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>No llegó a tener días ni pagos en B1.</p>
+              )}
 
+              {/* De baja es solo historial: alcanza con la tabla de semanas (sin detalle por día) */}
+              {!esHistorial && (<>
               {/* Tabla por día (formato Control de Saldos) */}
               {semanasVisibles.length === 0 ? (
                 <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Todavía no tiene días ni pagos.</p>
@@ -1067,7 +926,6 @@ export function LicenciaB1Tab() {
                           <th className="lb1-der">Pagado</th>
                           <th className="lb1-der">Cubierto</th>
                           <th>Estado</th>
-                          {puedeEditar && <th />}
                         </tr>
                       </thead>
                       <tbody>
@@ -1109,11 +967,6 @@ export function LicenciaB1Tab() {
                                   <span className="lb1-kardex-tenue" title="Pago con fecha fuera de los días que paga">Fuera del período</span>
                                 )}
                               </td>
-                              {puedeEditar && (
-                                <td style={{ textAlign: 'center' }}>
-                                  <button className="lb1-kardex-icono" onClick={() => abrirAgregar()} title="Agregar registro"><Plus size={13} /></button>
-                                </td>
-                              )}
                             </tr>
                           )
                         })}
@@ -1121,39 +974,14 @@ export function LicenciaB1Tab() {
                     </table>
                   </div>
 
-                  {/* Totales de lo que se ve (como el pie de Control de Saldos) */}
-                  {semanaResumen && (
-                    <div className="lb1-totales">
-                      <div>
-                        <span>A adelantar (días cerrados)</span>
-                        <strong>{formatCurrency(semanaResumen.aPagar)}</strong>
-                      </div>
-                      <div>
-                        <span>Adelantado (saldo a favor)</span>
-                        <strong style={{ color: '#16a34a' }}>+{formatCurrency(semanaResumen.pagado)}</strong>
-                      </div>
-                      <div>
-                        <span>{semanaResumen.faltante > 0 ? (semanaResumen.esActual ? 'Falta adelantar' : 'Faltó adelantar') : 'Adelantó de más'}</span>
-                        <strong style={{ color: semanaResumen.faltante > 0 ? '#b45309' : '#16a34a' }}>
-                          {formatCurrency(semanaResumen.faltante > 0 ? semanaResumen.faltante : semanaResumen.adelantado)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span>Estado</span>
-                        <strong>{ETIQUETA_ESTADO_SEMANA[semanaResumen.estado]}</strong>
-                      </div>
-                    </div>
-                  )}
                   {semanaResumen && semanaResumen.faltante > 0 && (
                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
                       No es deuda: lo que no adelantó se cobra igual en la facturación de la semana.
                     </div>
                   )}
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
-                    Mostrando {semanasVisibles.reduce((n, sem) => n + sem.filas.length, 0)} días
-                  </div>
                 </>
               )}
+              </>)}
             </div>
           </div>
         </div>
@@ -1204,21 +1032,15 @@ export function LicenciaB1Tab() {
                   <tbody>
                     {filaDiaVer.pagos.map(p => (
                       <tr key={p.key}>
-                        <td><span className={`lb1-origen lb1-origen-${p.origen}`}>{ORIGEN_CORTO[p.origen]}</span></td>
+                        <td><span className={`lb1-origen lb1-origen-${origenDeLista(p).clase}`}>{origenDeLista(p).texto}</span></td>
                         <td className="lb1-kardex-tenue">{p.empresa ? ETIQUETA_EMPRESA_CRESIUM[p.empresa] || p.empresa : '-'}</td>
                         <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.pagador || '-'}</td>
                         <td className="lb1-kardex-tenue">{p.cuit || '-'}</td>
                         <td className="lb1-kardex-tenue lb1-kardex-corto" title={p.nota || ''}>{p.nota || '-'}</td>
                         <td className="lb1-der lb1-kardex-monto" style={{ color: '#16a34a', fontWeight: 700 }}>+{formatCurrency(p.monto)}</td>
-                        <td className="lb1-kardex-tenue">{p.origen === 'auto' ? 'Automático' : p.cargadoPor || '-'}</td>
+                        <td className="lb1-kardex-tenue">{cargadoPorCorto(p)}</td>
                         <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                          <button className="lb1-kardex-icono" onClick={() => abrirPago(p)} title="Ver detalle"><Eye size={13} /></button>
-                          {puedeEditar && (
-                            <>
-                              <button className="lb1-kardex-icono" onClick={() => { abrirPago(p); setEditandoPago(true) }} title="Editar"><Edit2 size={13} /></button>
-                              <button className="lb1-kardex-icono lb1-kardex-icono-quitar" onClick={() => quitar(p)} title="Quitar"><X size={13} /></button>
-                            </>
-                          )}
+                          <button className="lb1-kardex-icono" onClick={() => setPagoVer(p)} title="Ver detalle"><Eye size={13} /></button>
                         </td>
                       </tr>
                     ))}
@@ -1233,243 +1055,59 @@ export function LicenciaB1Tab() {
         </div>
       )}
 
-      {/* Detalle / edición de un pago */}
+      {/* Detalle de un pago (solo consulta: los pagos se cargan en Saldos) */}
       {pagoVer && detalle && (
-        <div className="fact-modal-overlay" onClick={() => !guardando && setPagoVer(null)}>
+        <div className="fact-modal-overlay" onClick={() => setPagoVer(null)}>
           <div className="fact-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
             <div className="fact-modal-header">
-              <h2>{editandoPago ? 'Editar pago' : 'Detalle del pago'}</h2>
-              <button className="fact-modal-close" onClick={() => !guardando && setPagoVer(null)}><X size={20} /></button>
+              <h2>Detalle del pago</h2>
+              <button className="fact-modal-close" onClick={() => setPagoVer(null)}><X size={20} /></button>
             </div>
             <div className="fact-modal-body">
               <p className="lb1-tenue" style={{ marginTop: 0 }}>{detalle.nombre}</p>
-              {!editandoPago ? (
-                <div className="lb1-detalle-pago">
-                  <span className="lb1-label">Monto</span>
-                  <span className="lb1-monto lb1-verde">{formatCurrency(pagoVer.monto)}</span>
-                  <span className="lb1-label">Día al que corresponde</span>
-                  <span>{diaSemana(pagoVer.fecha)} {formatFecha(pagoVer.fecha)}</span>
-                  <span className="lb1-label">Origen</span>
-                  <span><span className={`lb1-origen lb1-origen-${pagoVer.origen}`}>{origenPago(pagoVer)}</span></span>
-                  {pagoVer.fechaDeposito && (
-                    <>
-                      <span className="lb1-label">Fecha del depósito</span>
-                      <span>{formatFecha(pagoVer.fechaDeposito)}</span>
-                    </>
-                  )}
-                  <span className="lb1-label">{pagoVer.origen === 'manual' ? 'Quién pagó' : 'Envió'}</span>
-                  <span>{pagoVer.pagador || '-'}</span>
-                  <span className="lb1-label">CUIT / CUIL</span>
-                  <span className="lb1-fecha">{pagoVer.cuit || '-'}</span>
-                  <span className="lb1-label">Nota</span>
-                  <span>{pagoVer.nota || '-'}</span>
-                  <span className="lb1-label">Cargado por</span>
-                  <span>
-                    {pagoVer.origen === 'auto'
-                      ? 'Automático (cruce por CUIT/CUIL con Cresium)'
+              <div className="lb1-detalle-pago">
+                <span className="lb1-label">Monto</span>
+                <span className="lb1-monto lb1-verde">{formatCurrency(pagoVer.monto)}</span>
+                <span className="lb1-label">Día al que corresponde</span>
+                <span>{diaSemana(pagoVer.fecha)} {formatFecha(pagoVer.fecha)}</span>
+                <span className="lb1-label">Origen</span>
+                <span><span className={`lb1-origen lb1-origen-${origenDeLista(pagoVer).clase}`}>{origenPago(pagoVer)}</span></span>
+                {pagoVer.fechaDeposito && (
+                  <>
+                    <span className="lb1-label">Fecha del depósito</span>
+                    <span>{formatFecha(pagoVer.fechaDeposito)}</span>
+                  </>
+                )}
+                {pagoVer.fechaInformada && (
+                  <>
+                    <span className="lb1-label">Fecha en que hizo el pago</span>
+                    <span>{formatFecha(pagoVer.fechaInformada)} (informativa: cuenta la fecha de carga)</span>
+                  </>
+                )}
+                <span className="lb1-label">{pagoVer.origen === 'manual' ? 'Quién pagó' : 'Envió'}</span>
+                <span>{pagoVer.pagador || '-'}</span>
+                <span className="lb1-label">CUIT / CUIL</span>
+                <span className="lb1-fecha">{pagoVer.cuit || '-'}</span>
+                <span className="lb1-label">Nota</span>
+                <span>{pagoVer.nota || '-'}</span>
+                <span className="lb1-label">Cargado por</span>
+                <span>
+                  {pagoVer.origen === 'auto'
+                    ? 'Automático (cruce con Cresium)'
+                    : esPaseDePrueba(pagoVer)
+                      ? `Pasado al saldo en la prueba del ${pagoVer.cargadoEn ? formatFechaHoraART(pagoVer.cargadoEn) : '25/11/2026'}`
                       : `${pagoVer.cargadoPor || '-'}${pagoVer.cargadoEn ? ` · ${formatFechaHoraART(pagoVer.cargadoEn)}` : ''}`}
-                  </span>
-                  {pagoVer.editadoEn && (
-                    <>
-                      <span className="lb1-label">Última edición</span>
-                      <span>{pagoVer.editadoPor || '-'} · {formatFechaHoraART(pagoVer.editadoEn)}</span>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Día al que corresponde <span className="required">*</span></label>
-                      <input type="date" className="form-input" value={formPago.fecha} onChange={e => setFormPago(f => ({ ...f, fecha: e.target.value }))} />
-                    </div>
-                    <div className="form-group">
-                      <label>Monto {pagoVer.origen === 'manual' && <span className="required">*</span>}</label>
-                      <input
-                        className="form-input"
-                        inputMode="decimal"
-                        value={pagoVer.origen === 'manual' ? formPago.monto : formatCurrency(pagoVer.monto)}
-                        disabled={pagoVer.origen !== 'manual'}
-                        onChange={e => setFormPago(f => ({ ...f, monto: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                  {pagoVer.origen === 'manual' && (
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>Quién pagó</label>
-                        <input className="form-input" value={formPago.pagador} onChange={e => setFormPago(f => ({ ...f, pagador: e.target.value }))} />
-                      </div>
-                      <div className="form-group">
-                        <label>CUIT / CUIL</label>
-                        <input className="form-input" value={formPago.cuit} placeholder="Opcional" onChange={e => setFormPago(f => ({ ...f, cuit: e.target.value }))} />
-                      </div>
-                    </div>
-                  )}
-                  <div className="form-group">
-                    <label>Nota</label>
-                    <input className="form-input" value={formPago.nota} onChange={e => setFormPago(f => ({ ...f, nota: e.target.value }))} />
-                  </div>
-                  {pagoVer.origen !== 'manual' && (
-                    <p className="lb1-tenue">
-                      El monto y quién envió son los del depósito de Cresium: solo se cambia el día al que se imputa y la nota.
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="fact-modal-footer">
-              {!editandoPago ? (
-                <>
-                  {puedeEditar && (
-                    <button className="btn-secondary lb1-btn-quitar" onClick={() => quitar(pagoVer)}>
-                      <Trash2 size={14} /> Quitar
-                    </button>
-                  )}
-                  <button className="btn-secondary" onClick={() => setPagoVer(null)}>Cerrar</button>
-                  {puedeEditar && (
-                    <button className="btn-primary lb1-btn-icono" onClick={() => setEditandoPago(true)}>
-                      <Edit2 size={14} /> Editar
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <button className="btn-secondary" onClick={() => setEditandoPago(false)} disabled={guardando}>Cancelar</button>
-                  <button className="btn-primary" onClick={guardarEdicionPago} disabled={guardando}>
-                    {guardando ? 'Guardando...' : 'Guardar'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Agregar registro: manual o buscando el depósito en Cresium */}
-      {agregando && detalle && (
-        <div className="fact-modal-overlay" onClick={() => !guardando && setAgregando(false)}>
-          <div className="fact-modal-content" style={{ maxWidth: '680px' }} onClick={e => e.stopPropagation()}>
-            <div className="fact-modal-header">
-              <h2>Agregar registro</h2>
-              <button className="fact-modal-close" onClick={() => !guardando && setAgregando(false)}><X size={20} /></button>
-            </div>
-            <div className="fact-modal-body">
-              <p className="lb1-tenue" style={{ marginTop: 0 }}>{detalle.nombre}</p>
-              <div className="lb1-modos">
-                <button className={form.modo === 'cresium' ? 'lb1-modo lb1-modo-activo' : 'lb1-modo'} onClick={() => setForm(f => ({ ...f, modo: 'cresium' }))}>
-                  <Search size={14} /> Buscar en Cresium
-                </button>
-                <button className={form.modo === 'manual' ? 'lb1-modo lb1-modo-activo' : 'lb1-modo'} onClick={() => setForm(f => ({ ...f, modo: 'manual' }))}>
-                  <Plus size={14} /> Manual
-                </button>
+                </span>
+                {pagoVer.editadoEn && (
+                  <>
+                    <span className="lb1-label">Última edición</span>
+                    <span>{pagoVer.editadoPor || '-'} · {formatFechaHoraART(pagoVer.editadoEn)}</span>
+                  </>
+                )}
               </div>
-
-              {form.modo === 'cresium' ? (
-                <>
-                  <div className="form-group">
-                    <label>CUIT / CUIL de quien depositó</label>
-                    <span className="lb1-tenue" style={{ display: 'block', marginBottom: '6px' }}>
-                      Busca los depósitos de los últimos 7 días: del {formatFecha(rangoBusqueda().desde)} al {formatFecha(rangoBusqueda().hasta)}.
-                    </span>
-                    <div className="lb1-buscar">
-                      <input
-                        className="form-input"
-                        value={busqueda}
-                        placeholder="Ej. 27301234567"
-                        onChange={e => setBusqueda(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && buscar()}
-                      />
-                      <button className="btn-secondary" onClick={buscar} disabled={buscando}>
-                        {buscando ? 'Buscando...' : 'Buscar'}
-                      </button>
-                    </div>
-                  </div>
-                  {resultados && resultados.length === 0 && (
-                    <p className="lb1-tenue">
-                      No hay depósitos con ese CUIT/CUIL del {formatFecha(rangoBusqueda().desde)} al {formatFecha(rangoBusqueda().hasta)}.
-                    </p>
-                  )}
-                  {resultados && resultados.length > 0 && (
-                    <div className="lb1-resultados">
-                      <table className="lb1-tabla">
-                        <thead>
-                          <tr><th /><th>Fecha</th><th>Cuenta</th><th>Envió</th><th>CUIT</th><th className="lb1-der">Importe</th></tr>
-                        </thead>
-                        <tbody>
-                          {resultados.map(m => {
-                            const yaCuenta = movimientosDelConductor.has(m.id)
-                            const bloqueado = !!m.asignadoA || yaCuenta
-                            return (
-                              <tr
-                                key={m.id}
-                                className={`${elegido?.id === m.id ? 'lb1-fila-elegida' : ''} ${bloqueado ? 'lb1-fila-bloqueada' : ''}`}
-                                onClick={() => !bloqueado && elegirDeposito(m)}
-                                title={m.asignadoA ? `Ya está asignado a ${m.asignadoA}` : yaCuenta ? 'Ya cuenta para este conductor' : undefined}
-                              >
-                                <td><input type="radio" checked={elegido?.id === m.id} disabled={bloqueado} readOnly /></td>
-                                <td className="lb1-fecha">{formatFecha(m.fecha)}</td>
-                                <td>{ETIQUETA_EMPRESA_CRESIUM[m.empresa] || m.empresa}</td>
-                                <td>
-                                  {m.contraparte || '-'}
-                                  {bloqueado && <div className="lb1-tenue">{m.asignadoA ? `Asignado a ${m.asignadoA}` : 'Ya cuenta para este conductor'}</div>}
-                                </td>
-                                <td className="lb1-fecha">{m.cuit || '-'}</td>
-                                <td className="lb1-der lb1-monto">{formatCurrency(m.importe)}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {elegido && (
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>Día al que corresponde <span className="required">*</span></label>
-                        <input type="date" className="form-input" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
-                      </div>
-                      <div className="form-group">
-                        <label>Nota</label>
-                        <input className="form-input" value={form.nota} placeholder="Ej. lo pagó la esposa" onChange={e => setForm(f => ({ ...f, nota: e.target.value }))} />
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Día al que corresponde <span className="required">*</span></label>
-                      <input type="date" className="form-input" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
-                    </div>
-                    <div className="form-group">
-                      <label>Monto <span className="required">*</span></label>
-                      <input className="form-input" inputMode="decimal" value={form.monto} placeholder="15000" onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Quién pagó</label>
-                      <input className="form-input" value={form.pagador} placeholder="Ej. María Pérez (hermana)" onChange={e => setForm(f => ({ ...f, pagador: e.target.value }))} />
-                    </div>
-                    <div className="form-group">
-                      <label>CUIT / CUIL</label>
-                      <input className="form-input" value={form.cuit} placeholder="Opcional" onChange={e => setForm(f => ({ ...f, cuit: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Nota</label>
-                    <input className="form-input" value={form.nota} placeholder="Ej. pagó en efectivo en la oficina" onChange={e => setForm(f => ({ ...f, nota: e.target.value }))} />
-                  </div>
-                </>
-              )}
             </div>
             <div className="fact-modal-footer">
-              <button className="btn-secondary" onClick={() => setAgregando(false)} disabled={guardando}>Cancelar</button>
-              <button className="btn-primary" onClick={guardarRegistro} disabled={guardando || (form.modo === 'cresium' && !elegido)}>
-                {guardando ? 'Guardando...' : 'Agregar'}
-              </button>
+              <button className="btn-secondary" onClick={() => setPagoVer(null)}>Cerrar</button>
             </div>
           </div>
         </div>

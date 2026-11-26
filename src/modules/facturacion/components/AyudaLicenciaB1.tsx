@@ -17,7 +17,7 @@ interface PromoAyuda {
 
 /**
  * Ícono "i" al lado de la pestaña Licencia B1: con un clic muestra cómo funciona
- * la promoción (antes era un párrafo fijo arriba de la tabla).
+ * la habilitación B1 (antes era un párrafo fijo arriba de la tabla).
  * Va dentro del botón de la pestaña, por eso es un span y corta la propagación.
  */
 export function AyudaLicenciaB1() {
@@ -38,7 +38,7 @@ export function AyudaLicenciaB1() {
         if (error) throw error
         if (data) setPromo(data as PromoAyuda)
       } catch (err) {
-        console.error('No se pudo leer la promoción B1:', err)
+        console.error('No se pudo leer la habilitación B1:', err)
       }
     })()
   }, [abierta, promo])
@@ -94,11 +94,7 @@ export function AyudaLicenciaB1() {
       </span>
       {abierta && createPortal(
         <div ref={panelRef} className="lb1-ayuda-panel" role="dialog" style={{ top: pos.top, left: pos.left }}>
-          <strong>
-            {promo
-              ? `${promo.codigo} · ${promo.nombre}`
-              : 'Licencia B1'}
-          </strong>
+          <strong>Licencia B1 · pago diario</strong>
           {promo?.fecha_inicio && promo?.fecha_fin && (
             <span className="lb1-ayuda-fechas">
               Del {formatFecha(promo.fecha_inicio)} al {formatFecha(promo.fecha_fin)}
@@ -106,18 +102,27 @@ export function AyudaLicenciaB1() {
           )}
           <ul>
             <li>
+              Habilitación temporal: se aceptan conductores con licencia B1 (antes solo D1), con la condición
+              de pagar {formatCurrency(PROMO_B1_PAGO_DIARIO)} por día como garantía de que están trabajando.
+            </li>
+            <li>
               Adelantan {formatCurrency(PROMO_B1_PAGO_DIARIO)} por día de su facturación semanal, todos los días
-              desde su primer turno hasta obtener la D1.
+              desde su primer turno.
+            </li>
+            <li>
+              Pagan por día hasta el día antes de obtener la D1, hasta la fecha de baja o hasta el fin de la
+              habilitación{promo?.fecha_fin ? ` (${formatFecha(promo.fecha_fin)})` : ''}, lo que pase primero.
             </li>
             <li>
               No es una deuda: lo que no adelantan se cobra igual al facturar la semana. Cada lunes empieza
               de cero y las semanas anteriores quedan como historial.
             </li>
             <li>
-              Los depósitos de Cresium se toman solos por CUIT/CUIL; lo que paga otra persona se agrega en el detalle.
+              Los depósitos de Cresium se toman solos (del conductor o de quien paga por él en Cresium conductores); el efectivo se carga en Saldos &gt; Registrar Pago con el tilde B1.
             </li>
             <li>
-              Lo adelantado resta en la facturación de la semana y se ve en Saldos como informativo (no cambia el saldo).
+              Cada pago entra al saldo como un pago más («Transferencia bancaria - B1», con la fecha de la
+              transferencia). En la factura la línea B1 queda como información.
             </li>
           </ul>
         </div>,

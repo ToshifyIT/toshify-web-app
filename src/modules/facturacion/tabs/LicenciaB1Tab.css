@@ -663,3 +663,16 @@
 [data-theme="dark"] .lb1-origen-auto { color: #60a5fa; }
 [data-theme="dark"] .lb1-origen-cresium { color: #c4b5fd; }
 [data-theme="dark"] .lb1-origen-manual { color: #94a3b8; }
+
+/* Conductor de baja: fecha de la baja como texto en color, sin fondo */
+.lb1-baja-etiqueta {
+  font-weight: 700;
+  color: var(--badge-red-text, #b91c1c);
+}
+
+.lb1-semana-baja {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--badge-red-text, #b91c1c);
+}

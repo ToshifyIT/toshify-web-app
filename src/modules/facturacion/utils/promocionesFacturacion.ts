@@ -12,10 +12,10 @@
 //   · PROMO_CYBER_DESCUENTO_10: 10% del alquiler de cada día cobrado que cae en el período
 //     (desde su ingreso) y 10% del ToshiPass en proporción a esos días. Línea de descuento
 //     con el código visible de la promoción (PRM01...).
-//   · PROMO_CYBER_LICENCIA_B1: paga $15.000 por día mientras maneja con B1 (antes de su
-//     fecha de obtención D1). Lo pagado en la semana (Cresium + registros a mano, ver
-//     pagosB1.ts) resta como saldo a favor con el código de la promoción (PRM02). Si no
-//     pagó nada, queda una línea informativa en $0 con los días.
+//   · PROMO_CYBER_LICENCIA_B1 (no es una promoción: es la habilitación temporal de conductores
+//     con licencia B1, que pagan $15.000 por día como garantía hasta tener la D1). Lo pagado
+//     entra al saldo como un pago más (pagosB1.ts); en la factura queda una línea informativa
+//     en $0 que se muestra como "Licencia B1" (no con el código PRM02).
 //
 // Este archivo solo decide QUÉ días entran; el monto lo calcula cada cálculo de Facturación
 // (Vista Previa y Recálculo) con el precio que ya usa para el día, igual que el referido.
@@ -89,15 +89,36 @@ export function textoLineaPagoB1(descripcion: string | null | undefined): string
   return textoPagoSemanalB1()
 }
 
-export function descripcionPagoDiarioB1(nombre: string, dias: number, pagado = 0): string {
+/** Cómo se llama la línea B1 en la factura (en lugar del código PRM02: B1 no es una promoción). */
+export const ETIQUETA_LINEA_B1 = 'Licencia B1'
+
+/**
+ * Texto de la línea informativa de Licencia B1 ("Licencia B1 - Pago diario: 3 días × ..."),
+ * o null si no es esa línea. Sirve también para semanas ya calculadas, que guardaron el
+ * nombre anterior ("Cyber Toshi: licencia B1 con pago diario · Pago diario B1: ...").
+ */
+export function textoLineaB1Informativa(descripcion: string | null | undefined): string | null {
+  const m = /(?:^|·\s*)Pago diario B1:\s*(.*)$/.exec(String(descripcion || ''))
+  return m ? `${ETIQUETA_LINEA_B1} - Pago diario: ${m[1]}` : null
+}
+
+export function descripcionPagoDiarioB1(dias: number, pagado = 0): string {
   const textoDias = `${dias} ${dias === 1 ? 'día' : 'días'} × $15.000`
-  if (pagado > 0) return textoPagoSemanalB1()
   const monto = (dias * PROMO_B1_PAGO_DIARIO).toLocaleString('es-AR')
-  return `${nombre} · Pago diario B1: ${textoDias} = $${monto} (sin pagos en la semana)`
+  // Desde 2026-11-26 lo pagado entra al saldo como un pago más: acá solo se informa
+  const pagos = pagado > 0
+    ? `pagado $${pagado.toLocaleString('es-AR')}, entra al saldo`
+    : 'sin pagos en la semana'
+  return `Pago diario B1: ${textoDias} = $${monto} (${pagos})`
 }
 
 /** Texto de una línea de promoción con su código adelante (para PDF y Prev. Fact.). */
 export function textoLineaPromocion(codigo: string, descripcion: string): string {
+  // Licencia B1: "Licencia B1 - ..." en lugar del código de la promoción (PRM02)
+  const textoB1 = textoLineaB1Informativa(descripcion)
+  if (textoB1) return textoB1
+  // Líneas B1 guardadas con el texto anterior "B1 - Pago Transferencia Bancaria"
+  if (/^B1\s*-\s*Pago\b/i.test(descripcion.trim())) return `${ETIQUETA_LINEA_B1} - ${descripcion.trim().replace(/^B1\s*-\s*/i, '')}`
   const texto = quitarDiasPromocion(descripcion)
   return texto.startsWith(`${codigo} - `) ? texto : `${codigo} - ${texto}`
 }
@@ -456,7 +477,8 @@ export function lineasPromocionConductor(
       },
     })
   }
-  // Licencia B1: lo pagado en la semana resta como saldo a favor; sin pagos, informativa en $0
+  // Licencia B1: línea informativa en $0. Lo pagado entra al saldo como un pago más
+  // (pagosB1.ts), así que la factura no lo descuenta (sería contarlo dos veces).
   let b1: PagoDiarioB1 | null = null
   const pB1 = promos.licenciaB1
   const diasB1 = [...(promos.diasB1.get(conductorId) || [])].sort()
@@ -469,9 +491,8 @@ export function lineasPromocionConductor(
       pagos: pagosB1.map(p => ({ fecha: p.fecha, monto: p.monto, origen: p.origen, pagador: p.pagador, detalle: detallePagoB1(p) })),
       monto: pagado,
     }
-    const descripcion = descripcionPagoDiarioB1(pB1.nombre, diasB1.length, pagado)
-    if (pagado > 0) lineas.push({ promocionId: pB1.id, codigo: pB1.codigo, monto: pagado, descripcion, calculo })
-    else b1 = { promocionId: pB1.id, codigo: pB1.codigo, dias: diasB1.length, descripcion, calculo }
+    const descripcion = descripcionPagoDiarioB1(diasB1.length, pagado)
+    b1 = { promocionId: pB1.id, codigo: pB1.codigo, dias: diasB1.length, descripcion, calculo }
   }
   const codigos = [...new Set([...lineas.map(l => l.codigo), ...(b1 ? [b1.codigo] : [])])]
   return { lineas, b1, codigos }
