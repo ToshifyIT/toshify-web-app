@@ -4,12 +4,13 @@
 
 import { supabase } from '../../../lib/supabase'
 import { getConceptoLabel } from '../../../utils/conceptoLabels'
-import { cargarIvaPorCodigo, desglosarIvaCargos, montoBruto, montoNeto } from '../../../utils/facturacionIva'
+import { cargarIvaPorCodigo, cargarPeriodoPorCodigo, desglosarIvaCargos, etiquetaConTarifa, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import { patronIlikeSinAcentos } from '../../../utils/nombreMatch'
 import { idsAportesEnFraccionamiento, cargarDesgloseFraccionamiento, type DesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { parseImporte } from './conductoresPanelService'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
+import { cargarFechasTransferencia } from '../../../services/controlSaldosService'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 
 import { hoyART } from '../../../utils/fechaArgentina'
@@ -285,7 +286,7 @@ export async function cargarDetalleSemana(
   anio: number,
   saldoAnterior = 0,
 ): Promise<SemanaDetalle> {
-  const [{ data: det }, vehRes, pagosRes, ivaPorCodigo, cortesRes] = await Promise.all([
+  const [{ data: det }, vehRes, pagosRes, ivaPorCodigo, cortesRes, periodoPorCodigo] = await Promise.all([
     supabase
       .from('facturacion_detalle')
       .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento, referencia_id, referencia_tipo, descripcion')
@@ -313,6 +314,8 @@ export async function cargarDetalleSemana(
       .select('id, tipo_movimiento, referencia, created_at')
       .eq('conductor_id', conductorId)
       .in('tipo_movimiento', ['pago_cabify', 'ajuste_manual']),
+    // Periodo de la tarifa ("OCT-26") para mostrar en lugar de "Tarifa Nueva"
+    cargarPeriodoPorCodigo(),
   ])
 
   const filas = ((det || []) as Array<any>)
@@ -332,10 +335,10 @@ export async function cargarDetalleSemana(
       // El resto, la misma etiqueta que ve el conductor en el portal (Mi Espacio).
       nombre: d.referencia_tipo === REFERENCIA_PROMOCION
         ? (textoLineaPagoB1(d.descripcion) || textoLineaPromocion(d.concepto_codigo, d.concepto_descripcion || ''))
-        : getConceptoLabel({
+        : etiquetaConTarifa(getConceptoLabel({
           concepto_codigo: d.concepto_codigo,
           concepto_descripcion: d.concepto_descripcion,
-        }),
+        }), d.concepto_codigo, periodoPorCodigo),
       cantidad: Number(d.cantidad) || 0,
       total: bruto,
       neto: esDescuento ? bruto : montoNeto(d, ivaPorCodigo),
@@ -684,11 +687,14 @@ export interface SaldoMovimiento {
   saldoPendiente: number
   saldoPrevio: number | null      // null en filas viejas (se cae al saldo de la fila siguiente)
   createdAt: string | null
+  /** Fecha real de la transferencia (depósitos de Cresium cargados por el servidor) */
+  fechaPago: string | null
   usuario: string | null
 }
 
 // Resumen de la facturación de una semana, para la columna "Facturado" y su detalle.
 export interface FacturacionResumenSemana {
+  id: string
   saldoAnterior: number
   subtotalAlquiler: number
   subtotalGarantia: number
@@ -737,8 +743,13 @@ export async function cargarKardexSaldoConductor(conductorId: string): Promise<S
     saldoPendiente: Number(r.saldo_pendiente) || 0,
     saldoPrevio: r.saldo_previo === null || r.saldo_previo === undefined ? null : Number(r.saldo_previo) || 0,
     createdAt: r.created_at ?? null,
+    fechaPago: null,
     usuario: r.created_by_name ?? null,
   }))
+
+  // Transferencias de Cresium: fecha en que se hizo (no la de carga)
+  const fechasTransferencia = await cargarFechasTransferencia(movimientos.map(m => m.id))
+  for (const m of movimientos) m.fechaPago = fechasTransferencia.get(m.id) || null
 
   const facPorSemana = new Map<string, FacturacionResumenSemana>()
   for (const f of (factRes.data || []) as Array<any>) {
@@ -746,6 +757,7 @@ export async function cargarKardexSaldoConductor(conductorId: string): Promise<S
     const s = f.periodo?.semana
     if (!a || !s) continue
     facPorSemana.set(`${a}-${s}`, {
+      id: String(f.id),
       saldoAnterior: Number(f.saldo_anterior) || 0,
       subtotalAlquiler: Number(f.subtotal_alquiler) || 0,
       subtotalGarantia: Number(f.subtotal_garantia) || 0,

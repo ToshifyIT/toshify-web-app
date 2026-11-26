@@ -190,6 +190,8 @@ export interface SaldoConductor {
   updated_at: string
   // Estado del conductor (desde join)
   conductor_estado?: string | null
+  // Fecha de baja del conductor, YYYY-MM-DD (desde join)
+  conductor_fecha_baja?: string | null
 }
 
 export interface AbonoConductor {

@@ -129,3 +129,28 @@ export async function insertControlSaldo(params: {
     }
   }
 }
+
+/**
+ * Fecha real de la transferencia de los movimientos que cargó el servidor desde Cresium
+ * (server-cresium-pagos.js): id de control_saldos -> procesado_en del depósito.
+ * El historial la muestra en lugar de la fecha de carga. Si todavía no se corrió
+ * sql/cresium_pagos_conductores.sql, devuelve un mapa vacío.
+ */
+export async function cargarFechasTransferencia(idsMovimientos: string[]): Promise<Map<string, string>> {
+  const fechas = new Map<string, string>()
+  const ids = [...new Set(idsMovimientos.filter(Boolean))]
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await (supabase.from('cresium_movimientos') as any)
+      .select('pago_control_saldo_id, procesado_en, fecha')
+      .in('pago_control_saldo_id', ids.slice(i, i + 200))
+      .not('pago_cargado_en', 'is', null)
+    if (error) {
+      if (error.code !== '42703') console.error('No se pudo leer la fecha de las transferencias:', error)
+      return fechas
+    }
+    for (const m of (data || []) as Array<{ pago_control_saldo_id: string; procesado_en: string | null; fecha: string }>) {
+      fechas.set(m.pago_control_saldo_id, m.procesado_en || `${m.fecha}T12:00:00-03:00`)
+    }
+  }
+  return fechas
+}

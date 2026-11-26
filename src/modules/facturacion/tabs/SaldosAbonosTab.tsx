@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { Alerta } from '../../../components/ui/alertas'
-import { showError, showSuccess } from '../../../utils/toast'
+import { showError, showSuccess, showWarning } from '../../../utils/toast'
 import {
   Wallet,
   Users,
@@ -15,7 +15,7 @@ import {
   Filter,
   // UserPlus,
   Trash2,
-  // Receipt,
+  Receipt,
   // ArrowUpCircle,
   // ArrowDownCircle,
   Banknote,
@@ -32,9 +32,14 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getISOWeekYear } from 'date-fns'
 import { LoadingOverlay, Spinner } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
-import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
+import { aplicarMovimientoSaldo, cargarFechasTransferencia, insertControlSaldo } from '../../../services/controlSaldosService'
 import { formatNombreCompleto, FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
+import { etiquetaTipoMovimiento, referenciaVisible } from '../../../utils/conceptoLabels'
+import { LineasFactura } from '../components/LineasFactura'
+import { desglosarPago, type DesglosePago } from '../utils/desglosePago'
+import { buscarTransferencias, DIAS_BUSQUEDA, registrarTransferencia, type TransferenciaCresium } from '../utils/transferenciasCresium'
+import { VINCULOS } from '../../administracion/cresium-conductores/cruceCresium'
 
 interface ConductorBasico {
   id: string
@@ -52,6 +57,18 @@ interface CobroFraccionadoRow {
   anio: number
   aplicado: boolean
   conductor: { nombres: string; apellidos: string } | null
+}
+
+/**
+ * Fila de la lista: saldo y estado que se muestran para la semana elegida.
+ * Semana actual: el saldo de hoy y el estado de hoy. Semana pasada: el saldo al cierre
+ * de esa semana (kardex) y el estado que tenía entonces.
+ */
+type SaldoVista = SaldoConductor & {
+  saldo_semana: number
+  estado_semana: string | null
+  // Semana pasada: saldo que entró en la factura de la semana siguiente (null = sin factura)
+  en_factura: number | null
 }
 
 interface AbonoRow {
@@ -73,9 +90,14 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 import { hoyART } from '../../../utils/fechaArgentina'
 import { numeroSemana, semanaISO, sumarSemanasISO } from '../../../utils/semanaISO'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
-import { cargarConductoresLicenciaB1, tipoPagoSaldos } from '../utils/licenciaB1Service'
+import { cargarConductoresLicenciaB1, enPromocionB1Hoy, tipoPagoSaldos } from '../utils/licenciaB1Service'
 import type { FilaB1 } from '../utils/licenciaB1Service'
-import { ETIQUETA_EMPRESA_CRESIUM } from '../utils/pagosB1'
+import { anteriorACargaAutomatica, ETIQUETA_EMPRESA_CRESIUM, registrarPagoB1DesdeSaldos } from '../utils/pagosB1'
+import { cargarSaldosAlCierre, cargarSaldoEnFactura, semanaSiguiente } from '../utils/saldoAlCierre'
+
+/** Texto seguro para HTML armado a mano (nombres que vienen de Cresium) */
+const escaparHtml = (texto: string) =>
+  texto.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
 /** Calcula días calendario entre una fecha y hoy (sin considerar hora) */
 function diasCalendario(desde: string | Date): number {
   const d = new Date(desde)
@@ -97,6 +119,11 @@ export function SaldosAbonosTab() {
   // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
 
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
+  // Saldo al cierre de la semana elegida (null = semana actual, se usa el saldo de hoy)
+  const [saldosCierre, setSaldosCierre] = useState<Map<string, number> | null>(null)
+  const [cargandoCierre, setCargandoCierre] = useState(false)
+  // Semana pasada: saldo que entró en la factura de la semana siguiente, por conductor
+  const [enFactura, setEnFactura] = useState<{ semana: number; abierta: boolean; mapa: Map<string, number> } | null>(null)
   // Pagos de Facturación > Licencia B1 (PRM02) por conductor. Solo informativos: ya restan
   // en la facturación de la semana; NO se guardan en el kardex ni cambian el saldo.
   const [pagosB1, setPagosB1] = useState<Map<string, FilaB1>>(new Map())
@@ -134,6 +161,9 @@ export function SaldosAbonosTab() {
     anio: number | null
     semana: number | null
   }>({ open: false, fact: null, anio: null, semana: null })
+
+  // Mini-modal: de dónde sale lo que debía el conductor antes de un pago manual
+  const [pagoDetalle, setPagoDetalle] = useState<{ d: DesglosePago; fecha: string } | null>(null)
 
   // Estado para edición de fila del kardex
   const [kardexEdit, setKardexEdit] = useState<{
@@ -260,6 +290,57 @@ export function SaldosAbonosTab() {
     cargarAsignadosSemana()
   }, [semanaOffset, sedeActualId])
 
+  // Semana pasada: saldo de cada conductor al cierre de esa semana (kardex)
+  useEffect(() => {
+    if (semanaOffset === 0 || saldos.length === 0) {
+      setSaldosCierre(null)
+      setEnFactura(null)
+      return
+    }
+    let cancelado = false
+    setCargandoCierre(true)
+    const ids = [...new Set(saldos.map(s => s.conductor_id))]
+    const sig = semanaSiguiente(parseISO(semanaSeleccionada.inicio))
+    Promise.all([
+      cargarSaldosAlCierre(ids, semanaSeleccionada.numero, semanaSeleccionada.anio),
+      cargarSaldoEnFactura(sig.semana, sig.anio, sedeActualId || null),
+    ])
+      .then(([mapa, factura]) => {
+        if (cancelado) return
+        setSaldosCierre(mapa)
+        setEnFactura(factura ? { semana: sig.semana, abierta: factura.estado === 'abierto', mapa: factura.mapa } : null)
+      })
+      .catch(err => {
+        console.error('Error cargando saldos al cierre de la semana:', err)
+        if (!cancelado) {
+          setSaldosCierre(null)
+          setEnFactura(null)
+          showError('Error', 'No se pudo cargar el saldo de esa semana')
+        }
+      })
+      .finally(() => { if (!cancelado) setCargandoCierre(false) })
+    return () => { cancelado = true }
+  }, [semanaOffset, saldos, semanaSeleccionada.numero, semanaSeleccionada.anio, semanaSeleccionada.inicio, sedeActualId])
+
+  // Filas con el saldo y el estado de la semana elegida
+  const saldosVista = useMemo<SaldoVista[]>(() => saldos.map(s => {
+    if (!saldosCierre) {
+      return { ...s, saldo_semana: s.saldo_actual, estado_semana: s.conductor_estado || null, en_factura: null }
+    }
+    // De baja hoy, pero con la baja después del cierre de la semana: esa semana estaba activo
+    const estadoHoy = (s.conductor_estado || '').toUpperCase()
+    const bajaPosterior = (estadoHoy === 'BAJA' || estadoHoy === 'INACTIVO') &&
+      !!s.conductor_fecha_baja && s.conductor_fecha_baja > semanaSeleccionada.fin
+    return {
+      ...s,
+      saldo_semana: saldosCierre.get(s.conductor_id) ?? 0,
+      estado_semana: bajaPosterior ? 'ACTIVO' : (s.conductor_estado || null),
+      en_factura: enFactura?.mapa.get(s.conductor_id) ?? null,
+    }
+  }), [saldos, saldosCierre, enFactura, semanaSeleccionada.fin])
+  const esSemanaPasada = saldosCierre !== null
+  const etiquetaSaldo = esSemanaPasada ? `Saldo al cierre S${semanaSeleccionada.numero}` : 'Saldo Actual'
+
   // Listas únicas para filtros
   const conductoresUnicos = useMemo(() =>
     [...new Set(saldos.map(s => s.conductor_nombre).filter(Boolean) as string[])].sort()
@@ -318,6 +399,7 @@ export function SaldosAbonosTab() {
           .select(`
             *,
             conductor:conductores(
+              fecha_terminacion,
               estado:conductores_estados(codigo)
             )
           `))
@@ -352,12 +434,14 @@ export function SaldosAbonosTab() {
 
       // Procesar saldos
       const saldosConEstado = (saldosRes.data || []).map((s: {
-        conductor?: { estado?: { codigo: string } | null } | null
+        conductor?: { fecha_terminacion?: string | null; estado?: { codigo: string } | null } | null
       } & SaldoConductor) => ({
         ...s,
-        conductor_estado: s.conductor?.estado?.codigo || null
+        conductor_estado: s.conductor?.estado?.codigo || null,
+        conductor_fecha_baja: s.conductor?.fecha_terminacion?.slice(0, 10) || null,
       }))
-      // Pagos Licencia B1 (informativos). Tolerante: si falla, Saldos carga igual.
+      // Pagos Licencia B1 (los que no entraron al saldo se ven como informativos).
+      // Tolerante: si falla, Saldos carga igual.
       // Quien tiene pagos B1 y todavía no tiene saldo aparece igual (fila solo de consulta).
       const b1 = await cargarConductoresLicenciaB1(aplicarFiltroSede).catch(err => {
         console.error('Error cargando pagos Licencia B1 para Saldos:', err)
@@ -1214,7 +1298,14 @@ export function SaldosAbonosTab() {
 
   // Registrar pago — reduce la deuda del conductor (suma al saldo)
   async function registrarPago(saldo: SaldoConductor) {
+    // Transferencia de Cresium elegida en el buscador (modo "Transferencia")
+    let elegida: TransferenciaCresium | null = null
     const saldoColor = saldo.saldo_actual < 0 ? '#DC2626' : saldo.saldo_actual > 0 ? '#16A34A' : '#6B7280'
+    // Tilde "pago diario de Licencia B1": solo en efectivo y si hoy está dentro de sus fechas B1
+    const puedeB1 = await enPromocionB1Hoy(saldo.conductor_id).catch(err => {
+      console.error('No se pudo revisar la habilitación B1 del conductor:', err)
+      return false
+    })
 
     const { value: formValues } = await Alerta.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago</span>',
@@ -1227,17 +1318,57 @@ export function SaldosAbonosTab() {
               ${saldo.saldo_actual < 0 ? ' <span style="color: #DC2626;">(DEUDA)</span>' : ''}
             </div>
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto del pago:</label>
-            <input id="swal-pago-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Monto" min="0" step="0.01">
+          <div style="display: flex; gap: 16px; margin-bottom: 12px; font-size: 13px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="swal-pago-modo" value="manual" checked style="accent-color: #ff0033;"> Efectivo u otro
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="swal-pago-modo" value="cresium" style="accent-color: #ff0033;"> Transferencia (Cresium)
+            </label>
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Concepto:</label>
-            <input id="swal-pago-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Pago en efectivo" value="Pago en efectivo">
+          <div id="swal-pago-manual">
+            <div style="margin-bottom: 10px;">
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto del pago:</label>
+              <input id="swal-pago-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Monto" min="0" step="0.01">
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Concepto:</label>
+              <input id="swal-pago-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Pago en efectivo" value="Pago en efectivo">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
+              <input id="swal-pago-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Recibo #123">
+            </div>
+            ${puedeB1 ? `
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #E5E7EB;">
+              <label style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: #374151; cursor: pointer;">
+                <input id="swal-pago-b1" type="checkbox" style="margin-top: 2px;">
+                <span>Es pago diario de Licencia B1 <span style="color: #6B7280;">(cuenta entero como adelanto de esta semana)</span></span>
+              </label>
+              <div id="swal-pago-b1-fecha" style="display: none; margin-top: 8px;">
+                <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Fecha en que hizo el pago (opcional):</label>
+                <input id="swal-pago-b1-fecha-input" type="date" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" max="${hoyART()}">
+                <div style="font-size: 11px; color: #6B7280; margin-top: 4px;">Es informativa: para B1 cuenta la fecha de carga (hoy).</div>
+              </div>
+            </div>` : ''}
           </div>
-          <div>
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
-            <input id="swal-pago-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Recibo #123">
+          <div id="swal-pago-cresium" style="display: none;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Quién transfirió (últimos ${DIAS_BUSQUEDA} días):</label>
+            <div style="display: flex; gap: 6px;">
+              <input id="swal-tr-buscar" type="text" class="swal2-input" style="font-size: 14px; margin: 0; flex: 1;" placeholder="CUIT/CUIL, DNI, CBU o nombre">
+              <button id="swal-tr-btn" type="button" class="btn-primary" style="padding: 0 12px;">Buscar</button>
+            </div>
+            <div id="swal-tr-lista" style="margin-top: 8px; max-height: 220px; overflow-y: auto;"></div>
+            <div id="swal-tr-recordar" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #E5E7EB;">
+              <label style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: #374151; cursor: pointer;">
+                <input id="swal-tr-recordar-check" type="checkbox" style="margin-top: 2px;">
+                <span>Recordar que esta persona paga por este conductor (sus próximas transferencias entran solas)</span>
+              </label>
+              <select id="swal-tr-vinculo" class="swal2-select" style="font-size: 13px; margin: 6px 0 0; width: 100%; padding: 6px 8px;" disabled>
+                <option value="">Vínculo (opcional)</option>
+                ${VINCULOS.map(v => `<option value="${v}">${v}</option>`).join('')}
+              </select>
+            </div>
           </div>
         </div>
       `,
@@ -1247,13 +1378,81 @@ export function SaldosAbonosTab() {
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#16a34a',
       cancelButtonColor: '#6B7280',
-      width: 380,
+      width: 440,
       customClass: {
         popup: 'swal-compact',
         title: 'swal-title-compact',
         htmlContainer: 'swal-html-compact'
       },
+      didOpen: (popup) => {
+        const q = <T extends HTMLElement>(id: string) => popup.querySelector(`#${id}`) as T
+        const lista = q<HTMLDivElement>('swal-tr-lista')
+        const recordar = q<HTMLDivElement>('swal-tr-recordar')
+        const check = q<HTMLInputElement>('swal-tr-recordar-check')
+        const vinculo = q<HTMLSelectElement>('swal-tr-vinculo')
+        popup.querySelectorAll<HTMLInputElement>('input[name="swal-pago-modo"]').forEach(r => r.addEventListener('change', () => {
+          const cresium = r.value === 'cresium' && r.checked
+          q<HTMLDivElement>('swal-pago-manual').style.display = cresium ? 'none' : ''
+          q<HTMLDivElement>('swal-pago-cresium').style.display = cresium ? '' : 'none'
+          if (cresium) q<HTMLInputElement>('swal-tr-buscar').focus()
+        }))
+        check.addEventListener('change', () => { vinculo.disabled = !check.checked })
+        const checkB1 = popup.querySelector<HTMLInputElement>('#swal-pago-b1')
+        checkB1?.addEventListener('change', () => {
+          q<HTMLDivElement>('swal-pago-b1-fecha').style.display = checkB1.checked ? '' : 'none'
+        })
+        const pintar = (encontradas: TransferenciaCresium[]) => {
+          lista.innerHTML = encontradas.length === 0
+            ? '<div style="font-size: 12px; color: #6B7280; padding: 8px 0;">No hay transferencias con ese dato en los últimos días.</div>'
+            : encontradas.map((t, i) => {
+              const libre = !t.cargadaA && !t.correspondeA
+              const nota = t.cargadaA ? `Ya cargada a ${escaparHtml(t.cargadaA)}`
+                : t.correspondeA
+                  ? (t.anteriorAlAutomatico
+                    ? `Es de ${escaparHtml(t.correspondeA)} (anterior al 26/11 12:00: se cargaba a mano)`
+                    : `Es de ${escaparHtml(t.correspondeA)}: entra sola`)
+                  : ''
+              return `<button type="button" data-i="${i}" ${libre ? '' : 'disabled'} style="display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 8px; margin-bottom: 4px; border: 1px solid ${elegida?.id === t.id ? '#16a34a' : '#E5E7EB'}; border-radius: 6px; background: transparent; cursor: ${libre ? 'pointer' : 'not-allowed'}; opacity: ${libre ? 1 : 0.55};">
+                <span><strong style="font-size: 12px; color: #111827;">${escaparHtml(t.contraparte || 'Sin nombre')}</strong><br>
+                <span style="font-size: 11px; color: #6B7280;">${formatFechaHora(t.procesado_en || t.fecha)} · ${t.cuit ? `CUIT ${t.cuit}` : escaparHtml(t.banco_contraparte || '')}${nota ? ` · ${nota}` : ''}</span></span>
+                <strong style="font-size: 12px; color: #16a34a; white-space: nowrap;">${formatCurrency(t.importe)}</strong>
+              </button>`
+            }).join('')
+          lista.querySelectorAll<HTMLButtonElement>('button[data-i]').forEach(b => b.addEventListener('click', () => {
+            elegida = encontradas[Number(b.dataset.i)]
+            recordar.style.display = ''
+            pintar(encontradas)
+          }))
+        }
+        const buscar = async () => {
+          elegida = null
+          recordar.style.display = 'none'
+          lista.innerHTML = '<div style="font-size: 12px; color: #6B7280; padding: 8px 0;">Buscando...</div>'
+          try {
+            pintar(await buscarTransferencias(q<HTMLInputElement>('swal-tr-buscar').value, (qq) => aplicarFiltroSede(qq)))
+          } catch (err) {
+            lista.innerHTML = `<div style="font-size: 12px; color: #DC2626; padding: 8px 0;">${escaparHtml(err instanceof Error ? err.message : 'No se pudo buscar')}</div>`
+          }
+        }
+        q<HTMLButtonElement>('swal-tr-btn').addEventListener('click', () => { void buscar() })
+        q<HTMLInputElement>('swal-tr-buscar').addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); void buscar() }
+        })
+      },
       preConfirm: () => {
+        const modo = (document.querySelector('input[name="swal-pago-modo"]:checked') as HTMLInputElement)?.value
+        if (modo === 'cresium') {
+          if (!elegida) {
+            Alerta.showValidationMessage('Buscá y elegí la transferencia')
+            return false
+          }
+          return {
+            modo: 'cresium' as const,
+            transferencia: elegida,
+            recordar: (document.getElementById('swal-tr-recordar-check') as HTMLInputElement).checked,
+            vinculo: (document.getElementById('swal-tr-vinculo') as HTMLSelectElement).value || null,
+          }
+        }
         const monto = (document.getElementById('swal-pago-monto') as HTMLInputElement).value
         const concepto = (document.getElementById('swal-pago-concepto') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-pago-ref') as HTMLInputElement).value
@@ -1266,21 +1465,48 @@ export function SaldosAbonosTab() {
           Alerta.showValidationMessage('Ingrese un concepto')
           return false
         }
+        const esB1 = !!(document.getElementById('swal-pago-b1') as HTMLInputElement | null)?.checked
+        const fechaB1 = esB1 ? (document.getElementById('swal-pago-b1-fecha-input') as HTMLInputElement).value || null : null
+        if (fechaB1 && fechaB1 > hoyART()) {
+          Alerta.showValidationMessage('La fecha en que hizo el pago no puede ser posterior a hoy')
+          return false
+        }
 
         return {
+          modo: 'manual' as const,
           monto: parseFloat(monto),
-          concepto,
-          referencia: referencia || null
+          // Pago B1: el concepto lo dice (se ve así en el historial de Saldos)
+          concepto: esB1 && !/\bB1\b/.test(concepto) ? `${concepto} - B1` : concepto,
+          referencia: referencia || null,
+          esB1,
+          fechaB1,
         }
       }
     })
 
     if (!formValues) return
 
+    // Transferencia de Cresium: monto, fecha y semana salen de la transferencia
+    if (formValues.modo === 'cresium') {
+      try {
+        const nuevoSaldo = await registrarTransferencia(
+          saldo.conductor_id,
+          formValues.transferencia,
+          { recordar: formValues.recordar, vinculo: formValues.vinculo },
+          { id: profile?.id ?? null, nombre: profile?.full_name ?? null },
+        )
+        showSuccess('Transferencia registrada', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
+        cargarSaldos()
+      } catch (error: any) {
+        showError('Error', error.message || 'No se pudo registrar la transferencia')
+      }
+      return
+    }
+
     try {
       // Pago = abono (suma al saldo, reduce deuda)
 
-      const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
+      const { data: abonoNuevo, error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: saldo.conductor_id,
         tipo: 'abono',
         monto: formValues.monto,
@@ -1289,7 +1515,7 @@ export function SaldosAbonosTab() {
         semana: numeroSemana(hoyART()),
         anio: semanaISO(hoyART()).anio,
         fecha_abono: new Date().toISOString()
-      })
+      }).select('id').single()
 
       if (errorAbono) throw errorAbono
 
@@ -1319,7 +1545,27 @@ export function SaldosAbonosTab() {
         userName: profile?.full_name,
       })
 
-      showSuccess('Pago Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
+      // Pago diario B1: queda enlazado al abono en Licencia B1 (cuenta entero como adelanto)
+      if (formValues.esB1) {
+        try {
+          await registrarPagoB1DesdeSaldos(
+            saldo.conductor_id,
+            abonoNuevo.id,
+            { monto: formValues.monto, fechaInformada: formValues.fechaB1, nota: formValues.referencia },
+            { id: profile?.id ?? null, nombre: profile?.full_name ?? null },
+          )
+        } catch (errB1) {
+          console.error('No se pudo marcar el pago como B1:', errB1)
+          showWarning('El pago entró al saldo, pero no se pudo marcar como pago B1', errB1 instanceof Error ? errB1.message : undefined)
+          cargarSaldos()
+          return
+        }
+      }
+
+      showSuccess(
+        formValues.esB1 ? 'Pago B1 Registrado' : 'Pago Registrado',
+        `Nuevo saldo: ${formatCurrency(nuevoSaldo)}${formValues.esB1 ? ' · cuenta como adelanto B1 de esta semana' : ''}`,
+      )
       cargarSaldos()
 
     } catch (error: any) {
@@ -1929,7 +2175,7 @@ export function SaldosAbonosTab() {
       regularizado: 'Facturación', pago_cabify: 'Pago Cabify', pago_didi: 'Pago DiDi', pago: 'Pago',
       pago_manual: 'Pago Manual', pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste', devolucion_garantia: 'Devolución Garantía',
       eliminacion_pago: 'Elim. Pago', edicion_pago: 'Edic. Pago', cargo: 'Cargo',
-      abono: 'Abono', eliminacion_saldo: 'Elim. Saldo', importacion: 'Importación',
+      abono: 'Abono', eliminacion_saldo: 'Elim. Saldo', importacion: 'Importación', cierre_sin_pago: 'Cierre',
     }
     const w = window.open('', '_blank', 'width=900,height=700')
     if (!w) return
@@ -1940,7 +2186,7 @@ export function SaldosAbonosTab() {
         <td>${fecha}</td>
         <td>${r.anio} S${String(r.semana).padStart(2, '0')}</td>
         <td>${tipoLabel[r.tipo_movimiento] || r.tipo_movimiento || '-'}</td>
-        <td>${(r.referencia || '-').replace(/</g, '&lt;')}</td>
+        <td>${referenciaVisible(r.referencia).replace(/</g, '&lt;')}</td>
         <td style="text-align:right">${monto}</td>
         <td style="text-align:right">${formatCurrency(r.saldo_pendiente || 0)}</td>
         <td>${(r.created_by_name || 'Sistema').replace(/</g, '&lt;')}</td>
@@ -1988,7 +2234,7 @@ export function SaldosAbonosTab() {
       // FIX 2026-05-20: traer facturacion_conductores para mostrar columna "Facturado" + detalle
 
       const { data: facts } = await (supabase.from('facturacion_conductores') as any)
-        .select('id, periodo_id, subtotal_alquiler, subtotal_garantia, subtotal_cargos, subtotal_descuentos, subtotal_neto, saldo_anterior, total_a_pagar, periodo:periodos_facturacion(anio, semana)')
+        .select('id, periodo_id, subtotal_alquiler, subtotal_garantia, subtotal_cargos, subtotal_descuentos, subtotal_neto, saldo_anterior, total_a_pagar, updated_at, periodo:periodos_facturacion(anio, semana)')
         .eq('conductor_id', saldo.conductor_id)
       // Indexar por anio-semana
       const facMap = new Map<string, any>()
@@ -2008,7 +2254,9 @@ export function SaldosAbonosTab() {
           abonosMap.set(`${ab.concepto}_${ab.monto}`, ab.referencia)
         }
       }
-      setKardexModal({ open: true, saldo, rows: rows || [], loading: false, facMap, abonosMap } as any)
+      // Transferencias de Cresium: se muestra la fecha en que se hizo, no la de carga
+      const fechasTransferencia = await cargarFechasTransferencia((rows || []).map((x: any) => x.id))
+      setKardexModal({ open: true, saldo, rows: rows || [], loading: false, facMap, abonosMap, fechasTransferencia } as any)
     } catch {
       showError('Error', 'No se pudo cargar el control de saldos')
       setKardexModal(prev => ({ ...prev, open: false, loading: false }))
@@ -2124,7 +2372,7 @@ export function SaldosAbonosTab() {
     return new Set(cobrosFraccionados.map(c => c.conductor_id))
   }, [cobrosFraccionados])
 
-  const columns = useMemo<ColumnDef<SaldoConductor>[]>(() => [
+  const columns = useMemo<ColumnDef<SaldoVista>[]>(() => [
     {
       accessorKey: 'conductor_nombre',
       meta: { info: 'Conductor y su CUIT o DNI.' },
@@ -2146,7 +2394,7 @@ export function SaldosAbonosTab() {
           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{row.original.conductor_cuit || row.original.conductor_dni}</div>
           {pagosB1.has(row.original.conductor_id) && (
             <span
-              title="Pagos de Licencia B1 (PRM02): informativos, ya restan en la facturación de la semana"
+              title="Pagos diarios de Licencia B1: adelantos de la facturación semanal (cada pago entra al saldo como un pago más)"
               style={{
                 display: 'inline-block', marginTop: '3px', padding: '1px 5px', borderRadius: 'var(--radius-xs)',
                 fontSize: '9px', fontWeight: 600, background: 'rgba(245, 158, 11, 0.16)', color: '#b45309',
@@ -2160,10 +2408,10 @@ export function SaldosAbonosTab() {
     },
     {
       id: 'conductor_estado',
-      meta: { info: 'Estado actual del conductor (Activo, Baja, etc.).' },
+      meta: { info: 'Estado del conductor (Activo, Baja, etc.). En una semana pasada, el que tenía al cierre de esa semana.' },
       header: 'Estado Cond.',
       cell: ({ row }) => {
-        const estado = row.original.conductor_estado
+        const estado = row.original.estado_semana
         if (!estado) return <span className="text-gray-400">-</span>
 
         const esActivo = estado.toUpperCase() === 'ACTIVO'
@@ -2185,14 +2433,31 @@ export function SaldosAbonosTab() {
       }
     },
     {
-      accessorKey: 'saldo_actual',
-      meta: { info: 'Cuenta corriente del conductor. Negativo: debe. Positivo: tiene saldo a favor.' },
-      header: 'Saldo Actual',
+      accessorKey: 'saldo_semana',
+      meta: { info: 'Cuenta corriente del conductor. Negativo: debe. Positivo: tiene saldo a favor. En una semana pasada, el saldo que tenía al cierre de esa semana.' },
+      header: etiquetaSaldo,
       cell: ({ row }) => {
-        const saldoVal = row.original.saldo_actual
+        const saldoVal = row.original.saldo_semana
         return <span className={`fact-precio ${saldoVal >= 0 ? '' : 'fact-precio-negative'}`} style={{ fontWeight: 700 }}>{formatCurrency(saldoVal)}</span>
       }
     },
+    // Semana pasada: lo que de ese saldo pasó a la factura de la semana siguiente
+    ...(enFactura ? [{
+      accessorKey: 'en_factura',
+      meta: {
+        info: `Saldo que entró en la factura de S${enFactura.semana}: el saldo al cierre menos lo que ` +
+          `pagó o se le ajustó durante S${enFactura.semana}, hasta que se calculó la factura. Es lo que ` +
+          `suma el modal Importe Generado de S${enFactura.semana} como saldo de la semana anterior. ` +
+          'Vacío: no tiene factura esa semana.' +
+          (enFactura.abierta ? ` S${enFactura.semana} sigue abierta: el valor puede cambiar al recalcular.` : ''),
+      },
+      header: `En factura S${enFactura.semana}${enFactura.abierta ? ' (abierta)' : ''}`,
+      cell: ({ row }) => {
+        const valor = row.original.en_factura
+        if (valor === null) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+        return <span className={`fact-precio ${valor >= 0 ? '' : 'fact-precio-negative'}`}>{formatCurrency(valor)}</span>
+      },
+    } as ColumnDef<SaldoVista>] : []),
     {
       id: 'estado_saldo',
       meta: { info: 'A favor (saldo mayor a 0), Deuda (menor a 0) o Sin saldo (igual a 0).' },
@@ -2212,7 +2477,7 @@ export function SaldosAbonosTab() {
         />
       ),
       cell: ({ row }) => {
-        const saldoVal = row.original.saldo_actual
+        const saldoVal = row.original.saldo_semana
         if (saldoVal > 0) return <span className="fact-badge fact-badge-green">A Favor</span>
         if (saldoVal < 0) return <span className="fact-badge fact-badge-red">Deuda</span>
         return <span className="fact-badge fact-badge-gray">Sin Saldo</span>
@@ -2275,13 +2540,13 @@ export function SaldosAbonosTab() {
         )
       }
     }
-  ], [conductorFilter, conductoresUnicos, estadoFilter, openColumnFilter, conductoresConFraccionado, pagosB1])
+  ], [conductorFilter, conductoresUnicos, estadoFilter, openColumnFilter, conductoresConFraccionado, pagosB1, etiquetaSaldo, enFactura])
 
   const saldosFiltrados = useMemo(() => {
-    return saldos.filter(s => {
+    return saldosVista.filter(s => {
       // Filtros de stats
-      if (filtroSaldo === 'favor' && s.saldo_actual <= 0) return false
-      if (filtroSaldo === 'deuda' && s.saldo_actual >= 0) return false
+      if (filtroSaldo === 'favor' && s.saldo_semana <= 0) return false
+      if (filtroSaldo === 'deuda' && s.saldo_semana >= 0) return false
       if (filtroSaldo === 'mora') {
         if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
         if (diasCalendario(s.ultima_actualizacion) <= 0) return false
@@ -2290,12 +2555,12 @@ export function SaldosAbonosTab() {
       // Filtros Excel
       if (conductorFilter.length > 0 && !conductorFilter.includes(s.conductor_nombre || '')) return false
       if (estadoFilter.length > 0) {
-        const estado = s.saldo_actual > 0 ? 'favor' : s.saldo_actual < 0 ? 'deuda' : 'sin_saldo'
+        const estado = s.saldo_semana > 0 ? 'favor' : s.saldo_semana < 0 ? 'deuda' : 'sin_saldo'
         if (!estadoFilter.includes(estado)) return false
       }
       // Filtro estado conductor
       if (estadoCondFilter !== 'todos') {
-        const ec = ((s as any).conductor_estado || '').toUpperCase()
+        const ec = (s.estado_semana || '').toUpperCase()
         if (estadoCondFilter === 'activo' && ec !== 'ACTIVO') return false
         if (estadoCondFilter === 'baja' && ec !== 'BAJA' && ec !== 'INACTIVO') return false
       }
@@ -2304,21 +2569,21 @@ export function SaldosAbonosTab() {
       if (asignadoFilter === 'no_asignado' && conductoresAsignados.has(s.conductor_id)) return false
       return true
     })
-  }, [saldos, filtroSaldo, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados, conductoresConFraccionado])
+  }, [saldosVista, filtroSaldo, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados, conductoresConFraccionado])
 
   const stats = useMemo(() => {
-    const total = saldos.length
-    const conductoresFavor = saldos.filter(s => s.saldo_actual > 0)
-    const conductoresDeuda = saldos.filter(s => s.saldo_actual < 0)
-    const conductoresMora = saldos.filter(s => {
+    const total = saldosVista.length
+    const conductoresFavor = saldosVista.filter(s => s.saldo_semana > 0)
+    const conductoresDeuda = saldosVista.filter(s => s.saldo_semana < 0)
+    const conductoresMora = saldosVista.filter(s => {
       if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
       return diasCalendario(s.ultima_actualizacion) > 0
     })
     const conFavor = conductoresFavor.length
     const conDeuda = conductoresDeuda.length
     const enMora = conductoresMora.length
-    const totalFavor = conductoresFavor.reduce((sum, s) => sum + s.saldo_actual, 0)
-    const totalDeuda = conductoresDeuda.reduce((sum, s) => sum + Math.abs(s.saldo_actual), 0)
+    const totalFavor = conductoresFavor.reduce((sum, s) => sum + s.saldo_semana, 0)
+    const totalDeuda = conductoresDeuda.reduce((sum, s) => sum + Math.abs(s.saldo_semana), 0)
 
     // Stats de fraccionados
     const totalFraccionado = cobrosFraccionados.reduce((sum, c) => sum + c.monto_cuota, 0)
@@ -2329,7 +2594,19 @@ export function SaldosAbonosTab() {
       conductoresFavor, conductoresDeuda, conductoresMora,
       totalFraccionado, cuotasPendientes
     }
-  }, [saldos, cobrosFraccionados])
+  }, [saldosVista, cobrosFraccionados])
+
+  // Deuda de lo que se ve en la lista (con los filtros aplicados), para poder cuadrar
+  const deudaLista = useMemo(() => {
+    const conDeuda = saldosFiltrados.filter(s => s.saldo_semana < 0)
+    const deudaFactura = saldosFiltrados.filter(s => (s.en_factura ?? 0) < 0)
+    return {
+      cantidad: conDeuda.length,
+      monto: conDeuda.reduce((sum, s) => sum - s.saldo_semana, 0),
+      cantidadFactura: deudaFactura.length,
+      montoFactura: deudaFactura.reduce((sum, s) => sum - (s.en_factura ?? 0), 0),
+    }
+  }, [saldosFiltrados])
 
   // Columnas para la tabla de Abonos (UI de movimientos removida, preservado por si se reactiva)
   /* const columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
@@ -2387,9 +2664,29 @@ export function SaldosAbonosTab() {
                 <AlertTriangle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{formatCurrency(stats.totalDeuda)}</span>
-                  <span className="fact-stat-label">Total Deuda</span>
+                  <span className="fact-stat-label">
+                    {esSemanaPasada ? `Total Deuda al cierre S${semanaSeleccionada.numero}` : 'Total Deuda'}
+                  </span>
                 </div>
               </div>
+              <div className="fact-stat-card">
+                <Filter size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{cargandoCierre ? '...' : formatCurrency(deudaLista.monto)}</span>
+                  <span className="fact-stat-label">Deuda en la lista ({deudaLista.cantidad})</span>
+                </div>
+              </div>
+              {enFactura && (
+                <div className="fact-stat-card">
+                  <Receipt size={18} className="fact-stat-icon" />
+                  <div className="fact-stat-content">
+                    <span className="fact-stat-value">{cargandoCierre ? '...' : formatCurrency(deudaLista.montoFactura)}</span>
+                    <span className="fact-stat-label">
+                      Deuda en la lista que entró en factura S{enFactura.semana} ({deudaLista.cantidadFactura})
+                    </span>
+                  </div>
+                </div>
+              )}
             </StatsGrid>
           </div>
 
@@ -2702,6 +2999,7 @@ export function SaldosAbonosTab() {
                     abono: 'Abono',
                     eliminacion_saldo: 'Elim. Saldo',
                     importacion: 'Importación',
+                    cierre_sin_pago: 'Cierre',
                   }
                   const cargosTipos = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
                   const abonosTipos = new Set(['pago_cabify', 'pago_didi', 'pago', 'pago_manual', 'pago_cuota', 'abono', 'devolucion_garantia'])
@@ -2711,6 +3009,9 @@ export function SaldosAbonosTab() {
                   // Para tipos ambiguos, inferir por delta del saldo_pendiente snapshot
                   const clasificar = (r: any, idx: number, rows: any[]): 'cargo' | 'abono' | 'elim' | null => {
                     const t = r.tipo_movimiento || 'regularizado'
+                    // Cierre de semana y Facturación (cierres viejos): solo marcan la factura de la
+                    // semana (columna Facturado), sin monto. Neutros.
+                    if (t === 'cierre_sin_pago' || t === 'regularizado') return null
                     if (elimTipos.has(t)) return 'elim'
                     if (cargosTipos.has(t)) return 'cargo'
                     if (abonosTipos.has(t)) return 'abono'
@@ -2722,9 +3023,19 @@ export function SaldosAbonosTab() {
                     return null
                   }
 
+                  // Pago de Cabify o DiDi en $0 que no movió el saldo (la carga del Excel lo crea
+                  // para quien no cobró por esa app): no aporta nada y no se muestra
+                  const esPagoAppVacio = (r: any, idx: number, rows: any[]) => {
+                    if (r.tipo_movimiento !== 'pago_cabify' && r.tipo_movimiento !== 'pago_didi') return false
+                    if (Number(r.monto_movimiento)) return false
+                    const prev = rows[idx + 1]
+                    return Math.abs((Number(r.saldo_pendiente) || 0) - (prev ? Number(prev.saldo_pendiente) || 0 : 0)) < 1
+                  }
+
                   // 1) Filtrar
                   const norm = (x: string) => (x || '').toString().toLowerCase()
                   const rowsFiltradas = (kardexModal.rows as any[]).filter((r) => {
+                    if (esPagoAppVacio(r, kardexModal.rows.indexOf(r), kardexModal.rows)) return false
                     if (kardexSemanaFilter) {
                       const semKey = `${r.anio}-${r.semana}`
                       if (semKey !== kardexSemanaFilter) return false
@@ -2789,6 +3100,11 @@ export function SaldosAbonosTab() {
                   const b1Filtrados = pagosB1Kardex.filter(p => {
                     const sem = semanaISO(p.fecha)
                     if (kardexSemanaFilter && `${sem.anio}-${sem.semana}` !== kardexSemanaFilter) return false
+                    // Los que ya entraron al saldo están en el historial como un pago más, y los
+                    // depósitos que ya se cargaron a mano como pago no cuentan
+                    if (p.abonoId || p.enSaldo || p.yaCargadoAMano) return false
+                    // Antes del 26/11 12:00 las transferencias se cargaban a mano: no se muestran
+                    if (anteriorACargaAutomatica(p)) return false
                     if (kardexTipoFilter && kardexTipoFilter !== 'abono') return false
                     if (kardexSearch.trim()) {
                       const blob = `${norm(p.pagador || '')} ${norm(p.nota || '')} ${norm(String(p.monto))} ${norm(p.cargadoPor || '')} ${norm(tipoPagoSaldos(p))} b1`
@@ -2838,7 +3154,7 @@ export function SaldosAbonosTab() {
                                     borderBottom: '1px solid var(--border-primary)',
                                     // Colores de abono (pago a favor del conductor), como los pagos normales
                                     background: 'rgba(240,253,244,0.4)', borderLeft: '3px solid transparent',
-                                  }} title="Pago de Licencia B1: informativo. Ya resta en la facturación de la semana (PRM02); no cambia el saldo. Se gestiona en Facturación > Licencia B1.">
+                                  }}>
                                     <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>{formatFecha(p.fecha)}</td>
                                     <td style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                                       {fila.anio} S{String(fila.semana).padStart(2, '0')}
@@ -2849,20 +3165,28 @@ export function SaldosAbonosTab() {
                                         background: '#f0fdf4', color: '#16a34a',
                                       }}>{esManual ? 'Pago Manual' : 'Transferencia Bancaria'}</span>
                                     </td>
-                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '160px', maxWidth: '280px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={`Pago B1${p.pagador ? ` · ${p.pagador}` : ''}`}>
                                       Pago B1{p.pagador ? ` · ${p.pagador}` : ''}
                                       <span style={{
                                         marginLeft: '6px', padding: '1px 5px', background: '#e5e7eb', color: 'var(--text-secondary)',
                                         borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px',
                                       }}>Informativo</span>
                                     </td>
-                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={detalleB1}>
+                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '140px', maxWidth: '240px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={detalleB1}>
                                       {detalleB1}
                                     </td>
                                     <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#16a34a', whiteSpace: 'nowrap' }}>
                                       +{formatCurrency(p.monto)}
                                     </td>
-                                    <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--text-tertiary)' }}>—</td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                      {/* Solo quedan acá los pagos que todavía no entraron al saldo */}
+                                      <span
+                                        style={{ color: 'var(--text-tertiary)', fontSize: '10px' }}
+                                        title="Este pago todavía no entró al saldo. Entra al abrir Facturación > Licencia B1 o Saldos"
+                                      >
+                                        no entró al saldo
+                                      </span>
+                                    </td>
                                     <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--text-tertiary)' }}>—</td>
                                     <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
                                       {p.origen === 'auto' ? 'Automático' : p.cargadoPor || '-'}
@@ -2873,7 +3197,8 @@ export function SaldosAbonosTab() {
                               }
                               const { r, i, cls, monto, saldo } = fila.real
                               const tipo = r.tipo_movimiento || 'regularizado'
-                              const labelBg = cls === 'cargo' ? '#fef2f2'
+                              const labelBg = tipo === 'cierre_sin_pago' || tipo === 'regularizado' ? 'transparent'
+                                            : cls === 'cargo' ? '#fef2f2'
                                             : cls === 'abono' ? '#f0fdf4'
                                             : cls === 'elim' ? '#f3f4f6'
                                             : 'var(--bg-secondary)'
@@ -2888,7 +3213,7 @@ export function SaldosAbonosTab() {
                                           : 'transparent'
                               const montoColor = cls === 'cargo' || cls === 'elim' ? '#dc2626' : cls === 'abono' ? '#16a34a' : 'var(--text-tertiary)'
                               const montoSigno = cls === 'cargo' || cls === 'elim' ? '-' : cls === 'abono' ? '+' : ''
-                              const fecha = formatFecha(r.created_at)
+                              const fecha = formatFecha((kardexModal as any).fechasTransferencia?.get(r.id) || r.created_at)
                               return (
                                 <tr key={i} style={{
                                   borderBottom: '1px solid var(--border-primary)',
@@ -2905,11 +3230,11 @@ export function SaldosAbonosTab() {
                                     <span style={{
                                       display: 'inline-block', padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                                       background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px',
-                                    }}>{tipoLabel[tipo] || tipo}</span>
+                                    }}>{etiquetaTipoMovimiento(tipo, r.referencia, tipoLabel)}</span>
                                   </td>
                                   {(() => {
                                     const refParts = (r.referencia || '').split(' | ')
-                                    const refMain = refParts[0] || '-'
+                                    const refMain = referenciaVisible(refParts[0])
                                     // Buscar detalle: primero en el pipe, luego en abonosMap
                                     let refDetalle = refParts.length > 1 ? refParts.slice(1).join(' | ') : ''
                                     if (!refDetalle && (kardexModal as any).abonosMap) {
@@ -2918,7 +3243,7 @@ export function SaldosAbonosTab() {
                                     }
                                     return (
                                       <>
-                                        <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={refMain}>
+                                        <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '160px', maxWidth: '280px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={refMain}>
                                           {refMain}
                                           {i === 0 && (
                                             <span style={{
@@ -2928,7 +3253,7 @@ export function SaldosAbonosTab() {
                                             }}>actual</span>
                                           )}
                                         </td>
-                                        <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={refDetalle || ''}>
+                                        <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '140px', maxWidth: '240px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={refDetalle || ''}>
                                           {refDetalle || '-'}
                                         </td>
                                       </>
@@ -2942,6 +3267,38 @@ export function SaldosAbonosTab() {
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: columna Facturado - click abre detalle + redondeo residuos */}
                                     {(() => {
+                                      // Pago manual: lo que debía antes de pagar (factura de la última semana
+                                      // cerrada menos lo pagado después); click abre el desglose
+                                      if (tipo === 'pago_manual') {
+                                        const movs = (kardexModal.rows as any[]).map(x => ({
+                                          tipo: x.tipo_movimiento || 'regularizado',
+                                          saldo: Number(x.saldo_pendiente) || 0,
+                                          referencia: x.referencia ? referenciaVisible(x.referencia) : null,
+                                          semana: x.semana ?? null,
+                                          anio: x.anio ?? null,
+                                        }))
+                                        const d = desglosarPago(movs, kardexModal.rows.indexOf(r), t => tipoLabel[t] || t)
+                                        if (d) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setPagoDetalle({ d, fecha: formatFecha(r.created_at) })
+                                              }}
+                                              style={{
+                                                background: 'none', border: 'none', cursor: 'pointer',
+                                                fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)',
+                                                textDecoration: 'underline', textDecorationStyle: 'dotted',
+                                                padding: 0, fontSize: '11px', fontWeight: 500,
+                                              }}
+                                              title="Lo que debía antes de este pago. Click para ver el detalle"
+                                            >
+                                              {formatCurrency(d.pendiente)}
+                                            </button>
+                                          )
+                                        }
+                                      }
                                       // Ajustes manuales, pagos manuales y cancelaciones por baja no tienen facturación asociada
                                       if (tipo === 'ajuste_manual' || tipo === 'cancelacion_fraccionado_baja' || tipo === 'pago_manual') return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       const fac = (kardexModal as any).facMap?.get(`${r.anio}-${r.semana}`)
@@ -3050,7 +3407,7 @@ export function SaldosAbonosTab() {
                       }}>
                         <span>
                           Mostrando {filasMezcladas.length} de {kardexModal.rows.length + pagosB1Kardex.length} movimientos
-                          {pagosB1Kardex.length > 0 && ' · los pagos B1 son informativos: no entran en los totales ni en el saldo'}
+                          {pagosB1Kardex.some(p => !p.abonoId && !p.enSaldo && !p.yaCargadoAMano && !anteriorACargaAutomatica(p)) && ' · los pagos B1 que todavía no entraron al saldo son informativos: no entran en los totales'}
                           {(kardexSearch || kardexSemanaFilter || kardexTipoFilter) && (
                             <button
                               onClick={() => { setKardexSearch(''); setKardexSemanaFilter(''); setKardexTipoFilter('') }}
@@ -3201,14 +3558,67 @@ export function SaldosAbonosTab() {
               <div className="fact-modal-body" style={{ padding: '16px' }}>
                 {/* Mostrar valores reales con 2 decimales, sin redondear (formatCurrency ya da 2 decimales) */}
                 {row('Saldo previo', Number(f.saldo_anterior) || 0, false, true)}
-                {row('Alquiler', Number(f.subtotal_alquiler) || 0)}
-                {row('Garantía (P003)', Number(f.subtotal_garantia) || 0)}
-                {row('Cargos', Number(f.subtotal_cargos) - Number(f.subtotal_alquiler) - Number(f.subtotal_garantia))}
-                {row('Descuentos', -(Number(f.subtotal_descuentos) || 0))}
+                {/* Un renglón por concepto (alquiler, garantía, Toshipass, promociones...) */}
+                <LineasFactura
+                  facturaId={f.id}
+                  fila={(nombre, monto, clave) => <Fragment key={clave}>{row(nombre, monto)}</Fragment>}
+                  respaldo={<>
+                    {row('Alquiler', Number(f.subtotal_alquiler) || 0)}
+                    {row('Garantía (P003)', Number(f.subtotal_garantia) || 0)}
+                    {row('Cargos', Number(f.subtotal_cargos) - Number(f.subtotal_alquiler) - Number(f.subtotal_garantia))}
+                    {row('Descuentos', -(Number(f.subtotal_descuentos) || 0))}
+                  </>}
+                />
                 <div style={{ borderTop: '2px solid var(--border-primary)', marginTop: '6px', paddingTop: '6px' }}>
                   {row('Subtotal Neto', Number(f.subtotal_neto) || 0, false, true)}
                   {row('Total a Pagar', Number(f.total_a_pagar) || 0, true)}
                 </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Mini-modal: de dónde sale lo que debía antes de un pago manual */}
+      {pagoDetalle && (() => {
+        const { d } = pagoDetalle
+        const fila = (lbl: string, val: number, tipo: 'normal' | 'suave' | 'total' = 'normal') => (
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', gap: '12px',
+            padding: '6px 0',
+            borderBottom: tipo === 'total' ? 'none' : '1px solid var(--border-primary)',
+            fontWeight: tipo === 'total' ? 700 : 500,
+            color: tipo === 'suave' ? 'var(--text-secondary)' : 'var(--text-primary)',
+            fontSize: tipo === 'total' ? '14px' : '12px',
+          }}>
+            <span>{lbl}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{formatCurrency(val)}</span>
+          </div>
+        )
+        const cierre = d.despues > 0.009 ? 'Queda debiendo' : d.despues < -0.009 ? 'Queda a favor' : 'Queda en'
+        return (
+          <div
+            className="fact-modal-overlay"
+            style={{ zIndex: 'var(--z-modal-nested)' }}
+            onClick={() => setPagoDetalle(null)}
+          >
+            <div
+              className="fact-modal-content"
+              style={{ maxWidth: '420px' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="fact-modal-header">
+                <h2 style={{ fontSize: '14px' }}>Pago del {pagoDetalle.fecha}</h2>
+                <button className="fact-modal-close" onClick={() => setPagoDetalle(null)}>
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="fact-modal-body" style={{ padding: '16px' }}>
+                {fila(`Facturado ${d.semanaFactura}`, d.facturado)}
+                {d.movimientos.map((m, i) => <Fragment key={i}>{fila(m.nombre, m.monto, 'suave')}</Fragment>)}
+                {fila('Debía antes de este pago', d.pendiente, 'total')}
+                {fila('Este pago', d.pago)}
+                {fila(cierre, Math.abs(d.despues), 'total')}
               </div>
             </div>
           </div>

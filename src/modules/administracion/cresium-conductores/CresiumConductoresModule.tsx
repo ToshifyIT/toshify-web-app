@@ -41,7 +41,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { haceDiasART, mesActualART } from '../../../utils/fechaArgentina'
-import { formatMoneda } from '../../../utils/format'
+import { formatFechaHora, formatMoneda } from '../../../utils/format'
 import { nombreMes } from '../../../utils/meses'
 import { showError, showSuccess } from '../../../utils/toast'
 import { confirmar } from '../../../components/ui/alertas'
@@ -67,6 +67,11 @@ const pesos = (n: number) => formatMoneda(n || 0, 'ARS', { decimales: 2 })
 function formatDia(dia: string | null | undefined): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dia || '')
   return m ? `${m[3]}/${m[2]}/${m[1]}` : '-'
+}
+
+/** Fecha y hora (HH:MM) del cobro; si no hay hora, solo el día. */
+function fechaMovimiento(m: { fecha: string | null; procesado_en: string | null }): string {
+  return m.procesado_en ? formatFechaHora(m.procesado_en, { segundos: false }) : formatDia(m.fecha)
 }
 
 /** CUIT con guiones: 20-12345678-9 */
@@ -157,7 +162,7 @@ export function CresiumConductoresModule() {
     let cancelado = false
     setLoading(true)
     setError(null)
-    obtenerMovimientosMes(mes)
+    obtenerMovimientosMes(mes, (q) => aplicarFiltroSede(q))
       .then((m) => { if (!cancelado) setMovimientos(m) })
       .catch((e: unknown) => {
         console.error('Error cargando movimientos de Cresium:', e)
@@ -165,7 +170,7 @@ export function CresiumConductoresModule() {
       })
       .finally(() => { if (!cancelado) setLoading(false) })
     return () => { cancelado = true }
-  }, [mes])
+  }, [mes, aplicarFiltroSede])
 
   const indice = useMemo(
     () => (conductores ? indexarConductores(conductores, pagadores || []) : null),
@@ -216,7 +221,7 @@ export function CresiumConductoresModule() {
     setConsultando(true)
     try {
       const conductorFicha = conductorDeConsulta(tipo, valor, conductores || [])
-      const movs = await obtenerMovimientosConsulta(tipo, valor, conductorFicha?.cbu ?? null, desde)
+      const movs = await obtenerMovimientosConsulta(tipo, valor, conductorFicha?.cbu ?? null, desde, (q) => aplicarFiltroSede(q))
       setConsulta({ tipo, valor, desde, movimientos: movs, conductorFicha })
       setVista('todos')
     } catch (err) {
@@ -254,8 +259,8 @@ export function CresiumConductoresModule() {
     {
       id: 'fecha',
       header: 'Fecha',
-      accessorFn: (f) => f.fecha || '',
-      cell: ({ row }) => formatDia(row.original.fecha),
+      accessorFn: (f) => f.procesado_en || f.fecha || '',
+      cell: ({ row }) => <span style={{ whiteSpace: 'nowrap' }}>{fechaMovimiento(row.original)}</span>,
     },
     {
       id: 'pago',
@@ -520,7 +525,7 @@ function AsignarConductorModal({ fila, conductores, onClose, onGuardar }: Asigna
             <span className="crc-nombre">{fila.contraparte || '(sin nombre)'}</span>
             <span className="crc-muted">
               {porCuit ? `CUIT ${formatCuit(fila.cuit)}` : `CBU/CVU ${fila.cuenta_contraparte || '-'}`}
-              {' · '}{formatDia(fila.fecha)} · {pesos(fila.importe)}
+              {' · '}{fechaMovimiento(fila)} · {pesos(fila.importe)}
             </span>
           </div>
 

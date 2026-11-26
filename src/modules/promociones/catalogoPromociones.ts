@@ -60,16 +60,20 @@ export const PROMOCIONES: DefinicionPromocion[] = [
   {
     clave: PROMO_CYBER_LICENCIA_B1,
     codigoInicial: 'PRM02',
-    nombre: 'Cyber Toshi: licencia B1 con pago diario',
-    descripcionInicial: 'Habilita el ingreso de conductores nuevos o que reingresan con licencia B1 (provisorio). Pagan $15.000 por día como saldo a favor hasta tener la D1.',
+    // No es una promoción: es la habilitación temporal de conductores con licencia B1. Está
+    // en este catálogo para manejar su período desde Parámetros > Promociones.
+    nombre: 'Habilitación licencia B1 (pago diario)',
+    descripcionInicial: 'Habilitación temporal: hasta el 31/12 se aceptan conductores con licencia B1 (antes solo D1), con la condición de pagar $15.000 por día como garantía de que está trabajando, hasta obtener la D1, darse de baja o el 31/12.',
     reglas: [
-      'Los conductores nuevos (ingreso por primera vez o reingreso dentro del período) pueden ingresar con licencia B1.',
-      'Mientras no tengan la D1 pagan $15.000 por día, que se acreditan como saldo a favor de su semana de alquiler.',
-      'Al obtener la D1 (fecha de obtención D1 en el conductor) dejan de pagar por día y pasan a semana vencida.',
-      'Facturación: se muestra el código y los días con B1 × $15.000 como dato informativo. Todavía no registra ni descuenta los pagos diarios.',
+      'Hasta el fin del período se aceptan conductores nuevos (ingreso por primera vez o reingreso dentro del período) con licencia B1; antes solo se aceptaba D1.',
+      'Condición: pagan $15.000 por día, todos los días desde su primer turno, como garantía de que están trabajando. Pagan hasta el día antes de obtener la D1, hasta la fecha de baja o hasta el fin del período, lo que pase primero.',
+      'No es deuda: lo que pagan por día es un adelanto de su facturación semanal. Lo que no adelantan se cobra igual al facturar la semana; cada lunes empieza de cero.',
+      'Transferencias: los depósitos de Cresium del conductor (o de quien paga por él en Cresium conductores) entran solos al saldo y cuentan como adelanto.',
+      'Efectivo: se carga en Facturación > Saldos > Registrar Pago con el tilde "Es pago diario de Licencia B1".',
+      'Seguimiento en Facturación > Licencia B1 (día por día y semana por semana). En la factura queda la línea "Licencia B1" como información.',
     ],
-    fechasSugeridas: { inicio: '2026-11-06', fin: '2027-01-03' },
-    conectada: false,
+    fechasSugeridas: { inicio: '2026-11-11', fin: '2026-12-31' },
+    conectada: true,
   },
 ]
 

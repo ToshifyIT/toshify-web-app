@@ -15,35 +15,40 @@
   overflow: hidden;
 }
 .csem-close {
-  position: absolute; top: 16px; right: 16px;
+  position: absolute; top: 10px; right: 12px;
   border: 1px solid var(--border-primary, #e5e7eb);
   background: var(--card-bg, #fff); color: var(--text-secondary, #6b7280); cursor: pointer;
   border-radius: var(--radius-md); padding: 5px;
 }
 .csem-close:hover { background: var(--bg-tertiary, #f3f4f6); }
 
+/* Encabezado compacto y fijo: conductor y semana en una línea, datos del auto en otra */
 .csem-header {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 20px 22px 14px; gap: 12px;
+  flex-shrink: 0;
+  padding: 12px 56px 10px 22px;
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
 }
-.csem-name { font-size: 18px; font-weight: 800; color: var(--text-primary, #111827); }
-.csem-dni { font-size: 13px; color: var(--text-tertiary, #9ca3af); margin-top: 2px; }
-.csem-week { text-align: right; margin-right: 34px; }
-.csem-week-n { font-size: 16px; font-weight: 800; color: #dc2626; }
-.csem-week-r { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin-top: 2px; }
+.csem-head-line {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; flex-wrap: wrap;
+}
+.csem-who { min-width: 0; }
+.csem-name { font-size: 14px; font-weight: 700; color: var(--text-primary, #111827); }
+.csem-dni { font-size: 11px; color: var(--text-secondary, #6b7280); margin-left: 8px; }
+.csem-week { font-size: 12px; color: var(--text-secondary, #6b7280); white-space: nowrap; }
+.csem-week-n { color: #dc2626; }
 
 .csem-info {
-  display: flex; flex-wrap: wrap; gap: 6px 18px;
-  padding: 12px 22px;
-  background: var(--cdet-suave, #f9fafb);
-  border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6;
-  font-size: 13px; color: var(--text-secondary, #6b7280);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  margin-top: 6px;
+  font-size: 12px; font-weight: 600; color: var(--text-primary, #111827);
 }
-.csem-info b { color: var(--text-primary, #111827); font-weight: 700; }
-.csem-info b.gnc { color: #059669; }
-.csem-flota { background: #dbeafe; color: #1d4ed8; padding: 1px 8px; border-radius: var(--radius-full); font-weight: 700; font-size: 12px; }
+.csem-info .gnc { color: #059669; }
+.csem-suave { color: var(--text-tertiary, #9ca3af); font-weight: 400; }
+.csem-flota { color: #1e40af; }
 
-.csem-body { overflow-y: auto; padding: 16px 22px 22px; }
+/* Solo el medio se desplaza */
+.csem-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 22px 12px; }
 .csem-empty { text-align: center; color: var(--text-tertiary, #9ca3af); padding: 30px; }
 
 .csem-sect-title {
@@ -90,17 +95,69 @@
 .csem-subtotal .debit { color: #dc2626; }
 .csem-subtotal .credit { color: #059669; }
 
+/* Pie fijo con el total */
+.csem-footer {
+  flex-shrink: 0;
+  padding: 10px 22px 12px;
+  border-top: 1px solid var(--border-primary, #e5e7eb);
+}
 .csem-total-box {
-  margin-top: 12px; padding: 14px;
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 14px;
   background: var(--cdet-suave, #f9fafb); border-radius: var(--radius-lg);
 }
-.csem-total-ref { padding-bottom: 12px; border-bottom: 1px solid var(--border-primary, #e5e7eb); }
-.csem-ref-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-tertiary, #9ca3af); padding: 2px 0; }
-.csem-total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: var(--text-primary, #111827); padding: 5px 0 2px; }
-.csem-pend { text-align: center; padding-top: 14px; }
-.csem-pend-lbl { font-size: 12px; font-weight: 700; color: var(--text-tertiary, #9ca3af); letter-spacing: .5px; }
-.csem-pend-amt { font-size: 30px; font-weight: 800; margin-top: 4px; }
+.csem-total-ref { flex: 1; min-width: 0; padding-right: 16px; border-right: 1px solid var(--border-primary, #e5e7eb); }
+.csem-ref-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-tertiary, #9ca3af); padding: 1px 0; }
+.csem-total-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--text-primary, #111827); padding: 1px 0; }
+.csem-pend { text-align: right; white-space: nowrap; }
+.csem-pend-lbl { font-size: 11px; font-weight: 700; color: var(--text-tertiary, #9ca3af); letter-spacing: .5px; }
+.csem-pend-amt { font-size: 22px; font-weight: 800; margin-top: 2px; }
 .csem-pend-amt.debit { color: #dc2626; }
 .csem-pend-amt.credit { color: #059669; }
 
-.csem-disclaimer { font-size: 11px; color: var(--text-tertiary, #9ca3af); font-style: italic; text-align: center; margin-top: 16px; }
+.csem-disclaimer { font-size: 10px; color: var(--text-tertiary, #9ca3af); font-style: italic; text-align: center; margin-top: 6px; }
+
+@media (max-width: 600px) {
+  .csem-total-box { flex-direction: column; align-items: stretch; gap: 8px; }
+  .csem-total-ref { padding-right: 0; border-right: none; padding-bottom: 8px; border-bottom: 1px solid var(--border-primary, #e5e7eb); }
+  .csem-pend { text-align: center; }
+}
+
+/* Detalle como cuenta (2026-11-26): bloques con su resultado, total a pagar resaltado */
+.csem-bloque {
+  font-size: 13px; font-weight: 700; color: var(--text-primary, #111827);
+  margin: 14px 0 6px;
+}
+.csem-body > .csem-bloque:first-child { margin-top: 0; }
+.csem-row.iva { color: var(--text-secondary, #6b7280); }
+.csem-resultado {
+  display: flex; justify-content: space-between;
+  padding: 8px 12px 0; margin-top: 6px;
+  border-top: 1px dashed var(--border-primary, #e5e7eb);
+  font-size: 13px; font-weight: 700; color: var(--text-primary, #111827);
+}
+.csem-resultado .credit { color: #059669; }
+.csem-saldo-ant {
+  display: flex; justify-content: space-between;
+  padding: 12px 12px 2px;
+  font-size: 13px; font-weight: 700; color: var(--text-primary, #111827);
+}
+.csem-saldo-ant .debit { color: #dc2626; }
+.csem-saldo-ant .credit { color: #059669; }
+.csem-total-pagar {
+  display: flex; justify-content: space-between;
+  margin-top: 12px; padding: 9px 12px;
+  background: var(--cdet-suave, #f3f4f6); border-radius: var(--radius-md);
+  font-size: 14px; font-weight: 700; color: var(--text-primary, #111827);
+}
+.csem-saldo-ant span:last-child, .csem-resultado span:last-child, .csem-total-pagar span:last-child { font-family: var(--font-mono); }
+.csem-cuenta {
+  flex: 1; min-width: 0;
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary, #6b7280);
+}
+
+/* Pendiente de pago siempre centrado; la cuenta, chica, debajo */
+.csem-total-box { flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.csem-pend { text-align: center; }
+.csem-cuenta { order: 2; flex: none; text-align: center; }
+.csem-cuenta:empty { display: none; }

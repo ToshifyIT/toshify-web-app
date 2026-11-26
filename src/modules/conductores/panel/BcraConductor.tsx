@@ -1,9 +1,12 @@
-// Detalle del BCRA del conductor, en la pestaña Seguimiento del detalle (arriba de la bitácora).
-// Mismos datos que la ficha del lead: alerta, situación, deudas, cheques y detalle por entidad.
+// BCRA del conductor, en la pestaña Seguimiento del detalle (arriba de la bitácora).
+// Se muestra como una línea de resumen (alerta, situación, deuda, fecha) y el detalle
+// (mismos datos que la ficha del lead) se abre con "Ver detalle", para no tapar la bitácora.
 // Lo completa server-bcra.js una vez por mes (sql/conductores_bcra.sql).
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { formatFechaHora, formatPlata } from '../../../utils/format'
+import { formatFecha, formatFechaHora, formatPlata } from '../../../utils/format'
 import { situacionBcra } from '../../leads/bcraSituaciones'
 import { InfoSituacionesBcra } from '../../leads/components/InfoSituacionesBcra'
 import './BcraConductor.css'
@@ -59,6 +62,7 @@ function periodo(p: string | null | undefined): string | null {
 export function BcraConductor({ conductorId }: { conductorId: string }) {
   const [datos, setDatos] = useState<DatosBcra | null>(null)
   const [estado, setEstado] = useState<'cargando' | 'listo' | 'error'>('cargando')
+  const [abierto, setAbierto] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -77,33 +81,50 @@ export function BcraConductor({ conductorId }: { conductorId: string }) {
     return () => { activo = false }
   }, [conductorId])
 
-  const titulo = (
-    <div className="bcra-cond-titulo">
-      Situación en el BCRA <InfoSituacionesBcra />
+  /** Una sola línea: "BCRA (i)  resumen  [Ver detalle]". */
+  const fila = (resumen: ReactNode, conDetalle = false) => (
+    <div className="bcra-cond-fila">
+      <span className="bcra-cond-titulo">BCRA <InfoSituacionesBcra /></span>
+      <span className="bcra-cond-resumen">{resumen}</span>
+      {conDetalle && (
+        <button
+          type="button"
+          className="bcra-cond-toggle"
+          aria-expanded={abierto}
+          onClick={() => setAbierto(a => !a)}
+        >
+          {abierto ? 'Ocultar' : 'Ver detalle'}
+          <ChevronDown size={14} style={{ transform: abierto ? 'rotate(180deg)' : undefined }} />
+        </button>
+      )}
     </div>
   )
 
   if (estado === 'cargando') {
-    return <section className="bcra-cond">{titulo}<p className="bcra-cond-nota">Cargando...</p></section>
+    return <section className="bcra-cond">{fila(<span className="bcra-cond-gris">Cargando...</span>)}</section>
   }
   if (estado === 'error' || !datos?.bcra_consultado_at) {
     return (
       <section className="bcra-cond">
-        {titulo}
-        <p className="bcra-cond-nota">
-          {estado === 'error'
-            ? 'No se pudo cargar la consulta al BCRA.'
-            : 'Pendiente: todavía no se consultó. Se consulta sola, una vez por mes, a los conductores activos.'}
-        </p>
+        {fila(
+          <span className="bcra-cond-gris">
+            {estado === 'error'
+              ? 'No se pudo cargar la consulta al BCRA.'
+              : 'Pendiente: todavía no se consultó. Se consulta sola, una vez por mes, a los conductores activos.'}
+          </span>,
+        )}
       </section>
     )
   }
   if (datos.bcra_error) {
     return (
       <section className="bcra-cond">
-        {titulo}
-        <p className="bcra-cond-nota" style={{ color: 'var(--color-warning)' }}>Sin validar: {datos.bcra_error}</p>
-        <p className="bcra-cond-nota">Consulta: {formatFechaHora(datos.bcra_consultado_at, { segundos: false })}</p>
+        {fila(
+          <>
+            <span style={{ color: 'var(--color-warning)' }}>Sin validar: {datos.bcra_error}</span>
+            <span className="bcra-cond-gris"> · consulta {formatFecha(datos.bcra_consultado_at)}</span>
+          </>,
+        )}
       </section>
     )
   }
@@ -115,78 +136,93 @@ export function BcraConductor({ conductorId }: { conductorId: string }) {
   const deudaAtraso = entidades.filter(e => e.situacion >= 2).reduce((acc, e) => acc + e.monto, 0)
   const nivel = datos.bcra_nivel ? NIVEL[datos.bcra_nivel] : null
 
+  const resumen = (
+    <>
+      {nivel && <strong style={{ color: nivel.color }}>{nivel.label}</strong>}
+      {nivel && ' · '}
+      <span style={{ color: colorSituacion(situacion), fontWeight: 600 }}>Situación {situacion}</span>
+      {' · '}
+      {datos.bcra_deuda_total ? `Deuda ${formatPlata(datos.bcra_deuda_total)}` : 'Sin deudas'}
+      <span className="bcra-cond-gris"> · consulta {formatFecha(datos.bcra_consultado_at)}</span>
+    </>
+  )
+
   return (
     <section className="bcra-cond">
-      {titulo}
-      <div className="bcra-cond-grilla">
-        {nivel && (
-          <div className="bcra-cond-dato bcra-cond-dato--ancho">
-            <span className="bcra-cond-label">Alerta</span>
-            <span>
-              <strong style={{ color: nivel.color }}>{nivel.label}</strong>
-              {datos.bcra_nivel_motivo ? ` · ${datos.bcra_nivel_motivo}` : ''}
-            </span>
-          </div>
-        )}
-        <div className="bcra-cond-dato">
-          <span className="bcra-cond-label">Situación</span>
-          <strong style={{ color: colorSituacion(situacion) }}>
-            {situacion} · {sit?.nombre ?? '-'}
-          </strong>
-        </div>
-        <div className="bcra-cond-dato">
-          <span className="bcra-cond-label">Deuda con atraso</span>
-          <span>{formatPlata(deudaAtraso)}</span>
-        </div>
-        <div className="bcra-cond-dato">
-          <span className="bcra-cond-label">Deuda total</span>
-          <span>{formatPlata(datos.bcra_deuda_total ?? 0)}</span>
-        </div>
-        <div className="bcra-cond-dato">
-          <span className="bcra-cond-label">Cheques rechazados</span>
-          <span>{datos.bcra_cheques ? datos.bcra_cheques : 'No'}</span>
-        </div>
-        <div className="bcra-cond-dato">
-          <span className="bcra-cond-label">Proceso judicial</span>
-          <span>{judicial ? 'Sí' : 'No'}</span>
-        </div>
-        <div className="bcra-cond-dato">
-          <span className="bcra-cond-label">Período informado</span>
-          <span>{periodo(datos.bcra_detalle?.periodo) ?? '-'}</span>
-        </div>
-        {datos.bcra_cuil && (
+      {fila(resumen, true)}
+      {abierto && (
+        <>
+        <div className="bcra-cond-grilla">
+          {nivel && (
+            <div className="bcra-cond-dato bcra-cond-dato--ancho">
+              <span className="bcra-cond-label">Alerta</span>
+              <span>
+                <strong style={{ color: nivel.color }}>{nivel.label}</strong>
+                {datos.bcra_nivel_motivo ? ` · ${datos.bcra_nivel_motivo}` : ''}
+              </span>
+            </div>
+          )}
           <div className="bcra-cond-dato">
-            <span className="bcra-cond-label">CUIL consultado</span>
-            <span>
-              {formatCuil(datos.bcra_cuil)}{datos.bcra_cuil_origen === 'dni' ? ' (armado desde el DNI)' : ''}
-            </span>
+            <span className="bcra-cond-label">Situación</span>
+            <strong style={{ color: colorSituacion(situacion) }}>
+              {situacion} · {sit?.nombre ?? '-'}
+            </strong>
           </div>
-        )}
-        <div className="bcra-cond-dato">
-          <span className="bcra-cond-label">Consulta</span>
-          <span>{formatFechaHora(datos.bcra_consultado_at, { segundos: false })}</span>
+          <div className="bcra-cond-dato">
+            <span className="bcra-cond-label">Deuda con atraso</span>
+            <span>{formatPlata(deudaAtraso)}</span>
+          </div>
+          <div className="bcra-cond-dato">
+            <span className="bcra-cond-label">Deuda total</span>
+            <span>{formatPlata(datos.bcra_deuda_total ?? 0)}</span>
+          </div>
+          <div className="bcra-cond-dato">
+            <span className="bcra-cond-label">Cheques rechazados</span>
+            <span>{datos.bcra_cheques ? datos.bcra_cheques : 'No'}</span>
+          </div>
+          <div className="bcra-cond-dato">
+            <span className="bcra-cond-label">Proceso judicial</span>
+            <span>{judicial ? 'Sí' : 'No'}</span>
+          </div>
+          <div className="bcra-cond-dato">
+            <span className="bcra-cond-label">Período informado</span>
+            <span>{periodo(datos.bcra_detalle?.periodo) ?? '-'}</span>
+          </div>
+          {datos.bcra_cuil && (
+            <div className="bcra-cond-dato">
+              <span className="bcra-cond-label">CUIL consultado</span>
+              <span>
+                {formatCuil(datos.bcra_cuil)}{datos.bcra_cuil_origen === 'dni' ? ' (armado desde el DNI)' : ''}
+              </span>
+            </div>
+          )}
+          <div className="bcra-cond-dato">
+            <span className="bcra-cond-label">Consulta</span>
+            <span>{formatFechaHora(datos.bcra_consultado_at, { segundos: false })}</span>
+          </div>
         </div>
-      </div>
 
-      {entidades.length > 0 && (
-        <table className="cdet-table bcra-cond-tabla">
-          <thead>
-            <tr>
-              <th>Entidad</th>
-              <th className="c">Situación</th>
-              <th className="r">Monto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entidades.map(e => (
-              <tr key={e.entidad}>
-                <td>{e.entidad}{e.proceso_judicial ? ' · proceso judicial' : ''}</td>
-                <td className="c" style={{ color: colorSituacion(e.situacion), fontWeight: 600 }}>{e.situacion}</td>
-                <td className="r">{formatPlata(e.monto)}</td>
+        {entidades.length > 0 && (
+          <table className="cdet-table bcra-cond-tabla">
+            <thead>
+              <tr>
+                <th>Entidad</th>
+                <th className="c">Situación</th>
+                <th className="r">Monto</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {entidades.map(e => (
+                <tr key={e.entidad}>
+                  <td>{e.entidad}{e.proceso_judicial ? ' · proceso judicial' : ''}</td>
+                  <td className="c" style={{ color: colorSituacion(e.situacion), fontWeight: 600 }}>{e.situacion}</td>
+                  <td className="r">{formatPlata(e.monto)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        </>
       )}
     </section>
   )

@@ -11,6 +11,14 @@
  * cargado o armado). Si no coincide, la consulta no se acepta y queda el error
  * para revisar.
  *
+ * Nombre mal cargado (2026-11-25): si el apellido del BCRA aparece en el nombre o en
+ * el mail del lead (p. ej. "Lucas beltranlucaseloy@gmail com" -> BELTRAN LUCAS ELOY),
+ * es la misma persona: se acepta la consulta y se corrige el nombre del lead con el
+ * del BCRA. Si ni el apellido coincide, el DNI es de otra persona y queda sin validar.
+ * Con la consulta validada, el CUIL se guarda como CUIT del lead si estaba vacío o
+ * era inválido (un CUIT inválido ya no frena la consulta: se usa el DNI). Cada
+ * corrección queda en la bitácora de Observaciones.
+ *
  * La API del BCRA es pública (sin clave):
  *   GET https://api.bcra.gob.ar/CentralDeDeudores/v1.0/Deudas/{cuit}
  *   GET https://api.bcra.gob.ar/CentralDeDeudores/v1.0/Deudas/ChequesRechazados/{cuit}
@@ -104,6 +112,11 @@ export function cuilDesdeDni(prefijo, dni) {
   return verificador === 10 ? null : base + verificador
 }
 
+/** El BCRA manda la Ñ como "¨" (FANDI¨O). */
+function limpiarNombreBcra(nombre) {
+  return nombre ? String(nombre).replace(/¨/g, 'Ñ').replace(/\s+/g, ' ').trim() : nombre
+}
+
 function palabrasNombre(texto) {
   return String(texto ?? '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -140,6 +153,56 @@ export function nombresCoinciden(nombresLead, nombreBcra) {
     if (bcra.some((b) => b === p || (p.length >= 5 && b.length >= 5 && distanciaCorta(p, b) <= 1))) iguales += 1
   }
   return iguales >= Math.min(2, lead.size)
+}
+
+/** Todo el texto del lead (nombres y usuario del mail) en mayúsculas, sin espacios ni tildes. */
+function textoPegado(...textos) {
+  return textos.flatMap(palabrasNombre).join('')
+}
+
+/**
+ * El nombre no coincide, pero el apellido del BCRA (la primera palabra, de 3 letras o
+ * más) aparece en el nombre o en el mail del lead: es la misma persona con el nombre
+ * mal cargado. Si ni el apellido aparece, el DNI es de otra persona.
+ */
+export function mismaPersonaProbable(lead, nombreBcra) {
+  const apellido = palabrasNombre(nombreBcra)[0]
+  if (!apellido || apellido.length < 3) return false
+  const usuarioMail = String(lead.email ?? '').split('@')[0]
+  const texto = textoPegado(lead.nombre_completo, lead.nombre_completo_2, lead.primer_nombre, lead.apellido, usuarioMail)
+  return texto.includes(apellido)
+}
+
+const titulo = (p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()
+
+/**
+ * "BELTRAN LUCAS ELOY" -> { primer_nombre: 'Lucas Eloy', apellido: 'Beltran' }.
+ * El BCRA no separa apellido y nombres: el apellido es la primera palabra y las que
+ * siguen mientras estén en el apellido que cargó el lead y no en su nombre
+ * (PRIETO CANE RODRIGO con "PrietoCane"). Siempre queda al menos un nombre.
+ */
+export function separarNombreBcra(nombreBcra, lead) {
+  const palabras = String(nombreBcra).split(' ').filter(Boolean)
+  const enApellido = textoPegado(lead.apellido)
+  const enNombre = textoPegado(lead.primer_nombre)
+  let corte = 1
+  while (corte < palabras.length - 1) {
+    const p = palabrasNombre(palabras[corte])[0]
+    if (!p || !enApellido.includes(p) || enNombre.includes(p)) break
+    corte += 1
+  }
+  const apellido = palabras.slice(0, corte).map(titulo).join(' ')
+  const nombres = palabras.slice(corte).map(titulo).join(' ')
+  return { primer_nombre: nombres, apellido, nombre_completo: `${nombres} ${apellido}`.trim() }
+}
+
+/** Línea de bitácora para Observaciones, mismo formato que las del sistema. */
+function lineaBitacora(texto) {
+  const ahora = new Date().toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).replace(',', '')
+  return `[${ahora} · BCRA] ${texto}`
 }
 
 const formatoPesos = (n) => `$${Math.round(n).toLocaleString('es-AR')}`
@@ -199,7 +262,7 @@ export async function consultarBcra(cuit, deudasPrevias) {
   if (cantCheques > 0) resumen += ` - ${cantCheques} cheque${cantCheques === 1 ? '' : 's'} rechazado${cantCheques === 1 ? '' : 's'}`
 
   return {
-    nombre: deudas?.denominacion ?? cheques?.denominacion ?? null,
+    nombre: limpiarNombreBcra(deudas?.denominacion ?? cheques?.denominacion ?? null),
     periodo: periodo?.periodo ?? null,
     situacion,
     total,
@@ -209,7 +272,8 @@ export async function consultarBcra(cuit, deudasPrevias) {
   }
 }
 
-const COLUMNAS_CONSULTA = 'id,cuit,dni,nombre_completo,nombre_completo_2,primer_nombre,apellido,bcra,bcra_resumen,bcra_intentos'
+const COLUMNAS_CONSULTA = 'id,cuit,dni,nombre_completo,nombre_completo_2,primer_nombre,apellido,email,observaciones,' +
+  'bcra,bcra_resumen,bcra_intentos'
 
 // Leads que se están consultando ahora (al instante o en la vuelta): no se consultan dos veces
 const enCurso = new Set()
@@ -279,19 +343,25 @@ async function actualizarConductor(cfg, id, cambios) {
 
 /**
  * Busca el resultado del BCRA para el lead: con el CUIT cargado o, si no hay, con el
- * CUIL armado desde el DNI. Devuelve { resultado, cuil, origen } o { error }.
+ * CUIL armado desde el DNI. Devuelve { resultado, cuil, origen, corregirNombre } o { error }.
+ * `corregirNombre`: el nombre del BCRA, cuando es la misma persona con el nombre mal cargado.
  */
 async function buscarEnBcra(lead) {
   const nombres = [lead.nombre_completo, lead.nombre_completo_2, lead.primer_nombre, lead.apellido]
   if (nombres.flatMap(palabrasNombre).length === 0) return { error: 'Falta el nombre del lead para validar' }
 
   const tieneCuit = String(lead.cuit ?? '').trim() !== ''
-  if (tieneCuit) {
-    const cuit = normalizarCuit(lead.cuit)
-    if (!cuit) return { error: 'CUIT inválido' }
+  const cuitValido = tieneCuit ? normalizarCuit(lead.cuit) : null
+  // CUIT inválido: sin DNI no hay con qué consultar; con DNI se sigue por el DNI
+  if (tieneCuit && !cuitValido && !String(lead.dni ?? '').trim()) return { error: 'CUIT inválido' }
+  if (cuitValido) {
+    const cuit = cuitValido
     const r = await consultarBcra(cuit)
     // Sin nada informado no hay nombre para comparar: el CUIT es el del lead
     if (r.nombre && !nombresCoinciden(nombres, r.nombre)) {
+      if (mismaPersonaProbable(lead, r.nombre)) {
+        return { resultado: r, cuil: cuit, origen: 'cuit', corregirNombre: r.nombre }
+      }
       return { error: `El nombre en el BCRA (${r.nombre}) no coincide con el del lead`, nombre: r.nombre, cuil: cuit }
     }
     return { resultado: r, cuil: cuit, origen: 'cuit' }
@@ -299,17 +369,27 @@ async function buscarEnBcra(lead) {
 
   // Sin CUIT: se prueba el CUIL con cada prefijo hasta que el nombre coincida
   let otroNombre = null
+  let probable = null
   for (const prefijo of PREFIJOS_CUIL) {
     const cuil = cuilDesdeDni(prefijo, lead.dni)
     if (!cuil) continue
     // Primero solo las deudas (trae el nombre); los cheques, cuando el nombre coincide
     const deudas = await getBcra(cuil)
-    const nombre = deudas?.denominacion ?? null
+    const nombre = limpiarNombreBcra(deudas?.denominacion ?? null)
     if (nombre && nombresCoinciden(nombres, nombre)) {
       return { resultado: await consultarBcra(cuil, deudas), cuil, origen: 'dni' }
     }
+    if (nombre && !probable && mismaPersonaProbable(lead, nombre)) probable = { nombre, cuil, deudas }
     if (nombre && !otroNombre) otroNombre = { nombre, cuil }
     await esperar(500)
+  }
+  if (probable) {
+    return {
+      resultado: await consultarBcra(probable.cuil, probable.deudas),
+      cuil: probable.cuil,
+      origen: 'dni',
+      corregirNombre: probable.nombre,
+    }
   }
   if (otroNombre) {
     return {
@@ -325,6 +405,32 @@ async function buscarEnBcra(lead) {
     cuil: null,
     origen: 'dni',
   }
+}
+
+/**
+ * Con la consulta validada: nombre del BCRA si el del lead estaba mal cargado, y el CUIL
+ * como CUIT si estaba vacío o era inválido. Cada cambio deja una línea en Observaciones.
+ */
+function correccionesLead(lead, b) {
+  const cambios = {}
+  const lineas = []
+  if (b.corregirNombre) {
+    const antes = [lead.primer_nombre, lead.apellido].filter(Boolean).join(' ') || lead.nombre_completo || ''
+    Object.assign(cambios, separarNombreBcra(b.corregirNombre, lead))
+    lineas.push(`Nombre corregido según el BCRA: ${cambios.nombre_completo} (antes: ${antes.trim()})`)
+  }
+  const cuitActual = String(lead.cuit ?? '').trim()
+  if (b.cuil && !normalizarCuit(cuitActual)) {
+    cambios.cuit = b.cuil
+    // Completar uno vacío no va a la bitácora; corregir uno mal cargado sí
+    if (cuitActual) lineas.push(`CUIT corregido según el BCRA: ${b.cuil} (antes: ${cuitActual})`)
+  }
+  if (lineas.length) {
+    const nuevas = lineas.map(lineaBitacora).join('\n')
+    const previas = String(lead.observaciones ?? '').trim()
+    cambios.observaciones = previas ? `${previas}\n${nuevas}` : nuevas
+  }
+  return cambios
 }
 
 /**
@@ -366,6 +472,7 @@ async function procesarLead(cfg, lead, tabla = 'leads') {
     if (tabla === 'leads') {
       const textoActual = (lead.bcra ?? '').trim()
       if (!textoActual || textoActual === (lead.bcra_resumen ?? '').trim()) cambios.bcra = r.resumen
+      Object.assign(cambios, correccionesLead(lead, b))
     }
     await guardar(lead.id, cambios)
     return 'ok'
