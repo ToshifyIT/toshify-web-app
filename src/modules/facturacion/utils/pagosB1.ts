@@ -311,13 +311,14 @@ export async function cargarPagosB1(
     if (error) throw errorTabla(error)
     registros.push(...(data || []))
   }
-  // Pagos enlazados a un abono de Saldos: si el abono ya no está (se borró el pago), no cuentan
-  const conAbono = registros.filter(r => r.origen === 'manual' && r.abono_id)
+  // Pagos enlazados a un abono de Saldos (efectivo, o transferencia marcada a mano): si el
+  // abono ya no está (se borró el pago), no cuentan
+  const conAbono = registros.filter(r => r.abono_id)
   if (conAbono.length > 0) {
     const existen = await abonosExistentes([...new Set(conAbono.map(r => r.abono_id as string))])
     for (let i = registros.length - 1; i >= 0; i--) {
       const r = registros[i]
-      if (r.origen === 'manual' && r.abono_id && !existen.has(r.abono_id)) registros.splice(i, 1)
+      if (r.abono_id && !existen.has(r.abono_id)) registros.splice(i, 1)
     }
   }
   // Depósitos asignados a mano a CUALQUIER conductor: no se toman solos para otro
@@ -567,6 +568,36 @@ export async function idSaldoConductor(conductorId: string): Promise<string> {
  * adelanto con la fecha de carga (hoy: siempre una semana abierta). `fechaInformada` es la
  * fecha en que dijo que pagó: solo informativa, no cambia la semana.
  */
+/**
+ * Transferencia de Cresium enlazada a mano en Saldos > Registrar Pago, para un conductor que
+ * está en B1. Con el tilde "Es pago diario de Licencia B1" cuenta en B1 el día de la
+ * transferencia; sin el tilde queda afuera de B1, aunque después coincida sola (por ejemplo,
+ * si se recordó a quien pagó). Queda enlazada al abono: si se borra el abono, sale de B1.
+ */
+export async function marcarTransferenciaB1(
+  conductorId: string,
+  t: { id: string; fecha: string; importe: number; contraparte: string | null; cuit: string | null },
+  abonoId: string,
+  esB1: boolean,
+  nota: string | null,
+  usuario: Usuario,
+): Promise<void> {
+  const fila = {
+    conductor_id: conductorId, origen: esB1 ? 'cresium' : 'excluido', fecha: t.fecha, monto: t.importe,
+    cresium_movimiento_id: t.id, pagador: t.contraparte, cuit: t.cuit, nota: nota?.trim() || null,
+    created_by: usuario.id, created_by_name: usuario.nombre,
+  }
+  const { error } = await (supabase.from('promocion_b1_pagos') as any).insert({ ...fila, abono_id: abonoId })
+  if (!error) return
+  // Sin sql/promocion_b1_pagos_desde_saldos.sql todavía no está la columna abono_id
+  if (error.code === '42703' || /abono_id/.test(error.message || '')) {
+    const { error: err2 } = await (supabase.from('promocion_b1_pagos') as any).insert(fila)
+    if (err2) throw errorTabla(err2)
+    return
+  }
+  throw errorTabla(error)
+}
+
 export async function registrarPagoB1DesdeSaldos(
   conductorId: string,
   abonoId: string,

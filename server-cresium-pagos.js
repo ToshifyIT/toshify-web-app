@@ -40,7 +40,8 @@ const DESDE_PAGOS = '2026-11-26T15:00:00Z'
 export const CONCEPTO_TRANSFERENCIA = 'Transferencia bancaria'
 export const CONCEPTO_TRANSFERENCIA_B1 = 'Transferencia bancaria - B1'
 const CLAVE_PROMO_B1 = 'CYBER_LICENCIA_B1'
-const USUARIO = 'Automático (Cresium)'
+// Usuario de los movimientos que carga solo: R2DT, el asistente de automatizaciones
+const USUARIO = 'R2DT'
 const TIMEOUT_MS = 30000
 
 /* ----------------------------- Fechas (ART) ------------------------------ */
