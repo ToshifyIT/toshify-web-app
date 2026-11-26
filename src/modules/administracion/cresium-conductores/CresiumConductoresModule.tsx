@@ -241,7 +241,8 @@ export function CresiumConductoresModule() {
     if (!f.asignacion) return
     const ok = await confirmar({
       titulo: 'Quitar asignación',
-      texto: `Los pagos de ${f.contraparte || 'esta persona'} dejan de figurar a nombre de ${f.nombre_conductor}.`,
+      texto: `Los pagos de ${f.contraparte || 'esta persona'} dejan de figurar a nombre de ${f.nombre_conductor}. `
+        + 'Las transferencias que ya entraron en su saldo siguen enlazadas: esto solo cambia las próximas.',
       peligro: true,
     })
     if (!ok) return

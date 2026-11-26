@@ -1,6 +1,7 @@
 // src/modules/administracion/cresium-conductores/cruceCresium.ts
 // Cruce de los movimientos de Cresium (cresium_movimientos) con los conductores.
-// Un movimiento es de un conductor si coincide, en este orden:
+// Un movimiento es de un conductor si, en este orden:
+//   0. ya entró en su saldo (enlazada desde Saldos o por el servidor: pago_conductor_id)
 //   1. el CUIT/CUIL del movimiento con el CUIT del conductor
 //   2. el DNI que va dentro del CUIL (dígitos 3 a 10) con el DNI del conductor
 //   3. la cuenta (CBU/CVU) del movimiento con el CBU del conductor
@@ -8,7 +9,7 @@
 import { supabase } from '../../../lib/supabase'
 import type { EmpresaCresium } from '../../../services/cresiumService'
 
-export type CriterioCruce = 'cuit' | 'dni' | 'cbu' | 'asignado'
+export type CriterioCruce = 'saldo' | 'cuit' | 'dni' | 'cbu' | 'asignado'
 
 export interface ConductorCruce {
   id: string
@@ -34,6 +35,10 @@ export interface MovimientoCruce {
   banco_contraparte: string | null
   importe: number
   nota: string | null
+  /** Conductor en cuyo saldo ya entró la transferencia (server-cresium-pagos.js o Saldos) */
+  pago_conductor_id?: string | null
+  pago_cargado_en?: string | null
+  pago_omitido?: string | null
 }
 
 export interface FilaCruce extends MovimientoCruce {
@@ -63,6 +68,7 @@ export const VINCULOS = ['Pareja', 'Hermano/a', 'Padre/Madre', 'Hijo/a', 'Tío/a
 export const DIAS_CONSULTA = 7
 
 export const ETIQUETA_CRITERIO: Record<CriterioCruce, string> = {
+  saldo: 'Enlazada en Saldos',
   cuit: 'CUIT/CUIL',
   dni: 'DNI',
   cbu: 'CBU',
@@ -70,7 +76,7 @@ export const ETIQUETA_CRITERIO: Record<CriterioCruce, string> = {
 }
 
 const COLUMNAS_MOV =
-  'cresium_id, empresa, fecha, procesado_en, direccion, tipo, contraparte, cuit, cuenta_contraparte, banco_contraparte, importe, nota'
+  'cresium_id, empresa, fecha, procesado_en, direccion, tipo, contraparte, cuit, cuenta_contraparte, banco_contraparte, importe, nota, pago_conductor_id, pago_cargado_en, pago_omitido'
 
 const TAM_PAGINA = 1000
 
@@ -339,7 +345,7 @@ export function indexarConductores(conductores: ConductorCruce[], pagadores: Pag
     if (p.cuit) pagadorPorCuit.set(soloDigitos(p.cuit), { conductor, pagador: p })
     else if (p.cbu) pagadorPorCbu.set(soloDigitos(p.cbu), { conductor, pagador: p })
   }
-  return { porCuit, porDni, porCbu, pagadorPorCuit, pagadorPorCbu }
+  return { porId, porCuit, porDni, porCbu, pagadorPorCuit, pagadorPorCbu }
 }
 
 export type IndiceConductores = ReturnType<typeof indexarConductores>
@@ -356,8 +362,16 @@ export function cruzar(
   const filas: FilaCruce[] = []
   for (const m of movimientos) {
     const cuit = soloDigitos(m.cuit)
-    let conductor = cuit ? indice.porCuit.get(cuit) : undefined
-    let criterio: CriterioCruce = 'cuit'
+    // Ya entró en el saldo de un conductor (el servidor o Registrar Pago en Saldos): eso manda,
+    // aunque después se haya quitado la asignación de quien paga
+    const enSaldo = m.pago_conductor_id && (m.pago_cargado_en || m.pago_omitido)
+      ? indice.porId.get(m.pago_conductor_id) : undefined
+    let conductor = enSaldo
+    let criterio: CriterioCruce = 'saldo'
+    if (!conductor) {
+      conductor = cuit ? indice.porCuit.get(cuit) : undefined
+      criterio = 'cuit'
+    }
     if (!conductor) {
       const dni = dniDeCuit(cuit)
       conductor = dni ? indice.porDni.get(dni) : undefined
