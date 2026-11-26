@@ -24,6 +24,8 @@ export interface MovimientoCruce {
   cresium_id: number
   empresa: EmpresaCresium
   fecha: string | null
+  /** Momento en que Cresium acreditó el cobro (con hora). */
+  procesado_en: string | null
   direccion: 'entrada' | 'salida'
   tipo: string | null
   contraparte: string | null
@@ -68,7 +70,7 @@ export const ETIQUETA_CRITERIO: Record<CriterioCruce, string> = {
 }
 
 const COLUMNAS_MOV =
-  'cresium_id, empresa, fecha, direccion, tipo, contraparte, cuit, cuenta_contraparte, banco_contraparte, importe, nota'
+  'cresium_id, empresa, fecha, procesado_en, direccion, tipo, contraparte, cuit, cuenta_contraparte, banco_contraparte, importe, nota'
 
 const TAM_PAGINA = 1000
 
@@ -137,14 +139,31 @@ export async function obtenerConductores(
   })
 }
 
-/** Cobros de personas en Cresium (sin rechazados ni empresas) del mes 'AAAA-MM' */
-export async function obtenerMovimientosMes(mes: string): Promise<MovimientoCruce[]> {
+/** Filtro de sede de la pantalla (aplicarFiltroSede): Buenos Aires o Pruebas */
+type FiltroSede = <Q>(query: Q) => Q
+
+/**
+ * Corre la consulta con el filtro de sede; si la base todavía no tiene la columna sede_id
+ * (falta sql/cresium_movimientos_sede.sql), la corre sin filtro.
+ */
+async function conSede<T>(filtrarSede: FiltroSede | undefined, correr: (f: FiltroSede) => Promise<T>): Promise<T> {
+  const sinFiltro: FiltroSede = (q) => q
+  try {
+    return await correr(filtrarSede || sinFiltro)
+  } catch (err) {
+    if (!filtrarSede || (err as { code?: string })?.code !== '42703') throw err
+    return correr(sinFiltro)
+  }
+}
+
+/** Cobros de personas en Cresium (sin rechazados ni empresas) del mes 'AAAA-MM', de la sede */
+export async function obtenerMovimientosMes(mes: string, filtrarSede?: FiltroSede): Promise<MovimientoCruce[]> {
   const [y, m] = mes.split('-').map(Number)
   const ultimoDia = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  return sinEmpresas(await traerTodo<MovimientoCruce>((desde, hasta) =>
-    supabase
+  return sinEmpresas(await conSede(filtrarSede, (f) => traerTodo<MovimientoCruce>((desde, hasta) =>
+    f(supabase
       .from('cresium_movimientos')
-      .select(COLUMNAS_MOV)
+      .select(COLUMNAS_MOV))
       .gte('fecha', `${mes}-01`)
       .lte('fecha', `${mes}-${String(ultimoDia).padStart(2, '0')}`)
       .neq('estado', 'FAILED')
@@ -152,7 +171,7 @@ export async function obtenerMovimientosMes(mes: string): Promise<MovimientoCruc
       .order('fecha', { ascending: false })
       .order('cresium_id', { ascending: false })
       .range(desde, hasta),
-  ))
+  )))
 }
 
 export type TipoConsulta = 'cbu' | 'cuit' | 'dni' | 'nombre'
@@ -208,13 +227,14 @@ export async function obtenerMovimientosConsulta(
   valor: string,
   cbuConductor: string | null,
   desde: string,
+  filtrarSede?: FiltroSede,
 ): Promise<MovimientoCruce[]> {
   if (tipo === 'nombre') {
     const patron = `%${nombreParaBuscar(valor).replace(/ /g, '%')}%`
-    return sinEmpresas(await traerTodo<MovimientoCruce>((d, h) =>
-      supabase
+    return sinEmpresas(await conSede(filtrarSede, (f) => traerTodo<MovimientoCruce>((d, h) =>
+      f(supabase
         .from('cresium_movimientos')
-        .select(COLUMNAS_MOV)
+        .select(COLUMNAS_MOV))
         .ilike('contraparte', patron)
         .gte('fecha', desde)
         .neq('estado', 'FAILED')
@@ -222,7 +242,7 @@ export async function obtenerMovimientosConsulta(
         .order('fecha', { ascending: false })
         .order('cresium_id', { ascending: false })
         .range(d, h),
-    ))
+    )))
   }
   const digitos = soloDigitos(valor)
   const condiciones: string[] = []
@@ -232,10 +252,10 @@ export async function obtenerMovimientosConsulta(
   const cbu = soloDigitos(cbuConductor)
   if (cbu.length === 22 && tipo !== 'cbu') condiciones.push(`cuenta_contraparte.eq.${cbu}`)
 
-  return sinEmpresas(await traerTodo<MovimientoCruce>((d, h) =>
-    supabase
+  return sinEmpresas(await conSede(filtrarSede, (f) => traerTodo<MovimientoCruce>((d, h) =>
+    f(supabase
       .from('cresium_movimientos')
-      .select(COLUMNAS_MOV)
+      .select(COLUMNAS_MOV))
       .or(condiciones.join(','))
       .gte('fecha', desde)
       .neq('estado', 'FAILED')
@@ -243,7 +263,7 @@ export async function obtenerMovimientosConsulta(
       .order('fecha', { ascending: false })
       .order('cresium_id', { ascending: false })
       .range(d, h),
-  ))
+  )))
 }
 
 /** Quiénes pagan por un conductor. null si la tabla todavía no existe (falta correr el SQL) */

@@ -47,6 +47,7 @@
 
 import express from 'express'
 import crypto from 'node:crypto'
+import { cargarPagosConductoresCresium } from './server-cresium-pagos.js'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -361,7 +362,7 @@ async function guardarMovimientos(cfg, filas) {
 async function ultimoProcesado(cfg, empresa) {
   const [f] = await selectTodo(
     cfg,
-    `cresium_movimientos?select=procesado_en&empresa=eq.${empresa}&procesado_en=not.is.null&order=procesado_en.desc&limit=1`,
+    `cresium_movimientos?select=procesado_en&empresa=eq.${empresa}${SOLO_REALES}&procesado_en=not.is.null&order=procesado_en.desc&limit=1`,
   )
   return f?.procesado_en || null
 }
@@ -756,10 +757,18 @@ function leerEmpresa(req, res) {
 /* Listado                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Transferencias de prueba (sede Pruebas, sql/cresium_movimientos_sede.sql): se cargan con
+ * cresium_id desde 9000000000000. No son movimientos reales de 44 Dreams ni Grupo CG: quedan
+ * fuera de todo lo contable (listado, totales, conciliación y Alegra).
+ */
+const PRIMER_ID_PRUEBA = 9000000000000
+const SOLO_REALES = `&cresium_id=lt.${PRIMER_ID_PRUEBA}`
+
 async function ultimaCategoriaPorCuit(cfg, empresa) {
   const filas = await selectTodo(
     cfg,
-    `cresium_movimientos?select=cuit,alegra_categoria_id,alegra_cargado_en&empresa=eq.${empresa}` +
+    `cresium_movimientos?select=cuit,alegra_categoria_id,alegra_cargado_en&empresa=eq.${empresa}${SOLO_REALES}` +
       '&alegra_estado=eq.cargado&alegra_categoria_id=not.is.null&order=alegra_cargado_en.asc',
   )
   const mapa = new Map()
@@ -778,7 +787,7 @@ async function filasDelMes(cfg, empresa, mes) {
   const [a, m] = mes.split('-').map(Number)
   const primerDia = `${mes}-01`
   const siguiente = new Date(Date.UTC(a, m, 1)).toISOString().slice(0, 10)
-  const filtro = `&empresa=eq.${empresa}&fecha=gte.${primerDia}&fecha=lt.${siguiente}&order=procesado_en.asc`
+  const filtro = `&empresa=eq.${empresa}${SOLO_REALES}&fecha=gte.${primerDia}&fecha=lt.${siguiente}&order=procesado_en.asc`
   let filas
   try {
     filas = await selectTodo(cfg, `cresium_movimientos?select=${COLUMNAS_LISTADO}${filtro}`)
@@ -1281,7 +1290,7 @@ cresiumRouter.post('/:empresa/cargar', async (req, res) => {
       const ids = items.map((i) => i.cresium_id).join(',')
       const filas = await selectTodo(
         ctx.cfg,
-        `cresium_movimientos?select=*&empresa=eq.${empresa}&cresium_id=in.(${ids})`,
+        `cresium_movimientos?select=*&empresa=eq.${empresa}${SOLO_REALES}&cresium_id=in.(${ids})`,
       )
       for (const item of items) {
         const fila = filas.find((f) => Number(f.cresium_id) === item.cresium_id)
@@ -1439,7 +1448,7 @@ async function conciliar(ctx, empresa, hasta, confirmar) {
   try {
     const conc = await selectTodo(
       ctx.cfg,
-      `cresium_movimientos?select=cresium_id,alegra_estado,alegra_conciliado&empresa=eq.${empresa}` +
+      `cresium_movimientos?select=cresium_id,alegra_estado,alegra_conciliado&empresa=eq.${empresa}${SOLO_REALES}` +
         `&fecha=gte.${desde}&fecha=lte.${hasta}&estado=eq.SUCCESS`,
     )
     yaConciliados = new Set(conc.filter((f) => f.alegra_conciliado).map((f) => Number(f.cresium_id)))
@@ -1459,7 +1468,7 @@ async function conciliar(ctx, empresa, hasta, confirmar) {
     ctx.cfg,
     `cresium_movimientos?select=cresium_id,fecha,estado,direccion,contraparte,importe,impuesto,alegra_estado,` +
       `alegra_pago_id,alegra_impuesto_pago_id,alegra_ajuste_pago_id,alegra_conciliacion_id` +
-      `&empresa=eq.${empresa}&fecha=gte.${desde}&estado=eq.SUCCESS`,
+      `&empresa=eq.${empresa}${SOLO_REALES}&fecha=gte.${desde}&estado=eq.SUCCESS`,
   )
   const enRango = todas.filter((f) => f.fecha <= hasta)
   const pendientes = enRango.filter((f) => ['pendiente', 'error'].includes(f.alegra_estado))
@@ -1484,7 +1493,7 @@ async function conciliar(ctx, empresa, hasta, confirmar) {
   const siguienteMes = new Date(Date.UTC(Number(hasta.slice(0, 4)), Number(hasta.slice(5, 7)), 1)).toISOString().slice(0, 10)
   const mesesSiguientes = await selectTodo(
     ctx.cfg,
-    `cresium_movimientos?select=direccion,importe,impuesto&empresa=eq.${empresa}&fecha=gte.${siguienteMes}&estado=eq.SUCCESS`,
+    `cresium_movimientos?select=direccion,importe,impuesto&empresa=eq.${empresa}${SOLO_REALES}&fecha=gte.${siguienteMes}&estado=eq.SUCCESS`,
   )
   const efectoPosterior = [...posteriores.filter((f) => f.fecha < siguienteMes), ...mesesSiguientes]
     .reduce((s, f) => s + efectoEnSaldo(f), 0)
@@ -1600,6 +1609,18 @@ export function iniciarSyncAutomaticoCresium() {
         console.log(`[cresium] Automático ${clave} ART ${empresa}: ${r.nuevos ?? 0} nuevos de ${r.traidos ?? 0}`)
       } catch (err) {
         console.error(`[cresium] Automático ${clave} ART ${empresa} falló:`, err.message)
+      }
+    }
+    // Depósitos de conductores -> pago en su saldo (server-cresium-pagos.js).
+    // CRESIUM_PAGOS_AUTO=0 lo apaga.
+    if (process.env.CRESIUM_PAGOS_AUTO !== '0') {
+      try {
+        const p = await cargarPagosConductoresCresium(cfg)
+        if (p.cargados || p.omitidos) {
+          console.log(`[cresium-pagos] ${clave} ART: ${p.cargados} cargados, ${p.omitidos} ya cargados a mano, ${p.sinConductor} sin conductor`)
+        }
+      } catch (err) {
+        console.error(`[cresium-pagos] ${clave} ART falló:`, err.message)
       }
     }
   }
