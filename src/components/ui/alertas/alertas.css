@@ -35,6 +35,36 @@
   animation: tsh-alerta-entrar 0.16s ease-out;
 }
 .tsh-alerta--ancha { width: 98vw; max-width: 1700px; }
+/* Título y botones fijos; solo el cuerpo hace scroll. Una cabecera propia del cuerpo
+   (.tsh-alerta-fijo-arriba) también queda quieta arriba. */
+.tsh-alerta--partes-fijas {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tsh-alerta--partes-fijas > .tsh-alerta-titulo,
+.tsh-alerta--partes-fijas > .tsh-alerta-acciones { flex-shrink: 0; }
+.tsh-alerta--partes-fijas > .tsh-alerta-cuerpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* La barra de scroll va en el margen de la ventana, sin tapar los montos */
+  padding-right: 16px;
+  margin-right: -16px;
+  scrollbar-width: thin;
+}
+.tsh-alerta--partes-fijas > .tsh-alerta-acciones {
+  margin-top: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-primary);
+}
+.tsh-alerta--partes-fijas .tsh-alerta-fijo-arriba {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-primary, #fff);
+}
 .tsh-alerta--sacudir { animation: tsh-alerta-sacudir 0.25s ease-in-out; }
 
 .tsh-alerta-icono {
