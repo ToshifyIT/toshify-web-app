@@ -2134,3 +2134,51 @@
   padding: 12px 8px 8px;
   overflow-y: visible;
 }
+
+/* Detalle de semana como cuenta (2026-11-26): mismo orden que el panel del conductor.
+   Encabezado compacto y pie fijos; solo el medio se desplaza. */
+.pdet-header { flex-shrink: 0; padding: 12px 64px 10px 22px; border-bottom: 1px solid var(--border-primary); }
+.pdet-head-line { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
+.pdet-who { min-width: 0; }
+.pdet-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.pdet-doc { font-size: 11px; color: var(--text-secondary); margin-left: 8px; }
+.pdet-week { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.pdet-week strong { color: var(--color-primary); }
+.pdet-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.pdet-suave { color: var(--text-tertiary); font-weight: 400; }
+.pdet-body.portal-detail-body { padding: 12px 22px; }
+.pdet-bloque { font-size: 13px; font-weight: 700; color: var(--text-primary); margin: 14px 0 6px; }
+.pdet-body > .pdet-bloque:first-child { margin-top: 0; }
+.pdet-iva .portal-detail-item-name { color: var(--text-secondary); }
+.pdet-resultado { display: flex; justify-content: space-between; padding: 8px 12px 0; margin-top: 6px; border-top: 1px dashed var(--border-primary); font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.pdet-saldo-ant { display: flex; justify-content: space-between; padding: 12px 12px 2px; font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.pdet-total-pagar { display: flex; justify-content: space-between; margin-top: 12px; padding: 9px 12px; background: var(--bg-secondary); border-radius: var(--radius-md); font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.pdet-resultado span:last-child, .pdet-saldo-ant span:last-child, .pdet-total-pagar span:last-child { font-family: var(--font-mono); }
+.pdet-footer { flex-shrink: 0; padding: 10px 22px 12px; border-top: 1px solid var(--border-primary); }
+.pdet-total-box { display: flex; align-items: center; gap: 16px; padding: 10px 14px; background: var(--bg-secondary); border-radius: var(--radius-lg); }
+.pdet-cuenta { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+.pdet-pend { text-align: right; white-space: nowrap; }
+.pdet-pend-lbl { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-tertiary); }
+.pdet-pend-amt { font-size: 22px; font-weight: 800; font-family: var(--font-mono); margin-top: 2px; }
+.pdet-pend-amt.debit { color: var(--color-primary); }
+.pdet-pend-amt.credit { color: #059669; }
+.pdet-pie { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; }
+.pdet-legal { font-size: 11px; font-style: italic; color: var(--text-tertiary); }
+.pdet-pdf-btn { flex-shrink: 0; padding: 6px 14px; background: var(--color-primary); color: #fff; border: none; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; cursor: pointer; }
+.pdet-pdf-btn:disabled { opacity: .6; cursor: default; }
+@media (max-width: 640px) {
+  .pdet-header { padding: 12px 56px 10px 14px; }
+  .pdet-body.portal-detail-body { padding: 12px 14px; }
+  .pdet-footer { padding: 10px 14px 12px; }
+  .pdet-total-box { flex-direction: column; align-items: stretch; gap: 6px; }
+  .pdet-pend { text-align: center; }
+  .pdet-cuenta { text-align: center; }
+  .pdet-pie { flex-direction: column-reverse; }
+  .pdet-legal { text-align: center; }
+}
+
+/* Pendiente de pago siempre centrado; la cuenta, chica, debajo */
+.pdet-total-box { flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.pdet-pend { text-align: center; }
+.pdet-cuenta { order: 2; flex: none; text-align: center; }
+.pdet-cuenta:empty { display: none; }

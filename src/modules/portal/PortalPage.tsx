@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { normalizeDni, normalizeCuit } from '../../utils/normalizeDocuments'
 import { getConceptoLabel } from '../../utils/conceptoLabels'
 import {
-  cargarIvaPorCodigo, etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto,
+  cargarIvaPorCodigo, cargarPeriodoPorCodigo, etiquetaConTarifa, etiquetaIvaLinea, ivaDeLinea, montoBruto, montoNeto,
   type IvaPorCodigo,
 } from '../../utils/facturacionIva'
 import { calcularKmSemanasConductor } from './kmRecorridos'
@@ -21,6 +21,7 @@ import './PortalPage.css'
 import { formatPlata, formatNumero } from '../../utils/format'
 import { PatenteBadge } from '../../components/ui/PatenteBadge'
 import { formatFecha, formatFechaHora, formatHora } from '../../utils/format'
+import { clasePagoConductor, textoPagoConductor } from '../../utils/textoPagoConductor'
 
 // =====================================================
 // TYPES
@@ -345,6 +346,10 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   // % de IVA por concepto (conceptos_nomina). Se usa para mostrar cada cargo en NETO y
   // el IVA en su propio renglon, igual que el modulo de Facturacion. Ver utils/facturacionIva.
   const [ivaPorCodigo, setIvaPorCodigo] = useState<IvaPorCodigo>(() => new Map())
+  // Periodo de la tarifa por concepto ("OCT-26"): se muestra en lugar de "Tarifa Nueva"
+  const [periodoPorCodigo, setPeriodoPorCodigo] = useState<Map<string, string>>(() => new Map())
+  const etiquetaConcepto = (item: { concepto_codigo: string; concepto_descripcion?: string | null }) =>
+    etiquetaConTarifa(getConceptoLabel(item), item.concepto_codigo, periodoPorCodigo)
   // aplicadoAFraccionamiento: pago que bajó una deuda que después se fraccionó. Ya está
   // dentro de las cuotas (P010): se muestra pero no se resta de la semana.
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string; aplicadoAFraccionamiento: boolean }>>([])
@@ -357,6 +362,19 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     pagos: Array<{ id: string; monto: number; ref: string; tipo: string; fecha: string }>
     resultado: number
   } | null>(null)
+  /**
+   * Aportes de la semana + los pagos que ya habían bajado el saldo anterior (que no
+   * estén ya en la lista), ordenados por fecha. Así el saldo anterior queda como cerró
+   * la semana anterior y todo lo pagado se ve en Aportes, igual que en el panel.
+   */
+  const aportesConPagosDelSaldo = (pagos: typeof detallePagos, conSaldo: boolean): typeof detallePagos => {
+    if (!conSaldo || !detalleSaldoBreakdown) return pagos
+    const ids = new Set(pagos.map(p => p.id))
+    const extra = detalleSaldoBreakdown.pagos
+      .filter(p => !ids.has(p.id))
+      .map(p => ({ id: p.id, tipo: p.tipo, monto: p.monto, referencia: p.ref, fecha: p.fecha, aplicadoAFraccionamiento: false }))
+    return [...pagos, ...extra].sort((a, b) => a.fecha.localeCompare(b.fecha))
+  }
   // Semana con cuota 1 de un fraccionamiento de saldo: cierre - pagos - fraccionado.
   // Los pagos de este desglose no se repiten en Aportes.
   const [desgloseFrac, setDesgloseFrac] = useState<DesgloseFraccionamiento | null>(null)
@@ -462,6 +480,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     cargarIvaPorCodigo()
       .then(m => { if (vivo) setIvaPorCodigo(m) })
       .catch(() => { /* sin desglose de IVA: los totales siguen en bruto */ })
+    cargarPeriodoPorCodigo()
+      .then(m => { if (vivo) setPeriodoPorCodigo(m) })
+      .catch(() => { /* sin periodo: queda la descripción guardada */ })
     return () => { vivo = false }
   }, [])
 
@@ -1386,7 +1407,8 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       if (!data) return
       const pagosSemana = data as Array<{ id: string; tipo_movimiento: string; monto_movimiento: number; referencia: string | null; created_at: string }>
       const idsFraccionados = idsAportesEnFraccionamiento([...((cortes || []) as typeof pagosSemana), ...pagosSemana])
-      setDetallePagos(pagosSemana.map(p => ({
+      // Un aporte en $0 (p. ej. "Pago Cabify" de una semana sin cobro) no se muestra
+      setDetallePagos(pagosSemana.filter(p => Math.abs(Number(p.monto_movimiento) || 0) >= 0.005).map(p => ({
         id: p.id,
         tipo: p.tipo_movimiento,
         monto: Number(p.monto_movimiento) || 0,
@@ -1679,7 +1701,10 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
       const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
       const saldoItemPdf = detalleItems.find(d => d.concepto_codigo === 'SALDO')
-      const saldoAntPdf = saldoItemPdf ? (saldoItemPdf.es_descuento ? -saldoItemPdf.total : saldoItemPdf.total) : 0
+      const saldoAntFacturaPdf = saldoItemPdf ? (saldoItemPdf.es_descuento ? -saldoItemPdf.total : saldoItemPdf.total) : 0
+      // Igual que el modal: saldo con el que cerró la semana anterior; sus pagos, en Aportes
+      const usarBreakdownPdf = !!detalleSaldoBreakdown && !desgloseFrac
+      const saldoAntPdf = usarBreakdownPdf ? detalleSaldoBreakdown!.saldoPrevio : saldoAntFacturaPdf
 
       // Salto de página automático si el contenido se acerca al pie.
       const pageHeight = pdf.internal.pageSize.getHeight()
@@ -1712,7 +1737,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       cargos.forEach((cargo) => {
         checkPage(10)
         pdf.setTextColor(negro)
-        const cargoDesc = getConceptoLabel(cargo)
+        const cargoDesc = etiquetaConcepto(cargo)
         const cargoLabel = cargo.cantidad > 1
           ? `${cargoDesc} x${cargo.cantidad}`
           : cargoDesc
@@ -1725,7 +1750,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       descuentos.forEach(desc => {
         checkPage(10)
         pdf.setTextColor(negro)
-        const descDesc = getConceptoLabel(desc)
+        const descDesc = etiquetaConcepto(desc)
         const descLabel = desc.cantidad > 1
           ? `${descDesc} x${desc.cantidad}`
           : descDesc
@@ -1766,7 +1791,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         y += 5
         desgloseFrac.pagos.forEach(p => {
           pdf.setTextColor(negro)
-          pdf.text(`${tipoLabelPdf[p.tipo] || p.tipo} · ${p.ref} · ${fechaCorta(p.fecha || '')}`, margin, y)
+          pdf.text(`${textoPagoConductor(p.tipo, p.ref, tipoLabelPdf[p.tipo] || p.tipo)} · ${fechaCorta(p.fecha || '')}`, margin, y)
           pdf.setTextColor(p.monto < 0 ? rojo : verde)
           pdf.text(`${p.monto < 0 ? '+' : '-'}${formatPlata(Math.abs(p.monto), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
           y += 5
@@ -1782,44 +1807,21 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         pdf.text(`${saldoAntPdf > 0 ? '+' : saldoAntPdf < 0 ? '-' : ''}${formatPlata(Math.abs(saldoAntPdf), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
         y += 6
       } else if (saldoAntPdf !== 0) {
-        checkPage(23 + (detalleSaldoBreakdown?.pagos.length || 1) * 5)
+        checkPage(23)
         y += 3
         pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(negro)
         pdf.text('SALDO ANTERIOR', margin, y); y += 6
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
-        if (detalleSaldoBreakdown) {
-          // saldoPrevio < 0 = el conductor ya tenia saldo a favor antes del pago
-          const previoAFavor = detalleSaldoBreakdown.saldoPrevio < 0
-          pdf.setTextColor(gris)
-          pdf.text(previoAFavor ? 'Saldo a favor anterior' : 'Saldo adeudado anterior', margin, y)
-          if (previoAFavor) pdf.setTextColor(verde)
-          pdf.text(`${previoAFavor ? '-' : ''}${formatPlata(Math.abs(detalleSaldoBreakdown.saldoPrevio), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
-          y += 5
-          detalleSaldoBreakdown.pagos.forEach(p => {
-            pdf.setTextColor(negro)
-            pdf.text(`${tipoLabelPdf[p.tipo] || 'Pago Manual'} · ${p.ref} · ${fechaCorta(p.fecha)}`, margin, y)
-            pdf.setTextColor(verde)
-            pdf.text(`-${formatPlata(p.monto, { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
-            y += 5
-          })
-          pdf.setTextColor(negro)
-          pdf.text(saldoAntPdf > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor', margin, y)
-          pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
-          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatPlata(Math.abs(saldoAntPdf), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
-          y += 6
-        } else {
-          pdf.setTextColor(negro)
-          pdf.text(saldoAntPdf > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior', margin, y)
-          pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
-          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatPlata(Math.abs(saldoAntPdf), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
-          y += 6
-        }
+        pdf.setTextColor(negro)
+        pdf.text(saldoAntPdf > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)', margin, y)
+        pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
+        pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatPlata(Math.abs(saldoAntPdf), { decimales: 2 })}`, pageWidth - margin, y, { align: 'right' })
+        y += 6
       }
 
       // APORTES (excluye los pagos ya aplicados en el saldo anterior, igual que el modal)
-      const idsYaAplicadosPdf = new Set((detalleSaldoBreakdown?.pagos || []).map(p => p.id))
       const idsEnDesgloseFracPdf = new Set((desgloseFrac?.pagos || []).map(p => p.id))
-      const pagosAportesPdf = detallePagos.filter(p => !idsYaAplicadosPdf.has(p.id) && !idsEnDesgloseFracPdf.has(p.id))
+      const pagosAportesPdf = aportesConPagosDelSaldo(detallePagos.filter(p => !idsEnDesgloseFracPdf.has(p.id)), usarBreakdownPdf)
       const totalPagadoSemanaPdf = pagosAportesPdf.filter(p => !p.aplicadoAFraccionamiento).reduce((s, p) => s + p.monto, 0)
       if (pagosAportesPdf.length > 0) {
         checkPage(16 + pagosAportesPdf.length * 5)
@@ -1829,10 +1831,10 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
         pagosAportesPdf.forEach(p => {
           checkPage(10)
-          const lbl = tipoLabelPdf[p.tipo] || p.tipo
-          const ref = p.referencia ? ` · ${p.referencia}` : ''
+          // Al conductor: tipo de pago y fecha, sin quién pagó ni la cuenta
+          const lbl = textoPagoConductor(p.tipo, p.referencia, tipoLabelPdf[p.tipo] || p.tipo)
           pdf.setTextColor(negro)
-          pdf.text(`${lbl}${ref} · ${fechaCorta(p.fecha)}`, margin, y)
+          pdf.text(`${lbl} · ${fechaCorta(p.fecha)}`, margin, y)
           if (p.aplicadoAFraccionamiento) {
             // Ya descontado dentro de las cuotas (P010): se informa sin restarlo
             pdf.setTextColor(156, 163, 175)
@@ -2401,7 +2403,11 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
     const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
     const saldoAnteriorItem = detalleItems.find(d => d.concepto_codigo === 'SALDO')
-    const saldoAnterior = saldoAnteriorItem ? (saldoAnteriorItem.es_descuento ? -saldoAnteriorItem.total : saldoAnteriorItem.total) : 0
+    const saldoAnteriorFactura = saldoAnteriorItem ? (saldoAnteriorItem.es_descuento ? -saldoAnteriorItem.total : saldoAnteriorItem.total) : 0
+    // Regla 2026-11-26 (igual que el panel del conductor): el saldo anterior es con lo que
+    // cerró la semana anterior, y los pagos que ya lo bajaron van en Aportes.
+    const usarBreakdown = !!detalleSaldoBreakdown && !desgloseFrac
+    const saldoAnterior = usarBreakdown ? detalleSaldoBreakdown!.saldoPrevio : saldoAnteriorFactura
     // Los cargos se muestran en NETO y el IVA va en su propio renglón (igual que el
     // módulo de Facturación). El subtotal suma los BRUTOS, así
     // Subtotal - Descuentos + Saldo anterior cierra contra total_a_pagar.
@@ -2411,7 +2417,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     // Cada cargo con IVA lleva su propio renglón de IVA justo debajo, con referencia al
     // producto (ej: "IVA 21% · P001 - Alquiler Turno Diurno").
     const filaIva = (etiqueta: string, valor: number) => (
-      <div className="portal-detail-item">
+      <div className="portal-detail-item pdet-iva">
         <span className="portal-detail-item-name">
           <span className="portal-detail-item-dot cargo" />
           <span className="portal-detail-item-text">{etiqueta}</span>
@@ -2421,9 +2427,8 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     )
     // Los pagos que ya quedaron aplicados dentro del "Saldo Anterior" no deben volver a
     // descontarse acá (si no, se restan dos veces). Se excluyen de los aportes por su ID.
-    const idsYaAplicados = new Set((detalleSaldoBreakdown?.pagos || []).map(p => p.id))
     const idsEnDesgloseFrac = new Set((desgloseFrac?.pagos || []).map(p => p.id))
-    const pagosAportes = detallePagos.filter(p => !idsYaAplicados.has(p.id) && !idsEnDesgloseFrac.has(p.id))
+    const pagosAportes = aportesConPagosDelSaldo(detallePagos.filter(p => !idsEnDesgloseFrac.has(p.id)), usarBreakdown)
     // Saldo real = referencial - lo ya pagado (Cabify + ajustes + transferencias).
     // Si > 0 = todavia debe. Si <= 0 = cubierto o a favor.
     // Los pagos que ya quedaron dentro de una deuda fraccionada no se restan.
@@ -2442,121 +2447,84 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           {loadingDetalle ? (
             <Spinner size="sm" message="Cargando detalle..." />
           ) : (
-            <div className="portal-detail-card" style={{ border: 'none', borderRadius: 0 }}>
-              {/* Header */}
-              <div className="portal-detail-header">
-                <div>
-                  <div className="portal-detail-conductor">{selectedFactura.conductor_nombre}</div>
-                  <div className="portal-detail-cuit">
-                    {selectedFactura.conductor_cuit || `DNI: ${selectedFactura.conductor_dni}`}
+            <div className="portal-detail-card pdet" style={{ border: 'none', borderRadius: 0 }}>
+              {/* Encabezado compacto y fijo (2026-11-26): conductor y semana en una línea,
+                  datos del auto en otra. Se lee como una cuenta: esta semana + saldo
+                  anterior = total a pagar; menos los aportes = pendiente. */}
+              <div className="pdet-header">
+                <div className="pdet-head-line">
+                  <div className="pdet-who">
+                    <span className="pdet-name">{selectedFactura.conductor_nombre}</span>
+                    <span className="pdet-doc">{selectedFactura.conductor_cuit || `DNI: ${selectedFactura.conductor_dni}`}</span>
+                  </div>
+                  <div className="pdet-week">
+                    <strong>Semana {periodo.semana}</strong>
+                    {' · '}{format(parseISO(periodo.fecha_inicio), 'dd/MM')} al {format(parseISO(periodo.fecha_fin), 'dd/MM')}/{periodo.anio}
                   </div>
                 </div>
-                <div>
-                  <div className="portal-detail-semana">Semana {periodo.semana}</div>
-                  <div className="portal-detail-fechas">
-                    {format(parseISO(periodo.fecha_inicio), 'dd/MM')} - {format(parseISO(periodo.fecha_fin), 'dd/MM')} / {periodo.anio}
-                  </div>
+                <div className="pdet-info">
+                  <PatenteBadge patente={selectedFactura.vehiculo_patente} size="sm" />
+                  <span>{selectedFactura.tipo_alquiler}</span>
+                  {detalleItems.some(d => ['P014', 'P015', 'P016'].includes(d.concepto_codigo))
+                    ? <span style={{ color: '#ef4444' }}>Sin GNC</span>
+                    : <span style={{ color: '#059669' }}>GNC</span>}
+                  <span>{selectedFactura.turnos_cobrados}<span className="pdet-suave"> de {selectedFactura.turnos_base} turnos</span></span>
+                  {selectedFactura.grupo_flota && <span style={{ color: '#1e40af' }}>{selectedFactura.grupo_flota}</span>}
                 </div>
               </div>
 
-              {/* Info bar */}
-              <div className="portal-detail-info">
-                <div className="portal-detail-info-item">
-                  <span className="portal-detail-info-label">Vehículo</span>
-                  <span className="portal-detail-info-value"><PatenteBadge patente={selectedFactura.vehiculo_patente} size="sm" /></span>
-                </div>
-                <div className="portal-detail-info-item">
-                  <span className="portal-detail-info-label">Modalidad</span>
-                  <span className="portal-detail-info-value">{selectedFactura.tipo_alquiler}</span>
-                </div>
-                <div className="portal-detail-info-item">
-                  <span className="portal-detail-info-label">Combustible</span>
-                  <span className="portal-detail-info-value" style={{ color: detalleItems.some(d => ['P014','P015','P016'].includes(d.concepto_codigo)) ? '#ef4444' : '#10b981' }}>
-                    {detalleItems.some(d => ['P014','P015','P016'].includes(d.concepto_codigo)) ? 'Sin GNC' : 'GNC'}
-                  </span>
-                </div>
-                <div className="portal-detail-info-item">
-                  <span className="portal-detail-info-label">Turnos</span>
-                  <span className="portal-detail-info-value">{selectedFactura.turnos_cobrados}/{selectedFactura.turnos_base}</span>
-                </div>
-                {selectedFactura.grupo_flota && (
-                  <div className="portal-detail-info-item">
-                    <span className="portal-detail-info-label">Flota</span>
-                    <span className="portal-detail-info-value" style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 'var(--radius-xs)', fontSize: '11px', fontWeight: 600 }}>
-                      {selectedFactura.grupo_flota}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="portal-detail-body">
+              <div className="portal-detail-body pdet-body">
                 {detalleError && (
                   <div style={{ padding: '12px', background: '#FEE2E2', color: '#dc2626', borderRadius: 'var(--radius-sm)', fontSize: '12px', marginBottom: '8px' }}>
                     {detalleError}
                   </div>
                 )}
-                {/* CONCEPTOS (cargos + descuentos unificados) */}
-                <div className="portal-detail-section">
-                  <div className="portal-detail-section-title cargos">Conceptos</div>
-                  <div className="portal-detail-items">
-                    {cargos.map((item) => (
-                      <Fragment key={item.id}>
-                      <div className="portal-detail-item">
-                        <span className="portal-detail-item-name">
-                          <span className="portal-detail-item-dot cargo" />
-                          <span className="portal-detail-item-text">
-                            {getConceptoLabel(item)}
-                            {item.cantidad > 1 && ` x${item.cantidad}`}
-                            {item.fecha_infraccion && (
-                              <span className="portal-detail-item-infraccion">
-                                Fecha infracción: {(() => {
-                                  // Formato unico de la app: 'DD/MM/YYYY HH:MM:SS' (hora Argentina)
-                                  return formatFechaHora(item.fecha_infraccion)
-                                })()}
-                              </span>
-                            )}
-                          </span>
-                        </span>
-                        <span className="portal-detail-item-amount">{formatPlata(montoNeto(item, ivaPorCodigo), { decimales: 2 })}</span>
-                      </div>
-                      {(() => {
-                        const ivaItem = ivaDeLinea(item, ivaPorCodigo)
-                        return ivaItem.monto > 0 && filaIva(etiquetaIvaLinea(ivaItem.porcentaje, `${item.concepto_codigo} - ${getConceptoLabel(item)}`), ivaItem.monto)
-                      })()}
-                      </Fragment>
-                    ))}
-                    {descuentos.map((item) => (
-                      <div key={item.id} className="portal-detail-item">
-                        <span className="portal-detail-item-name">
-                          <span className="portal-detail-item-dot descuento" />
-                          {getConceptoLabel(item)}
-                        </span>
-                        <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
-                          -{formatPlata(item.total, { decimales: 2 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* SUBTOTALES */}
-                <div className="portal-detail-items" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '8px', marginTop: '4px' }}>
-                  <div className="portal-detail-item">
-                    <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Subtotal Cargos</span>
-                    <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatPlata(subtotalCargos, { decimales: 2 })}</span>
-                  </div>
-                  {subtotalDescuentos > 0 && (
+                <div className="pdet-bloque">Esta semana</div>
+                <div className="portal-detail-items">
+                  {cargos.map((item) => (
+                    <Fragment key={item.id}>
                     <div className="portal-detail-item">
-                      <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Subtotal Descuentos</span>
-                      <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatPlata(subtotalDescuentos, { decimales: 2 })}</span>
+                      <span className="portal-detail-item-name">
+                        <span className="portal-detail-item-dot cargo" />
+                        <span className="portal-detail-item-text">
+                          {etiquetaConcepto(item)}
+                          {item.cantidad > 1 && ` x${item.cantidad}`}
+                          {item.fecha_infraccion && (
+                            <span className="portal-detail-item-infraccion">
+                              Fecha infracción: {formatFechaHora(item.fecha_infraccion)}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                      <span className="portal-detail-item-amount">{formatPlata(montoNeto(item, ivaPorCodigo), { decimales: 2 })}</span>
                     </div>
-                  )}
+                    {(() => {
+                      const ivaItem = ivaDeLinea(item, ivaPorCodigo)
+                      return ivaItem.monto > 0 && filaIva(etiquetaIvaLinea(ivaItem.porcentaje, `${item.concepto_codigo} - ${etiquetaConcepto(item)}`), ivaItem.monto)
+                    })()}
+                    </Fragment>
+                  ))}
+                  {descuentos.map((item) => (
+                    <div key={item.id} className="portal-detail-item">
+                      <span className="portal-detail-item-name" style={{ color: '#059669' }}>
+                        <span className="portal-detail-item-dot descuento" />
+                        {etiquetaConcepto(item)}
+                      </span>
+                      <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
+                        − {formatPlata(item.total, { decimales: 2 })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="pdet-resultado">
+                  <span>Subtotal de la semana</span>
+                  <span>{formatPlata(subtotalCargos - subtotalDescuentos, { decimales: 2 })}</span>
                 </div>
 
                 {/* SALDO ANTERIOR con fraccionamiento: cierre - pagos - fraccionado = resultado */}
                 {desgloseFrac && (
-                  <div className="portal-detail-section" style={{ marginTop: '8px' }}>
-                    <div className="portal-detail-section-title" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>Saldo Anterior</div>
+                  <div>
+                    <div className="pdet-bloque">Saldo anterior</div>
                     <div className="portal-detail-items">
                       <div className="portal-detail-item">
                         <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>
@@ -2569,9 +2537,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                         <div key={p.id} className="portal-detail-item">
                           <span className="portal-detail-item-name">
                             <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
-                            {({ pago_manual: 'Pago Manual', pago_efectivo: 'Pago en efectivo', pago: 'Pago', pago_cuota: 'Pago Cuota', cargo: 'Cargo' } as Record<string, string>)[p.tipo] || p.tipo}
+                            {clasePagoConductor(p.tipo, p.ref) || ({ pago_manual: 'Pago Manual', pago_efectivo: 'Pago en efectivo', pago: 'Pago', pago_cuota: 'Pago Cuota', cargo: 'Cargo' } as Record<string, string>)[p.tipo] || p.tipo}
                             <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
-                              · {p.ref}{p.fecha ? ` · ${formatFecha(p.fecha)}` : ''}
+                              {clasePagoConductor(p.tipo, p.ref) ? '' : `· ${p.ref}`}{p.fecha ? ` · ${formatFecha(p.fecha)}` : ''}
                             </span>
                           </span>
                           <span className="portal-detail-item-amount" style={{ color: p.monto < 0 ? '#dc2626' : '#059669', fontWeight: 600 }}>
@@ -2594,7 +2562,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                       <div className="portal-detail-item">
                         <span className="portal-detail-item-name">
                           <span className="portal-detail-item-dot" style={{ background: saldoAnterior > 0 ? '#dc2626' : '#059669' }} />
-                          {saldoAnterior > 0 ? 'Resultado: deuda pendiente' : saldoAnterior < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente'}
+                          {saldoAnterior > 0 ? 'Saldo anterior (deuda)' : saldoAnterior < 0 ? 'Saldo anterior (a favor)' : 'Saldo anterior: sin saldo'}
                         </span>
                         <span className="portal-detail-item-amount" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
                           {saldoAnterior > 0 ? '+' : saldoAnterior < 0 ? '-' : ''}{formatPlata(Math.abs(saldoAnterior), { decimales: 2 })}
@@ -2606,61 +2574,22 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
                 {/* SALDO ANTERIOR */}
                 {saldoAnterior !== 0 && !desgloseFrac && (
-                  <div className="portal-detail-section" style={{ marginTop: '8px' }}>
-                    <div className="portal-detail-section-title" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>Saldo Anterior</div>
+                  <div>
                     <div className="portal-detail-items">
-                      {detalleSaldoBreakdown && (
-                        <>
-                          <div className="portal-detail-item">
-                            <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>
-                              <span className="portal-detail-item-dot" style={{ background: '#d1d5db' }} />
-                              {detalleSaldoBreakdown.saldoPrevio < 0 ? 'Saldo a favor anterior' : 'Saldo adeudado anterior'}
-                            </span>
-                            <span className="portal-detail-item-amount" style={{
-                              color: detalleSaldoBreakdown.saldoPrevio < 0 ? '#059669' : '#9ca3af', fontStyle: 'italic',
-                            }}>
-                              {detalleSaldoBreakdown.saldoPrevio < 0 ? '-' : ''}{formatPlata(Math.abs(detalleSaldoBreakdown.saldoPrevio), { decimales: 2 })}
-                            </span>
-                          </div>
-                          {detalleSaldoBreakdown.pagos.map(p => (
-                            <div key={p.id} className="portal-detail-item">
-                              <span className="portal-detail-item-name">
-                                <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
-                                {({
-                                  pago_manual: 'Pago Manual',
-                                  pago_efectivo: 'Pago en efectivo',
-                                  pago_cabify: 'Pago Cabify',
-                                  pago_didi: 'Pago DiDi',
-                                  pago_cuota: 'Pago Cuota',
-                                  ajuste_manual: 'Ajuste',
-                                  devolucion_garantia: 'Devolución Garantía',
-                                } as Record<string, string>)[p.tipo] || 'Pago Manual'}
-                                <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
-                                  {`· ${p.ref}`}
-                                  {` · ${formatFecha(p.fecha)}`}
-                                </span>
-                              </span>
-                              <span className="portal-detail-item-amount" style={{ color: '#059669', fontWeight: 600 }}>
-                                -{formatPlata(p.monto, { decimales: 2 })}
-                              </span>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                      <div className="portal-detail-item">
-                        <span className="portal-detail-item-name">
-                          <span className="portal-detail-item-dot" style={{ background: saldoAnterior > 0 ? '#dc2626' : '#059669' }} />
-                          {detalleSaldoBreakdown
-                            ? (saldoAnterior > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor')
-                            : (saldoAnterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior')}
-                        </span>
-                        <span className="portal-detail-item-amount" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
-                          {saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior), { decimales: 2 })}
+                      <div className="pdet-saldo-ant">
+                        <span>{saldoAnterior > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)'}</span>
+                        <span style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
+                          {saldoAnterior > 0 ? '+ ' : '− '}{formatPlata(Math.abs(saldoAnterior), { decimales: 2 })}
                         </span>
                       </div>
                     </div>
                   </div>
                 )}
+
+                <div className="pdet-total-pagar">
+                  <span>Total a pagar</span>
+                  <span>{formatPlata(totalAPagar, { decimales: 2 })}</span>
+                </div>
 
                 {/* PAGOS REALIZADOS EN ESTA SEMANA
                     Excluye el pago que ya quedó aplicado dentro del "Saldo Anterior"
@@ -2677,14 +2606,8 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                   }
                   const totalPagado = totalPagadoSemana
                   return (
-                    <div className="portal-detail-section" style={{ marginTop: '8px' }}>
-                      <div
-                        className="portal-detail-section-title"
-                        style={{ color: '#059669' }}
-                        title="Aportes registrados: app Cabify y transferencias a Toshify."
-                      >
-                        Aportes
-                      </div>
+                    <div>
+                      <div className="pdet-bloque" title="Aportes registrados: app Cabify y transferencias a Toshify.">Aportes</div>
                       <div className="portal-detail-items">
                         {pagosAportes.map((p) => {
                           const fecha = formatFecha(p.fecha)
@@ -2692,9 +2615,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                             <div key={p.id} className="portal-detail-item">
                               <span className="portal-detail-item-name">
                                 <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
-                                {tipoLabel[p.tipo] || p.tipo}
+                                {clasePagoConductor(p.tipo, p.referencia) || tipoLabel[p.tipo] || p.tipo}
                                 <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
-                                  {p.referencia ? `· ${p.referencia}` : ''} · {fecha}
+                                  {p.referencia && !clasePagoConductor(p.tipo, p.referencia) ? `· ${p.referencia}` : ''} · {fecha}
                                   {p.aplicadoAFraccionamiento ? ' · aplicado a la deuda fraccionada' : ''}
                                 </span>
                               </span>
@@ -2708,83 +2631,44 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                                 </span>
                               ) : (
                                 <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
-                                  -{formatPlata(p.monto, { decimales: 2 })}
+                                  − {formatPlata(p.monto, { decimales: 2 })}
                                 </span>
                               )}
                             </div>
                           )
                         })}
-                        <div className="portal-detail-item" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '6px', marginTop: '4px' }}>
-                          <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Total aportado</span>
-                          <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatPlata(totalPagado, { decimales: 2 })}</span>
-                        </div>
+                      </div>
+                      <div className="pdet-resultado">
+                        <span>Total aportado</span>
+                        <span style={{ color: '#059669' }}>− {formatPlata(totalPagado, { decimales: 2 })}</span>
                       </div>
                     </div>
                   )
                 })()}
+              </div>
 
-                {/* DETALLE FINAL — un solo recuadro, formato lista descripción/monto.
-                    Cargos (+ descuentos) + saldo anterior = Monto Total Referencial;
-                    menos Total aportado = Pendiente de Pago (único total resaltado).
-                    Las líneas de detalle van en gris (referenciales), sin repetir datos. */}
-                <div className="portal-detail-total">
-                  <div className="portal-detail-items" style={{ marginBottom: '8px' }}>
-                    <div className="portal-detail-item">
-                      <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Subtotal Cargos</span>
-                      <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>{formatPlata(subtotalCargos, { decimales: 2 })}</span>
-                    </div>
-                    {subtotalDescuentos > 0 && (
-                      <div className="portal-detail-item">
-                        <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Subtotal Descuentos</span>
-                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatPlata(subtotalDescuentos, { decimales: 2 })}</span>
-                      </div>
-                    )}
-                    {saldoAnterior !== 0 && (
-                      <div className="portal-detail-item">
-                        <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>{saldoAnterior > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)'}</span>
-                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>
-                          {saldoAnterior > 0 ? '+' : '-'}{formatPlata(Math.abs(saldoAnterior), { decimales: 2 })}
-                        </span>
-                      </div>
-                    )}
-                    {/* Subtotal referencial (divisor arriba) */}
-                    <div className="portal-detail-item" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '6px', marginTop: '4px' }}>
-                      <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Monto Total Referencial</span>
-                      <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatPlata(totalAPagar, { decimales: 2 })}</span>
-                    </div>
-                    {totalPagadoSemana > 0 && (
-                      <div className="portal-detail-item">
-                        <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Total aportado</span>
-                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatPlata(totalPagadoSemana, { decimales: 2 })}</span>
-                      </div>
-                    )}
+              {/* Pie fijo: la cuenta final, el PDF y la nota legal */}
+              <div className="pdet-footer">
+                <div className="pdet-total-box">
+                  <div className="pdet-cuenta">
+                    {totalPagadoSemana > 0 && <>{formatPlata(totalAPagar, { decimales: 2 })} − {formatPlata(totalPagadoSemana, { decimales: 2 })} aportado</>}
                   </div>
-                  {/* Único total resaltado: Pendiente de Pago (divisor arriba) */}
-                  <div style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '10px' }}>
-                    <div className="portal-detail-total-label">{saldoPendiente < -0.01 ? 'Saldo a Favor' : 'Pendiente de Pago'}</div>
-                    <div className={`portal-detail-total-amount ${saldoPendiente > 0.01 ? 'debit' : 'credit'}`}>
+                  <div className="pdet-pend">
+                    <div className="pdet-pend-lbl">{saldoPendiente < -0.01 ? 'Saldo a favor' : 'Pendiente de pago'}</div>
+                    <div className={`pdet-pend-amt ${saldoPendiente > 0.01 ? 'debit' : 'credit'}`}>
                       {formatPlata(Math.abs(saldoPendiente) < 0.01 ? 0 : Math.abs(saldoPendiente), { decimales: 2 })}
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* PDF Button */}
-              <div className="portal-detail-actions">
-                <button
-                  className="portal-pdf-btn"
-                  onClick={exportarPDF}
-                  disabled={exportingPdf}
-                >
-                  {exportingPdf ? 'Generando...' : '↓ Descargar PDF'}
-                </button>
+                <div className="pdet-pie">
+                  <span className="pdet-legal">Información referencial: no es un comprobante fiscal válido.</span>
+                  <button className="pdet-pdf-btn" onClick={exportarPDF} disabled={exportingPdf}>
+                    {exportingPdf ? 'Generando...' : 'Descargar PDF'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
-          {/* Nota legal */}
-          <div className="portal-nota-legal" style={{ padding: '0 24px 18px', flexShrink: 0 }}>
-            La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.
-          </div>
         </div>
       </div>
     )

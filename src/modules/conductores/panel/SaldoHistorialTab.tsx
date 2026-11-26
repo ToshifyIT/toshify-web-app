@@ -4,7 +4,7 @@
 // facturación; sin "Editar saldo" ni edición de movimientos (eso sigue viviendo
 // en el módulo de Facturación, que es donde se gestionan los saldos).
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { X, Search, FileDown } from 'lucide-react'
 import { formatPlata } from '../../../utils/format'
 import {
@@ -16,6 +16,9 @@ import {
 import { Spinner } from '../../../components/ui/LoadingOverlay'
 import { EmptyState } from '../../../components/ui/EstadosVista'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
+import { etiquetaTipoMovimiento, referenciaVisible } from '../../../utils/conceptoLabels'
+import { LineasFactura } from '../../facturacion/components/LineasFactura'
+import { desglosarPago, type DesglosePago } from '../../facturacion/utils/desglosePago'
 
 interface Props {
   // El kardex lo carga el modal una sola vez y lo comparte con los KPIs.
@@ -42,6 +45,7 @@ const TIPO_LABEL: Record<string, string> = {
   abono: 'Abono',
   eliminacion_saldo: 'Elim. Saldo',
   importacion: 'Importación',
+  cierre_sin_pago: 'Cierre',
 }
 
 const CARGOS_TIPOS = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
@@ -54,6 +58,9 @@ type Clase = 'cargo' | 'abono' | 'elim' | null
 // infiere por el delta del snapshot saldo_pendiente contra la fila más vieja.
 function clasificar(r: SaldoMovimiento, idx: number, rows: SaldoMovimiento[]): Clase {
   const t = r.tipoMovimiento || 'regularizado'
+  // Cierre de semana y Facturación (cierres viejos): solo marcan la factura de la semana
+  // (columna Facturado), sin monto. Neutros.
+  if (t === 'cierre_sin_pago' || t === 'regularizado') return null
   if (ELIM_TIPOS.has(t)) return 'elim'
   if (CARGOS_TIPOS.has(t)) return 'cargo'
   if (ABONOS_TIPOS.has(t)) return 'abono'
@@ -65,6 +72,15 @@ function clasificar(r: SaldoMovimiento, idx: number, rows: SaldoMovimiento[]): C
   return null
 }
 
+// Pago de Cabify o DiDi en $0 que no movió el saldo (la carga del Excel lo crea para quien
+// no cobró por esa app): no aporta nada y no se muestra.
+function esPagoAppVacio(r: SaldoMovimiento, idx: number, rows: SaldoMovimiento[]): boolean {
+  if (r.tipoMovimiento !== 'pago_cabify' && r.tipoMovimiento !== 'pago_didi') return false
+  if (r.montoMovimiento) return false
+  const prev = rows[idx + 1]
+  return Math.abs(r.saldoPendiente - (prev ? prev.saldoPendiente : 0)) < 1
+}
+
 // Limpia centavos residuales (<$1) para no mostrar saldos tipo $0,03.
 const cleanResiduo = (v: number) => (Math.abs(v) < 1 ? 0 : v)
 
@@ -72,6 +88,8 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
   const [search, setSearch] = useState('')
   const [semanaFilter, setSemanaFilter] = useState('')   // '' = todas, formato '2026-19'
   const [tipoFilter, setTipoFilter] = useState('')       // '' | cargo | abono | eliminacion
+  // Mini-modal: de dónde sale lo que debía el conductor antes de un pago manual
+  const [pagoDetalle, setPagoDetalle] = useState<{ d: DesglosePago; fecha: string } | null>(null)
   const [factDetalle, setFactDetalle] = useState<{ fact: FacturacionResumenSemana; anio: number | null; semana: number | null } | null>(null)
 
   // useMemo: si no, `data?.movimientos || []` crea un array nuevo en cada render
@@ -96,6 +114,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
     const norm = (x: unknown) => (x ?? '').toString().toLowerCase()
     const idxDe = new Map(rows.map((r, i) => [r.id, i]))
     const filtradas = rows.filter(r => {
+      if (esPagoAppVacio(r, idxDe.get(r.id) ?? 0, rows)) return false
       if (semanaFilter && `${r.anio}-${r.semana}` !== semanaFilter) return false
       if (tipoFilter) {
         const cls = clasificar(r, idxDe.get(r.id) ?? 0, rows)
@@ -134,13 +153,13 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
     const w = window.open('', '_blank', 'width=900,height=700')
     if (!w) return
     const cuerpo = rows.map(r => {
-      const fecha = formatFecha(r.createdAt)
+      const fecha = formatFecha(r.fechaPago || r.createdAt)
       const monto = r.montoMovimiento ? formatPlata(Math.abs(r.montoMovimiento)) : '-'
       return `<tr>
         <td>${fecha}</td>
         <td>${r.anio} S${String(r.semana ?? '').padStart(2, '0')}</td>
         <td>${TIPO_LABEL[r.tipoMovimiento] || r.tipoMovimiento || '-'}</td>
-        <td>${(r.referencia || '-').replace(/</g, '&lt;')}</td>
+        <td>${referenciaVisible(r.referencia).replace(/</g, '&lt;')}</td>
         <td style="text-align:right">${monto}</td>
         <td style="text-align:right">${formatPlata(r.saldoPendiente)}</td>
         <td>${(r.usuario || 'Sistema').replace(/</g, '&lt;')}</td>
@@ -296,7 +315,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
               <tbody>
                 {filas.map(({ r, i, cls, monto, saldo }) => {
                   const tipo = r.tipoMovimiento || 'regularizado'
-                  const labelBg = cls === 'cargo' ? '#fef2f2' : cls === 'abono' ? '#f0fdf4' : cls === 'elim' ? '#f3f4f6' : 'var(--bg-secondary, #f9fafb)'
+                  const labelBg = tipo === 'cierre_sin_pago' || tipo === 'regularizado' ? 'transparent' : cls === 'cargo' ? '#fef2f2' : cls === 'abono' ? '#f0fdf4' : cls === 'elim' ? '#f3f4f6' : 'var(--bg-secondary, #f9fafb)'
                   const labelFg = cls === 'cargo' ? '#dc2626' : cls === 'abono' ? '#16a34a' : 'var(--text-secondary, #6b7280)'
                   const rowBg = i === 0 ? '#fef3c7'
                     : cls === 'cargo' ? 'rgba(254,242,242,0.4)'
@@ -305,10 +324,10 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                     : 'transparent'
                   const montoColor = cls === 'cargo' || cls === 'elim' ? '#dc2626' : cls === 'abono' ? '#16a34a' : 'var(--text-tertiary, #9ca3af)'
                   const montoSigno = cls === 'cargo' || cls === 'elim' ? '-' : cls === 'abono' ? '+' : ''
-                  const fecha = formatFecha(r.createdAt)
+                  const fecha = formatFecha(r.fechaPago || r.createdAt)
 
                   const refParts = (r.referencia || '').split(' | ')
-                  const refMain = refParts[0] || '-'
+                  const refMain = referenciaVisible(refParts[0])
                   let refDetalle = refParts.length > 1 ? refParts.slice(1).join(' | ') : ''
                   if (!refDetalle && data) {
                     refDetalle = data.detalleAbonos.get(`${r.referencia}_${Math.abs(r.montoMovimiento)}`) || ''
@@ -328,9 +347,9 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                         <span style={{
                           display: 'inline-block', padding: '1px 6px', borderRadius: 'var(--radius-xs)',
                           background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px',
-                        }}>{TIPO_LABEL[tipo] || tipo}</span>
+                        }}>{etiquetaTipoMovimiento(tipo, r.referencia, TIPO_LABEL)}</span>
                       </td>
-                      <td style={{ padding: '5px 8px', color: 'var(--text-secondary, #6b7280)', fontSize: '10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={refMain}>
+                      <td style={{ padding: '5px 8px', color: 'var(--text-secondary, #6b7280)', fontSize: '10px', minWidth: '160px', maxWidth: '280px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={refMain}>
                         {refMain}
                         {i === 0 && (
                           <span style={{
@@ -340,7 +359,7 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                           }}>actual</span>
                         )}
                       </td>
-                      <td style={{ padding: '5px 8px', color: 'var(--text-secondary, #6b7280)', fontSize: '10px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={refDetalle || ''}>
+                      <td style={{ padding: '5px 8px', color: 'var(--text-secondary, #6b7280)', fontSize: '10px', minWidth: '140px', maxWidth: '240px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={refDetalle || ''}>
                         {refDetalle || '-'}
                       </td>
                       <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: montoColor, whiteSpace: 'nowrap' }}>
@@ -348,6 +367,35 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
                       </td>
                       <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                         {(() => {
+                          // Pago manual: lo que debía antes de pagar (factura de la última semana
+                          // cerrada menos lo pagado después); click abre el desglose
+                          if (tipo === 'pago_manual') {
+                            const movs = rows.map(x => ({
+                              tipo: x.tipoMovimiento || 'regularizado',
+                              saldo: x.saldoPendiente,
+                              referencia: x.referencia ? referenciaVisible(x.referencia) : null,
+                              semana: x.semana,
+                              anio: x.anio,
+                            }))
+                            const d = desglosarPago(movs, rows.indexOf(r), t => TIPO_LABEL[t] || t)
+                            if (d) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setPagoDetalle({ d, fecha: formatFecha(r.fechaPago || r.createdAt) }) }}
+                                  style={{
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    fontFamily: 'var(--font-mono)', color: 'var(--text-secondary, #6b7280)',
+                                    textDecoration: 'underline', textDecorationStyle: 'dotted',
+                                    padding: 0, fontSize: '11px', fontWeight: 500,
+                                  }}
+                                  title="Lo que debía antes de este pago. Click para ver el detalle"
+                                >
+                                  {formatPlata(d.pendiente)}
+                                </button>
+                              )
+                            }
+                          }
                           // Ajustes manuales, pagos manuales y cancelaciones por baja no
                           // tienen facturación asociada.
                           if (tipo === 'ajuste_manual' || tipo === 'cancelacion_fraccionado_baja' || tipo === 'pago_manual') {
@@ -447,6 +495,25 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
         </>
       )}
 
+      {/* Mini-modal: de dónde sale lo que debía antes de un pago manual */}
+      {pagoDetalle && (
+        <div className="cdet-deuda-overlay" onClick={(e) => { e.stopPropagation(); setPagoDetalle(null) }}>
+          <div className="cdet-deuda-modal" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+            <button className="cdet-deuda-close" onClick={() => setPagoDetalle(null)} aria-label="Cerrar"><X size={16} /></button>
+            <div className="cdet-deuda-title" style={{ marginBottom: '12px' }}>Pago del {pagoDetalle.fecha}</div>
+            {filaDetalle(`Facturado ${pagoDetalle.d.semanaFactura}`, pagoDetalle.d.facturado)}
+            {pagoDetalle.d.movimientos.map((m, i) => <Fragment key={i}>{filaDetalle(m.nombre, m.monto, false, true)}</Fragment>)}
+            {filaDetalle('Debía antes de este pago', pagoDetalle.d.pendiente, true)}
+            {filaDetalle('Este pago', pagoDetalle.d.pago)}
+            {filaDetalle(
+              pagoDetalle.d.despues > 0.009 ? 'Queda debiendo' : pagoDetalle.d.despues < -0.009 ? 'Queda a favor' : 'Queda en',
+              Math.abs(pagoDetalle.d.despues),
+              true,
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Mini-modal: desglose de la facturación de la semana */}
       {factDetalle && (
         <div className="cdet-deuda-overlay" onClick={(e) => { e.stopPropagation(); setFactDetalle(null) }}>
@@ -454,10 +521,17 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
             <button className="cdet-deuda-close" onClick={() => setFactDetalle(null)} aria-label="Cerrar"><X size={16} /></button>
             <div className="cdet-deuda-title" style={{ marginBottom: '12px' }}>Detalle Facturación — S{factDetalle.semana}/{factDetalle.anio}</div>
             {filaDetalle('Saldo previo', factDetalle.fact.saldoAnterior, false, true)}
-            {filaDetalle('Alquiler', factDetalle.fact.subtotalAlquiler)}
-            {filaDetalle('Garantía (P003)', factDetalle.fact.subtotalGarantia)}
-            {filaDetalle('Cargos', factDetalle.fact.subtotalCargos - factDetalle.fact.subtotalAlquiler - factDetalle.fact.subtotalGarantia)}
-            {filaDetalle('Descuentos', -factDetalle.fact.subtotalDescuentos)}
+            {/* Un renglón por concepto (alquiler, garantía, Toshipass, promociones...) */}
+            <LineasFactura
+              facturaId={factDetalle.fact.id}
+              fila={(nombre, monto, clave) => <Fragment key={clave}>{filaDetalle(nombre, monto)}</Fragment>}
+              respaldo={<>
+                {filaDetalle('Alquiler', factDetalle.fact.subtotalAlquiler)}
+                {filaDetalle('Garantía (P003)', factDetalle.fact.subtotalGarantia)}
+                {filaDetalle('Cargos', factDetalle.fact.subtotalCargos - factDetalle.fact.subtotalAlquiler - factDetalle.fact.subtotalGarantia)}
+                {filaDetalle('Descuentos', -factDetalle.fact.subtotalDescuentos)}
+              </>}
+            />
             <div style={{ borderTop: '2px solid var(--border-primary, #e5e7eb)', marginTop: '6px', paddingTop: '6px' }}>
               {filaDetalle('Subtotal Neto', factDetalle.fact.subtotalNeto, false, true)}
               {filaDetalle('Total a Pagar', factDetalle.fact.totalAPagar, true)}

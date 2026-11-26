@@ -311,7 +311,10 @@ function abrir(o: AlertaOpciones): Promise<AlertaResultado> {
   // Las clases propias de cada módulo no se aplican a la ventana (todas se ven
   // igual); solo se respeta el pedido de ventana ancha para tablas de detalle.
   const ancha = /ancho|wide/.test(o.customClass?.popup || '')
-  const popup = el('div', `tsh-alerta${ancha ? ' tsh-alerta--ancha' : ''}`)
+  // 'partes-fijas': título, botones y la cabecera .tsh-alerta-fijo-arriba quedan quietos;
+  // solo el cuerpo hace scroll
+  const partesFijas = /partes-fijas/.test(o.customClass?.popup || '')
+  const popup = el('div', `tsh-alerta${ancha ? ' tsh-alerta--ancha' : ''}${partesFijas ? ' tsh-alerta--partes-fijas' : ''}`)
   popup.setAttribute('role', 'dialog')
   popup.setAttribute('aria-modal', 'true')
   if (o.width !== undefined) popup.style.width = typeof o.width === 'number' ? `${o.width}px` : o.width

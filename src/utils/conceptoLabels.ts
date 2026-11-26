@@ -87,3 +87,28 @@ export function getConceptoLabel(item: ConceptoFacturable): string {
 
   return baseLabel
 }
+
+/**
+ * Referencia de un movimiento del kardex tal como se muestra. Los cierres de semana se
+ * guardaron como "Cierre sin pago S47/2026" hasta noviembre 2026; ahora son "Cierre S47/2026".
+ * Los viejos se muestran igual que los nuevos (el dato guardado no cambia).
+ */
+export function referenciaVisible(referencia: string | null | undefined): string {
+  if (!referencia) return '-'
+  return referencia.replace(/^Cierre sin pago\b/i, 'Cierre')
+}
+
+/**
+ * Etiqueta del tipo de un movimiento del kardex. Los pagos B1 entran como pago_manual
+ * ("Pago B1 · quién pagó | detalle"): si vinieron de Cresium se muestran como transferencia.
+ */
+export function etiquetaTipoMovimiento(
+  tipo: string,
+  referencia: string | null | undefined,
+  etiquetas: Record<string, string>,
+): string {
+  const ref = referencia || ''
+  if (tipo === 'pago_manual' && /^Transferencia bancaria/i.test(ref)) return 'Transferencia Bancaria'
+  if (tipo === 'pago_manual' && /^Pago B1/.test(ref) && /Cresium/.test(ref)) return 'Transferencia Bancaria'
+  return etiquetas[tipo] || tipo
+}

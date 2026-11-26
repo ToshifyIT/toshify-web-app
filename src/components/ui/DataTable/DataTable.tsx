@@ -1467,8 +1467,11 @@ export function DataTable<T>({
   const coincideBusqueda = useCallback((original: T, filterValue: unknown) => {
     if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
 
-    // Sin tildes en los dos lados: "jose gonzalez" encuentra a "JOSÉ GONZÁLEZ"
-    const searchLower = textoBusqueda(filterValue).trim()
+    // Sin tildes en los dos lados: "jose gonzalez" encuentra a "JOSÉ GONZÁLEZ".
+    // Comas y punto y coma cuentan como espacio, y los espacios de más no importan:
+    // "GALARZA,  JAVIER" encuentra a "Javier Humberto Galarza".
+    const searchLower = textoBusqueda(filterValue).replace(/[,;]+/g, ' ').replace(/\s+/g, ' ').trim()
+    if (searchLower === '') return true
     const allText = searchIndex.get(original as object) || ''
 
     if (allText.includes(searchLower)) return true

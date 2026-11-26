@@ -9,13 +9,15 @@ import { showError, showSuccess } from '../../../utils/toast'
 import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
 import { evaluarCierre, timestampCierre, descuentoCierre, CIERRE_DEFAULTS, type ParamsCierre } from '../utils/cierreAsignacion'
 import { construirSaldosAnteriores } from '../utils/saldoAnterior'
+import { cargarSaldosAlCierre, cargarPagosManualesSemana, cargarOtrosMovimientosSemana, type OtrosMovimientosSemana, type PagosManualesSemana } from '../utils/saldoAlCierre'
 import { acumularCuentaCabify, elegirCuentaCabify, type CuentasCabifyPorConductor } from '../utils/cuentaCabify'
 import { cargarDesgloseFraccionamiento } from '../../../utils/aportesFraccionados'
 import { cargarReglaToshipass, diasTrabajadosToshipass, cargarDevolucionesCambioTarifaEnPeriodo, CODIGO_TOSHIPASS, CODIGO_DEVOLUCION_GARANTIA, DESCRIPCION_DEVOLUCION_GARANTIA } from '../utils/toshipass'
 import { cargarDiasDescuentoReferido, descripcionDescuentoReferido, DESCUENTO_REFERIDO_PORCENTAJE, esLineaDescuentoReferido } from '../utils/descuentoReferido'
 import {
   cargarPromocionesSemana, descuentoPromoAlquiler, descuentoPromoToshipass, leerCalculoPromocion,
-  esPagoPromocionB1, lineasPromocionConductor, REFERENCIA_PROMOCION, textoLineaPagoB1, textoLineaPromocion,
+  esPagoPromocionB1, lineasPromocionConductor, REFERENCIA_PROMOCION, textoLineaB1Informativa, textoLineaPagoB1,
+  textoLineaPromocion,
 } from '../utils/promocionesFacturacion'
 import type { DiaPromocion, LineaPromocion, PagoDiarioB1 } from '../utils/promocionesFacturacion'
 import { cruzarPagosDidi, leerExcelDidi, palabrasNombreDidi, type CandidatoDidi, type MetodoCruceDidi, type NoCruzadoDidi } from '../utils/pagosDidi'
@@ -93,12 +95,14 @@ let logoAspectRatio = 3
 const _logoPreload = new Image()
 _logoPreload.src = logoToshifyUrl
 _logoPreload.onload = () => {
+  // A 600 px de ancho alcanza para el PDF (a resolución completa cada PDF pesaba ~80 MB)
+  const escala = Math.min(1, 600 / (_logoPreload.naturalWidth || 600))
   const c = document.createElement('canvas')
-  c.width = _logoPreload.naturalWidth
-  c.height = _logoPreload.naturalHeight
+  c.width = Math.round(_logoPreload.naturalWidth * escala)
+  c.height = Math.round(_logoPreload.naturalHeight * escala)
   logoAspectRatio = c.width / c.height
   const ctx = c.getContext('2d')!
-  ctx.drawImage(_logoPreload, 0, 0)
+  ctx.drawImage(_logoPreload, 0, 0, c.width, c.height)
   logoBase64 = c.toDataURL('image/png')
 }
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
@@ -110,6 +114,7 @@ import { hoyART } from '../../../utils/fechaArgentina'
 import { semanaISO, semanasDelAnio } from '../../../utils/semanaISO'
 import { cargarAppsPagoSemana, type AppsPago } from '../../../services/appsPagoService'
 import { quitarDiasPromocion } from '../../../utils/conceptoLabels'
+import { clasePagoConductor, diaMesPago } from '../../../utils/textoPagoConductor'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
 // Promociones y descuentos de la semana de un conductor (columna "Promos/Desc."):
 // descuento del referido (5% primera semana) y las promociones con código (PRM...),
@@ -372,6 +377,8 @@ interface FacturacionConductor {
   proyectado_alquiler?: number
   // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
   fecha_baja_no_coincide?: boolean
+  // Fecha de baja (YYYY-MM-DD) si el conductor está de baja; null si está activo
+  fecha_baja?: string | null
   // Discrepancia de formato DNI entre conductores y cabify_historico
   dni_discrepancy?: { conductorRaw: string; cabifyRaw: string } | null
   // Alerta: conductor diurno con entrega nueva en la semana requiere prorrateo (incidencia a favor)
@@ -700,21 +707,27 @@ interface SaldoSeparado { saldoCierre: number; pagos: PagoSemana[]; totalPagos: 
  * ese movimiento en la lista, no se separa.
  * Con saldo_anterior 0 también se separa: si pagó toda la deuda en la semana, se muestra
  * cuánto debía al cierre y los pagos que la dejaron en 0.
+ * Solo se miran movimientos con semana hasta la facturada: un pago o ajuste de la semana
+ * siguiente que deja el saldo en el mismo valor no es el corte ni un pago de esta semana.
  * `movsDesc`: movimientos del conductor, más recientes primero. Signos: saldo_anterior
  * positivo = deuda; saldo_pendiente del kardex positivo = a favor.
  */
 function separarPagosSemana(
   saldoAnterior: number,
-  movsDesc: Array<{ tipo_movimiento: string; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null; created_at: string }>,
+  movsDesc: Array<{ tipo_movimiento: string; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null; created_at: string; semana?: number | null; anio?: number | null }>,
   inicioSemanaMs: number,
+  semanaFacturada: { semana: number; anio: number },
 ): SaldoSeparado | null {
   const centavos = (n: number) => Math.round(n * 100)
-  const corte = movsDesc.find(m => centavos(m.saldo_pendiente || 0) === centavos(-saldoAnterior))
+  const tope = semanaFacturada.anio * 100 + semanaFacturada.semana
+  const hastaLaSemana = (m: { semana?: number | null; anio?: number | null }) =>
+    m.semana == null || m.anio == null || m.anio * 100 + m.semana <= tope
+  const corte = movsDesc.find(m => hastaLaSemana(m) && centavos(m.saldo_pendiente || 0) === centavos(-saldoAnterior))
   if (!corte) return null
   const finMs = new Date(corte.created_at).getTime()
   const enSemana = movsDesc.filter(m => {
     const t = new Date(m.created_at).getTime()
-    return t >= inicioSemanaMs && t <= finMs
+    return t >= inicioSemanaMs && t <= finMs && hastaLaSemana(m)
   })
   if (enSemana.some(m => m.tipo_movimiento === 'eliminacion_pago')) return null
   const pagos: PagoSemana[] = []
@@ -790,6 +803,8 @@ export function ReporteFacturacionTab() {
   // Pagos Cabify cargados (Excel formato Cabify) — Map<conductor_id, monto_pagado>
   // Solo se popula cuando el período está cerrado y hay registros en pagos_conductores
   const [pagosCabifyMap, setPagosCabifyMap] = useState<Map<string, number>>(new Map())
+  // Parte de pagosCabifyMap que vino de DiDi (pagosCabifyMap suma Cabify + DiDi)
+  const [pagosDidiMap, setPagosDidiMap] = useState<Map<string, number>>(new Map())
   // Pagos de facturación de la semana que NO apuntan a ninguna facturación
   // actual del período (quedaron huérfanos, ej. Pagos Cabify procesados con la
   // pantalla desactualizada después de un recálculo). Solo se muestran como
@@ -824,6 +839,19 @@ export function ReporteFacturacionTab() {
   // Dentro de cada grupo se suman (OR); entre grupos se combinan (AND).
   const [filtroEmpresa, setFiltroEmpresa] = useState<string[]>([])
   const [filtroApp, setFiltroApp] = useState<Array<'cabify' | 'didi'>>([])
+  // Licencia del conductor (B1 / D1) y turno (diurno / nocturno / a cargo), también en el
+  // filtro de la columna Conductor
+  const [filtroLicencia, setFiltroLicencia] = useState<string[]>([])
+  const [filtroTurno, setFiltroTurno] = useState<string[]>([])
+  /** Turnos de la semana, como los íconos de la tabla (sol / luna / 24 h) */
+  const turnosDe = (f: object): string[] => {
+    const o = f as { tipo_alquiler?: string | null; prorrateo_diurno_dias?: number | null; prorrateo_nocturno_dias?: number | null }
+    if (o.tipo_alquiler === 'CARGO') return ['cargo']
+    return [
+      ...((o.prorrateo_diurno_dias || 0) > 0 ? ['diurno'] : []),
+      ...((o.prorrateo_nocturno_dias || 0) > 0 ? ['nocturno'] : []),
+    ]
+  }
   const [filtroEfectivo, setFiltroEfectivo] = useState<string[]>([])
   // Tarifa (ENE-26 / OCT-26) y promo van en el filtro de la columna Alq.
   // Promo: 'con' / 'sin' o un código puntual (PRM01).
@@ -842,12 +870,19 @@ export function ReporteFacturacionTab() {
         v === 'con' ? promos.length > 0 : v === 'sin' ? promos.length === 0 : promos.includes(v))
       if (!pasa) return false
     }
+    if (!pasaGruposConductor(f)) return false
+    if (filtroEfectivo.length > 0 && !filtroEfectivo.includes(f.permiso_efectivo || '')) return false
+    return true
+  }
+  /** Empresa, app, licencia y turno (los grupos del filtro de la columna Conductor) */
+  const pasaGruposConductor = (f: { conductor_id: string; grupo_flota?: string | null }) => {
     if (filtroEmpresa.length > 0 && !filtroEmpresa.includes(f.grupo_flota || '')) return false
     if (filtroApp.length > 0) {
       const apps = appsPorConductor.get(f.conductor_id)
       if (!apps || !filtroApp.some(a => apps[a])) return false
     }
-    if (filtroEfectivo.length > 0 && !filtroEfectivo.includes(f.permiso_efectivo || '')) return false
+    if (filtroLicencia.length > 0 && !filtroLicencia.includes(licenciaPorConductor.get(f.conductor_id)?.categoria || '')) return false
+    if (filtroTurno.length > 0 && !turnosDe(f).some(t => filtroTurno.includes(t))) return false
     return true
   }
   // Mapa de grupo ganador por DNI (vista previa) - ref para compartir entre funciones
@@ -1132,6 +1167,7 @@ export function ReporteFacturacionTab() {
       return
     }
     const inicioSemana = new Date(`${format(semanaActual.inicio, 'yyyy-MM-dd')}T00:00:00-03:00`)
+    const semanaFacturada = { semana: getISOWeek(semanaActual.inicio), anio: getISOWeekYear(semanaActual.inicio) }
     const ids = [...new Set(conSaldo.map(f => f.conductor_id))]
     void (async () => {
       try {
@@ -1140,7 +1176,7 @@ export function ReporteFacturacionTab() {
         const movs: any[] = []
         for (let k = 0; k < ids.length; k += 200) {
           const { data, error } = await (supabase.from('control_saldos') as any)
-            .select('conductor_id, tipo_movimiento, saldo_pendiente, monto_movimiento, referencia, created_at')
+            .select('conductor_id, tipo_movimiento, saldo_pendiente, monto_movimiento, referencia, created_at, semana, anio')
             .in('conductor_id', ids.slice(k, k + 200))
             .gte('created_at', inicioSemana.toISOString())
             .order('created_at', { ascending: false })
@@ -1155,7 +1191,7 @@ export function ReporteFacturacionTab() {
         }
         const resultado = new Map<string, SaldoSeparado>()
         for (const f of conSaldo) {
-          const sep = separarPagosSemana(f.saldo_anterior, porConductor.get(f.conductor_id) || [], inicioSemana.getTime())
+          const sep = separarPagosSemana(f.saldo_anterior, porConductor.get(f.conductor_id) || [], inicioSemana.getTime(), semanaFacturada)
           if (sep) resultado.set(f.conductor_id, sep)
         }
         if (!cancelado) setSaldosSeparados(resultado)
@@ -1166,6 +1202,101 @@ export function ReporteFacturacionTab() {
     })()
     return () => { cancelado = true }
   }, [facturaciones, semanaActual])
+
+  // Saldo de cada conductor al cierre de la semana anterior, con la misma regla que Saldos
+  // (histórico por semana cerrada). Para el modal Importe Generado: deuda al cierre, menos lo
+  // pagado en esta semana, igual al saldo que entró en la factura.
+  const [cierreSemanaAnterior, setCierreSemanaAnterior] = useState<{ semana: number; mapa: Map<string, number> } | null>(null)
+  useEffect(() => {
+    let cancelado = false
+    setCierreSemanaAnterior(null)
+    const ids = [...new Set([...facturaciones, ...vistaPreviaData].map(f => f.conductor_id))]
+    if (ids.length === 0) return
+    const anterior = subWeeks(semanaActual.inicio, 1)
+    const semana = getISOWeek(anterior)
+    cargarSaldosAlCierre(ids, semana, getISOWeekYear(anterior))
+      .then(mapa => { if (!cancelado) setCierreSemanaAnterior({ semana, mapa }) })
+      .catch(error => console.error('Error cargando el saldo al cierre de la semana anterior:', error))
+    return () => { cancelado = true }
+  }, [facturaciones, vistaPreviaData, semanaActual])
+
+  // Pagos cargados a mano con la semana mirada (efectivo, transferencias, DiDi a mano).
+  // Para el modal Importe Generado: cuentan como cobrado de la semana.
+  // Y los ajustes, cancelaciones de fraccionado y demás movimientos de la semana que cambian
+  // la deuda sin ser cargo de la factura ni cobro (suman o restan al total a cobrar).
+  const [pagosManualesSemana, setPagosManualesSemana] = useState<Map<string, PagosManualesSemana> | null>(null)
+  const [otrosMovimientosSemana, setOtrosMovimientosSemana] = useState<Map<string, OtrosMovimientosSemana> | null>(null)
+  useEffect(() => {
+    let cancelado = false
+    setPagosManualesSemana(null)
+    setOtrosMovimientosSemana(null)
+    const ids = [...new Set([...facturaciones, ...vistaPreviaData].map(f => f.conductor_id))]
+    if (ids.length === 0) return
+    const semana = getISOWeek(semanaActual.inicio)
+    const anio = getISOWeekYear(semanaActual.inicio)
+    Promise.all([cargarPagosManualesSemana(ids, semana, anio), cargarOtrosMovimientosSemana(ids, semana, anio)])
+      .then(([pagos, otros]) => {
+        if (cancelado) return
+        setPagosManualesSemana(pagos)
+        setOtrosMovimientosSemana(otros)
+      })
+      .catch(error => console.error('Error cargando los movimientos de la semana:', error))
+    return () => { cancelado = true }
+  }, [facturaciones, vistaPreviaData, semanaActual])
+
+  // Importe Generado de la semana (tarjeta y modal).
+  // Total a cobrar = cargos de la semana - descuentos + deuda al cierre de la semana anterior
+  // - saldo a favor al cierre de la semana anterior + ajustes y otros movimientos de la semana.
+  // Cobrado = efectivo y transferencias cargados con esta semana + Cabify y DiDi de esta semana
+  // (llegan después del cierre, pero son de esta semana).
+  // Se parte de la deuda al cierre y no del saldo que entró en la factura porque el efectivo
+  // pagado antes de calcular la factura ya bajó ese saldo: contarlo como cobrado sería
+  // contarlo dos veces. Mientras el cierre no cargó, se usa el saldo de la factura sin efectivo.
+  const resumenCobroSemana = (lista: FacturacionConductor[]) => {
+    const cierre = cierreSemanaAnterior
+    const manuales = pagosManualesSemana
+    const otrosMov = otrosMovimientosSemana
+    const conCierre = !!cierre && !!manuales && !!otrosMov
+    const filas = lista.map(f => {
+      const alquiler = f.subtotal_alquiler || 0
+      const garantia = f.subtotal_garantia || 0
+      const toshipass = f.monto_toshipass || 0
+      // Incidencias, multas y demás cargos, menos los descuentos (incidencias y tickets a favor,
+      // promociones). Puede quedar negativo si los descuentos superan a los cargos extra.
+      const extra = Math.max(0, (f.subtotal_cargos || 0) - alquiler - garantia - toshipass) -
+        (f.subtotal_descuentos || 0)
+      // Saldo con el que arrancó la semana: deuda o saldo a favor (este último resta)
+      const saldoInicio = conCierre ? -(cierre.mapa.get(f.conductor_id) ?? 0) : (f.saldo_anterior || 0)
+      const deuda = Math.max(0, saldoInicio)
+      const favor = Math.max(0, -saldoInicio)
+      const manual = conCierre ? manuales.get(f.conductor_id) : undefined
+      const didiExcel = pagosDidiMap.get(f.conductor_id) || 0
+      const cabify = (pagosCabifyMap.get(f.conductor_id) || 0) - didiExcel
+      const didi = didiExcel + (manual?.didi || 0)
+      const efectivo = manual?.efectivo || 0
+      const otroMov = conCierre ? otrosMov.get(f.conductor_id) : undefined
+      const otros = otroMov?.efecto || 0
+      const debe = alquiler + garantia + toshipass + extra + deuda - favor + otros
+      return { f, alquiler, garantia, toshipass, extra, deuda, favor, otros, otrosCantidad: otroMov?.cantidad || 0,
+        cabify, didi, efectivo, debe,
+        cobrado: cabify + didi + efectivo, pagosManuales: manual?.cantidad || 0 }
+    })
+    const sumar = (k: 'alquiler' | 'garantia' | 'toshipass' | 'extra' | 'deuda' | 'favor' | 'otros' | 'otrosCantidad' | 'cabify' | 'didi' | 'efectivo' | 'debe' | 'cobrado' | 'pagosManuales') =>
+      filas.reduce((s, x) => s + x[k], 0)
+    const total = sumar('debe')
+    const cobrado = sumar('cobrado')
+    return {
+      filas, conCierre, semanaCierre: cierre?.semana ?? null,
+      alquiler: sumar('alquiler'), garantia: sumar('garantia'), toshipass: sumar('toshipass'),
+      extra: sumar('extra'), deuda: sumar('deuda'), conDeuda: filas.filter(x => x.deuda > 0).length,
+      favor: sumar('favor'), conFavor: filas.filter(x => x.favor > 0).length,
+      otros: sumar('otros'), otrosCantidad: sumar('otrosCantidad'),
+      cabify: sumar('cabify'), didi: sumar('didi'), efectivo: sumar('efectivo'),
+      pagosManuales: sumar('pagosManuales'), total, cobrado,
+      porcentaje: total > 0 ? Math.round((cobrado / total) * 100) : 0,
+      hayPagosApps: pagosCabifyMap.size > 0,
+    }
+  }
 
   // Apps con las que pagó cada conductor (etiquetas "Cabify" / "DiDi" bajo el nombre).
   // Solo visual. La regla está en appsPagoService (la misma del Panel de conductores).
@@ -1327,9 +1458,16 @@ export function ReporteFacturacionTab() {
   const datosParaFiltros = modoVistaPrevia ? vistaPreviaData : facturaciones
 
   // Listas de valores únicos para filtros Excel
+  // Solo los que cumplen lo marcado de Empresa, App, Licencia y Turno (con Diurno marcado no
+  // aparecen nocturnos). Los nombres ya elegidos se muestran igual, para poder destildarlos.
   const conductoresUnicos = useMemo(() =>
-    [...new Set(datosParaFiltros.map(f => f.conductor_nombre).filter(Boolean))].sort() as string[]
-  , [datosParaFiltros])
+    [...new Set([
+      ...datosParaFiltros.filter(pasaGruposConductor).map(f => f.conductor_nombre),
+      ...conductorFilter,
+    ].filter(Boolean))].sort() as string[]
+    // pasaGruposConductor depende de estos filtros y mapas
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  , [datosParaFiltros, filtroEmpresa, filtroApp, filtroLicencia, filtroTurno, appsPorConductor, licenciaPorConductor, conductorFilter])
   const empresasUnicas = useMemo(() =>
     [...new Set(datosParaFiltros.map(f => f.grupo_flota || '').filter(Boolean))].sort() as string[]
   , [datosParaFiltros])
@@ -1354,6 +1492,11 @@ export function ReporteFacturacionTab() {
     ...empresasUnicas.map(e => ({ value: `empresa:${e}`, label: `Empresa · ${e}` })),
     { value: 'app:cabify', label: 'App · Cabify' },
     { value: 'app:didi', label: 'App · DiDi' },
+    { value: 'licencia:B1', label: 'Licencia · B1' },
+    { value: 'licencia:D1', label: 'Licencia · D1' },
+    { value: 'turno:diurno', label: 'Turno · Diurno' },
+    { value: 'turno:nocturno', label: 'Turno · Nocturno' },
+    { value: 'turno:cargo', label: 'Turno · A cargo (24 h)' },
     ...conductoresUnicos,
   ], [empresasUnicas, conductoresUnicos])
 
@@ -2271,6 +2414,7 @@ export function ReporteFacturacionTab() {
             : f.conductor_nombre || '',
           estado_billing: estadoBilling,
           fecha_baja_no_coincide: fechaBajaNoCoincideLoad,
+          fecha_baja: esDeBajaLoad ? ftStrLoad : null,
           garantia_estado: garantiaEstadoMapLoad.get(f.conductor_id) || undefined,
           garantia_acumulada: garantiaAcumuladaMapLoad.get(f.conductor_id) || 0,
           garantia_monto_total: garantiaMontoTotalMapLoad.get(f.conductor_id) || 1_000_000,
@@ -2488,7 +2632,7 @@ export function ReporteFacturacionTab() {
       const codigosPromocionMap = new Map<string, string[]>()
       ;(detallesData || []).forEach((d: any) => {
         if (d.referencia_tipo !== REFERENCIA_PROMOCION || !d.concepto_codigo) return
-        if (esPagoPromocionB1(d.descripcion)) return
+        if (esPagoPromocionB1(d.descripcion) || textoLineaB1Informativa(d.concepto_descripcion)) return
         const actuales = codigosPromocionMap.get(d.facturacion_id) || []
         if (!actuales.includes(d.concepto_codigo)) actuales.push(d.concepto_codigo)
         codigosPromocionMap.set(d.facturacion_id, actuales)
@@ -2641,7 +2785,7 @@ export function ReporteFacturacionTab() {
       const pagosCabifyPromesa = !simulacion && esPeriodoCerrado
         ? Promise.all(Array.from({ length: Math.ceil(factIdsPeriodo.length / 200) }, (_, k) =>
             (supabase.from('pagos_conductores') as any)
-              .select('conductor_id, monto')
+              .select('conductor_id, monto, referencia')
               .eq('tipo_cobro', 'facturacion_semanal')
               .in('referencia_id', factIdsPeriodo.slice(k * 200, k * 200 + 200))
               // Cabify y DiDi: los dos cuentan como cobrado de la semana
@@ -2696,6 +2840,7 @@ export function ReporteFacturacionTab() {
         )
         setVistaPreviaData(facturacionesTransformadas as FacturacionConductor[])
         setPagosCabifyMap(new Map())
+        setPagosDidiMap(new Map())
         setPagosSinVincular([])
         return
       }
@@ -2708,17 +2853,23 @@ export function ReporteFacturacionTab() {
         // `semana` del pago es la del día en que se cargó (la semana siguiente), así que no
         // sirve: se buscan los pagos que apuntan a las facturas de este período y cuya
         // referencia lleva esta semana ("Pago Cabify S46/2026").
-        const pagosData: Array<{ conductor_id: string; monto: number }> = []
+        const pagosData: Array<{ conductor_id: string; monto: number; referencia: string | null }> = []
         for (const { data } of await pagosCabifyPromesa) {
-          pagosData.push(...((data || []) as Array<{ conductor_id: string; monto: number }>))
+          pagosData.push(...((data || []) as Array<{ conductor_id: string; monto: number; referencia: string | null }>))
         }
         const mapa = new Map<string, number>()
+        const mapaDidi = new Map<string, number>()
         for (const p of pagosData) {
           mapa.set(p.conductor_id, (mapa.get(p.conductor_id) || 0) + Number(p.monto || 0))
+          if (/^Pago DiDi/i.test(p.referencia || '')) {
+            mapaDidi.set(p.conductor_id, (mapaDidi.get(p.conductor_id) || 0) + Number(p.monto || 0))
+          }
         }
         setPagosCabifyMap(mapa)
+        setPagosDidiMap(mapaDidi)
       } else {
         setPagosCabifyMap(new Map())
+        setPagosDidiMap(new Map())
       }
 
       // Pagos sin vincular (ver estado pagosSinVincular). Se identifican por la
@@ -5021,7 +5172,7 @@ export function ReporteFacturacionTab() {
   /**
    * F13: al cerrar la semana, las facturas que no tienen NINGÚN pago registrado pasan su
    * deuda (o saldo a favor) al saldo del conductor. Se registra como un pago de $0
-   * ("Cierre sin pago S{n}/{año}") con el mismo cálculo que un pago de app: así el pago real
+   * ("Cierre S{n}/{año}"; antes "Cierre sin pago") con el mismo cálculo que un pago de app: así el pago real
    * que llegue después se descuenta bien (el movimiento cuenta como de la propia factura) y
    * la semana queda bloqueada para recalcular como cualquier semana con pagos.
    */
@@ -5044,7 +5195,7 @@ export function ReporteFacturacionTab() {
     }
     const hoy = new Date()
     const { semana: semanaHoy, anio: anioHoy } = semanaISO(hoyART())
-    const referencia = `Cierre sin pago S${per.semana}/${per.anio}`
+    const referencia = `Cierre S${per.semana}/${per.anio}`
     for (const f of lista) {
       if (conPago.has(f.id) || !f.conductor_id) continue
       try {
@@ -5303,7 +5454,7 @@ export function ReporteFacturacionTab() {
           })
         } else {
           const { data: movs } = await (supabase.from('control_saldos') as any)
-            .select('tipo_movimiento, saldo_adeudado, saldo_a_favor, saldo_pendiente, monto_movimiento, referencia, created_at')
+            .select('tipo_movimiento, saldo_adeudado, saldo_a_favor, saldo_pendiente, monto_movimiento, referencia, created_at, semana, anio')
             .eq('conductor_id', facturacion.conductor_id)
             .order('created_at', { ascending: false })
             .limit(30)
@@ -5315,7 +5466,10 @@ export function ReporteFacturacionTab() {
 
           // a) Pagos hechos durante la semana facturada: se muestran aparte del saldo anterior.
           const inicioSemana = new Date(`${format(semanaActual.inicio, 'yyyy-MM-dd')}T00:00:00-03:00`).getTime()
-          const separado = separarPagosSemana(saldoAnt, lista, inicioSemana)
+          const separado = separarPagosSemana(saldoAnt, lista, inicioSemana, {
+            semana: getISOWeek(semanaActual.inicio),
+            anio: getISOWeekYear(semanaActual.inicio),
+          })
           if (separado) {
             setDetalleSaldoBreakdown({
               saldoPrevio: separado.saldoCierre,
@@ -5576,17 +5730,18 @@ export function ReporteFacturacionTab() {
       <div style="display:grid; grid-template-columns:150px 1fr; gap:2px 12px; font-size:13px; line-height:1.8">
         ${filas.map(([k, v]) => `<strong>${k}</strong><span>${v}</span>`).join('')}
       </div>`
-    const titulo = (t: string) =>
-      `<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 6px">${t}</div>`
     const th = (t: string, der = false) =>
       `<th style="padding:5px 8px;font-size:10px;color:#6b7280;text-align:${der ? 'right' : 'left'};border-bottom:1px solid #e5e7eb">${t}</th>`
     const td = (t: string, der = false, extra = '') =>
       `<td style="padding:5px 8px;font-size:12px;border-bottom:1px solid #f3f4f6;text-align:${der ? 'right' : 'left'};${der ? 'font-family:monospace;' : ''}${extra}">${t}</td>`
 
     const calculo = leerCalculoPromocion(item.descripcion)
+    // Licencia B1 no es una promoción: se muestra como "Licencia B1" (no con el código PRM02)
+    const esB1 = calculo?.tipo === 'b1'
+    const textoB1 = textoLineaB1Informativa(item.concepto_descripcion)
     const cabecera = grid([
-      ['Código:', `<span style="font-weight:700;color:#b91c1c">${esc(item.concepto_codigo)}</span>`],
-      ['Concepto:', esc(quitarDiasPromocion(item.concepto_descripcion))],
+      ['Código:', `<span style="font-weight:700;color:#b91c1c">${esc(esB1 ? 'Licencia B1' : item.concepto_codigo)}</span>`],
+      ['Concepto:', esc(textoB1 ? textoB1.replace(/^Licencia B1 - /, '') : quitarDiasPromocion(item.concepto_descripcion))],
     ])
     if (!calculo) {
       return `${cabecera}
@@ -5598,88 +5753,81 @@ export function ReporteFacturacionTab() {
     const ingreso = calculo.ingreso
       ? `${fecha(calculo.ingreso.fecha)} (${calculo.ingreso.esReingreso ? 'reingreso' : 'primer día trabajado'})`
       : '-'
-    let html = `${cabecera}
-      ${titulo('Promoción')}
+    // Licencia B1: solo el resumen de la semana (la habilitación se ve en Facturación > Licencia B1).
+    // Promociones: lo justo para entender el monto (pedido 2026-11-26): vigencia, ingreso del
+    // conductor y la cuenta. El nombre ya está en el concepto y los totales en la factura.
+    let html = esB1 ? cabecera : `${cabecera}
+      <div style="margin-top:10px">
       ${grid([
-        ['Promoción:', esc(calculo.promocion.nombre)],
         ['Vigencia:', `${fecha(calculo.promocion.desde)} al ${fecha(calculo.promocion.hasta)}`],
         ['Ingreso del conductor:', ingreso],
-        ['Por qué entra:', 'Ingresó o reingresó dentro de la vigencia'],
-      ])}`
+      ])}
+      </div>`
+    const resultado = `<strong style="color:#059669">-${formatCurrency(calculo.monto)}</strong>`
 
     if (calculo.tipo === 'alquiler') {
       const dias = calculo.dias || []
       const base = dias.reduce((sum, d) => sum + d.precio * d.fraccion, 0)
-      const filas = dias.map(d => {
-        const tarifa = periodoPorCodigo.get(d.codigo)
-        const concepto = `${d.codigo} ${MODALIDAD_POR_CODIGO_ALQUILER[d.codigo] || ''}${tarifa ? ` (${tarifa})` : ''}`
-        return `<tr>${td(fecha(d.fecha))}${td(esc(concepto))}${td(formatCurrency(d.precio), true)}${td(d.fraccion === 1 ? 'Completo' : pct(d.fraccion), true)}${td(formatCurrency(d.precio * d.fraccion), true)}${td(`-${formatCurrency(d.descuento)}`, true, 'color:#059669;font-weight:600;')}</tr>`
-      }).join('')
-      html += `
-        ${titulo(`Cálculo día por día (${dias.length} ${dias.length === 1 ? 'día' : 'días'})`)}
-        <div style="max-height:220px;overflow-y:auto">
+      // Todos los días iguales (mismo concepto, precio y turno completo): una sola cuenta.
+      // Si cambian (medio turno, otra tarifa), la tabla día por día.
+      const iguales = dias.length > 0 && dias.every(d => d.fraccion === 1 && d.codigo === dias[0].codigo && d.precio === dias[0].precio)
+      if (iguales) {
+        html += grid([
+          ['Cálculo:', `${dias.length} ${dias.length === 1 ? 'día' : 'días'} × ${formatCurrency(dias[0].precio)} = ${formatCurrency(base)} × ${pct(calculo.porcentaje)} = ${resultado}`],
+        ])
+      } else {
+        const filas = dias.map(d => {
+          const tarifa = periodoPorCodigo.get(d.codigo)
+          const concepto = `${d.codigo} ${MODALIDAD_POR_CODIGO_ALQUILER[d.codigo] || ''}${tarifa ? ` (${tarifa})` : ''}${d.fraccion === 1 ? '' : ` · ${pct(d.fraccion)} del día`}`
+          return `<tr>${td(fecha(d.fecha))}${td(esc(concepto))}${td(formatCurrency(d.precio * d.fraccion), true)}${td(`-${formatCurrency(d.descuento)}`, true, 'color:#059669;font-weight:600;')}</tr>`
+        }).join('')
+        html += `
+        <div style="max-height:220px;overflow-y:auto;margin-top:8px">
           <table style="width:100%;border-collapse:collapse">
-            <thead><tr>${th('Fecha')}${th('Concepto')}${th('Precio día', true)}${th('Cobrado', true)}${th('Base', true)}${th(pct(calculo.porcentaje), true)}</tr></thead>
+            <thead><tr>${th('Fecha')}${th('Concepto')}${th('Base', true)}${th(pct(calculo.porcentaje), true)}</tr></thead>
             <tbody>${filas}</tbody>
           </table>
         </div>
-        ${grid([
-          ['Base (IVA incluido):', formatCurrency(base)],
-          ['Porcentaje:', pct(calculo.porcentaje)],
-          ['Cálculo:', `${formatCurrency(base)} × ${pct(calculo.porcentaje)} = <strong style="color:#059669">-${formatCurrency(calculo.monto)}</strong>`],
-        ])}
-        <div style="font-size:11px;color:#6b7280;margin-top:4px">Precio día = valor del concepto de alquiler con IVA. Si ese día se cobró medio turno, el ${pct(calculo.porcentaje)} es sobre esa mitad.</div>`
+        ${grid([['Cálculo:', `${formatCurrency(base)} × ${pct(calculo.porcentaje)} = ${resultado}`]])}`
+      }
     } else if (calculo.tipo === 'toshipass') {
-      const proporcion = calculo.diasCobrados ? (calculo.diasPromo || 0) / calculo.diasCobrados : 0
-      html += `
-        ${titulo('Cálculo')}
-        ${grid([
-          ['ToshiPass semanal:', formatCurrency(calculo.base || 0)],
-          ['Días cobrados:', `${calculo.diasCobrados || 0}`],
-          ['Días con promoción:', `${calculo.diasPromo || 0} de ${calculo.diasCobrados || 0} (${pct(proporcion)})`],
-          ['Porcentaje:', pct(calculo.porcentaje)],
-          ['Cálculo:', `${formatCurrency(calculo.base || 0)} × ${pct(calculo.porcentaje)} × ${pct(proporcion)} = <strong style="color:#059669">-${formatCurrency(calculo.monto)}</strong>`],
-        ])}
-        <div style="font-size:11px;color:#6b7280;margin-top:4px">El ToshiPass es un monto semanal fijo: el ${pct(calculo.porcentaje)} se aplica en proporción a los días de la semana que caen en la promoción.</div>`
+      const diasPromo = calculo.diasPromo || 0
+      const diasCobrados = calculo.diasCobrados || 0
+      // Toda la semana en la promoción: solo el %. Si no, en proporción a los días.
+      const proporcional = diasCobrados > 0 && diasPromo !== diasCobrados
+      html += grid([
+        ['Cálculo:', proporcional
+          ? `${formatCurrency(calculo.base || 0)} × ${pct(calculo.porcentaje)} × ${diasPromo} de ${diasCobrados} días = ${resultado}`
+          : `${formatCurrency(calculo.base || 0)} × ${pct(calculo.porcentaje)} = ${resultado}`],
+      ])
     } else {
-      const diasB1 = calculo.diasB1 || []
+      const diasB1 = [...(calculo.diasB1 || [])].sort()
       const pagos = calculo.pagos || []
       const aPagar = diasB1.length * (calculo.pagoDiario || 0)
-      // Cada pago como "Pago de esta semana · Pago en transferencia / Pago manual"
-      const filasPagos = pagos.map(p => {
-        const concepto = `Pago de esta semana · ${p.origen === 'manual' ? 'Pago manual' : 'Pago en transferencia'}`
-        return `<tr>${td(fecha(p.fecha))}${td(`<strong>${concepto}</strong>`)}${td(esc(p.pagador || '-'))}${td(esc(p.detalle))}${td(`-${formatCurrency(p.monto)}`, true, 'color:#059669;font-weight:600;')}</tr>`
+      const falta = Math.max(0, aPagar - calculo.monto)
+      const rangoDias = diasB1.length === 0
+        ? '-'
+        : diasB1.length === 1
+          ? fecha(diasB1[0])
+          : `${fecha(diasB1[0]).slice(0, 5)} al ${fecha(diasB1[diasB1.length - 1]).slice(0, 5)}`
+      // Un renglón por pago: "25/11 · $ 30.000 · transferencia de Fulano"
+      const listaPagos = pagos.map(p => {
+        const medio = p.origen === 'manual' ? 'efectivo' : 'transferencia'
+        return `<div>${fecha(p.fecha).slice(0, 5)} · ${formatCurrency(p.monto)} · ${medio}${p.pagador ? ` de ${esc(p.pagador)}` : ''}</div>`
       }).join('')
       html += `
-        ${titulo('Pago diario B1')}
+        <div style="margin-top:12px">
         ${grid([
-          ['Días con B1:', diasB1.length ? `${diasB1.length}: ${diasB1.map(fecha).join(', ')}` : '-'],
-          ['A pagar en la semana:', `${diasB1.length} × ${formatCurrency(calculo.pagoDiario || 0)} = ${formatCurrency(aPagar)}`],
-          ['Pagado en la semana:', `<strong style="color:#059669">${formatCurrency(calculo.monto)}</strong>`],
+          ['Días con B1:', `${diasB1.length} (${rangoDias})`],
+          ['A adelantar:', `${diasB1.length} × ${formatCurrency(calculo.pagoDiario || 0)} = ${formatCurrency(aPagar)}`],
+          ['Adelantado:', `<strong style="color:#059669">${formatCurrency(calculo.monto)}</strong>`],
+          ['Faltó:', falta > 0 ? `<strong style="color:#d97706">${formatCurrency(falta)}</strong>` : '-'],
+          ...(pagos.length ? [['Pagos:', listaPagos] as [string, string]] : []),
         ])}
-        ${pagos.length ? `
-          ${titulo(`Pagos de la semana (${pagos.length})`)}
-          <div style="max-height:200px;overflow-y:auto">
-            <table style="width:100%;border-collapse:collapse">
-              <thead><tr>${th('Fecha')}${th('Concepto')}${th('Pagó')}${th('Origen')}${th('Monto', true)}</tr></thead>
-              <tbody>${filasPagos}</tbody>
-            </table>
-          </div>` : ''}
-        <div style="font-size:11px;color:#6b7280;margin-top:4px">Lo pagado por día (Cresium o cargado a mano en Facturación &gt; Licencia B1) es saldo a favor de esta semana y resta del total. En Saldos se ve como informativo (no cambia el saldo).</div>`
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:8px">Solo informativo: los pagos B1 entran al saldo como cualquier pago. Esta línea no cambia el total.</div>`
     }
 
-    // Efecto en el total de la factura
-    if (detalleFacturacion && item.total > 0) {
-      const f = detalleFacturacion
-      html += `
-        ${titulo('Cómo impacta en el total')}
-        ${grid([
-          ['Subtotal cargos:', formatCurrency(f.subtotal_cargos)],
-          ['Descuentos:', `-${formatCurrency(f.subtotal_descuentos)} <span style="color:#6b7280">(incluye este -${formatCurrency(item.total)})</span>`],
-          ['Saldo anterior:', `${f.saldo_anterior >= 0 ? '+' : '-'}${formatCurrency(Math.abs(f.saldo_anterior))}`],
-          ['Total a pagar:', `<strong style="color:#ff0033">${formatCurrency(f.total_a_pagar)}</strong>`],
-        ])}`
-    }
     return html
   }
 
@@ -5703,13 +5851,20 @@ export function ReporteFacturacionTab() {
     const unitario = item.precio_unitario
     const total = item.total
 
-    // Desglose básico que siempre se muestra
+    // Desglose básico que siempre se muestra. Cantidad y precio unitario solo si hay más de
+    // una unidad (alquiler por días, etc.): en ToshiPass, garantía y demás conceptos de una
+    // sola unidad no dicen nada. Con IVA, el neto y el IVA como en las filas de la factura.
+    const ivaItem = ivaDeLinea(item, ivaPorCodigo)
+    // Alquiler: los días y el valor por día van abajo ("Días cobrados" / "Valor por día")
+    const codigosAlquilerDetalle = ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']
     const htmlBasico = `
       <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
         <strong>Código:</strong> <span>${codigo}</span>
         <strong>Concepto:</strong> <span>${desc}</span>
-        <strong>Cantidad:</strong> <span>${qty}</span>
-        <strong>Precio unit.:</strong> <span>${formatCurrency(unitario)}</span>
+        ${qty !== 1 && !codigosAlquilerDetalle.includes(codigo) ? `<strong>Cantidad:</strong> <span>${qty}</span>
+        <strong>Precio unit.:</strong> <span>${formatCurrency(unitario)}</span>` : ''}
+        ${ivaItem.porcentaje > 0 ? `<strong>Neto:</strong> <span>${formatCurrency(montoNeto(item, ivaPorCodigo))}</span>
+        <strong>IVA ${ivaItem.porcentaje}%:</strong> <span>${formatCurrency(ivaItem.monto)}</span>` : ''}
         <strong>Total:</strong> <span style="font-weight:700; color:#ff0033">${formatCurrency(total)}</span>
       </div>
     `
@@ -5781,7 +5936,6 @@ export function ReporteFacturacionTab() {
             ${periodoTarifa ? `<strong>Tarifa:</strong> <span>${periodoTarifa}</span>` : ''}
             <strong>Días cobrados:</strong> <span>${qty} de 7</span>
             <strong>Valor por día:</strong> <span>${formatCurrency(unitario)}</span>
-            <strong>Subtotal:</strong> <span style="font-weight:600">${formatCurrency(total)}</span>
           </div>
         `
       }
@@ -6002,6 +6156,9 @@ export function ReporteFacturacionTab() {
     }
 
     const formatDesc = (codigo: string, desc: string) => {
+      // Línea informativa de Licencia B1: "Licencia B1 - Pago diario: ..."
+      const textoB1 = textoLineaB1Informativa(desc)
+      if (textoB1) return textoB1
       const label = conceptoLabels[codigo]
       if (!label) return desc
       if (desc.includes('Alquiler') || desc.includes('Garantía') || desc.includes('Peaje') ||
@@ -7135,157 +7292,178 @@ export function ReporteFacturacionTab() {
       const negro = '#111827'
       const verde = '#059669'
 
-      // Header con logo
+      // Mismo contenido y orden que el modal "Detalle de Facturación" (pedido 2026-11-26):
+      // cabecera compacta, cargos con su IVA, descuentos, saldo anterior y total a pagar.
+      const derecha = pageWidth - margin
+      const anchoTexto = pageWidth - margin * 2 - 45
+      const fila = (texto: string, monto: string, color = negro, negrita = false) => {
+        pdf.setFont('helvetica', negrita ? 'bold' : 'normal')
+        pdf.setTextColor(negro)
+        const lineas = pdf.splitTextToSize(texto, anchoTexto) as string[]
+        pdf.text(lineas, margin, y)
+        pdf.setTextColor(color)
+        pdf.text(monto, derecha, y, { align: 'right' })
+        y += 5 * lineas.length
+      }
+      const tituloSeccion = (texto: string, color: string) => {
+        pdf.setFontSize(10)
+        pdf.setTextColor(color)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(texto, margin, y)
+        y += 6
+        pdf.setFontSize(9.5)
+      }
+      const separador = (espacio = 6) => {
+        pdf.setDrawColor(220, 220, 220)
+        pdf.setLineWidth(0.2)
+        pdf.line(margin, y, derecha, y)
+        y += espacio
+      }
+
+      // Logo y semana
       if (logoBase64) {
-        const logoH = 35
+        const logoH = 24
         const logoW = logoH * logoAspectRatio
-        pdf.addImage(logoBase64, 'PNG', margin, y - 16, logoW, logoH)
+        pdf.addImage(logoBase64, 'PNG', margin, y - 12, logoW, logoH, undefined, 'FAST')
       } else {
-        pdf.setFontSize(22)
+        pdf.setFontSize(20)
         pdf.setTextColor(rojo)
         pdf.setFont('helvetica', 'bold')
         pdf.text('TOSHIFY', margin, y)
       }
-
-      // Título del documento
-      pdf.setFontSize(14)
+      pdf.setFontSize(13)
       pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('FACTURACIÓN', pageWidth - margin, y, { align: 'right' })
-
+      pdf.text('Detalle de Facturación', derecha, y, { align: 'right' })
       pdf.setFontSize(10)
       pdf.setTextColor(rojo)
-      pdf.text(`Semana ${semanaNum} / ${anioNum}`, pageWidth - margin, y + 6, { align: 'right' })
-
+      pdf.text(`Semana ${semanaNum}`, derecha - pdf.getTextWidth(` · ${format(parseISO(fechaInicioStr), 'dd/MM')} al ${format(parseISO(fechaFinStr), 'dd/MM/yyyy')}`), y + 6, { align: 'right' })
       pdf.setTextColor(gris)
       pdf.setFont('helvetica', 'normal')
-      pdf.text(`${format(parseISO(fechaInicioStr), 'dd/MM/yyyy')} - ${format(parseISO(fechaFinStr), 'dd/MM/yyyy')}`, pageWidth - margin, y + 11, { align: 'right' })
-
-      y += 25
-
-      // Línea separadora
+      pdf.text(` · ${format(parseISO(fechaInicioStr), 'dd/MM')} al ${format(parseISO(fechaFinStr), 'dd/MM/yyyy')}`, derecha, y + 6, { align: 'right' })
+      y += 14
       pdf.setDrawColor(220, 38, 38)
       pdf.setLineWidth(0.5)
-      pdf.line(margin, y, pageWidth - margin, y)
-      y += 10
-
-      // Datos del conductor
-      pdf.setFontSize(11)
-      pdf.setTextColor(negro)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('CONDUCTOR', margin, y)
-      y += 6
-
-      pdf.setFontSize(10)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(`Nombre: ${detalleFacturacion.conductor_nombre}`, margin, y)
-      pdf.text(`DNI: ${detalleFacturacion.conductor_dni}`, pageWidth / 2, y)
-      y += 5
-      if (detalleFacturacion.conductor_cuit) {
-        pdf.text(`CUIT: ${detalleFacturacion.conductor_cuit}`, margin, y)
-      }
-      pdf.text(`Vehículo: ${detalleFacturacion.vehiculo_patente || '-'}`, pageWidth / 2, y)
-      y += 5
-      pdf.text(`Tipo: ${detalleFacturacion.tipo_alquiler}`, margin, y)
-      pdf.text(`Turnos: ${detalleFacturacion.turnos_cobrados}/${detalleFacturacion.turnos_base}`, pageWidth / 2, y)
-      y += 10
-
-      // Línea separadora
-      pdf.setDrawColor(200, 200, 200)
-      pdf.setLineWidth(0.2)
-      pdf.line(margin, y, pageWidth - margin, y)
-      y += 8
-
-      // CARGOS
-      pdf.setFontSize(11)
-      pdf.setTextColor(rojo)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('CARGOS', margin, y)
+      pdf.line(margin, y, derecha, y)
       y += 7
 
-      pdf.setFontSize(10)
+      // Cabecera compacta: conductor y CUIT; vehículo · tipo · turnos · flota · promo
+      pdf.setFontSize(11)
       pdf.setTextColor(negro)
-      pdf.setFont('helvetica', 'normal')
-
-      // Mismo criterio que el detalle en pantalla: cada producto con su importe neto y,
-      // debajo, su propio renglon de IVA con referencia al concepto.
-      const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0)
-      cargos.forEach(cargo => {
-        const desc = descripcionSinNumeroCuota(descripcionConPeriodo(cargo.concepto_descripcion, cargo.concepto_codigo, periodoPorCodigo), cargo.concepto_codigo)
-        const descConCodigo = cargo.concepto_codigo && cargo.concepto_codigo !== 'PEND' ? `${cargo.concepto_codigo} - ${desc}` : desc
-        pdf.text(descConCodigo, margin, y)
-        pdf.text(formatCurrency(montoNeto(cargo, ivaPorCodigo)), pageWidth - margin, y, { align: 'right' })
-        y += 5
-        const ivaLinea = ivaDeLinea(cargo, ivaPorCodigo)
-        if (ivaLinea.monto > 0) {
-          pdf.text(etiquetaIvaLinea(ivaLinea.porcentaje, descConCodigo), margin, y)
-          pdf.text(formatCurrency(ivaLinea.monto), pageWidth - margin, y, { align: 'right' })
-          y += 5
-        }
-      })
-
-      // Saldo anterior y mora: NO se muestran en factura (se manejan en tab Saldos)
-
-      y += 3
       pdf.setFont('helvetica', 'bold')
+      pdf.text(detalleFacturacion.conductor_nombre, margin, y)
+      const anchoNombre = pdf.getTextWidth(detalleFacturacion.conductor_nombre)
+      pdf.setFontSize(9)
+      pdf.setTextColor(gris)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(detalleFacturacion.conductor_cuit || `DNI: ${detalleFacturacion.conductor_dni}`, margin + anchoNombre + 3, y)
+      y += 5.5
+      const datos = [
+        detalleFacturacion.vehiculo_patente || '-',
+        detalleFacturacion.tipo_alquiler === 'CARGO' ? 'A cargo' : 'Turno',
+        `${detalleFacturacion.turnos_cobrados} de ${detalleFacturacion.turnos_base} turnos`,
+        ...(detalleFacturacion.grupo_flota ? [detalleFacturacion.grupo_flota] : []),
+        ...(detallePromociones.codigos.length > 0 ? [detallePromociones.codigos.join(' · ')] : []),
+      ]
+      pdf.setFontSize(9.5)
+      pdf.setTextColor(negro)
+      pdf.text(datos.join('  ·  '), margin, y)
+      y += 5
+      separador(7)
+
+      // CARGOS: cada producto con su neto y, debajo, su renglón de IVA
+      tituloSeccion('CARGOS', gris)
+      const cargos = detalleCargos
+      cargos.forEach(cargo => {
+        const textoB1 = cargo.referencia_tipo === REFERENCIA_PROMOCION ? textoLineaB1Informativa(cargo.concepto_descripcion) : null
+        const desc = descripcionSinNumeroCuota(descripcionConPeriodo(cargo.concepto_descripcion, cargo.concepto_codigo, periodoPorCodigo), cargo.concepto_codigo)
+        const descConCodigo = textoB1 || (cargo.concepto_codigo && cargo.concepto_codigo !== 'PEND' ? `${cargo.concepto_codigo} - ${desc}` : desc)
+        const cantidad = cargo.cantidad > 1 && cargo.concepto_codigo !== 'P003' ? ` x${cargo.cantidad}` : ''
+        fila(`${descConCodigo}${cantidad}`, formatCurrency(montoNeto(cargo, ivaPorCodigo)))
+        const ivaLinea = ivaDeLinea(cargo, ivaPorCodigo)
+        if (ivaLinea.monto > 0) fila(etiquetaIvaLinea(ivaLinea.porcentaje, descConCodigo), formatCurrency(ivaLinea.monto))
+      })
+      if (conceptosFaltantes.peajes > 0) fila('Peajes Cabify', formatCurrency(conceptosFaltantes.peajes))
+      y += 1
+      separador(5)
       const subtotalCargosReal = Math.round(cargos.reduce((sum, c) => sum + montoBruto(c), 0) * 100) / 100
-      pdf.text('SUBTOTAL CARGOS', margin, y)
-      pdf.text(formatCurrency(subtotalCargosReal), pageWidth - margin, y, { align: 'right' })
-      y += 10
+      fila('SUBTOTAL CARGOS', formatCurrency(subtotalCargosReal), negro, true)
+      y += 5
 
-      // DESCUENTOS
-      const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
+      // DESCUENTOS / CRÉDITOS
+      const descuentos = detalleDescuentos
       if (descuentos.length > 0) {
-        pdf.setFontSize(11)
-        pdf.setTextColor(verde)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text('DESCUENTOS / CRÉDITOS', margin, y)
-        y += 7
-
-        pdf.setFontSize(10)
-        pdf.setTextColor(negro)
-        pdf.setFont('helvetica', 'normal')
-
+        tituloSeccion('DESCUENTOS / CRÉDITOS', gris)
         descuentos.forEach(desc => {
-          // Promociones: con su código adelante (PRM01 - ...); pagos diarios B1 con su texto propio
           const textoDesc = desc.referencia_tipo === REFERENCIA_PROMOCION
             ? (textoLineaPagoB1(desc.descripcion) || textoLineaPromocion(desc.concepto_codigo, desc.concepto_descripcion))
-            : desc.concepto_descripcion
-          pdf.text(textoDesc, margin, y)
-          pdf.text(`-${formatCurrency(desc.total)}`, pageWidth - margin, y, { align: 'right' })
-          y += 5
+            : desc.concepto_codigo && desc.concepto_codigo !== 'PEND'
+              ? `${desc.concepto_codigo} - ${desc.concepto_descripcion}`
+              : desc.concepto_descripcion
+          fila(textoDesc, `-${formatCurrency(desc.total)}`, verde)
         })
-
-        y += 3
-        pdf.setFont('helvetica', 'bold')
-        pdf.setTextColor(verde)
-        const subtotalDescReal = descuentos.reduce((sum, d) => sum + d.total, 0)
-        pdf.text('SUBTOTAL DESCUENTOS', margin, y)
-        pdf.text(`-${formatCurrency(subtotalDescReal)}`, pageWidth - margin, y, { align: 'right' })
-        y += 10
+        y += 1
+        separador(5)
+        fila('SUBTOTAL DESCUENTOS', `-${formatCurrency(descuentos.reduce((sum, d) => sum + d.total, 0))}`, verde, true)
+        y += 5
       }
 
-      // TOTAL
-      pdf.setDrawColor(200, 200, 200)
-      pdf.setLineWidth(0.5)
-      pdf.line(margin, y, pageWidth - margin, y)
-      y += 8
+      // SALDO ANTERIOR: mismo desglose que el modal (cierre de la semana anterior, pagos de
+      // esta semana con su tipo y fecha, fraccionamiento y resultado)
+      const saldoAnt = conceptosFaltantes.saldo
+      const breakdown = detalleSaldoBreakdown
+      if (saldoAnt !== 0 || !!breakdown?.fraccionamiento || (breakdown?.pagos.length ?? 0) > 0) {
+        tituloSeccion('SALDO ANTERIOR', gris)
+        if (breakdown) {
+          fila(
+            `${breakdown.saldoPrevio < 0 ? 'Saldo a favor' : 'Saldo adeudado'}${breakdown.cierreSemana !== null ? ` al cierre S${breakdown.cierreSemana}` : ' anterior'}`,
+            `${breakdown.saldoPrevio < 0 ? '-' : ''}${formatCurrency(Math.abs(breakdown.saldoPrevio))}`,
+            breakdown.saldoPrevio < 0 ? verde : rojo,
+          )
+          breakdown.pagos.forEach(pg => {
+            let texto = `Ajuste de saldo · ${pg.ref}`
+            if (!pg.esAjuste) {
+              const clase = clasePagoConductor(null, pg.ref)
+              const base = clase ? `${clase} ${diaMesPago(pg.fecha)}`.trim() : pg.ref
+              texto = breakdown.cierreSemana !== null ? `Pago de esta semana · ${base}` : base
+            }
+            fila(texto, `${pg.monto < 0 ? '+' : '-'}${formatCurrency(Math.abs(pg.monto))}`, pg.monto < 0 ? rojo : verde)
+          })
+          if (breakdown.fraccionamiento) {
+            fila(`Fraccionamiento en ${breakdown.fraccionamiento.cuotas} cuotas (P010)`, `-${formatCurrency(breakdown.fraccionamiento.monto)}`, '#6366F1')
+          }
+        }
+        const textoResultado = breakdown
+          ? (saldoAnt > 0 ? 'Resultado: deuda pendiente' : saldoAnt < 0 ? 'Resultado: saldo a favor' : 'Resultado: sin saldo pendiente')
+          : (saldoAnt > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior')
+        fila(textoResultado, `${saldoAnt > 0 ? '+' : saldoAnt < 0 ? '-' : ''}${formatCurrency(Math.abs(saldoAnt))}`, saldoAnt > 0 ? rojo : verde, true)
+        y += 5
+      }
 
-      const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0)
-      const totalFinal = subtotalCargosReal - subtotalDescPdf
-      const saldoColor = totalFinal > 0 ? rojo : verde
-
-      pdf.setFontSize(14)
-      pdf.setTextColor(saldoColor)
+      // TOTAL A PAGAR: el mismo de la tabla y del modal (incluye el saldo anterior)
+      const totalFinal = Math.round(totalRealDetalle * 100) / 100
+      pdf.setFillColor(243, 244, 246)
+      pdf.setDrawColor(220, 220, 220)
+      pdf.setLineWidth(0.3)
+      pdf.roundedRect(margin, y, derecha - margin, 24, 2, 2, 'FD')
+      pdf.setFontSize(8.5)
+      pdf.setTextColor(gris)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('TOTAL A PAGAR', margin, y)
-      pdf.text(formatCurrency(totalFinal), pageWidth - margin, y, { align: 'right' })
+      pdf.text('TOTAL A PAGAR', pageWidth / 2, y + 7, { align: 'center' })
+      pdf.setFontSize(18)
+      pdf.setTextColor(totalFinal > 0 ? rojo : verde)
+      pdf.text(formatCurrency(totalFinal), pageWidth / 2, y + 15, { align: 'center' })
+      pdf.setFontSize(8.5)
+      pdf.setTextColor(gris)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(totalFinal > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor', pageWidth / 2, y + 20.5, { align: 'center' })
+      y += 30
 
       // Pie de página
       pdf.setFontSize(8)
       pdf.setTextColor(gris)
       pdf.text(`Generado el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, margin, pdf.internal.pageSize.getHeight() - 10)
-      pdf.text('TOSHIFY - Sistema de Gestión de Flota', pageWidth - margin, pdf.internal.pageSize.getHeight() - 10, { align: 'right' })
+      pdf.text('TOSHIFY - Sistema de Gestión de Flota', derecha, pdf.internal.pageSize.getHeight() - 10, { align: 'right' })
 
       // Guardar PDF
       const nombreArchivo = `Facturacion_${detalleFacturacion.conductor_nombre.replace(/\s+/g, '_')}_Semana${semanaNum}_${anioNum}.pdf`
@@ -9331,7 +9509,7 @@ export function ReporteFacturacionTab() {
       conductores_favor: src.filter(f => f.total_a_pagar <= 0).length,
       ...contarCoberturaToshipass(srcToshipass),
     }
-  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroEmpresa, filtroApp, filtroEfectivo, filtroTarifa, filtroPromo, periodoPorCodigo, appsPorConductor, pagosCabifyMap])
+  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroEmpresa, filtroApp, filtroLicencia, licenciaPorConductor, filtroTurno, filtroEfectivo, filtroTarifa, filtroPromo, periodoPorCodigo, appsPorConductor, pagosCabifyMap])
 
   // Detalle por conductor del Total Proyectado (se abre desde "Ver detalle").
   // Usa exactamente los mismos campos que el total: proyectado_alquiler +
@@ -9752,45 +9930,42 @@ export function ReporteFacturacionTab() {
       importe_generado: {
         title: `Importe Generado — S${periodo?.semana || '?'}/${periodo?.anio || '?'}`,
         html: (() => {
-          // Total que se debió cobrar = alquiler + garantía + cargos extra + saldo previo
-          const totalAlquiler = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
-          const totalGarantia = src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
-          // Toshipass (P027) va dentro de subtotal_cargos: se muestra en su propia fila
-          const totalToshipass = src.reduce((s, f) => s + (f.monto_toshipass || 0), 0)
-          // Cargos "extra" = subtotal_cargos menos alquiler, garantía y Toshipass (incidencias, multas, etc.)
-          const totalCargosExtra = src.reduce((s, f) => {
-            const cargos = f.subtotal_cargos || 0
-            const alq = f.subtotal_alquiler || 0
-            const gar = f.subtotal_garantia || 0
-            const tp = f.monto_toshipass || 0
-            return s + Math.max(0, cargos - alq - gar - tp)
-          }, 0)
-          const totalSaldoPrevio = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
-          const importeGenerado = totalAlquiler + totalGarantia + totalToshipass + totalCargosExtra + totalSaldoPrevio
+          // Ver resumenCobroSemana: total a cobrar = cargos + deuda al cierre de la semana
+          // anterior; cobrado = efectivo/transferencias + Cabify + DiDi de esta semana.
+          const r = resumenCobroSemana(src)
+          const semEsta = `S${periodo?.semana || getISOWeek(semanaActual.inicio)}`
+          const semAnt = r.semanaCierre ? `S${r.semanaCierre}` : 'la semana anterior'
 
-          // Pagado por Cabify (Excel cargado en pagos_conductores)
-          const totalCobroCabify = src.reduce((s, f) => s + (pagosCabifyMap.get(f.conductor_id) || 0), 0)
-          const hayPagosCargados = pagosCabifyMap.size > 0
+          // Deuda al cierre separada por estado EN ESTA SEMANA: de baja solo si la fecha de baja
+          // cae hasta el cierre de la semana mirada. Sin fecha de baja se toma el estado actual.
+          // Pausa cuenta como activo.
+          const finSemana = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
+          const deBajaEnSemana = (f: FacturacionConductor) =>
+            f.estado_billing === 'De baja' && (!f.fecha_baja || f.fecha_baja <= finSemana)
+          const conDeuda = r.filas.filter(x => x.deuda > 0)
+          const deudaBajas = conDeuda.filter(x => deBajaEnSemana(x.f))
+          const deudaActivos = conDeuda.filter(x => !deBajaEnSemana(x.f))
+          const sumaDeuda = (lista: typeof conDeuda) => lista.reduce((s, x) => s + x.deuda, 0)
 
-          const porcentaje = importeGenerado > 0 ? Math.round((totalCobroCabify / importeGenerado) * 100) : 0
+          // Lo que suman las facturas (total a pagar). Su saldo anterior ya trae descontado el
+          // efectivo pagado antes de calcularlas. Se muestra para cuadrar con las facturas.
+          const totalFacturas = src.reduce((s, f) => s + (f.total_a_pagar || 0), 0)
+
+          const porcentaje = r.porcentaje
           const pctClamped = Math.min(100, Math.max(0, porcentaje))
           // Color por significado (solo texto y barra, sin fondos): verde cubierto, ámbar parcial, rojo deuda
           const pctColor = porcentaje >= 100 ? '#16a34a' : porcentaje >= 50 ? '#d97706' : '#dc2626'
-          // Diferencia: + = falta cobrar (rojo) · - = Cabify cobró de más, a favor (verde)
-          const diferencia = importeGenerado - totalCobroCabify
+          // Diferencia: + = falta cobrar (rojo) · - = se cobró de más, a favor (verde)
+          const diferencia = r.total - r.cobrado
           const aFavor = diferencia < 0
           const diffColor = diferencia > 0 ? '#dc2626' : '#16a34a'
           const diffLabel = aFavor ? 'A favor' : (diferencia > 0 ? 'Falta cobrar' : 'Cubierto')
 
-          // Buckets por conductor
+          // Cobertura por conductor: lo que pagó en la semana contra lo que debía
           const buckets = { ok: 0, mid: 0, low: 0 }
-          for (const f of src) {
-            const debe = (f.subtotal_alquiler || 0) + (f.subtotal_garantia || 0) + (f.monto_toshipass || 0) +
-                         Math.max(0, (f.subtotal_cargos || 0) - (f.subtotal_alquiler || 0) - (f.subtotal_garantia || 0) - (f.monto_toshipass || 0)) +
-                         Math.max(0, f.saldo_anterior || 0)
-            if (debe <= 0) continue
-            const pago = pagosCabifyMap.get(f.conductor_id) || 0
-            const pct = (pago / debe) * 100
+          for (const x of r.filas) {
+            if (x.debe <= 0) continue
+            const pct = (x.cobrado / x.debe) * 100
             if (pct >= 100) buckets.ok++
             else if (pct >= 50) buckets.mid++
             else buckets.low++
@@ -9801,32 +9976,82 @@ export function ReporteFacturacionTab() {
           const titulo = 'font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.4px;margin:22px 0 6px;'
           const fila = 'display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--border-primary);'
           const monto = 'font-variant-numeric:tabular-nums;white-space:nowrap;'
-          const componentes: Array<[string, number]> = [
-            ['Alquiler de la semana', totalAlquiler],
-            ['Garantía (cuota semanal)', totalGarantia],
-            ['Toshipass', totalToshipass],
-            ['Incidencias y cargos extra', totalCargosExtra],
-            ['Saldo pendiente de la semana anterior', totalSaldoPrevio],
-          ]
-          const nota = `<div style="margin-top:18px;font-size:11px;line-height:1.5;color:var(--text-tertiary);">
-              Importe generado: lo que se debió cobrar al cierre (alquiler + garantía + Toshipass + cargos + saldo previo),
-              comparado con los pagos cargados desde el Excel de Cabify de esa semana.
+          const subFila = 'display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0 5px 16px;font-size:12px;'
+          const cantidadHtml = (cantidad: number | null) =>
+            cantidad !== null ? ` <span style="color:var(--text-tertiary);">(${cantidad})</span>` : ''
+          const filaHtml = (nombre: string, cantidad: number | null, valor: number, extra = '') =>
+            `<div style="${fila}${extra}"><span style="color:var(--text-primary);">${nombre}${cantidadHtml(cantidad)}</span><span style="${monto}color:var(--text-primary);">${formatCurrency(valor)}</span></div>`
+          const subFilaHtml = (nombre: string, cantidad: number | null, valor: number) =>
+            `<div style="${subFila}"><span style="color:var(--text-secondary);">${nombre}${cantidadHtml(cantidad)}</span><span style="${monto}color:var(--text-secondary);">${formatCurrency(valor)}</span></div>`
+          const totalHtml = (nombre: string, valor: number) =>
+            `<div style="${fila}border-bottom:none;"><span style="font-weight:700;">${nombre}</span><span style="${monto}font-weight:700;">${formatCurrency(valor)}</span></div>`
+
+          // Cobrado en la semana, con cuánto del total a cobrar cubrió cada medio
+          // (los tres suman el porcentaje de arriba)
+          const pctDelTotal = (valor: number) => {
+            if (r.total <= 0) return ''
+            const pct = (valor / r.total) * 100
+            const texto = pct > 0 && pct < 1 ? '<1' : String(Math.round(pct))
+            return `<span style="color:var(--text-tertiary);margin-right:10px;">${texto}%</span>`
+          }
+          const filaCobradoHtml = (nombre: string, cantidad: number | null, valor: number) =>
+            `<div style="${fila}"><span style="color:var(--text-primary);">${nombre}${cantidadHtml(cantidad)}</span><span style="${monto}color:var(--text-primary);">${pctDelTotal(valor)}${formatCurrency(valor)}</span></div>`
+          const filasCobrado = [
+            filaCobradoHtml('Efectivo y transferencias', r.pagosManuales, r.efectivo),
+            filaCobradoHtml('Cabify', null, r.cabify),
+            filaCobradoHtml('DiDi', null, r.didi),
+          ].join('')
+
+          // Componentes del total. Debajo de la deuda: cuánto es de activos y cuánto de bajas.
+          const nombreDeuda = r.conCierre ? `Deuda al cierre ${semAnt}` : 'Saldo de la semana anterior'
+          const desgloseDeuda = conDeuda.length > 0
+            ? `<div style="padding-bottom:6px;border-bottom:1px solid var(--border-primary);">${
+                subFilaHtml('Conductores activos', deudaActivos.length, sumaDeuda(deudaActivos)) +
+                subFilaHtml('Conductores de baja', deudaBajas.length, sumaDeuda(deudaBajas))
+              }</div>`
+            : ''
+          const filasComponentes = [
+            filaHtml('Alquiler de la semana', null, r.alquiler),
+            filaHtml('Garantía (cuota semanal)', null, r.garantia),
+            filaHtml('Toshipass', null, r.toshipass),
+            filaHtml('Incidencias, cargos extra y descuentos', null, r.extra),
+            filaHtml(nombreDeuda, r.conDeuda, r.deuda, desgloseDeuda ? 'border-bottom:none;' : '') + desgloseDeuda,
+            r.favor > 0
+              ? filaHtml(r.conCierre ? `Saldo a favor al cierre ${semAnt}` : 'Saldo a favor de la semana anterior', r.conFavor, -r.favor)
+              : '',
+            // Cancelaciones de fraccionado por baja, devoluciones de garantía, ajustes...
+            Math.abs(r.otros) >= 0.01
+              ? filaHtml(`Ajustes y otros movimientos de ${semEsta}`, r.otrosCantidad, r.otros)
+              : '',
+          ].join('')
+          const cuadreFacturas = `
+            <div style="${subFila}padding-left:0;margin-top:2px;">
+              <span style="color:var(--text-tertiary);">Total de las facturas ${semEsta}</span>
+              <span style="${monto}color:var(--text-tertiary);">${formatCurrency(totalFacturas)}</span>
             </div>`
 
-          const placeholderHtml = `
-            <div style="padding:20px 0 4px;text-align:center;">
-              <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;">
-                Falta cargar el Excel de pagos de Cabify de esta semana.
-              </div>
-              <div style="font-size:11px;color:var(--text-tertiary);">Con ese archivo se calcula cuánto se cobró.</div>
-            </div>
-            <div style="${titulo}">Total que debería cobrarse</div>
-            ${componentes.map(([nombre, valor]) => `<div style="${fila}"><span style="color:var(--text-primary);">${nombre}</span><span style="${monto}color:var(--text-primary);">${formatCurrency(valor)}</span></div>`).join('')}
-            <div style="${fila}border-bottom:none;border-top:2px solid var(--border-primary);margin-top:-1px;"><span style="font-weight:700;">Total</span><span style="${monto}font-weight:700;">${formatCurrency(importeGenerado)}</span></div>
-            ${nota}
-          `
+          const resumenHtml = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
+              <div><div style="${etiqueta}">Total a cobrar ${semEsta}</div><div style="font-size:17px;font-weight:700;color:var(--text-primary);${monto}">${formatCurrency(r.total)}</div></div>
+              <div><div style="${etiqueta}">Cobrado</div><div style="font-size:17px;font-weight:700;color:var(--text-primary);${monto}">${formatCurrency(r.cobrado)}</div></div>
+              <div><div style="${etiqueta}">${diffLabel}</div><div style="font-size:17px;font-weight:700;color:${diffColor};${monto}">${formatCurrency(Math.abs(diferencia))}</div></div>
+            </div>`
 
-          const fullHtml = `
+          const coberturaHtml = `
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#16a34a;">${buckets.ok}</div><div style="${etiqueta}">Cubrió 100% o más</div></div>
+              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#d97706;">${buckets.mid}</div><div style="${etiqueta}">Parcial (50 a 99%)</div></div>
+              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#dc2626;">${buckets.low}</div><div style="${etiqueta}">Menos del 50%</div></div>
+            </div>`
+
+          const avisoSinApps = r.hayPagosApps ? '' : `
+            <div style="padding:14px 0 0;font-size:12px;color:var(--text-secondary);">
+              Falta cargar los pagos de Cabify y DiDi de ${semEsta}. Hasta entonces el cobrado es solo el efectivo.
+            </div>`
+
+          // Arriba fijo (no se va con el scroll): porcentaje, totales y cobertura por conductor
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
+            <div class="tsh-alerta-fijo-arriba" style="padding-bottom:14px;border-bottom:1px solid var(--border-primary);">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">
               <span style="${etiqueta}">Cobrado</span>
               <span style="font-size:26px;font-weight:700;line-height:1;color:${pctColor};${monto}">${porcentaje}%</span>
@@ -9834,27 +10059,20 @@ export function ReporteFacturacionTab() {
             <div style="height:6px;border-radius:3px;background:var(--border-primary);overflow:hidden;margin:10px 0 16px;" role="progressbar" aria-valuenow="${pctClamped}" aria-valuemin="0" aria-valuemax="100">
               <div style="height:100%;width:${pctClamped}%;background:${pctColor};border-radius:3px;"></div>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
-              <div><div style="${etiqueta}">Total facturado</div><div style="font-size:17px;font-weight:700;color:var(--text-primary);${monto}">${formatCurrency(importeGenerado)}</div></div>
-              <div><div style="${etiqueta}">Cabify cobró</div><div style="font-size:17px;font-weight:700;color:var(--text-primary);${monto}">${formatCurrency(totalCobroCabify)}</div></div>
-              <div><div style="${etiqueta}">${diffLabel}</div><div style="font-size:17px;font-weight:700;color:${diffColor};${monto}">${formatCurrency(Math.abs(diferencia))}</div></div>
+            ${resumenHtml}
+            ${avisoSinApps}
+            <div style="${titulo}margin-top:16px;">Cobertura por conductor</div>
+            ${coberturaHtml}
             </div>
+
+            <div style="${titulo}">Cobrado en ${semEsta}</div>
+            ${filasCobrado}
+            ${totalHtml('Total cobrado', r.cobrado)}
 
             <div style="${titulo}">Componentes del total</div>
-            ${componentes.map(([nombre, valor]) => `<div style="${fila}"><span style="color:var(--text-primary);">${nombre}</span><span style="${monto}color:var(--text-primary);">${formatCurrency(valor)}</span></div>`).join('')}
-            <div style="${fila}border-bottom:none;"><span style="font-weight:700;">Total facturado</span><span style="${monto}font-weight:700;">${formatCurrency(importeGenerado)}</span></div>
-
-            <div style="${titulo}">Cobertura por conductor</div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#16a34a;">${buckets.ok}</div><div style="${etiqueta}">Cubrió 100% o más</div></div>
-              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#d97706;">${buckets.mid}</div><div style="${etiqueta}">Parcial (50 a 99%)</div></div>
-              <div><div style="font-size:20px;font-weight:700;line-height:1.1;color:#dc2626;">${buckets.low}</div><div style="${etiqueta}">Menos del 50%</div></div>
-            </div>
-            ${nota}
-          `
-
-          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
-            ${hayPagosCargados ? fullHtml : placeholderHtml}
+            ${filasComponentes}
+            ${totalHtml(`Total a cobrar ${semEsta}`, r.total)}
+            ${cuadreFacturas}
           </div>`
         })()
       }
@@ -9866,6 +10084,8 @@ export function ReporteFacturacionTab() {
       html: info.html,
       width: 'min(92vw, 520px)',
       confirmButtonText: 'Cerrar',
+      // Importe Generado: resumen arriba y botón abajo fijos; el detalle hace scroll
+      customClass: stat === 'importe_generado' ? { popup: 'partes-fijas' } : undefined,
       didOpen: (popup) => {
         if (stat !== 'proyectado') return
         popup.querySelector('#btn-detalle-proyectado')?.addEventListener('click', () => showDetalleProyectado(src))
@@ -9884,12 +10104,16 @@ export function ReporteFacturacionTab() {
           selectedValues={[
             ...filtroEmpresa.map(e => `empresa:${e}`),
             ...filtroApp.map(a => `app:${a}`),
+            ...filtroLicencia.map(l => `licencia:${l}`),
+            ...filtroTurno.map(t => `turno:${t}`),
             ...conductorFilter,
           ]}
           onSelectionChange={(valores) => {
             setFiltroEmpresa(valores.filter(v => v.startsWith('empresa:')).map(v => v.slice(8)))
             setFiltroApp(valores.filter(v => v.startsWith('app:')).map(v => v.slice(4) as 'cabify' | 'didi'))
-            setConductorFilter(valores.filter(v => !v.startsWith('empresa:') && !v.startsWith('app:')))
+            setFiltroLicencia(valores.filter(v => v.startsWith('licencia:')).map(v => v.slice(9)))
+            setFiltroTurno(valores.filter(v => v.startsWith('turno:')).map(v => v.slice(6)))
+            setConductorFilter(valores.filter(v => !['empresa:', 'app:', 'licencia:', 'turno:'].some(p => v.startsWith(p))))
           }}
           filterId="conductor"
           openFilterId={openColumnFilter}
@@ -10505,7 +10729,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, opcionesFiltroConductor, filtroEmpresa, filtroApp, filtroEfectivo, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados, appsPorConductor, licenciaPorConductor, periodoPorCodigo, filtroTarifa, filtroPromo, opcionesFiltroAlquiler])
+  ], [excesos, modoVistaPrevia, conductorFilter, opcionesFiltroConductor, filtroEmpresa, filtroApp, filtroLicencia, filtroTurno, filtroEfectivo, tipoFilter, patenteFilter, openColumnFilter, saldosSeparados, appsPorConductor, licenciaPorConductor, periodoPorCodigo, filtroTarifa, filtroPromo, opcionesFiltroAlquiler])
 
   // Info de la semana
   const infoSemana = useMemo(() => {
@@ -11289,7 +11513,7 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
-                        <span className="stat-label">Cubrió{'\u00A0'}<StatInfo text="Cubrió Toshipass: conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">Cubrió Toshipass{'\u00A0'}<StatInfo text="Cubrió Toshipass: conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                     <div className="fact-stat-card"
@@ -11299,7 +11523,7 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon red" />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
-                        <span className="stat-label">No cubrió{'\u00A0'}<StatInfo text="No cubrió Toshipass: conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">No cubrió Toshipass{'\u00A0'}<StatInfo text="No cubrió Toshipass: conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                   </>
@@ -11457,7 +11681,7 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon" style={{ color: '#16a34a' }} />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#16a34a' }}>{stats.toshipass_cubrio}</span>
-                        <span className="stat-label">Cubrió{'\u00A0'}<StatInfo text="Cubrió Toshipass: conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">Cubrió Toshipass{'\u00A0'}<StatInfo text="Cubrió Toshipass: conductores con Toshipass cuyo cobro app de Cabify alcanzó para el alquiler y el Toshipass. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                     <div className="fact-stat-card"
@@ -11467,25 +11691,18 @@ export function ReporteFacturacionTab() {
                       <Ticket size={18} className="stat-icon red" />
                       <div className="stat-content">
                         <span className="stat-value" style={{ color: '#dc2626' }}>{stats.toshipass_no_cubrio + stats.toshipass_sin_datos}</span>
-                        <span className="stat-label">No cubrió{'\u00A0'}<StatInfo text="No cubrió Toshipass: conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
+                        <span className="stat-label">No cubrió Toshipass{'\u00A0'}<StatInfo text="No cubrió Toshipass: conductores con Toshipass cuyo cobro app no alcanzó para el alquiler y el Toshipass, o que todavía no tienen cobro app. Click para filtrar la tabla." /></span>
                       </div>
                     </div>
                   </>
                 )}
                 {/* Importe Generado: solo visible en semanas cerradas */}
                 {periodo?.estado === 'cerrado' && (() => {
-                  // Calcular importe total que debió cobrarse
-                  const totalDebe = facturacionesFiltradas.reduce((s, f) => {
-                    const alq = f.subtotal_alquiler || 0
-                    const gar = f.subtotal_garantia || 0
-                    const cargos = f.subtotal_cargos || 0
-                    const cargosExtra = Math.max(0, cargos - alq - gar)
-                    const saldoPrev = Math.max(0, f.saldo_anterior || 0)
-                    return s + alq + gar + cargosExtra + saldoPrev
-                  }, 0)
-                  const totalCobrado = facturacionesFiltradas.reduce((s, f) => s + (pagosCabifyMap.get(f.conductor_id) || 0), 0)
-                  const pct = totalDebe > 0 ? Math.round((totalCobrado / totalDebe) * 100) : 0
-                  const hayPagos = pagosCabifyMap.size > 0
+                  // Total a cobrar de la semana y cuánto se cobró (mismo cálculo que el modal)
+                  const resumen = resumenCobroSemana(facturacionesFiltradas)
+                  const totalDebe = resumen.total
+                  const pct = resumen.porcentaje
+                  const hayPagos = resumen.hayPagosApps || resumen.efectivo > 0
                   const pctColor = pct > 100 ? '#2563eb' : pct >= 90 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626'
                   return (
                     <div className="fact-stat-card"
@@ -11497,7 +11714,7 @@ export function ReporteFacturacionTab() {
                       <div className="stat-content">
                         <span className="stat-value">{formatCurrency(totalDebe)}</span>
                         <span className="stat-label">
-                          Imp. Gen.{'\u00A0'}<StatInfo text="Importe generado de la semana cerrada y qué porcentaje ya se cubrió con los pagos de Cabify y DiDi cargados. Click para ver el detalle." />{' '}
+                          Imp. Gen.{'\u00A0'}<StatInfo text="Total a cobrar de la semana cerrada (cargos más la deuda al cierre de la semana anterior) y qué porcentaje se cobró con efectivo, transferencias, Cabify y DiDi de esa semana. Click para ver el detalle." />{' '}
                           {hayPagos ? (
                             <span style={{ color: pctColor, fontWeight: 700 }}>
                               · {pct}% cubierto
@@ -11686,6 +11903,10 @@ export function ReporteFacturacionTab() {
               emptyIcon={<FileText size={48}
             />}
               emptyTitle="Sin facturaciones"
+              // Con filtros puestos se ven los encabezados aunque no quede nadie: si no, no hay
+              // forma de abrir el filtro para sacarlo
+              mostrarTablaSinDatos={[conductorFilter, filtroEmpresa, filtroApp, filtroLicencia, filtroTurno,
+                filtroEfectivo, filtroTarifa, filtroPromo].some(f => f.length > 0)}
               emptyDescription="No hay conductores facturados en este período"
               pageSize={100}
               pageSizeOptions={[10, 20, 50, 100]}
@@ -12352,95 +12573,59 @@ export function ReporteFacturacionTab() {
               </button>
             </div>
 
-            <div className="fact-modal-body">
+            {/* Tres franjas: encabezado arriba y total abajo quietos; solo el medio se desplaza
+                (antes eran "sticky" dentro del scroll y el contenido pasaba por debajo y saltaba) */}
+            <div className="fact-modal-body" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
               {loadingDetalle ? (
-                <Spinner size="sm" message="Cargando detalle..." />
+                <div style={{ padding: '20px' }}><Spinner size="sm" message="Cargando detalle..." /></div>
               ) : detalleFacturacion ? (
-                <div style={{ padding: '4px 0' }}>
-                  {/* Header: Conductor + Semana */}
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                  {/* Cabecera compacta (pedido 2026-11-26): conductor y semana en una línea;
+                      vehículo, tipo, turnos, flota y promo en otra, como texto */}
                   <div style={{
-                    marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                    paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)',
+                    flexShrink: 0, padding: '12px 20px 10px', borderBottom: '1px solid var(--border-primary)',
                   }}>
-                    <div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {detalleFacturacion.conductor_nombre}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {detalleFacturacion.conductor_nombre}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: '8px' }}>
+                          {detalleFacturacion.conductor_cuit || `DNI: ${detalleFacturacion.conductor_dni}`}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        {detalleFacturacion.conductor_cuit || `DNI: ${detalleFacturacion.conductor_dni}`}
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        <strong style={{ color: 'var(--color-primary)' }}>Semana {periodo?.semana || infoSemana.semana}</strong>
+                        {' · '}
+                        {periodo
+                          ? `${format(parseISO(periodo.fecha_inicio), 'dd/MM')} al ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
+                          : `${infoSemana.inicio} al ${infoSemana.fin}/${infoSemana.anio}`}
+                        {modoVistaPrevia && <span style={{ color: '#3B82F6', fontWeight: 500 }}> · Vista Previa</span>}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-primary)' }}>
-                        Semana {periodo?.semana || infoSemana.semana}
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        {periodo
-                          ? `${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} - ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
-                          : `${infoSemana.inicio} - ${infoSemana.fin} / ${infoSemana.anio}`
-                        }
-                      </div>
-                      {modoVistaPrevia && (
-                        <div style={{ fontSize: '10px', color: '#3B82F6', marginTop: '3px', fontWeight: 500 }}>
-                          Vista Previa
-                        </div>
+                    <div style={{
+                      display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: '10px', rowGap: '4px',
+                      marginTop: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)',
+                    }}>
+                      <PatenteBadge patente={detalleFacturacion.vehiculo_patente} size="sm" />
+                      <span style={{ color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : 'var(--text-primary)' }}>
+                        {detalleFacturacion.tipo_alquiler === 'CARGO' ? 'A cargo' : 'Turno'}
+                      </span>
+                      <span>
+                        {detalleFacturacion.turnos_cobrados}
+                        <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}> de {detalleFacturacion.turnos_base} turnos</span>
+                      </span>
+                      {detalleFacturacion.grupo_flota && (
+                        <span style={{ color: '#1e40af' }}>{detalleFacturacion.grupo_flota}</span>
+                      )}
+                      {detallePromociones.codigos.length > 0 && (
+                        <span style={{ color: '#b91c1c' }}>{detallePromociones.codigos.join(' · ')}</span>
                       )}
                     </div>
                   </div>
 
-                  {/* Datos del alquiler en una línea: etiqueta arriba y valor abajo, como texto
-                      (sin cajas ni pastillas). Envuelve en vez de cortar la flota. */}
-                  {(() => {
-                    const celdas: Array<{ etiqueta: string; valor: React.ReactNode }> = [
-                      { etiqueta: 'Vehículo', valor: <PatenteBadge patente={detalleFacturacion.vehiculo_patente} size="sm" /> },
-                      {
-                        etiqueta: 'Tipo',
-                        valor: (
-                          <span style={{ color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : 'var(--text-primary)' }}>
-                            {detalleFacturacion.tipo_alquiler === 'CARGO' ? 'A cargo' : 'Turno'}
-                          </span>
-                        ),
-                      },
-                      {
-                        etiqueta: 'Turnos',
-                        valor: (
-                          <span>
-                            {detalleFacturacion.turnos_cobrados}
-                            <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}> de {detalleFacturacion.turnos_base}</span>
-                          </span>
-                        ),
-                      },
-                    ]
-                    if (detalleFacturacion.grupo_flota) {
-                      celdas.push({ etiqueta: 'Flota', valor: <span style={{ color: '#1e40af' }}>{detalleFacturacion.grupo_flota}</span> })
-                    }
-                    if (detallePromociones.codigos.length > 0) {
-                      celdas.push({
-                        etiqueta: 'Promo',
-                        valor: <span style={{ color: '#b91c1c' }}>{detallePromociones.codigos.join(' · ')}</span>,
-                      })
-                    }
-                    return (
-                      <dl style={{
-                        display: 'flex', flexWrap: 'wrap', columnGap: '28px', rowGap: '10px',
-                        margin: '0 0 18px', paddingBottom: '14px', borderBottom: '1px solid var(--border-primary)',
-                      }}>
-                        {celdas.map(celda => (
-                          <div key={celda.etiqueta} style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-                            <dt className="fact-det-label" style={{
-                              fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.4px',
-                            }}>
-                              {celda.etiqueta}
-                            </dt>
-                            <dd style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', minHeight: '20px' }}>
-                              {celda.valor}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )
-                  })()}
-
+                  {/* Lo que se desplaza: cargos, descuentos, saldo anterior, cobrado y pagos */}
+                  <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 20px 8px' }}>
                   {/* Sección: Cargos */}
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{
@@ -12472,9 +12657,11 @@ export function ReporteFacturacionTab() {
                       return (<>
                       {detalleCargos.map((item) => {
                         let desc = descripcionSinNumeroCuota(descripcionConPeriodo(item.concepto_descripcion, item.concepto_codigo, periodoPorCodigo), item.concepto_codigo);
-                        // Prefijo con código de producto
+                        // Prefijo con código de producto (Licencia B1: "Licencia B1 - ...", sin PRM02)
                         const codigo = item.concepto_codigo
-                        if (codigo && codigo !== 'PEND') {
+                        const textoB1 = item.referencia_tipo === REFERENCIA_PROMOCION ? textoLineaB1Informativa(item.concepto_descripcion) : null
+                        if (textoB1) desc = textoB1
+                        else if (codigo && codigo !== 'PEND') {
                           desc = `${codigo} - ${desc}`
                         }
                         const esPenalidad = item.referencia_id && (item.referencia_tipo === 'penalidad' || item.referencia_tipo === 'penalidad_cuota')
@@ -12689,9 +12876,13 @@ export function ReporteFacturacionTab() {
                           {detalleSaldoBreakdown.pagos.map((p, idx) => (
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {p.esAjuste
-                                  ? `Ajuste de saldo · ${p.ref}`
-                                  : detalleSaldoBreakdown.cierreSemana !== null ? `Pago de esta semana · ${p.ref}` : p.ref}
+                                {(() => {
+                                  if (p.esAjuste) return `Ajuste de saldo · ${p.ref}`
+                                  // Al conductor: tipo de pago y fecha, sin quién pagó ni la cuenta
+                                  const clase = clasePagoConductor(null, p.ref)
+                                  const texto = clase ? `${clase} ${diaMesPago(p.fecha)}`.trim() : p.ref
+                                  return detalleSaldoBreakdown.cierreSemana !== null ? `Pago de esta semana · ${texto}` : texto
+                                })()}
                                 {p.fecha && (
                                   <AdaptiveTooltip
                                     content={`${p.esAjuste ? 'Ajuste' : 'Pago'} registrado el ${fechaHoraAR(p.fecha)} hs`}
@@ -12759,28 +12950,6 @@ export function ReporteFacturacionTab() {
                       </div>
                     </div>
                   )}
-
-                  {/* Total a Pagar */}
-                  <div style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    padding: '16px', borderRadius: 'var(--radius-md)', marginTop: '4px',
-                    background: 'var(--bg-secondary)', border: '2px solid var(--border-primary)',
-                  }}>
-                    <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
-                      Total a Pagar
-                    </span>
-                    <span className="modal-monto-total" style={{
-                      fontWeight: 700, fontFamily: 'var(--font-mono)', lineHeight: 1,
-                      margin: '6px 0',
-                      color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
-                    }}>
-                      {/* Total = suma de ítems ya procesados (alquiler entero, resto con 2 decimales). Solo visual. */}
-                      {formatCurrency(Math.round(totalRealDetalle * 100) / 100)}
-                    </span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {totalRealDetalle > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
-                    </span>
-                  </div>
 
                   {/* Cobrado */}
                   {!modoVistaPrevia && (detalleFacturacion.monto_cobrado || 0) > 0 && (() => {
@@ -12889,6 +13058,31 @@ export function ReporteFacturacionTab() {
                       </div>
                     </div>
                   )}
+                  </div>
+
+                  {/* Total a Pagar: franja fija abajo */}
+                  <div style={{ flexShrink: 0, padding: '10px 20px 12px', borderTop: '1px solid var(--border-primary)' }}>
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    padding: '12px 16px', borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-secondary)', border: '2px solid var(--border-primary)',
+                  }}>
+                    <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
+                      Total a Pagar
+                    </span>
+                    <span className="modal-monto-total" style={{
+                      fontWeight: 700, fontFamily: 'var(--font-mono)', lineHeight: 1,
+                      margin: '6px 0',
+                      color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
+                    }}>
+                      {/* Total = suma de ítems ya procesados (alquiler entero, resto con 2 decimales). Solo visual. */}
+                      {formatCurrency(Math.round(totalRealDetalle * 100) / 100)}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      {totalRealDetalle > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
+                    </span>
+                  </div>
+                  </div>
                 </div>
               ) : (
                 <div className="fact-no-data">No se encontró información</div>
