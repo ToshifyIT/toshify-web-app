@@ -58,6 +58,38 @@ export async function cargarIvaPorCodigo(): Promise<IvaPorCodigo> {
   )
 }
 
+/** Codigo de concepto -> periodo de su tarifa ("OCT-26"). */
+export type PeriodoPorCodigo = Map<string, string>
+
+/**
+ * Periodo de cada concepto, del sufijo de su descripcion en conceptos_nomina
+ * ("ALQUILER DE VEHICULO NOCTURNO OCT-26" -> "OCT-26"). Mismo criterio que Facturacion.
+ */
+export async function cargarPeriodoPorCodigo(): Promise<PeriodoPorCodigo> {
+  const { data } = await supabase
+    .from('conceptos_nomina')
+    .select('codigo, descripcion')
+    .eq('activo', true)
+  const mapa: PeriodoPorCodigo = new Map()
+  for (const c of (data || []) as Array<{ codigo: string | null; descripcion: string | null }>) {
+    const ultima = String(c.descripcion || '').trim().split(/\s+/).pop() || ''
+    if (c.codigo && /^[A-Za-zÁÉÍÓÚÑ]{3}-\d{2}$/.test(ultima)) mapa.set(c.codigo, ultima.toUpperCase())
+  }
+  return mapa
+}
+
+/**
+ * Alquiler: "(Tarifa Nueva)" / "(Tarifa Antigua)" -> "(Tarifa OCT-26)", como en Facturacion.
+ * "Nueva" no le dice nada al conductor; el periodo si. Sin periodo, queda igual.
+ */
+export function etiquetaConTarifa(label: string, codigo: string, periodos: PeriodoPorCodigo): string {
+  if (!CODIGOS_ALQUILER.includes(codigo)) return label
+  const periodo = periodos.get(codigo)
+  if (!periodo) return label
+  const base = label.replace(/\s*\((?:Tarifa\s+)?(?:Nueva|Antigua)\)\s*$/i, '').trim()
+  return `${base} (Tarifa ${periodo})`
+}
+
 /** Importe bruto (con IVA) de la linea. Fallback a `total` si no hay precio unitario. */
 export function montoBruto(item: LineaFacturable): number {
   const bruto = Number(item.cantidad || 0) * Number(item.precio_unitario || 0) || Number(item.total || 0)
