@@ -1,0 +1,187 @@
+/* Saldos > «Cresium por revisar» (CresiumPagosRevision.tsx) */
+
+.cps-aviso {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid #7c3aed;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cps-aviso svg {
+  flex-shrink: 0;
+  color: #7c3aed;
+  margin-top: 1px;
+}
+
+.cps-barra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.cps-pestanas {
+  display: flex;
+  gap: 4px;
+}
+
+.cps-pestana {
+  padding: 6px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cps-pestana.activa {
+  background: #ff0033;
+  border-color: #ff0033;
+  color: #fff;
+  font-weight: 600;
+}
+
+.cps-resumen {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cps-vacio {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.cps-tabla-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+.cps-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.cps-tabla th {
+  position: sticky;
+  top: 0;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cps-tabla td {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+.cps-nombre {
+  font-weight: 600;
+}
+
+.cps-sub {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.cps-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  font-size: 9px;
+}
+
+.cps-alerta {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+  margin-top: 4px;
+  color: #b45309;
+  font-size: 11px;
+}
+
+.cps-alerta svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.cps-select {
+  margin-top: 2px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.cps-col-acciones {
+  width: 140px;
+}
+
+.cps-botones {
+  justify-content: flex-start;
+}
+
+.cps-botones .fact-table-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Fila de un pago por permitir dentro de Control de Saldos */
+.cps-kardex-fila {
+  background: rgba(124, 58, 237, 0.05);
+  border-left: 3px solid #7c3aed !important;
+}
+
+.cps-kardex-fila .cps-select {
+  margin: 0;
+  padding: 2px 4px;
+  font-size: 10px;
+}
+
+.cps-kardex-fila .fact-table-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.cps-boton-revisar {
+  position: relative;
+}
+
+.cps-contador {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #ff0033;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}

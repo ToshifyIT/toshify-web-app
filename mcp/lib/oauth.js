@@ -140,11 +140,11 @@ export function esTokenOAuth(token) {
 }
 
 /**
- * Datos de acceso para un token OAuth, con la misma forma que una API key
- * ({ id, name, permissions }) más `usuario`. null si el token no sirve o la persona ya
- * no tiene acceso.
+ * Datos de acceso para un token OAuth junto con la API key del conector (la de la URL),
+ * con la misma forma que una API key ({ id, name, permissions }) más `usuario`. null si
+ * el token no sirve o la persona ya no tiene acceso.
  */
-export async function validarTokenOAuth(token) {
+export async function validarTokenOAuth(token, keyData) {
   if (!esTokenOAuth(token)) return null;
   try {
     const ahora = new Date().toISOString();
@@ -153,11 +153,12 @@ export async function validarTokenOAuth(token) {
       `&expires_at=gt.${encodeURIComponent(ahora)}&select=user_id,client_id`
     );
     if (!t) return null;
-    const acceso = await permisosDeUsuario(t.user_id);
+    // Lo que ve la persona: los módulos de la key del conector que su usuario también tiene
+    const acceso = await permisosDeUsuario(t.user_id, keyData?.permisosKey || []);
     if (!acceso) return null;
     return {
-      id: null,
-      name: `usuario:${acceso.usuario.email}`,
+      id: keyData?.id ?? null,
+      name: `usuario:${acceso.usuario.email}${keyData ? ` (key ${keyData.name})` : ''}`,
       permissions: acceso.permisos,
       usuario: acceso.usuario,
     };

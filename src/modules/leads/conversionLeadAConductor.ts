@@ -21,6 +21,7 @@ import type { Lead } from '../../types/leads.types'
 import { guiaParaConductor } from './guias'
 import { estadoMonotributo, faltantesMonotributo } from './monotributo'
 import { codigosCategoriaParaConductor, estadoLicencia, faltantesLicencia, licenciaSiNo } from './licenciaLead'
+import { faltantesEmergenciaLead, nombreContactoEmergenciaLead } from './contactoEmergencia'
 import { nombresDelLead } from './nombreLead'
 
 /**
@@ -160,6 +161,8 @@ export function validarCamposConversion(lead: Lead, opciones: OpcionesValidacion
     else if (lead.referido === true && !lead.embajador_id) camposFaltantes.push('Embajador (quién lo refirió)')
     if (!lead.email?.trim()) camposFaltantes.push('Email app móvil (Cabify)')
     if (!lead.direccion?.trim()) camposFaltantes.push('Dirección')
+    // Contacto de emergencia completo (ver ./contactoEmergencia.ts)
+    camposFaltantes.push(...faltantesEmergenciaLead(lead))
     // Licencia (ver ./licenciaLead.ts): para ser conductor tiene que tenerla
     if (estadoLicencia(lead.licencia) === 'no') camposFaltantes.push('Licencia (el lead indica que no tiene)')
     else camposFaltantes.push(...faltantesLicencia(lead))
@@ -388,7 +391,7 @@ async function convertirLeadAConductorSinFreno(
       url_documentacion: lead.url_folder || null,
       intercom_id: lead.id_lead || null,
       id_conversation: lead.id_conversation || null,
-      contacto_emergencia: lead.contacto_de_emergencia || lead.datos_de_emergencia || null,
+      contacto_emergencia: nombreContactoEmergenciaLead(lead) || null,
       telefono_emergencia: lead.telefono_emergencia || null,
       parentesco_emergencia: lead.parentesco_emergencia || null,
       direccion_emergencia: lead.direccion_emergencia || null,

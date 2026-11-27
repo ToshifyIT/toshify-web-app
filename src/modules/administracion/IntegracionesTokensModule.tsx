@@ -1223,12 +1223,54 @@ const AVAILABLE_PERMISSIONS = [
   { value: 'leads:create:api', label: 'Leads: Alta por API REST (externos)', desc: 'ESCRITURA. Habilita POST /api/v1/leads para dar de alta leads. Unico permiso de la API REST que modifica la base.' },
 ];
 
+/** Módulo del menú de Toshibase con sus submódulos, para los módulos de cada API key. */
+interface ModuloMenu {
+  name: string;
+  label: string;
+  submenus: Array<{ name: string; label: string; nivel: number }>;
+}
+
+/** Key del conector de Claude: exige iniciar sesión con usuario de Toshibase (mcp/lib/accesoUsuario.js). */
+const PERMISO_CLAUDE = 'mcp:usuario';
+
+/** Permiso de lectura de un módulo (menu:<nombre>) o submódulo (submenu:<nombre>). */
+const permisoMenu = (name: string) => `menu:${name}`;
+const permisoSubmenu = (name: string) => `submenu:${name}`;
+
+/**
+ * Módulos y submódulos activos del menú (los mismos de Menú por rol), en su orden. Un
+ * módulo nuevo aparece solo. Los submenús por capitán (guia-<id>) no se listan: se crean
+ * solos por persona.
+ */
+async function cargarModulosMenu(): Promise<ModuloMenu[]> {
+  const [{ data: menus, error: errorMenus }, { data: submenus, error: errorSubmenus }] = await Promise.all([
+    supabase.from('menus').select('id, name, label').eq('is_active', true).order('order_index'),
+    supabase.from('submenus').select('id, name, label, menu_id, parent_id').eq('is_active', true).order('order_index'),
+  ]);
+  if (errorMenus) throw errorMenus;
+  if (errorSubmenus) throw errorSubmenus;
+
+  type FilaSubmenu = { id: string; name: string; label: string | null; menu_id: string; parent_id: string | null };
+  const subs = ((submenus || []) as FilaSubmenu[]).filter(sm => !sm.name?.startsWith('guia-'));
+  const hijos = (menuId: string, padre: string | null, nivel: number): ModuloMenu['submenus'] =>
+    subs
+      .filter(sm => sm.menu_id === menuId && (sm.parent_id ?? null) === padre)
+      .flatMap(sm => [{ name: sm.name, label: sm.label || sm.name, nivel }, ...hijos(menuId, sm.id, nivel + 1)]);
+
+  return ((menus || []) as Array<{ id: string; name: string; label: string | null }>).map(m => ({
+    name: m.name,
+    label: m.label || m.name,
+    submenus: hijos(m.id, null, 0),
+  }));
+}
+
 function McpTab() {
   const [apiKeys, setApiKeys] = useState<ApiKeyData[]>([]);
+  const [modulosMenu, setModulosMenu] = useState<ModuloMenu[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newPermissions, setNewPermissions] = useState<string[]>(['leads:read', 'datos:read']);
+  const [newPermissions, setNewPermissions] = useState<string[]>([PERMISO_CLAUDE]);
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
@@ -1254,6 +1296,16 @@ function McpTab() {
   }, []);
 
   useEffect(() => { fetchKeys(); }, [fetchKeys]);
+
+  useEffect(() => {
+    cargarModulosMenu()
+      .then(setModulosMenu)
+      .catch(err => console.error('Error cargando módulos del menú:', err));
+  }, []);
+
+  // Lista de módulos: cuáles están desplegados y qué se busca
+  const [modulosAbiertos, setModulosAbiertos] = useState<Set<string>>(new Set());
+  const [busquedaModulo, setBusquedaModulo] = useState('');
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -1390,6 +1442,226 @@ function McpTab() {
     </div>
   );
 
+  // Módulos de la key: la lista sale del menú de Toshibase, así que un módulo o submódulo
+  // nuevo aparece solo (sin tildar). Con el conector de Claude cada persona ve los
+  // tildados que su usuario también tiene (mcp/lib/accesoUsuario.js). Solo lectura.
+  // Una fila por módulo; se despliega para tildar submódulos sueltos.
+  const renderModuleList = (selected: string[], setSelected: (fn: (prev: string[]) => string[]) => void) => {
+    if (!modulosMenu.length) {
+      return <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cargando módulos...</div>;
+    }
+
+    const todosDe = (m: ModuloMenu) => [permisoMenu(m.name), ...m.submenus.map(sm => permisoSubmenu(sm.name))];
+    const todosLosPermisos = modulosMenu.flatMap(todosDe);
+
+    // Módulo: tilda o destilda todo (módulo y submódulos)
+    const toggleModulo = (m: ModuloMenu) => {
+      const todos = todosDe(m);
+      const completo = todos.every(p => selected.includes(p));
+      setSelected(prev => completo ? prev.filter(p => !todos.includes(p)) : [...new Set([...prev, ...todos])]);
+    };
+
+    // Submódulo: arrastra a los suyos (Cresium -> 44 Dreams, Grupo CG). El módulo queda
+    // tildado mientras tenga algún submódulo tildado.
+    const toggleSubmodulo = (m: ModuloMenu, indice: number) => {
+      const sm = m.submenus[indice];
+      const grupo = [permisoSubmenu(sm.name)];
+      for (let i = indice + 1; i < m.submenus.length && m.submenus[i].nivel > sm.nivel; i++) {
+        grupo.push(permisoSubmenu(m.submenus[i].name));
+      }
+      setSelected(prev => {
+        const marcar = !prev.includes(grupo[0]);
+        let next = marcar ? [...new Set([...prev, ...grupo])] : prev.filter(p => !grupo.includes(p));
+        const algunSub = m.submenus.some(x => next.includes(permisoSubmenu(x.name)));
+        next = algunSub
+          ? [...new Set([...next, permisoMenu(m.name)])]
+          : next.filter(p => p !== permisoMenu(m.name));
+        return next;
+      });
+    };
+
+    const toggleAbierto = (name: string) => setModulosAbiertos(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
+    const texto = busquedaModulo.trim().toLowerCase();
+    const coincide = (t: string) => t.toLowerCase().includes(texto);
+    const visibles = modulosMenu.filter(m => !texto || coincide(m.label) || m.submenus.some(sm => coincide(sm.label)));
+    const botonTexto: CSSProperties = {
+      fontSize: '12px', background: 'transparent', border: 'none', color: 'var(--color-primary)',
+      cursor: 'pointer', padding: 0,
+    };
+
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={busquedaModulo}
+            onChange={e => setBusquedaModulo(e.target.value)}
+            placeholder="Buscar módulo..."
+            style={{
+              flex: '1 1 200px', maxWidth: '280px', padding: '6px 10px',
+              background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px',
+            }}
+          />
+          <button type="button" style={botonTexto}
+            onClick={() => setSelected(prev => [...new Set([...prev, ...todosLosPermisos])])}>
+            Tildar todo
+          </button>
+          <button type="button" style={botonTexto}
+            onClick={() => setSelected(prev => prev.filter(p => !todosLosPermisos.includes(p)))}>
+            Destildar todo
+          </button>
+        </div>
+
+        <div style={{ border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+          {visibles.length === 0 && (
+            <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              Ningún módulo coincide con la búsqueda.
+            </div>
+          )}
+          {visibles.map((m, i) => {
+            const todos = todosDe(m);
+            const marcados = todos.filter(p => selected.includes(p)).length;
+            const completo = marcados === todos.length;
+            const parcial = marcados > 0 && !completo;
+            const subsMarcados = m.submenus.filter(sm => selected.includes(permisoSubmenu(sm.name))).length;
+            const abierto = m.submenus.length > 0 && (modulosAbiertos.has(m.name) || Boolean(texto));
+            return (
+              <div key={m.name} style={{ borderTop: i ? '1px solid var(--border-primary)' : 'none' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px',
+                  background: marcados ? 'rgba(88, 166, 255, 0.06)' : 'transparent',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={completo}
+                    ref={el => { if (el) el.indeterminate = parcial; }}
+                    onChange={() => toggleModulo(m)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span
+                    onClick={() => (m.submenus.length ? toggleAbierto(m.name) : toggleModulo(m))}
+                    style={{ flex: 1, fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {m.label}
+                  </span>
+                  {m.submenus.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => toggleAbierto(m.name)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent',
+                        border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12px',
+                      }}
+                    >
+                      {subsMarcados} de {m.submenus.length}
+                      {abierto ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                  )}
+                </div>
+                {abierto && (
+                  <div style={{ padding: '2px 12px 8px 36px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {m.submenus.map((sm, idx) => (
+                      (!texto || coincide(m.label) || coincide(sm.label)) && (
+                        <label
+                          key={sm.name}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+                            fontSize: '12px', paddingLeft: `${sm.nivel * 18}px`,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected.includes(permisoSubmenu(sm.name))}
+                            onChange={() => toggleSubmodulo(m, idx)}
+                          />
+                          {sm.label}
+                        </label>
+                      )
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const permisosDeKey = (
+    selected: string[],
+    setSelected: (fn: (prev: string[]) => string[]) => void,
+    onToggle: (perm: string) => void,
+  ) => {
+    const paraClaude = selected.includes(PERMISO_CLAUDE);
+    const tipo = (valor: boolean, titulo: string, detalle: string) => (
+      <label
+        style={{
+          flex: '1 1 260px', display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px',
+          background: paraClaude === valor ? 'rgba(88, 166, 255, 0.08)' : 'var(--bg-secondary)',
+          border: `1px solid ${paraClaude === valor ? 'var(--color-primary)' : 'var(--border-primary)'}`,
+          borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '13px',
+        }}
+      >
+        <input
+          type="radio"
+          checked={paraClaude === valor}
+          onChange={() => { if (paraClaude !== valor) onToggle(PERMISO_CLAUDE); }}
+          style={{ marginTop: '2px' }}
+        />
+        <div>
+          <div style={{ fontWeight: 600 }}>{titulo}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{detalle}</div>
+        </div>
+      </label>
+    );
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Tipo de key</div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {tipo(true, 'Claude', 'Cada persona entra con su usuario de Toshibase y ve los módulos de abajo que su usuario también tiene. La key sola no sirve.')}
+            {tipo(false, 'Integración', 'Para sistemas que no inician sesión (chatbot, API externa). La key sola da acceso.')}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '2px' }}>Módulos</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+            Qué puede leer esta key. Solo lectura: nunca modifica nada. Los módulos nuevos del menú
+            aparecen acá solos, sin tildar.
+          </div>
+          {renderModuleList(selected, setSelected)}
+        </div>
+        {!paraClaude && (
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>Permisos especiales</div>
+            {renderPermissionList(selected, onToggle)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Etiquetas de la tarjeta: tipo, cantidad de módulos y permisos especiales
+  const etiquetasDeKey = (permisos: string[] = []) => {
+    const esModulo = (p: string) => p.startsWith('menu:') || p.startsWith('submenu:');
+    const modulos = modulosMenu.filter(m => permisos.includes(permisoMenu(m.name))
+      || m.submenus.some(sm => permisos.includes(permisoSubmenu(sm.name)))).length;
+    const especiales = permisos.filter(p => p !== PERMISO_CLAUDE && !esModulo(p));
+    return [
+      permisos.includes(PERMISO_CLAUDE) ? 'Claude' : 'Integración',
+      ...(modulos ? [`${modulos} ${modulos === 1 ? 'módulo' : 'módulos'}`] : []),
+      ...especiales,
+    ];
+  };
+
   const maskKey = (key: string) => `${key.substring(0, 8)}${'*'.repeat(48)}${key.substring(key.length - 8)}`;
 
   const formatDate = (date: string | null) => {
@@ -1413,11 +1685,11 @@ function McpTab() {
         </div>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
           Servidor MCP para que chatbots y asistentes (como Claude) accedan a datos de Toshify.
-          Cada API key tiene permisos granulares. Con "Datos de operación: Lectura" el asistente
-          solo puede consultar datos de operación (sin facturación ni parámetros) y con
-          "Administración: Lectura", también facturación. Nunca puede modificarlos. Las personas
-          no necesitan key: conectan https://mcp.toshify.com.ar/mcp en Claude, inician sesión con
-          su cuenta y ven las mismas tablas que en el sistema. Las keys quedan para integraciones.
+          Para Claude Teams: creá una key "Para Claude", tildá los módulos y el administrador de
+          Claude agrega el conector con https://mcp.toshify.com.ar/mcp?apiKey=LA_KEY. Cada persona
+          inicia sesión con su usuario de Toshibase y ve los módulos de la key que su usuario
+          también tiene. Siempre solo lectura. Sin la key en la URL no se entra. Las keys sin
+          "Para Claude" quedan para integraciones, con sus permisos especiales.
         </p>
         <div style={{
           display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap',
@@ -1513,7 +1785,7 @@ function McpTab() {
             <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
               Permisos
             </label>
-            {renderPermissionList(newPermissions, togglePermission)}
+            {permisosDeKey(newPermissions, setNewPermissions, togglePermission)}
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -1661,7 +1933,7 @@ function McpTab() {
               {/* Permissions & meta */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {key.permissions?.map(perm => (
+                  {etiquetasDeKey(key.permissions).map(perm => (
                     <span
                       key={perm}
                       style={{
@@ -1691,7 +1963,7 @@ function McpTab() {
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                     La key no cambia. Los permisos nuevos rigen en el próximo pedido de quien la use.
                   </div>
-                  {renderPermissionList(editPermissions, perm => setEditPermissions(prev =>
+                  {permisosDeKey(editPermissions, setEditPermissions, perm => setEditPermissions(prev =>
                     prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]
                   ))}
                   <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>

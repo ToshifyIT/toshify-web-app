@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  CARTAS OFERTA (DocuSeal) -> carpeta del conductor en Drive   (v5, 2026-11-23)
+ *  CARTAS OFERTA (DocuSeal) -> carpeta del conductor en Drive   (v6, 2026-11-26)
  * =====================================================================
  *
  * Cada 1 minuto, en la casilla de josue.caride@toshify.com.ar:
@@ -32,10 +32,13 @@
  * PRIMERA VEZ: revisa TODAS las cartas oferta de la casilla, en tandas.
  * Después, solo las nuevas. Cada ejecución toma primero lo nuevo.
  *
- * AVISOS EN SLACK (canal it-log-bots, v3):
- *   ✅ cada carta guardada (conductor, carpeta, archivos).
+ * AVISOS EN SLACK (canal it-log-bots, v6): solo inicio, errores y fin.
+ *   🚀 inicio: cuando una ejecución encuentra cartas nuevas (las vueltas sin nada
+ *      nuevo, cada minuto, no avisan).
+ *   ✅ fin: UN resumen con las cartas guardadas (conductor y carpeta), cuántas no se
+ *      pudieron guardar y cuánto tardó. Ya no hay un aviso por cada carta.
  *   ⚠️ cada carta que no se pudo guardar, UNA vez (motivo y cómo se arregla); los
- *      reintentos no vuelven a avisar. Si después se guarda, llega el ✅.
+ *      reintentos no vuelven a avisar. Si después se guarda, figura en el resumen ✅.
  *   🛑 Toshibase no responde / clave rechazada / error del script (como mucho uno
  *      por hora del mismo tipo), y cartas que se dejaron de reintentar.
  *
@@ -172,11 +175,13 @@ function ejecutar(soloPrueba) {
   let procesados = null;
   let pendientes = null;
   let alertados = null;
+  let ctxActual = null;
   try {
     procesados = leerProcesados();
     pendientes = leerPendientes();
     alertados = leerAlertados();
-    const ctx = { procesados, pendientes, alertados, soloPrueba, resumen, inicio, nuevosPendientes: {} };
+    const ctx = { procesados, pendientes, alertados, soloPrueba, resumen, inicio, nuevosPendientes: {}, avisoInicio: false, guardadasSlack: [] };
+    ctxActual = ctx;
 
     if (soloPrueba) {
       // Las últimas cartas, de cualquier fecha
@@ -218,7 +223,33 @@ function ejecutar(soloPrueba) {
     if (!soloPrueba && alertados && pendientes) guardarAlertados(alertados, pendientes);
     lock.releaseLock();
     logResumen(resumen, soloPrueba);
+    if (!soloPrueba && ctxActual) avisarFin(ctxActual);
   }
+}
+
+/** 🚀 Aviso de inicio: una sola vez por ejecución, y solo si hay cartas nuevas. */
+function avisarInicio(ctx) {
+  if (ctx.soloPrueba || ctx.avisoInicio) return;
+  ctx.avisoInicio = true;
+  avisarSlack(mensajeSlack('🚀 *Cartas Oferta: inicio del proceso*', [
+    '📬 Hay cartas oferta nuevas de DocuSeal para guardar en las carpetas de los conductores.',
+  ]));
+}
+
+/** ✅ Aviso de fin: un resumen, solo si la ejecución avisó el inicio o guardó algo. */
+function avisarFin(ctx) {
+  const g = ctx.guardadasSlack;
+  if (!ctx.avisoInicio && !g.length) return;
+  const r = ctx.resumen;
+  const noGuardadas = r.noEncontrados.length + r.ambiguos.length + r.sinCarpeta.length + r.erroresApi + r.sinNombre;
+  const segundos = Math.round((Date.now() - ctx.inicio) / 1000);
+  avisarSlack(mensajeSlack('✅ *Cartas Oferta: fin del proceso*', [
+    `📄 *Cartas guardadas:* ${g.length}`,
+    g.length ? g.map(x => `• ${x}`).join('\n') : null,
+    noGuardadas ? `⚠️ *No guardadas:* ${noGuardadas} (avisadas arriba; se reintentan solas)` : null,
+    r.cortado ? '⏱️ Se cortó por tiempo; sigue en la próxima ejecución.' : null,
+    `⏱️ *Duración:* ${segundos} s`,
+  ]));
 }
 
 /** Procesa los correos de las conversaciones. Devuelve cuántas terminó. */
@@ -239,6 +270,7 @@ function recorrerHilos(hilos, soloRecientes, ctx) {
         r.yaProcesados++;
         continue;
       }
+      avisarInicio(ctx);
       procesarMensaje(mensaje, ctx);
     }
     terminadas++;
@@ -356,17 +388,12 @@ function procesarMensaje(mensaje, ctx) {
   });
   ctx.procesados[mensaje.getId()] = diaDe(mensaje.getDate());
 
-  // Solo si guardó algo (si todo ya existía, ya se avisó antes)
+  // Va al resumen de fin solo si guardó algo (si todo ya existía, ya figuró antes)
   if (nuevos.length) {
     const habiaFallado = !!ctx.alertados[mensaje.getId()];
-    avisarSlack(mensajeSlack('✅ *Carta oferta guardada*' + (habiaFallado ? ' (antes había fallado, ya está resuelto)' : ''), [
-      `👤 *Conductor:* ${resp.conductor.nombre} (DNI ${resp.conductor.dni || '?'})`,
-      `📄 *Carta:* ${asunto}`,
-      `📁 *Carpeta:* <${destino.getUrl()}|${resp.carpeta} / ${CONFIG.NOMBRE_SUBCARPETA}>`,
-      `📎 *Archivos guardados (${nuevos.length}):* ${nuevos.join(', ')}`,
-      existian.length ? `📎 *Ya estaban:* ${existian.join(', ')}` : null,
-      `🔎 *Cómo se identificó al conductor:* ${resp.motivo}`,
-    ]));
+    ctx.guardadasSlack.push(`${resp.conductor.nombre} (DNI ${resp.conductor.dni || '?'}): ` +
+      `<${destino.getUrl()}|${resp.carpeta} / ${CONFIG.NOMBRE_SUBCARPETA}> · ${nuevos.length} PDF` +
+      (habiaFallado ? ' (antes había fallado, ya está resuelto)' : ''));
   }
   delete ctx.alertados[mensaje.getId()];
 }
