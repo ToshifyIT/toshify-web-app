@@ -48,7 +48,7 @@ export interface TransferenciaCresium {
   cargadaA: string | null
   /** Se cruza sola con un conductor (nombre) */
   correspondeA: string | null
-  /** Anterior al 26/11 12:00: el servidor no la carga (en esa época se cargaban a mano) */
+  /** Anterior al 26/11 12:00: el servidor no la carga (en esa época se cargaban a mano): se enlaza a mano */
   anteriorAlAutomatico: boolean
 }
 
@@ -112,6 +112,40 @@ export async function buscarTransferencias(
       anteriorAlAutomatico: !!m.procesado_en && m.procesado_en < DESDE_AUTOMATICO,
     }
   })
+}
+
+/** Pago que ya está en el saldo del conductor y podría ser la misma transferencia */
+export interface PagoParecido {
+  monto: number
+  concepto: string | null
+  fecha: string
+  cargadoPor: string | null
+}
+
+/**
+ * Pagos del conductor por el mismo monto, desde el día de la transferencia, que no vienen de
+ * otra transferencia de Cresium. Antes del 26/11 12:00 las transferencias se cargaban a mano
+ * (a veces como "Pago en efectivo"): si hay uno, enlazarla sumaría la plata dos veces.
+ */
+export async function pagosParecidos(conductorId: string, t: TransferenciaCresium): Promise<PagoParecido[]> {
+  const { data, error } = await (supabase.from('abonos_conductores') as any)
+    .select('id, monto, concepto, fecha_abono, created_at, created_by_name')
+    .eq('conductor_id', conductorId).eq('tipo', 'abono').eq('monto', t.importe)
+    .gte('fecha_abono', `${t.fecha}T00:00:00-03:00`)
+  if (error) throw new Error(`No se pudieron revisar los pagos del conductor: ${error.message}`)
+  const abonos = (data || []) as any[]
+  if (abonos.length === 0) return []
+  const { data: deCresium, error: errCresium } = await (supabase.from('cresium_movimientos') as any)
+    .select('pago_abono_id')
+    .in('pago_abono_id', abonos.map(a => a.id))
+  if (errCresium) throw new Error(`No se pudieron revisar los pagos del conductor: ${errCresium.message}`)
+  const enlazados = new Set(((deCresium || []) as any[]).map(m => m.pago_abono_id))
+  return abonos.filter(a => !enlazados.has(a.id)).map(a => ({
+    monto: Number(a.monto) || 0,
+    concepto: a.concepto,
+    fecha: a.fecha_abono || a.created_at,
+    cargadoPor: a.created_by_name,
+  }))
 }
 
 /** ¿Ese día el conductor paga por día con la promoción de licencia B1? */
