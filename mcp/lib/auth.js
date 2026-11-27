@@ -11,6 +11,7 @@
  */
 
 import { supabaseRequest } from './supabase.js';
+import { permisosDeKey, requiereUsuario } from './accesoUsuario.js';
 
 /**
  * Busca una API key activa y devuelve sus datos, o null si no existe / esta
@@ -39,7 +40,11 @@ export async function validateApiKey(apiKey) {
       body: JSON.stringify({ last_used_at: new Date().toISOString() }),
     }).catch(() => {}); // fire and forget
 
-    return data[0];
+    // Módulos tildados (menu:/submenu:) -> lectura de las tablas de esas pantallas.
+    // permisosKey guarda los de la key tal cual, para cruzarlos con el usuario que inicia
+    // sesión por el conector de Claude.
+    const permisosKey = data[0].permissions || [];
+    return { ...data[0], permisosKey, permissions: permisosDeKey(permisosKey) };
   } catch {
     return null;
   }
@@ -104,6 +109,14 @@ export function requireApiKey(permission) {
       return res.status(401).json({
         error: 'unauthorized',
         message: 'API key invalida o inactiva',
+      });
+    }
+
+    // La key del conector de Claude no sirve sola: exige usuario de Toshibase
+    if (requiereUsuario(apiKeyData.permisosKey)) {
+      return res.status(403).json({
+        error: 'forbidden',
+        message: 'Esta API key es para el conector de Claude: no sirve para la API REST',
       });
     }
 

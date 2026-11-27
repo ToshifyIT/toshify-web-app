@@ -15,8 +15,12 @@
  * Lo que no consulta ninguna pantalla (tablas que llena o lee el backend) sale de
  * EXTRA_POR_DATASET, abajo, y queda listado en el resumen para revisarlo.
  *
+ * Además lista como "datasets automáticos" las tablas de pantallas que no están en el
+ * catálogo (ver lib/tablasFueraMcp.js): así un módulo nuevo trae sus datos solo.
+ *
  * Uso (desde la raíz del repo):  node mcp/generadores/generarPantallasDatos.mjs
- * Volver a correrlo cuando cambien las pantallas o el catálogo.
+ * La imagen del MCP (Dockerfile.mcp) lo corre en cada publicación; a mano solo hace falta
+ * para probar en local. --candidatas lista las tablas de pantallas fuera del catálogo.
  */
 
 import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
@@ -30,6 +34,7 @@ const SALIDA = join(RAIZ, 'mcp/lib/pantallasDatos.js');
 
 const { CATALOGO } = await import(join(RAIZ, 'mcp/lib/catalogoDatos.js'));
 const { REPORTES } = await import(join(RAIZ, 'mcp/lib/datos.js'));
+const { TABLAS_FUERA_MCP, PATRON_TABLAS_PROHIBIDAS } = await import(join(RAIZ, 'mcp/lib/tablasFueraMcp.js'));
 
 /**
  * Datasets que ninguna pantalla consulta con .from() porque los lee el backend o una
@@ -61,6 +66,7 @@ const EXTRA_POR_DATASET = {
   twochat_llamadas: { comoRuta: ['/integraciones/2chat/llamadas'] },
   alegra_comprobantes: { comoRuta: ['/integraciones/alegra/44dreams', '/integraciones/alegra/grupocg'] },
   mediciones_rutas: { comoRuta: ['/leads', '/onboarding/programacion-v2', '/onboarding/distribucion-mapa-v2'] },
+  vehiculos_notas: { comoRuta: ['/vehiculos'] },
   dashboard_insights: { comoReporte: 'dashboard_directivo' },
 };
 
@@ -199,6 +205,25 @@ for (const [nombre, r] of Object.entries(REPORTES)) {
   else sinPantalla.push(`reporte:${nombre}`);
 }
 
+// 4b) Datasets automáticos: tablas de pantallas que no están en el catálogo ni afuera a
+// propósito. Las de pantallas solo para admin no entran (ninguna key ni persona sin rol
+// admin las vería y el admin ya tiene el catálogo).
+const enCatalogo = new Set(Object.keys(CATALOGO));
+const fuera = new Set(TABLAS_FUERA_MCP);
+const porTablaAuto = {};
+const candidatas = [];
+for (const [tabla, lista] of [...pantallasPorTabla.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  if (enCatalogo.has(tabla) || PATRON_TABLAS_PROHIBIDAS.test(tabla)) continue;
+  const pantallas = limpiar(lista.filter((p) => !p.admin));
+  if (!pantallas.length) continue;
+  candidatas.push(tabla);
+  if (!fuera.has(tabla)) porTablaAuto[tabla] = pantallas;
+}
+if (process.argv.includes('--candidatas')) {
+  console.log(JSON.stringify(candidatas, null, 2));
+  process.exit(0);
+}
+
 // 5) Archivo de salida
 const fecha = new Date().toISOString().slice(0, 10);
 const salida = `// mcp/lib/pantallasDatos.js
@@ -215,11 +240,16 @@ export const PANTALLAS_POR_DATASET = ${JSON.stringify(porDataset, null, 2)};
 export const PANTALLAS_POR_REPORTE = ${JSON.stringify(porReporte, null, 2)};
 
 export const SIN_PANTALLA = ${JSON.stringify(sinPantalla)};
+
+// Datasets automáticos (ver lib/tablasFueraMcp.js): tablas de pantallas que no están en
+// el catálogo. Sus columnas se leen de la base al arrancar el MCP (lib/tablasAuto.js).
+export const PANTALLAS_POR_TABLA_AUTO = ${JSON.stringify(porTablaAuto, null, 2)};
 `;
 writeFileSync(SALIDA, salida);
 
 console.log(`Rutas leídas: ${rutas.length}`);
 console.log(`Datasets con pantalla: ${Object.keys(porDataset).length} de ${Object.keys(CATALOGO).length}`);
 console.log(`Reportes con pantalla: ${Object.keys(porReporte).length} de ${Object.keys(REPORTES).length}`);
+console.log(`Datasets automáticos (${Object.keys(porTablaAuto).length}): ${Object.keys(porTablaAuto).join(', ') || '-'}`);
 console.log(`Sin pantalla (${sinPantalla.length}): ${sinPantalla.join(', ') || '-'}`);
 console.log(`Escrito: ${relative(RAIZ, SALIDA)}`);

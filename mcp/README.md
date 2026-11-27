@@ -21,8 +21,9 @@ Dos formas, segun quien se conecta:
 
 Para el conector de Claude (claude.ai, Claude Teams, Desktop, Claude Code). Cada persona
 inicia sesion con su cuenta de Toshibase (Google o correo y contraseña) y el MCP le
-muestra **las mismas tablas que ve en el sistema**: las de las pantallas que tiene
-habilitadas en Menu por rol / Menu por usuario. Solo lectura. No hace falta API key.
+muestra las tablas de las pantallas que tiene habilitadas en Menu por rol / Menu por
+usuario, **dentro de los modulos tildados en la API key "Para Claude"** que va en la URL
+del conector (ver "Modulos de cada key" abajo). Solo lectura. Sin la key no se entra.
 
 - `lib/oauth.js`: servidor de autorizacion OAuth 2.1 (registro dinamico, PKCE S256,
   permiso de acceso de 1 hora y renovacion de 30 dias con rotacion). Endpoints:
@@ -51,12 +52,37 @@ Enviar la API key de una de estas formas:
 - Header: `Authorization: Bearer TU_API_KEY` (solo `/mcp`)
 - Query param: `/mcp?apiKey=TU_API_KEY` o `/sse?apiKey=TU_API_KEY`
 
+### Módulos de cada key y conector de Claude
+
+Al crear o editar una key, la lista "Módulos" muestra los módulos y submódulos activos del
+menú de Toshibase (los mismos de Menú por rol): uno nuevo aparece solo, sin tildar. Se
+guardan como `menu:<nombre>` / `submenu:<nombre>` en `api_keys.permissions`
+(`lib/accesoUsuario.js`). Siempre solo lectura.
+
+- **Para Claude** (`mcp:usuario`): el administrador de Claude Teams agrega el conector con
+  `https://mcp.toshify.com.ar/mcp?apiKey=LA_KEY`. Cada persona inicia sesión con su usuario
+  de Toshibase y ve los módulos tildados en la key **que su usuario también tiene**. En ese
+  camino no hay herramientas que escriban. La key sola no sirve: sin sesión, /mcp pide el
+  login; /sse y la API REST la rechazan.
+- **Sin key no se entra:** un token de login sin la key en la URL recibe 403.
+- **Integraciones** (key sin `mcp:usuario`): la key sola ve los módulos tildados más sus
+  permisos especiales de siempre (`datos:read`, `administracion:read`, `leads:*`, `*:api`).
+
+### Tablas de módulos nuevos (automáticas)
+
+`Dockerfile.mcp` corre `generadores/generarPantallasDatos.mjs` en cada publicación. Si
+una pantalla usa una tabla que no está en el catálogo, entra sola como dataset automático
+(`PANTALLAS_POR_TABLA_AUTO`): al arrancar, `lib/tablasAuto.js` lee sus columnas de la base
+y saca las sensibles. No entran las de `lib/tablasFueraMcp.js` (las que se dejaron afuera a
+propósito y los nombres de usuarios, permisos, keys, logs, etc.) ni las de pantallas solo
+admin. Las automáticas no van con `datos:read`: solo con su módulo tildado en la key. Para describirla mejor o elegir columnas, agregarla al catálogo.
+
 ## Conectarlo a Claude
 
-- **claude.ai / Claude Teams / Desktop:** Configuracion > Conectores > Agregar conector
-  personalizado, URL `https://mcp.toshify.com.ar/mcp` (sin apiKey). Al conectar se abre el
-  login de Toshify; cada persona entra con su cuenta.
-- **Claude Code:** `claude mcp add --transport http toshify https://mcp.toshify.com.ar/mcp`
+- **claude.ai / Claude Teams / Desktop:** el administrador va a Configuracion > Conectores >
+  Agregar conector personalizado, URL `https://mcp.toshify.com.ar/mcp?apiKey=LA_KEY` (una key
+  "Para Claude"). Al conectar se abre el login de Toshify; cada persona entra con su cuenta.
+- **Claude Code:** `claude mcp add --transport http toshify "https://mcp.toshify.com.ar/mcp?apiKey=LA_KEY"`
   y despues `/mcp` para iniciar sesion.
 - Con API key (integraciones): `https://mcp.toshify.com.ar/mcp?apiKey=TU_API_KEY`.
 

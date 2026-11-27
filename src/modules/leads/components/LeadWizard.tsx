@@ -13,6 +13,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { ESTADO_DESCARTADO, pedirMotivoDescarte, textoDescarte } from '../motivoDescarte'
 import { estadoMonotributo, faltantesMonotributo } from '../monotributo'
 import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, estadoLicencia, faltantesLicencia } from '../licenciaLead'
+import { PARENTESCOS_EMERGENCIA, faltantesEmergenciaLead } from '../contactoEmergencia'
 import { AlertasLicencia } from './AlertasLicencia'
 import { unirNombre } from '../nombreLead'
 import { FUENTE_SELLIUM } from '../cargaMasivaSellium'
@@ -276,7 +277,10 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
       !lleno(formData.fecha_de_nacimiento) && 'Fecha de nacimiento', !lleno(formData.nacionalidad) && 'Nacionalidad',
       !lleno(formData.estado_civil) && 'Estado civil', !lleno(formData.sede || formData.sede_id) && 'Sede',
     ].filter(Boolean) as string[],
-    2: [!lleno(formData.phone) && 'Teléfono', !lleno(formData.email) && 'Email Cabify', !lleno(formData.direccion) && 'Dirección'].filter(Boolean) as string[],
+    2: [
+      !lleno(formData.phone) && 'Teléfono', !lleno(formData.email) && 'Email Cabify', !lleno(formData.direccion) && 'Dirección',
+      ...faltantesEmergenciaLead(formData),
+    ].filter(Boolean) as string[],
     3: [
       ...faltantesLicencia(formData), !lleno(formData.experiencia_previa) && 'Experiencia previa',
       !lleno(formData.url_folder) && 'Link de documentación',
@@ -603,7 +607,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             {/* Clasificación Domicilio y Estado Dirección ocultos */}
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Nombre Contacto Emergencia</label>
+                <label>Nombre Contacto Emergencia <span className="required">*</span></label>
                 <input
                   type="text"
                   value={formData.datos_de_emergencia || ''}
@@ -611,7 +615,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 />
               </div>
               <div className="lead-wizard-field">
-                <label>Teléfono Emergencia</label>
+                <label>Teléfono Emergencia <span className="required">*</span></label>
                 <input
                   type="text"
                   value={formData.telefono_emergencia || ''}
@@ -621,27 +625,12 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Parentesco</label>
+                <label>Parentesco <span className="required">*</span></label>
                 <select value={formData.parentesco_emergencia || ''} onChange={e => updateField('parentesco_emergencia', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="Padre/Madre">Padre/Madre</option>
-                  <option value="Hermano/a">Hermano/a</option>
-                  <option value="Cónyuge">Conyuge</option>
-                  <option value="Hijo/a">Hijo/a</option>
-                  <option value="Abuelo/a">Abuelo/a</option>
-                  <option value="Amigo/a">Amigo/a</option>
-                  <option value="Compadre">Compadre</option>
-                  <option value="Comadre">Comadre</option>
-                  <option value="Concubino/a">Concubino/a</option>
-                  <option value="Conviviente">Conviviente</option>
-                  <option value="Cuñado/a">Cuñado/a</option>
-                  <option value="Ex Esposo/a">Ex Esposo/a</option>
-                  <option value="Padrastro">Padrastro</option>
-                  <option value="Madrastra">Madrastra</option>
-                  <option value="Primo/a">Primo/a</option>
-                  <option value="Vecino/a">Vecino/a</option>
-                  <option value="Tío/a">Tio/a</option>
-                  <option value="Otro">Otro</option>
+                  {PARENTESCOS_EMERGENCIA.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
                 </select>
               </div>
               <div className="lead-wizard-field">
@@ -657,7 +646,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group full-width">
               <div className="lead-wizard-field">
-                <label>Dirección Emergencia</label>
+                <label>Dirección Emergencia <span className="required">*</span></label>
                 <input
                   type="text"
                   value={formData.direccion_emergencia || ''}

@@ -13,6 +13,14 @@ RUN npm ci --omit=dev --ignore-scripts
 # Copy MCP server, docs, and the shared lib/routes modules
 COPY mcp/ ./mcp/
 
+# Relación pantallas -> tablas generada desde el código de la app en cada publicación:
+# un módulo nuevo (ruta en HomePage.tsx) entra solo al MCP con sus tablas. src/ se copia
+# solo para leerlo y se borra. Si el generador falla queda el pantallasDatos.js del repo.
+COPY src/ ./src/
+RUN node mcp/generadores/generarPantallasDatos.mjs \
+  || echo "AVISO: no se pudo regenerar mcp/lib/pantallasDatos.js; se usa el del repo"; \
+  rm -rf ./src
+
 # Expose MCP port
 EXPOSE 3002
 

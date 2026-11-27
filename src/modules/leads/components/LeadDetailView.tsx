@@ -167,12 +167,17 @@ function VerificacionDocumentosVista({ verificacion }: { verificacion: Verificac
       <Tarjeta titulo="Documentos en la carpeta">
         {DOCUMENTOS_VERIFICADOS.map(({ clave, label }) => {
           const doc = verificacion.documentos[clave]
+          // Sin leer todavía (y nada leído de ese documento): "Pendiente", no "No"
+          const enLectura = !doc?.encontrado && !!doc?.pendiente
           return (
             <div key={clave} className="lead-detail-item lead-detail-item--largo">
               <span className="lead-detail-item-label">{label}</span>
               <span className="lead-detail-item-value">
-                <span style={{ fontWeight: 600, color: doc?.encontrado ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                  {doc?.encontrado ? 'Sí' : 'No'}
+                <span style={{
+                  fontWeight: 600,
+                  color: doc?.encontrado ? 'var(--color-success)' : enLectura ? 'var(--color-warning)' : 'var(--color-danger)',
+                }}>
+                  {doc?.encontrado ? 'Sí' : enLectura ? 'Pendiente de lectura' : 'No'}
                 </span>
                 <ListaObservaciones items={doc?.observaciones || []} />
               </span>

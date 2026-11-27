@@ -73,8 +73,8 @@ function permisoDe(d) {
 
 /**
  * Si se puede leer un dataset: una key por su permiso (datos:read o el del dataset) y
- * una persona logueada por tabla:<dataset> (las pantallas que ve en Toshibase, ver
- * lib/accesoUsuario.js).
+ * por tabla:<dataset> (módulos tildados en la key, cruzados con el usuario que inicia
+ * sesión por el conector de Claude; ver lib/accesoUsuario.js).
  */
 function puedeLeer(nombre, d, permisos = []) {
   return permisos.includes(permisoDe(d)) || permisos.includes(`tabla:${nombre}`);

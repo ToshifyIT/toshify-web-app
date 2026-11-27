@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { rateLimit } from 'express-rate-limit';
 import { supabaseRequest } from './lib/supabase.js';
 import { validateApiKey, hasPermission } from './lib/auth.js';
+import { requiereUsuario } from './lib/accesoUsuario.js';
 import { registrarConsultaMcp } from './lib/audit.js';
 import oauthRouter, { esTokenOAuth, validarTokenOAuth, headerLogin } from './lib/oauth.js';
 import { CATALOGO } from './lib/catalogoDatos.js';
@@ -33,6 +34,7 @@ import asignacionesRouter from './routes/asignaciones.js';
 import flotaRouter from './routes/flota.js';
 import keysRouter from './routes/keys.js';
 import leadsCrearRouter from './routes/leadsCrear.js';
+import { cargarTablasAuto } from './lib/tablasAuto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -614,6 +616,9 @@ app.get('/sse', async (req, res) => {
   if (!apiKeyData) {
     return res.status(401).json({ error: 'API key invalida o inactiva' });
   }
+  if (requiereUsuario(apiKeyData.permisosKey)) {
+    return res.status(403).json({ error: 'Esta API key es para el conector de Claude: usar /mcp e iniciar sesión' });
+  }
 
   console.log(`[MCP] Nueva conexion SSE de: ${apiKeyData.name}`);
 
@@ -689,31 +694,51 @@ function apiKeyDeRequest(req) {
   return req.headers['x-api-key'] || bearer?.[1] || req.query.apiKey;
 }
 
+/** Token OAuth (Authorization: Bearer) y API key (x-api-key o ?apiKey=) por separado. */
+function credencialesDeRequest(req) {
+  const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1];
+  const token = esTokenOAuth(bearer) ? bearer : null;
+  const apiKey = req.headers['x-api-key'] || (token ? null : bearer) || req.query.apiKey || null;
+  return { token, apiKey: apiKey ? String(apiKey) : null };
+}
+
 function errorJsonRpc(res, status, message) {
   res.status(status).json({ jsonrpc: '2.0', error: { code: -32000, message }, id: null });
 }
 
 // express.json() solo en esta ruta: a nivel global rompe /messages (ver arriba).
 app.post('/mcp', mcpLimiter, express.json({ limit: '1mb' }), async (req, res) => {
-  const credencial = apiKeyDeRequest(req);
+  const { token, apiKey } = credencialesDeRequest(req);
 
-  // Sin credencial: 401 con el header que le indica a Claude dónde iniciar sesión
-  if (!credencial) {
+  // Sin nada: 401 con el header que le indica a Claude dónde iniciar sesión
+  if (!token && !apiKey) {
     res.set('WWW-Authenticate', headerLogin(req));
     return errorJsonRpc(res, 401, 'Falta iniciar sesión');
   }
 
+  // El conector de Claude siempre lleva la API key en la URL (la configura el
+  // administrador de Claude Teams). Sin key no se entra, aunque la persona inicie sesión.
+  if (!apiKey) {
+    return errorJsonRpc(res, 403, 'Falta la API key en la URL del conector. Pedile al administrador la URL del conector de Toshify.');
+  }
+  const keyData = await validateApiKey(apiKey);
+  if (!keyData) return errorJsonRpc(res, 401, 'API key invalida o inactiva');
+
   let apiKeyData;
-  if (esTokenOAuth(credencial)) {
-    apiKeyData = await validarTokenOAuth(credencial);
+  if (token) {
+    // Persona: ve los módulos de la key que su usuario de Toshibase también tiene
+    apiKeyData = await validarTokenOAuth(token, keyData);
     if (!apiKeyData) {
       // Vencido, revocado o la persona ya no tiene acceso: Claude renueva o pide login
       res.set('WWW-Authenticate', headerLogin(req, 'invalid_token'));
       return errorJsonRpc(res, 401, 'Sesión vencida o sin acceso. Volvé a conectar el conector.');
     }
+  } else if (requiereUsuario(keyData.permisosKey)) {
+    // Key del conector de Claude sin sesión: se pide el login de Toshibase
+    res.set('WWW-Authenticate', headerLogin(req));
+    return errorJsonRpc(res, 401, 'Iniciá sesión con tu usuario de Toshibase');
   } else {
-    apiKeyData = await validateApiKey(credencial);
-    if (!apiKeyData) return errorJsonRpc(res, 401, 'API key invalida o inactiva');
+    apiKeyData = keyData; // integración: la key sola
   }
 
   const server = createMcpServer(apiKeyData);
@@ -740,8 +765,12 @@ app.delete('/mcp', (req, res) => errorJsonRpc(res, 405, 'Metodo no permitido'));
 // Start server
 // =====================================================
 
+// Tablas de pantallas nuevas que no están en el catálogo (lib/tablasAuto.js)
+const tablasAuto = await cargarTablasAuto();
+
 app.listen(PORT, () => {
   console.log(`Toshify MCP Server running on port ${PORT}`);
+  console.log(`  Datasets automáticos: ${tablasAuto.join(', ') || 'ninguno'}`);
   console.log(`  MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`  SSE endpoint: http://localhost:${PORT}/sse`);
   console.log(`  Health check: http://localhost:${PORT}/health`);

@@ -51,6 +51,8 @@ const menuIcons: Record<string, LucideIcon> = {
   'ctrl-exceso-km': Gauge,
   'bitacora-gps': History,
   'cabify': MapPin,
+  'didi': Car,
+  'app-viajes': Car,
   'twochat': Phone,
   'cresium': Landmark,
   'alegra-compras': Receipt,
@@ -281,6 +283,7 @@ const USSPage = lazy(() => import('./integraciones/uss/USSPage').then(m => ({ de
 const BitacoraPage = lazy(() => import('./integraciones/uss/BitacoraPage').then(m => ({ default: m.BitacoraPage })))
 const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExcesoKmPage').then(m => ({ default: m.ControlExcesoKmPage })))
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
+const DidiPage = lazy(() => import('./integraciones/didi/DidiPage').then(m => ({ default: m.DidiPage })))
 const TwoChatLlamadasPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatLlamadasPage })))
 const TwoChatContactosPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatContactosPage })))
 const TwoChatMensajesPage = lazy(() => import('./integraciones/twochat/TwoChatPage').then(m => ({ default: m.TwoChatMensajesPage })))
@@ -2216,6 +2219,13 @@ export function HomePage() {
                   <LazyPage><CabifyPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              <Route path="/integraciones/didi" element={
+                <ProtectedRoute submenuName="didi" action="view">
+                  <LazyPage><DidiPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              {/* APP Viajes: grupo con Cabify y DiDi (sql/integraciones_app_viajes_menu.sql) */}
+              <Route path="/integraciones/app-viajes" element={<Navigate to="/integraciones/cabify" replace />} />
               {/* 2Chat: grupo con Control de llamadas y Contactos */}
               <Route path="/integraciones/2chat" element={<Navigate to="/integraciones/2chat/llamadas" replace />} />
               <Route path="/integraciones/2chat/llamadas" element={
