@@ -39,7 +39,10 @@ import { usuarioVisible } from '../../../utils/usuarioAutomatico'
 import { etiquetaTipoMovimiento, referenciaVisible } from '../../../utils/conceptoLabels'
 import { LineasFactura } from '../components/LineasFactura'
 import { desglosarPago, type DesglosePago } from '../utils/desglosePago'
-import { buscarTransferencias, DIAS_BUSQUEDA, registrarTransferencia, type TransferenciaCresium } from '../utils/transferenciasCresium'
+import {
+  buscarTransferencias, DIAS_BUSQUEDA, pagosParecidos, registrarTransferencia,
+  type PagoParecido, type TransferenciaCresium,
+} from '../utils/transferenciasCresium'
 import { VINCULOS } from '../../administracion/cresium-conductores/cruceCresium'
 
 interface ConductorBasico {
@@ -1409,11 +1412,12 @@ export function SaldosAbonosTab() {
           lista.innerHTML = encontradas.length === 0
             ? '<div style="font-size: 12px; color: #6B7280; padding: 8px 0;">No hay transferencias con ese dato en los últimos días.</div>'
             : encontradas.map((t, i) => {
-              const libre = !t.cargadaA && !t.correspondeA
+              // Las que entran solas (servidor) no se eligen; las anteriores al 26/11 12:00 sí
+              const libre = !t.cargadaA && (!t.correspondeA || t.anteriorAlAutomatico)
               const nota = t.cargadaA ? `Ya cargada a ${escaparHtml(t.cargadaA)}`
                 : t.correspondeA
                   ? (t.anteriorAlAutomatico
-                    ? `Es de ${escaparHtml(t.correspondeA)} (anterior al 26/11 12:00: se cargaba a mano)`
+                    ? `Es de ${escaparHtml(t.correspondeA)} (anterior al 26/11 12:00: no entra sola, se enlaza acá)`
                     : `Es de ${escaparHtml(t.correspondeA)}: entra sola`)
                   : ''
               return `<button type="button" data-i="${i}" ${libre ? '' : 'disabled'} style="display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 8px; margin-bottom: 4px; border: 1px solid ${elegida?.id === t.id ? '#16a34a' : '#E5E7EB'}; border-radius: 6px; background: transparent; cursor: ${libre ? 'pointer' : 'not-allowed'}; opacity: ${libre ? 1 : 0.55};">
@@ -1505,12 +1509,27 @@ export function SaldosAbonosTab() {
     if (formValues.modo === 'cresium') {
       const t = formValues.transferencia
       const nombre = formatNombreCompleto(saldo.conductor_nombre)
+      // Antes del 26/11 12:00 se cargaban a mano: puede que ya esté en el saldo como otro pago
+      let parecidos: PagoParecido[] = []
+      try {
+        parecidos = await pagosParecidos(saldo.conductor_id, t)
+      } catch (err) {
+        console.error('No se pudieron revisar los pagos del conductor:', err)
+        showError('No se pudo revisar si ya se cargó a mano', err instanceof Error ? err.message : undefined)
+        return
+      }
+      const yaCargado = parecidos.map(p => `${formatCurrency(p.monto)} el ${formatFechaHora(p.fecha)}`
+        + ` (${p.concepto || 'sin concepto'}${p.cargadoPor ? `, ${p.cargadoPor}` : ''})`).join('; ')
       // No hay desenlazar: una vez cargada en un saldo, la transferencia no se puede volver a usar
       const ok = await confirmar({
-        titulo: 'Enlazar transferencia',
+        titulo: parecidos.length ? '¿Ya se cargó a mano?' : 'Enlazar transferencia',
         texto: `${formatCurrency(t.importe)} de ${t.contraparte || 'Cresium'} entra en el saldo de ${nombre}. `
-          + 'Revisá que sea de este conductor: después no se puede pasar a otro.',
-        confirmar: 'Sí, enlazar',
+          + (parecidos.length
+            ? `Ojo: ya tiene cargado ${yaCargado}. Si es esta misma transferencia, no la enlaces: `
+              + 'se sumaría dos veces.'
+            : 'Revisá que sea de este conductor: después no se puede pasar a otro.'),
+        confirmar: parecidos.length ? 'Es otra, enlazar' : 'Sí, enlazar',
+        peligro: parecidos.length > 0,
       })
       if (!ok) return
       try {
