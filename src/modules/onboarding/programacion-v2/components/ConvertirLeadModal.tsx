@@ -26,6 +26,7 @@ import {
 } from '../../../leads/conversionLeadAConductor'
 import { estadoMonotributo } from '../../../leads/monotributo'
 import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, licenciaSiNo, normalizarLicenciaAlGuardar } from '../../../leads/licenciaLead'
+import { PARENTESCOS_EMERGENCIA } from '../../../leads/contactoEmergencia'
 import { AlertasLicencia } from '../../../leads/components/AlertasLicencia'
 import type { Lead } from '../../../../types/leads.types'
 import {
@@ -100,7 +101,7 @@ const PESTANAS: TabsBarItem<Pestana>[] = [
 
 /** Pestaña de un campo faltante (por el texto que devuelve la validación). */
 function pestanaDeFaltante(texto: string): Pestana {
-  if (/tel[eé]fono|email|direcci[oó]n/i.test(texto)) return 'contacto'
+  if (/tel[eé]fono|email|direcci[oó]n|emergencia/i.test(texto)) return 'contacto'
   if (/licencia|obtenci[oó]n|categor[ií]a|vencimiento/i.test(texto)) return 'licencia'
   if (/experiencia|cochera/i.test(texto)) return 'operativo'
   if (/documentaci[oó]n|drive/i.test(texto)) return 'documentacion'
@@ -316,6 +317,10 @@ export function ConvertirLeadModal({
       experiencia_previa: texto(l.experiencia_previa),
       cochera: texto(l.cochera),
       url_folder: texto(l.url_folder),
+      datos_de_emergencia: texto(l.datos_de_emergencia ?? l.contacto_de_emergencia),
+      telefono_emergencia: texto(l.telefono_emergencia),
+      parentesco_emergencia: texto(l.parentesco_emergencia),
+      direccion_emergencia: texto(l.direccion_emergencia),
     }
 
     // Un campo con formato invalido no se guarda: en una columna `date` ni
@@ -341,6 +346,7 @@ export function ConvertirLeadModal({
       'fecha_licencia_b1', 'fecha_licencia_d1',
       'estado_licencia', 'tipo_licencia',
       'experiencia_previa', 'cochera', 'url_folder',
+      'datos_de_emergencia', 'telefono_emergencia', 'parentesco_emergencia', 'direccion_emergencia',
     ]
     for (const c of campos) {
       const va = (a[c] ?? '') as string
@@ -684,6 +690,26 @@ export function ConvertirLeadModal({
                 </Campo>
                 <Campo label="Dirección" obligatorio error={errores.direccion}>
                   <input style={inputStyle} value={lead.direccion || ''} onChange={(e) => set('direccion', e.target.value)} />
+                </Campo>
+              </div>
+                    <div style={{ ...tituloSeccion, marginTop: '20px' }}>Contacto de Emergencia</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px' }}>
+                <Campo label="Nombre contacto" obligatorio>
+                  <input style={inputStyle} value={lead.datos_de_emergencia ?? lead.contacto_de_emergencia ?? ''} onChange={(e) => set('datos_de_emergencia', e.target.value)} />
+                </Campo>
+                <Campo label="Teléfono emergencia" obligatorio>
+                  <input style={inputStyle} value={lead.telefono_emergencia || ''} onChange={(e) => set('telefono_emergencia', e.target.value)} />
+                </Campo>
+                <Campo label="Parentesco" obligatorio>
+                  <select style={inputStyle} value={lead.parentesco_emergencia || ''} onChange={(e) => set('parentesco_emergencia', e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    {PARENTESCOS_EMERGENCIA.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                </Campo>
+                <Campo label="Dirección emergencia" obligatorio>
+                  <input style={inputStyle} value={lead.direccion_emergencia || ''} onChange={(e) => set('direccion_emergencia', e.target.value)} />
                 </Campo>
               </div>
                   </>

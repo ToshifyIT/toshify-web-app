@@ -57,6 +57,7 @@ import { formatFecha } from '../../utils/format'
 import { alertasLicencia, CATEGORIAS_LICENCIA_LEAD, clasesDeLicencia, licenciaSiNo } from '../leads/licenciaLead'
 import { AlertasLicencia } from '../leads/components/AlertasLicencia'
 import { agregarCategoriaAlHistorico, columnasLicenciaConductor, erroresLicenciaConductor } from './licenciaConductor'
+import { PARENTESCOS_EMERGENCIA, erroresEmergenciaConductor } from '../leads/contactoEmergencia'
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
 
@@ -1290,6 +1291,7 @@ export function ConductoresModule() {
       !formData.nombres ||
       !formData.apellidos ||
       Object.keys(erroresLicenciaConductor(formData)).length > 0 ||
+      Object.keys(erroresEmergenciaConductor(formData)).length > 0 ||
       !formData.sede_id
     ) {
       Alerta.fire({
@@ -1485,6 +1487,7 @@ export function ConductoresModule() {
     if (!formData.telefono_contacto?.trim()) newErrors.telefono_contacto = 'Requerido';
     if (!formData.email?.trim()) newErrors.email = 'Requerido (el de la app de Cabify; usado en contratos)';
     if (!formData.direccion?.trim()) newErrors.direccion = 'Requerido (usado en contratos)';
+    Object.assign(newErrors, erroresEmergenciaConductor(formData));
     if (!formData.estado_id) newErrors.estado_id = 'Debe seleccionar un estado';
     // Guía obligatorio (solo si la columna existe, ver sql/conductores_guia.sql)
     if (formData.guia !== undefined && !formData.guia.trim()) newErrors.guia = 'Requerido';
@@ -1517,6 +1520,10 @@ export function ConductoresModule() {
         estado_id: 'Estado',
         guia: 'Capitán',
         embajador_id: 'Embajador (es referido)',
+        contacto_emergencia: 'Nombre contacto emergencia',
+        telefono_emergencia: 'Teléfono emergencia',
+        parentesco_emergencia: 'Parentesco emergencia',
+        direccion_emergencia: 'Dirección emergencia',
       };
       const faltantes = Object.keys(newErrors).map(k => labels[k] || k);
       Alerta.fire({
@@ -4322,6 +4329,7 @@ const PESTANA_DE_CAMPO: Record<string, PestanaEdicion> = {
   fecha_licencia_b1: 'licencia', fecha_licencia_d1: 'licencia',
   telefono_contacto: 'contacto', telefono_secundario: 'contacto', email: 'contacto', correo_personal: 'contacto',
   direccion: 'contacto', zona: 'contacto', guia: 'contacto', contacto_emergencia: 'contacto', telefono_emergencia: 'contacto',
+  parentesco_emergencia: 'contacto', direccion_emergencia: 'contacto',
   experiencia_previa: 'operativo', estado_id: 'operativo', fecha_terminacion: 'operativo', motivo_baja: 'operativo',
   preferencia_turno: 'operativo', fecha_contratacion: 'operativo',
   url_documentacion: 'documentacion', ibutton: 'documentacion',
@@ -4983,56 +4991,57 @@ function ModalEditar({
 
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Nombre Contacto</label>
+            <label className="form-label">Nombre Contacto *</label>
             <input
               type="text"
-              className="form-input"
+              className={`form-input ${editErrors.contacto_emergencia ? 'input-error' : ''}`}
               value={formData.contacto_emergencia}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  contacto_emergencia: e.target.value,
-                })
-              }
+              onChange={(e) => setFormData({ ...formData, contacto_emergencia: e.target.value })}
               disabled={saving}
             />
+            {editErrors.contacto_emergencia && <span className="error-message">{editErrors.contacto_emergencia}</span>}
           </div>
           <div className="form-group">
-            <label className="form-label">Teléfono Emergencia</label>
+            <label className="form-label">Teléfono Emergencia *</label>
             <input
               type="tel"
-              className="form-input"
+              className={`form-input ${editErrors.telefono_emergencia ? 'input-error' : ''}`}
               value={formData.telefono_emergencia}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  telefono_emergencia: e.target.value,
-                })
-              }
+              onChange={(e) => setFormData({ ...formData, telefono_emergencia: e.target.value })}
               disabled={saving}
             />
+            {editErrors.telefono_emergencia && <span className="error-message">{editErrors.telefono_emergencia}</span>}
           </div>
         </div>
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Parentesco</label>
-            <input
-              type="text"
-              className="form-input"
+            <label className="form-label">Parentesco *</label>
+            <select
+              className={`form-input ${editErrors.parentesco_emergencia ? 'input-error' : ''}`}
               value={formData.parentesco_emergencia}
               onChange={(e) => setFormData({ ...formData, parentesco_emergencia: e.target.value })}
               disabled={saving}
-            />
+            >
+              <option value="">Seleccionar</option>
+              {formData.parentesco_emergencia && !PARENTESCOS_EMERGENCIA.some(p => p.value === formData.parentesco_emergencia) && (
+                <option value={formData.parentesco_emergencia}>{formData.parentesco_emergencia}</option>
+              )}
+              {PARENTESCOS_EMERGENCIA.map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+            {editErrors.parentesco_emergencia && <span className="error-message">{editErrors.parentesco_emergencia}</span>}
           </div>
           <div className="form-group">
-            <label className="form-label">Dirección Emergencia</label>
+            <label className="form-label">Dirección Emergencia *</label>
             <input
               type="text"
-              className="form-input"
+              className={`form-input ${editErrors.direccion_emergencia ? 'input-error' : ''}`}
               value={formData.direccion_emergencia}
               onChange={(e) => setFormData({ ...formData, direccion_emergencia: e.target.value })}
               disabled={saving}
             />
+            {editErrors.direccion_emergencia && <span className="error-message">{editErrors.direccion_emergencia}</span>}
           </div>
         </div>
 

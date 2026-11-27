@@ -232,6 +232,8 @@ export interface Lead {
 /** Un documento revisado en la carpeta de Drive del lead. */
 export interface DocumentoVerificado {
   encontrado: boolean
+  /** Hay archivos de este documento que el bot todavía no pudo leer (espera a Gemini o falló) */
+  pendiente?: boolean
   observaciones: string[]
 }
 

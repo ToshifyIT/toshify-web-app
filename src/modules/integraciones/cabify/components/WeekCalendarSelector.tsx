@@ -14,6 +14,8 @@ interface WeekCalendarSelectorProps {
   readonly availableWeeks: readonly WeekOption[]
   readonly isDisabled: boolean
   readonly onWeekChange: (week: WeekOption) => void
+  /** Solo semanas completas: oculta las pestañas Día y Rangos (DiDi solo tiene datos por semana). */
+  readonly soloSemanas?: boolean
 }
 
 // Días de la semana (Lunes a Domingo)
@@ -62,6 +64,7 @@ export function WeekCalendarSelector({
   availableWeeks,
   isDisabled,
   onWeekChange,
+  soloSemanas = false,
 }: WeekCalendarSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [viewDate, setViewDate] = useState(new Date())
@@ -337,7 +340,7 @@ export function WeekCalendarSelector({
       {isOpen && dropdownPos && (
         <div className="week-calendar-dropdown" style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left }}>
           {/* Pestañas Día/Semana */}
-          <div className="week-calendar-tabs">
+          {!soloSemanas && <div className="week-calendar-tabs">
             <button
               type="button"
               className={`week-calendar-tab ${selectionMode === 'day' ? 'active' : ''}`}
@@ -359,7 +362,7 @@ export function WeekCalendarSelector({
             >
               Rangos
             </button>
-          </div>
+          </div>}
 
           {/* Header con navegación */}
           <div className="week-calendar-header">

@@ -9,6 +9,7 @@ import {
   convertirLeadAConductor,
   validarCamposConversion,
 } from './conversionLeadAConductor'
+import { faltantesEmergenciaLead } from './contactoEmergencia'
 import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
@@ -2190,6 +2191,25 @@ export function LeadsModule() {
     return false
   }
 
+  /**
+   * Contacto de emergencia obligatorio (nombre, teléfono, parentesco y
+   * dirección; ver ./contactoEmergencia.ts). Al editar, un nombre cargado en la
+   * columna vieja del lead (`contacto_de_emergencia`) también cuenta.
+   * Devuelve false (y avisa) si falta alguno.
+   */
+  function validarEmergencia(fields: Record<string, unknown>, original: Lead | null): boolean {
+    const faltan = faltantesEmergenciaLead({
+      datos_de_emergencia: fields.datos_de_emergencia as string | null,
+      contacto_de_emergencia: original?.contacto_de_emergencia,
+      telefono_emergencia: fields.telefono_emergencia as string | null,
+      parentesco_emergencia: fields.parentesco_emergencia as string | null,
+      direccion_emergencia: fields.direccion_emergencia as string | null,
+    })
+    if (faltan.length === 0) return true
+    Alerta.fire('Falta el contacto de emergencia', `Completá en el paso Contacto: ${faltan.join(', ')}.`, 'warning')
+    return false
+  }
+
   /** Consulta el BCRA del lead recién guardado sin esperar la vuelta de 5 minutos. */
   function consultarBcraAhora(leadId: string, nombre: unknown) {
     void pedirConsultaBcra(leadId).then(estado => {
@@ -2204,6 +2224,7 @@ export function LeadsModule() {
     normalizarLicenciaAlGuardar(fields)
     if (!prepararTelefonos(fields, null)) return
     if (!validarReferido(fields)) return
+    if (!validarEmergencia(fields, null)) return
     setSaving(true)
     try {
       // Asignar sede actual (UUID) al crear
@@ -2233,6 +2254,7 @@ export function LeadsModule() {
     normalizarLicenciaAlGuardar(fields)
     if (!prepararTelefonos(fields, selectedLead)) return
     if (!validarReferido(fields)) return
+    if (!validarEmergencia(fields, selectedLead)) return
     setSaving(true)
     try {
       // Resolver sede_id si el campo sede texto cambió

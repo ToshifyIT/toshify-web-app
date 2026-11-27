@@ -1,0 +1,90 @@
+/* Integraciones > DiDi (DidiModule.tsx) */
+
+.didi-module {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.didi-barra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.didi-barra-derecha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.didi-conductor {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.didi-nombre {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.didi-sub {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.didi-sin-vincular {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b45309;
+  font-size: 11px;
+}
+
+.didi-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.didi-link:hover {
+  text-decoration: underline;
+}
+
+.didi-plata {
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.didi-vacio {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* Botón de importar dentro de la barra (mismo alto que el selector de semana) */
+.didi-importar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.cabify-driver-compact-meta.didi-sin-vincular {
+  gap: 8px;
+}

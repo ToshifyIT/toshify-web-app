@@ -6,6 +6,7 @@ import { ReferidoEmbajadorFields } from './ReferidoEmbajadorFields'
 import { GUIAS_ACTIVOS } from '../../leads/guias'
 import { CATEGORIAS_LICENCIA_LEAD } from '../../leads/licenciaLead'
 import { erroresLicenciaConductor } from '../licenciaConductor'
+import { PARENTESCOS_EMERGENCIA, erroresEmergenciaConductor } from '../../leads/contactoEmergencia'
 
 interface ConductorFormData {
   nombres: string
@@ -139,6 +140,7 @@ export function ConductorWizard({
       if (!formData.email.trim()) newErrors.email = 'El email de Cabify es requerido'
       if (!formData.direccion.trim()) newErrors.direccion = 'La dirección es requerida'
       if (!formData.experiencia_previa.trim()) newErrors.experiencia_previa = 'Requerido'
+      Object.assign(newErrors, erroresEmergenciaConductor(formData))
     }
 
     setErrors(newErrors)
@@ -427,7 +429,7 @@ export function ConductorWizard({
               <Phone size={20} />
               <h3>Información de Contacto</h3>
             </div>
-            <p className="step-description">Datos de contacto del conductor y contacto de emergencia.</p>
+            <p className="step-description">Datos de contacto del conductor y contacto de emergencia (obligatorio).</p>
 
             <div className="form-row">
               <div className="form-group">
@@ -518,46 +520,57 @@ export function ConductorWizard({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Nombre Contacto</label>
+                <label className="form-label">Nombre Contacto *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.contacto_emergencia ? 'input-error' : ''}`}
                   value={formData.contacto_emergencia}
                   onChange={(e) => setFormData({ ...formData, contacto_emergencia: e.target.value })}
                   disabled={saving}
                 />
+                {errors.contacto_emergencia && <span className="error-message">{errors.contacto_emergencia}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">Teléfono Emergencia</label>
+                <label className="form-label">Teléfono Emergencia *</label>
                 <input
                   type="tel"
-                  className="form-input"
+                  className={`form-input ${errors.telefono_emergencia ? 'input-error' : ''}`}
                   value={formData.telefono_emergencia}
                   onChange={(e) => setFormData({ ...formData, telefono_emergencia: e.target.value })}
                   disabled={saving}
                 />
+                {errors.telefono_emergencia && <span className="error-message">{errors.telefono_emergencia}</span>}
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Parentesco</label>
-                <input
-                  type="text"
-                  className="form-input"
+                <label className="form-label">Parentesco *</label>
+                <select
+                  className={`form-input ${errors.parentesco_emergencia ? 'input-error' : ''}`}
                   value={formData.parentesco_emergencia}
                   onChange={(e) => setFormData({ ...formData, parentesco_emergencia: e.target.value })}
                   disabled={saving}
-                />
+                >
+                  <option value="">Seleccionar</option>
+                  {formData.parentesco_emergencia && !PARENTESCOS_EMERGENCIA.some(p => p.value === formData.parentesco_emergencia) && (
+                    <option value={formData.parentesco_emergencia}>{formData.parentesco_emergencia}</option>
+                  )}
+                  {PARENTESCOS_EMERGENCIA.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+                {errors.parentesco_emergencia && <span className="error-message">{errors.parentesco_emergencia}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">Dirección Emergencia</label>
+                <label className="form-label">Dirección Emergencia *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.direccion_emergencia ? 'input-error' : ''}`}
                   value={formData.direccion_emergencia}
                   onChange={(e) => setFormData({ ...formData, direccion_emergencia: e.target.value })}
                   disabled={saving}
                 />
+                {errors.direccion_emergencia && <span className="error-message">{errors.direccion_emergencia}</span>}
               </div>
             </div>
             <div className="section-divider">Experiencia</div>

@@ -1,5 +1,5 @@
 // mcp/lib/pantallasDatos.js
-// GENERADO por mcp/generadores/generarPantallasDatos.mjs el 2026-11-17: no editar a mano.
+// GENERADO por mcp/generadores/generarPantallasDatos.mjs el 2026-11-27: no editar a mano.
 // Volver a generar cuando cambien las pantallas (src/pages/HomePage.tsx) o el catálogo.
 //
 // Para cada dataset del catálogo y cada reporte: las pantallas de Toshibase que lo
@@ -88,6 +88,12 @@ export const PANTALLAS_POR_DATASET = {
       "ruta": "/integraciones/cabify"
     },
     {
+      "menu": null,
+      "submenu": "didi",
+      "admin": false,
+      "ruta": "/integraciones/didi"
+    },
+    {
       "menu": "reportes",
       "submenu": "dashboard-kpis",
       "admin": false,
@@ -110,6 +116,12 @@ export const PANTALLAS_POR_DATASET = {
       "submenu": "facturacion",
       "admin": false,
       "ruta": "/administracion/facturacion"
+    },
+    {
+      "menu": null,
+      "submenu": "cresium-conductores",
+      "admin": false,
+      "ruta": "/administracion/cresium-conductores"
     },
     {
       "menu": null,
@@ -324,6 +336,12 @@ export const PANTALLAS_POR_DATASET = {
       "ruta": "/integraciones/cabify"
     },
     {
+      "menu": null,
+      "submenu": "didi",
+      "admin": false,
+      "ruta": "/integraciones/didi"
+    },
+    {
       "menu": "reportes",
       "submenu": "dashboard-kpis",
       "admin": false,
@@ -346,6 +364,12 @@ export const PANTALLAS_POR_DATASET = {
       "submenu": "facturacion",
       "admin": false,
       "ruta": "/administracion/facturacion"
+    },
+    {
+      "menu": null,
+      "submenu": "cresium-conductores",
+      "admin": false,
+      "ruta": "/administracion/cresium-conductores"
     },
     {
       "menu": null,
@@ -580,6 +604,12 @@ export const PANTALLAS_POR_DATASET = {
       "ruta": "/integraciones/cabify"
     },
     {
+      "menu": null,
+      "submenu": "didi",
+      "admin": false,
+      "ruta": "/integraciones/didi"
+    },
+    {
       "menu": "reportes",
       "submenu": "dashboard-kpis",
       "admin": false,
@@ -602,6 +632,12 @@ export const PANTALLAS_POR_DATASET = {
       "submenu": "facturacion",
       "admin": false,
       "ruta": "/administracion/facturacion"
+    },
+    {
+      "menu": null,
+      "submenu": "cresium-conductores",
+      "admin": false,
+      "ruta": "/administracion/cresium-conductores"
     },
     {
       "menu": null,
@@ -1548,6 +1584,12 @@ export const PANTALLAS_POR_DATASET = {
       "ruta": "/conductores"
     },
     {
+      "menu": "leads",
+      "submenu": null,
+      "admin": false,
+      "ruta": "/leads"
+    },
+    {
       "menu": "siniestros",
       "submenu": null,
       "admin": false,
@@ -1789,6 +1831,12 @@ export const PANTALLAS_POR_DATASET = {
     },
     {
       "menu": null,
+      "submenu": "asignaciones",
+      "admin": false,
+      "ruta": "/onboarding/asignaciones"
+    },
+    {
+      "menu": null,
       "submenu": "programacion-entregas",
       "admin": false,
       "ruta": "/onboarding/programacion-v2"
@@ -1804,6 +1852,18 @@ export const PANTALLAS_POR_DATASET = {
       "submenu": "dashboard-general",
       "admin": false,
       "ruta": "/reportes/dashboard-general"
+    },
+    {
+      "menu": "reportes",
+      "submenu": "control-gestores",
+      "admin": false,
+      "ruta": "/reportes/control-gestores"
+    },
+    {
+      "menu": null,
+      "submenu": "riesgo-bcra",
+      "admin": false,
+      "ruta": "/parametros/riesgo-bcra"
     }
   ],
   "parejas_lead": [
@@ -2891,6 +2951,18 @@ export const PANTALLAS_POR_DATASET = {
     },
     {
       "menu": null,
+      "submenu": "productos",
+      "admin": false,
+      "ruta": "/logistica/productos"
+    },
+    {
+      "menu": null,
+      "submenu": "proveedores",
+      "admin": false,
+      "ruta": "/logistica/proveedores"
+    },
+    {
+      "menu": null,
       "submenu": "inventario-dashboard",
       "admin": false,
       "ruta": "/logistica/inventario/dashboard"
@@ -2912,6 +2984,12 @@ export const PANTALLAS_POR_DATASET = {
       "submenu": "inventario-asignaciones",
       "admin": false,
       "ruta": "/logistica/inventario/asignaciones-activas"
+    },
+    {
+      "menu": null,
+      "submenu": "inventario-historial",
+      "admin": false,
+      "ruta": "/logistica/inventario/historial"
     },
     {
       "menu": null,
@@ -2993,9 +3071,21 @@ export const PANTALLAS_POR_DATASET = {
     },
     {
       "menu": null,
+      "submenu": "didi",
+      "admin": false,
+      "ruta": "/integraciones/didi"
+    },
+    {
+      "menu": null,
       "submenu": "twochat-llamadas",
       "admin": false,
       "ruta": "/integraciones/2chat/llamadas"
+    },
+    {
+      "menu": null,
+      "submenu": "twochat-mensajes",
+      "admin": false,
+      "ruta": "/integraciones/2chat/mensajes"
     },
     {
       "menu": null,
@@ -3047,6 +3137,12 @@ export const PANTALLAS_POR_DATASET = {
     },
     {
       "menu": null,
+      "submenu": "cresium-conductores",
+      "admin": false,
+      "ruta": "/administracion/cresium-conductores"
+    },
+    {
+      "menu": null,
       "submenu": "gestion-usuarios",
       "admin": false,
       "ruta": "/administracion/gestion-usuarios"
@@ -3080,6 +3176,12 @@ export const PANTALLAS_POR_DATASET = {
       "submenu": "parametros-sistema",
       "admin": false,
       "ruta": "/parametros/grupos-flota"
+    },
+    {
+      "menu": null,
+      "submenu": "riesgo-bcra",
+      "admin": false,
+      "ruta": "/parametros/riesgo-bcra"
     },
     {
       "menu": "seguimiento-conductores",
@@ -3138,14 +3240,6 @@ export const PANTALLAS_POR_DATASET = {
   ],
   "twochat_llamadas": [
     {
-      "menu": null,
-      "submenu": "twochat-llamadas",
-      "admin": false,
-      "ruta": "/integraciones/2chat/llamadas"
-    }
-  ],
-  "cresium_movimientos": [
-    {
       "menu": "conductores",
       "submenu": null,
       "admin": false,
@@ -3158,10 +3252,42 @@ export const PANTALLAS_POR_DATASET = {
       "ruta": "/onboarding/distribucion-mapa-v2"
     },
     {
+      "menu": "reportes",
+      "submenu": "control-gestores",
+      "admin": false,
+      "ruta": "/reportes/control-gestores"
+    }
+  ],
+  "cresium_movimientos": [
+    {
+      "menu": "conductores",
+      "submenu": null,
+      "admin": false,
+      "ruta": "/conductores/panel"
+    },
+    {
+      "menu": "leads",
+      "submenu": null,
+      "admin": false,
+      "ruta": "/leads"
+    },
+    {
+      "menu": null,
+      "submenu": "distribucion-mapa",
+      "admin": false,
+      "ruta": "/onboarding/distribucion-mapa-v2"
+    },
+    {
       "menu": null,
       "submenu": "facturacion",
       "admin": false,
       "ruta": "/administracion/facturacion"
+    },
+    {
+      "menu": null,
+      "submenu": "cresium-conductores",
+      "admin": false,
+      "ruta": "/administracion/cresium-conductores"
     }
   ],
   "alegra_comprobantes": [
@@ -3405,6 +3531,12 @@ export const PANTALLAS_POR_DATASET = {
     },
     {
       "menu": null,
+      "submenu": "asignaciones",
+      "admin": false,
+      "ruta": "/onboarding/asignaciones"
+    },
+    {
+      "menu": null,
       "submenu": "programacion-entregas",
       "admin": false,
       "ruta": "/onboarding/programacion-v2"
@@ -3420,6 +3552,18 @@ export const PANTALLAS_POR_DATASET = {
       "submenu": "dashboard-general",
       "admin": false,
       "ruta": "/reportes/dashboard-general"
+    },
+    {
+      "menu": "reportes",
+      "submenu": "control-gestores",
+      "admin": false,
+      "ruta": "/reportes/control-gestores"
+    },
+    {
+      "menu": null,
+      "submenu": "riesgo-bcra",
+      "admin": false,
+      "ruta": "/parametros/riesgo-bcra"
     }
   ],
   "v_multas_historico": [
@@ -3706,3 +3850,24 @@ export const PANTALLAS_POR_REPORTE = {
 };
 
 export const SIN_PANTALLA = [];
+
+// Datasets automáticos (ver lib/tablasFueraMcp.js): tablas de pantallas que no están en
+// el catálogo. Sus columnas se leen de la base al arrancar el MCP (lib/tablasAuto.js).
+export const PANTALLAS_POR_TABLA_AUTO = {
+  "didi_conductores": [
+    {
+      "menu": null,
+      "submenu": "didi",
+      "admin": false,
+      "ruta": "/integraciones/didi"
+    }
+  ],
+  "didi_semanal": [
+    {
+      "menu": null,
+      "submenu": "didi",
+      "admin": false,
+      "ruta": "/integraciones/didi"
+    }
+  ]
+};
