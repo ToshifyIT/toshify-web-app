@@ -14,6 +14,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { formatFecha } from '../../../utils/format'
+import { USUARIO_AUTOMATICO, usuarioVisible } from '../../../utils/usuarioAutomatico'
 import { semanaISO } from '../../../utils/semanaISO'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { formatFechaHoraART, hoyART, sumarDiasISO } from '../../../utils/fechaArgentina'
@@ -198,9 +199,9 @@ function origenPago(p: PagoB1): string {
 
 /** Quién lo cargó, como texto corto para la lista de pagos del día. */
 function cargadoPorCorto(p: PagoB1): string {
-  if (p.origen === 'auto') return 'Automático'
+  if (p.origen === 'auto') return USUARIO_AUTOMATICO
   if (esPaseDePrueba(p)) return 'Pasado al saldo (prueba)'
-  return p.cargadoPor || '-'
+  return usuarioVisible(p.cargadoPor, '-')
 }
 
 
@@ -1093,10 +1094,10 @@ export function LicenciaB1Tab() {
                 <span className="lb1-label">Cargado por</span>
                 <span>
                   {pagoVer.origen === 'auto'
-                    ? 'Automático (cruce con Cresium)'
+                    ? `${USUARIO_AUTOMATICO} (cruce con Cresium)`
                     : esPaseDePrueba(pagoVer)
                       ? `Pasado al saldo en la prueba del ${pagoVer.cargadoEn ? formatFechaHoraART(pagoVer.cargadoEn) : '25/11/2026'}`
-                      : `${pagoVer.cargadoPor || '-'}${pagoVer.cargadoEn ? ` · ${formatFechaHoraART(pagoVer.cargadoEn)}` : ''}`}
+                      : `${usuarioVisible(pagoVer.cargadoPor, '-')}${pagoVer.cargadoEn ? ` · ${formatFechaHoraART(pagoVer.cargadoEn)}` : ''}`}
                 </span>
                 {pagoVer.editadoEn && (
                   <>

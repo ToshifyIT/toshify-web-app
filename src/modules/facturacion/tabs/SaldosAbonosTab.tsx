@@ -35,6 +35,7 @@ import type { SaldoConductor } from '../../../types/facturacion.types'
 import { aplicarMovimientoSaldo, cargarFechasTransferencia, insertControlSaldo } from '../../../services/controlSaldosService'
 import { formatNombreCompleto, FILTRO_SIN_INTERNOS } from '../../../utils/conductorUtils'
 import { formatFecha, formatFechaHora } from '../../../utils/format'
+import { usuarioVisible } from '../../../utils/usuarioAutomatico'
 import { etiquetaTipoMovimiento, referenciaVisible } from '../../../utils/conceptoLabels'
 import { LineasFactura } from '../components/LineasFactura'
 import { desglosarPago, type DesglosePago } from '../utils/desglosePago'
@@ -90,9 +91,9 @@ import { EmptyState } from '../../../components/ui/EstadosVista'
 import { hoyART } from '../../../utils/fechaArgentina'
 import { numeroSemana, semanaISO, sumarSemanasISO } from '../../../utils/semanaISO'
 import { ExcelColumnFilter } from '../../../components/ui/DataTable/ExcelColumnFilter'
-import { cargarConductoresLicenciaB1, enPromocionB1Hoy, tipoPagoSaldos } from '../utils/licenciaB1Service'
+import { cargarConductoresLicenciaB1, enPromocionB1Hoy } from '../utils/licenciaB1Service'
 import type { FilaB1 } from '../utils/licenciaB1Service'
-import { anteriorACargaAutomatica, ETIQUETA_EMPRESA_CRESIUM, registrarPagoB1DesdeSaldos } from '../utils/pagosB1'
+import { registrarPagoB1DesdeSaldos } from '../utils/pagosB1'
 import { cargarSaldosAlCierre, cargarSaldoEnFactura, semanaSiguiente } from '../utils/saldoAlCierre'
 
 /** Texto seguro para HTML armado a mano (nombres que vienen de Cresium) */
@@ -1301,7 +1302,7 @@ export function SaldosAbonosTab() {
     // Transferencia de Cresium elegida en el buscador (modo "Transferencia")
     let elegida: TransferenciaCresium | null = null
     const saldoColor = saldo.saldo_actual < 0 ? '#DC2626' : saldo.saldo_actual > 0 ? '#16A34A' : '#6B7280'
-    // Tilde "pago diario de Licencia B1": solo en efectivo y si hoy está dentro de sus fechas B1
+    // Tilde "pago diario de Licencia B1" (efectivo y transferencia): si hoy está dentro de sus fechas B1
     const puedeB1 = await enPromocionB1Hoy(saldo.conductor_id).catch(err => {
       console.error('No se pudo revisar la habilitación B1 del conductor:', err)
       return false
@@ -1343,12 +1344,12 @@ export function SaldosAbonosTab() {
             <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #E5E7EB;">
               <label style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: #374151; cursor: pointer;">
                 <input id="swal-pago-b1" type="checkbox" style="margin-top: 2px;">
-                <span>Es pago diario de Licencia B1 <span style="color: #6B7280;">(cuenta entero como adelanto de esta semana)</span></span>
+                <span>Es pago diario de Licencia B1<br><span style="color: #6B7280;">Marcado: todo el monto se suma a lo que pagó de B1 esta semana. Sin marcar: va a su saldo pendiente.</span></span>
               </label>
               <div id="swal-pago-b1-fecha" style="display: none; margin-top: 8px;">
                 <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Fecha en que hizo el pago (opcional):</label>
                 <input id="swal-pago-b1-fecha-input" type="date" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" max="${hoyART()}">
-                <div style="font-size: 11px; color: #6B7280; margin-top: 4px;">Es informativa: para B1 cuenta la fecha de carga (hoy).</div>
+                <div style="font-size: 11px; color: #6B7280; margin-top: 4px;">Solo queda anotada. Para B1 se toma la fecha de hoy.</div>
               </div>
             </div>` : ''}
           </div>
@@ -1364,10 +1365,16 @@ export function SaldosAbonosTab() {
                 <input id="swal-tr-recordar-check" type="checkbox" style="margin-top: 2px;">
                 <span id="swal-tr-recordar-texto">Recordar que esta persona paga por este conductor (sus próximas transferencias entran solas)</span>
               </label>
-              <select id="swal-tr-vinculo" class="swal2-select" style="font-size: 13px; margin: 6px 0 0; width: 100%; padding: 6px 8px;" disabled>
-                <option value="">Vínculo (opcional)</option>
+              <select id="swal-tr-vinculo" class="swal2-select" style="font-size: 13px; margin: 6px 0 0; width: 100%; padding: 6px 8px;">
+                <option value="">Vínculo con el conductor (opcional)</option>
                 ${VINCULOS.map(v => `<option value="${v}">${v}</option>`).join('')}
               </select>
+              <div style="font-size: 11px; color: #6B7280; margin-top: 4px;">Queda anotado en este pago, aunque no marques Recordar.</div>
+              ${puedeB1 ? `
+              <label style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: #374151; cursor: pointer; margin-top: 10px; padding-top: 10px; border-top: 1px solid #E5E7EB;">
+                <input id="swal-tr-b1" type="checkbox" style="margin-top: 2px;">
+                <span>Es pago diario de Licencia B1<br><span style="color: #6B7280;">Marcado: todo el monto se suma a lo que pagó de B1 el día de la transferencia. Sin marcar: va a su saldo pendiente.</span></span>
+              </label>` : ''}
             </div>
           </div>
         </div>
@@ -1388,15 +1395,12 @@ export function SaldosAbonosTab() {
         const q = <T extends HTMLElement>(id: string) => popup.querySelector(`#${id}`) as T
         const lista = q<HTMLDivElement>('swal-tr-lista')
         const recordar = q<HTMLDivElement>('swal-tr-recordar')
-        const check = q<HTMLInputElement>('swal-tr-recordar-check')
-        const vinculo = q<HTMLSelectElement>('swal-tr-vinculo')
         popup.querySelectorAll<HTMLInputElement>('input[name="swal-pago-modo"]').forEach(r => r.addEventListener('change', () => {
           const cresium = r.value === 'cresium' && r.checked
           q<HTMLDivElement>('swal-pago-manual').style.display = cresium ? 'none' : ''
           q<HTMLDivElement>('swal-pago-cresium').style.display = cresium ? '' : 'none'
           if (cresium) q<HTMLInputElement>('swal-tr-buscar').focus()
         }))
-        check.addEventListener('change', () => { vinculo.disabled = !check.checked })
         const checkB1 = popup.querySelector<HTMLInputElement>('#swal-pago-b1')
         checkB1?.addEventListener('change', () => {
           q<HTMLDivElement>('swal-pago-b1-fecha').style.display = checkB1.checked ? '' : 'none'
@@ -1456,6 +1460,8 @@ export function SaldosAbonosTab() {
             transferencia: elegida,
             recordar: (document.getElementById('swal-tr-recordar-check') as HTMLInputElement).checked,
             vinculo: (document.getElementById('swal-tr-vinculo') as HTMLSelectElement).value || null,
+            // Solo si está en B1: marcado o no, decide si cuenta como pago diario
+            esB1: puedeB1 ? !!(document.getElementById('swal-tr-b1') as HTMLInputElement | null)?.checked : undefined,
           }
         }
         const monto = (document.getElementById('swal-pago-monto') as HTMLInputElement).value
@@ -1477,11 +1483,15 @@ export function SaldosAbonosTab() {
           return false
         }
 
+        // Conductor en B1: el concepto dice si es pago diario B1 o va al saldo pendiente
+        // (se ve así en el historial de Saldos; al conductor le sigue saliendo "Pago en efectivo")
+        const conceptoFinal = esB1
+          ? (/\bB1\b/.test(concepto) ? concepto : `${concepto} - B1`)
+          : puedeB1 && !/saldo pendiente/i.test(concepto) ? `${concepto} - Saldo pendiente` : concepto
         return {
           modo: 'manual' as const,
           monto: parseFloat(monto),
-          // Pago B1: el concepto lo dice (se ve así en el historial de Saldos)
-          concepto: esB1 && !/\bB1\b/.test(concepto) ? `${concepto} - B1` : concepto,
+          concepto: conceptoFinal,
           referencia: referencia || null,
           esB1,
           fechaB1,
@@ -1504,13 +1514,20 @@ export function SaldosAbonosTab() {
       })
       if (!ok) return
       try {
-        const nuevoSaldo = await registrarTransferencia(
+        const { nuevoSaldo, avisoB1 } = await registrarTransferencia(
           saldo.conductor_id,
           formValues.transferencia,
-          { recordar: formValues.recordar, vinculo: formValues.vinculo },
+          { recordar: formValues.recordar, vinculo: formValues.vinculo, esB1: formValues.esB1 },
           { id: profile?.id ?? null, nombre: profile?.full_name ?? null },
         )
-        showSuccess('Transferencia registrada', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
+        if (avisoB1) {
+          showWarning('La transferencia entró al saldo, pero no se pudo marcar en Licencia B1', avisoB1)
+        } else {
+          showSuccess(
+            formValues.esB1 ? 'Transferencia B1 registrada' : 'Transferencia registrada',
+            `Nuevo saldo: ${formatCurrency(nuevoSaldo)}${formValues.esB1 ? ' · se suma a lo pagado de B1' : ''}`,
+          )
+        }
         cargarSaldos()
       } catch (error: any) {
         showError('Error', error.message || 'No se pudo registrar la transferencia')
@@ -1579,7 +1596,7 @@ export function SaldosAbonosTab() {
 
       showSuccess(
         formValues.esB1 ? 'Pago B1 Registrado' : 'Pago Registrado',
-        `Nuevo saldo: ${formatCurrency(nuevoSaldo)}${formValues.esB1 ? ' · cuenta como adelanto B1 de esta semana' : ''}`,
+        `Nuevo saldo: ${formatCurrency(nuevoSaldo)}${formValues.esB1 ? ' · se suma a lo pagado de B1 esta semana' : ''}`,
       )
       cargarSaldos()
 
@@ -2204,7 +2221,7 @@ export function SaldosAbonosTab() {
         <td>${referenciaVisible(r.referencia).replace(/</g, '&lt;')}</td>
         <td style="text-align:right">${monto}</td>
         <td style="text-align:right">${formatCurrency(r.saldo_pendiente || 0)}</td>
-        <td>${(r.created_by_name || 'Sistema').replace(/</g, '&lt;')}</td>
+        <td>${usuarioVisible(r.created_by_name).replace(/</g, '&lt;')}</td>
       </tr>`
     }).join('')
     w.document.write(`<!doctype html><html><head><meta charset="utf-8" />
@@ -2860,8 +2877,6 @@ export function SaldosAbonosTab() {
           ? (Number((kardexModal.rows as any[])[0].saldo_pendiente) || 0)
           : s.saldo_actual
         const sColor = saldoRealKardex >= 0 ? '#16a34a' : '#dc2626'
-        // Pagos de Licencia B1 (PRM02): filas informativas dentro de la tabla (no cambian el saldo)
-        const pagosB1Kardex = pagosB1.get(s.conductor_id)?.pagos || []
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
               <div className="fact-modal-content" style={{ maxWidth: '1100px' }} onClick={(e) => e.stopPropagation()}>
@@ -2922,11 +2937,10 @@ export function SaldosAbonosTab() {
                 </div>
 
                 {/* Barra de filtros (v2) */}
-                {!kardexModal.loading && (kardexModal.rows.length > 0 || pagosB1Kardex.length > 0) && (() => {
-                  // Opciones únicas de semanas para el dropdown (movimientos + pagos B1)
+                {!kardexModal.loading && kardexModal.rows.length > 0 && (() => {
+                  // Opciones únicas de semanas para el dropdown
                   const semanasUnicas = Array.from(new Set([
                     ...(kardexModal.rows as any[]).map(r => `${r.anio}-${r.semana}`),
-                    ...pagosB1Kardex.map(p => { const sem = semanaISO(p.fecha); return `${sem.anio}-${sem.semana}` }),
                   ])).sort((a, b) => {
                     const [aA, aS] = a.split('-').map(Number)
                     const [bA, bS] = b.split('-').map(Number)
@@ -2995,7 +3009,7 @@ export function SaldosAbonosTab() {
                 {/* Tabla v2: saldo recalculado en runtime, fila top destacada */}
                 {kardexModal.loading ? (
                   <Spinner size="sm" message="Cargando..." />
-                ) : kardexModal.rows.length === 0 && pagosB1Kardex.length === 0 ? (
+                ) : kardexModal.rows.length === 0 ? (
                   <EmptyState size="sm" title="Sin registros" />
                 ) : (() => {
                   // Helpers
@@ -3047,9 +3061,54 @@ export function SaldosAbonosTab() {
                     return Math.abs((Number(r.saldo_pendiente) || 0) - (prev ? Number(prev.saldo_pendiente) || 0 : 0)) < 1
                   }
 
+                  // Pagos borrados: no se muestran ni el pago, ni sus ediciones, ni su "Elim. Pago"
+                  // (suelen ser errores de carga). Siguen en la base: de ellos sale el saldo guardado
+                  // en cada fila. De la más vieja a la más nueva: cada edición ("$A -> $B") pasa al
+                  // pago de $A a valer $B, y cada eliminación se empareja con el pago más reciente
+                  // que vale ese monto.
+                  const pagosBorrados = new Set<any>()
+                  {
+                    const todas = kardexModal.rows as any[]
+                    const pesos = (txt: string) => Number(txt.replace(/\./g, '').replace(',', '.')) || 0
+                    const mismoMonto = (x: number, y: number) => Math.abs(x - y) < 1
+                    const sinPar: Array<{ filas: any[]; monto: number }> = []
+                    for (let k = todas.length - 1; k >= 0; k--) {
+                      const r = todas[k]
+                      const t = r.tipo_movimiento || 'regularizado'
+                      if (abonosTipos.has(t) && Number(r.monto_movimiento) > 0) {
+                        sinPar.push({ filas: [r], monto: Math.abs(Number(r.monto_movimiento) || 0) })
+                        continue
+                      }
+                      if (t === 'edicion_pago') {
+                        const m = /\(\$\s*([\d.,]+)\s*->\s*\$\s*([\d.,]+)\)/.exec(String(r.referencia || ''))
+                        if (!m) continue
+                        const antes = pesos(m[1])
+                        for (let j = sinPar.length - 1; j >= 0; j--) {
+                          if (mismoMonto(sinPar[j].monto, antes)) {
+                            sinPar[j].filas.push(r)
+                            sinPar[j].monto = pesos(m[2])
+                            break
+                          }
+                        }
+                        continue
+                      }
+                      if (t !== 'eliminacion_pago') continue
+                      const montoElim = Math.abs(Number(r.monto_movimiento) || 0)
+                      for (let j = sinPar.length - 1; j >= 0; j--) {
+                        if (mismoMonto(sinPar[j].monto, montoElim)) {
+                          for (const f of sinPar[j].filas) pagosBorrados.add(f)
+                          pagosBorrados.add(r)
+                          sinPar.splice(j, 1)
+                          break
+                        }
+                      }
+                    }
+                  }
+
                   // 1) Filtrar
                   const norm = (x: string) => (x || '').toString().toLowerCase()
                   const rowsFiltradas = (kardexModal.rows as any[]).filter((r) => {
+                    if (pagosBorrados.has(r)) return false
                     if (esPagoAppVacio(r, kardexModal.rows.indexOf(r), kardexModal.rows)) return false
                     if (kardexSemanaFilter) {
                       const semKey = `${r.anio}-${r.semana}`
@@ -3063,7 +3122,7 @@ export function SaldosAbonosTab() {
                     }
                     if (kardexSearch.trim()) {
                       const q = norm(kardexSearch)
-                      const blob = `${norm(r.referencia)} ${norm(r.created_by_name)} ${norm(r.monto_movimiento)} ${norm(tipoLabel[r.tipo_movimiento] || r.tipo_movimiento)}`
+                      const blob = `${norm(r.referencia)} ${norm(usuarioVisible(r.created_by_name))} ${norm(r.monto_movimiento)} ${norm(tipoLabel[r.tipo_movimiento] || r.tipo_movimiento)}`
                       if (!blob.includes(q)) return false
                     }
                     return true
@@ -3110,34 +3169,6 @@ export function SaldosAbonosTab() {
                   const saldoNetoRango = totalAbonos - totalCargos
                   const saldoFinal = filasConSaldos.length > 0 ? filasConSaldos[0].saldo : (s.saldo_actual || 0)
 
-                  // Pagos B1 con los mismos filtros (semana, tipo y búsqueda). Son pagos: se ven
-                  // con "Abonos" o sin filtro de tipo. No entran en los totales ni en el saldo.
-                  const b1Filtrados = pagosB1Kardex.filter(p => {
-                    const sem = semanaISO(p.fecha)
-                    if (kardexSemanaFilter && `${sem.anio}-${sem.semana}` !== kardexSemanaFilter) return false
-                    // Los que ya entraron al saldo están en el historial como un pago más, y los
-                    // depósitos que ya se cargaron a mano como pago no cuentan
-                    if (p.abonoId || p.enSaldo || p.yaCargadoAMano) return false
-                    // Antes del 26/11 12:00 las transferencias se cargaban a mano: no se muestran
-                    if (anteriorACargaAutomatica(p)) return false
-                    if (kardexTipoFilter && kardexTipoFilter !== 'abono') return false
-                    if (kardexSearch.trim()) {
-                      const blob = `${norm(p.pagador || '')} ${norm(p.nota || '')} ${norm(String(p.monto))} ${norm(p.cargadoPor || '')} ${norm(tipoPagoSaldos(p))} b1`
-                      if (!blob.includes(norm(kardexSearch))) return false
-                    }
-                    return true
-                  })
-                  // Movimientos y pagos B1 juntos, por año, semana y fecha (más nuevo arriba)
-                  type FilaKardex = { b1: null; real: typeof filasConSaldos[number]; anio: number; semana: number; ts: string }
-                    | { b1: typeof b1Filtrados[number]; real: null; anio: number; semana: number; ts: string }
-                  const filasMezcladas: FilaKardex[] = [
-                    ...filasConSaldos.map(f => ({ b1: null, real: f, anio: Number(f.r.anio) || 0, semana: Number(f.r.semana) || 0, ts: String(f.r.created_at || '') })),
-                    ...b1Filtrados.map(p => {
-                      const sem = semanaISO(p.fecha)
-                      return { b1: p, real: null, anio: sem.anio, semana: sem.semana, ts: p.cargadoEn || `${p.fecha}T23:59:59` }
-                    }),
-                  ].sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana) || b.ts.localeCompare(a.ts)) as FilaKardex[]
-
                   return (
                     <>
                       <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)' }}>
@@ -3156,61 +3187,8 @@ export function SaldosAbonosTab() {
                             </tr>
                           </thead>
                           <tbody>
-                            {filasMezcladas.map(fila => {
-                              // Pago de Licencia B1: fila informativa, no se edita
-                              if (fila.b1) {
-                                const p = fila.b1
-                                const esManual = p.origen === 'manual'
-                                const detalleB1 = esManual
-                                  ? (p.nota || '-')
-                                  : [`Cresium ${p.empresa ? ETIQUETA_EMPRESA_CRESIUM[p.empresa] || p.empresa : ''}`.trim(), p.nota].filter(Boolean).join(' · ')
-                                return (
-                                  <tr key={`b1-${p.key}`} style={{
-                                    borderBottom: '1px solid var(--border-primary)',
-                                    // Colores de abono (pago a favor del conductor), como los pagos normales
-                                    background: 'rgba(240,253,244,0.4)', borderLeft: '3px solid transparent',
-                                  }}>
-                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>{formatFecha(p.fecha)}</td>
-                                    <td style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                                      {fila.anio} S{String(fila.semana).padStart(2, '0')}
-                                    </td>
-                                    <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', fontSize: '10px' }}>
-                                      <span style={{
-                                        display: 'inline-block', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontWeight: 600, fontSize: '10px',
-                                        background: '#f0fdf4', color: '#16a34a',
-                                      }}>{esManual ? 'Pago Manual' : 'Transferencia Bancaria'}</span>
-                                    </td>
-                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '160px', maxWidth: '280px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={`Pago B1${p.pagador ? ` · ${p.pagador}` : ''}`}>
-                                      Pago B1{p.pagador ? ` · ${p.pagador}` : ''}
-                                      <span style={{
-                                        marginLeft: '6px', padding: '1px 5px', background: '#e5e7eb', color: 'var(--text-secondary)',
-                                        borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px',
-                                      }}>Informativo</span>
-                                    </td>
-                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '140px', maxWidth: '240px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={detalleB1}>
-                                      {detalleB1}
-                                    </td>
-                                    <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#16a34a', whiteSpace: 'nowrap' }}>
-                                      +{formatCurrency(p.monto)}
-                                    </td>
-                                    <td style={{ padding: '5px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                      {/* Solo quedan acá los pagos que todavía no entraron al saldo */}
-                                      <span
-                                        style={{ color: 'var(--text-tertiary)', fontSize: '10px' }}
-                                        title="Este pago todavía no entró al saldo. Entra al abrir Facturación > Licencia B1 o Saldos"
-                                      >
-                                        no entró al saldo
-                                      </span>
-                                    </td>
-                                    <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--text-tertiary)' }}>—</td>
-                                    <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
-                                      {p.origen === 'auto' ? 'Automático' : p.cargadoPor || '-'}
-                                    </td>
-                                    {isAdmin() && <td />}
-                                  </tr>
-                                )
-                              }
-                              const { r, i, cls, monto, saldo } = fila.real
+                            {filasConSaldos.map(fila => {
+                              const { r, i, cls, monto, saldo } = fila
                               const tipo = r.tipo_movimiento || 'regularizado'
                               const labelBg = tipo === 'cierre_sin_pago' || tipo === 'regularizado' ? 'transparent'
                                             : cls === 'cargo' ? '#fef2f2'
@@ -3221,8 +3199,7 @@ export function SaldosAbonosTab() {
                                             : cls === 'abono' ? '#16a34a'
                                             : cls === 'elim' ? 'var(--text-secondary)'
                                             : 'var(--text-secondary)'
-                              const rowBg = i === 0 ? '#fef3c7'
-                                          : cls === 'cargo' ? 'rgba(254,242,242,0.4)'
+                              const rowBg = cls === 'cargo' ? 'rgba(254,242,242,0.4)'
                                           : cls === 'abono' ? 'rgba(240,253,244,0.4)'
                                           : cls === 'elim' ? 'rgba(249,250,251,0.6)'
                                           : 'transparent'
@@ -3233,7 +3210,7 @@ export function SaldosAbonosTab() {
                                 <tr key={i} style={{
                                   borderBottom: '1px solid var(--border-primary)',
                                   background: rowBg,
-                                  borderLeft: i === 0 ? '3px solid #f59e0b' : '3px solid transparent',
+                                  borderLeft: '3px solid transparent',
                                 }}>
                                   <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
                                     {fecha}
@@ -3260,13 +3237,6 @@ export function SaldosAbonosTab() {
                                       <>
                                         <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '160px', maxWidth: '280px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={refMain}>
                                           {refMain}
-                                          {i === 0 && (
-                                            <span style={{
-                                              marginLeft: '6px', padding: '1px 5px', background: '#f59e0b',
-                                              color: '#fff', borderRadius: 'var(--radius-xs)', fontSize: '9px', fontWeight: 700,
-                                              textTransform: 'uppercase', letterSpacing: '0.4px',
-                                            }}>actual</span>
-                                          )}
                                         </td>
                                         <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', minWidth: '140px', maxWidth: '240px', whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={refDetalle || ''}>
                                           {refDetalle || '-'}
@@ -3348,7 +3318,7 @@ export function SaldosAbonosTab() {
                                     {formatCurrency(saldo)}
                                   </td>
                                   <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
-                                    {r.created_by_name || 'Sistema'}
+                                    {usuarioVisible(r.created_by_name)}
                                   </td>
                                   {isAdmin() && <td style={{ padding: '5px 4px', textAlign: 'center' }}>
                                     <button
@@ -3421,8 +3391,7 @@ export function SaldosAbonosTab() {
                         fontSize: '10px', color: 'var(--text-tertiary)',
                       }}>
                         <span>
-                          Mostrando {filasMezcladas.length} de {kardexModal.rows.length + pagosB1Kardex.length} movimientos
-                          {pagosB1Kardex.some(p => !p.abonoId && !p.enSaldo && !p.yaCargadoAMano && !anteriorACargaAutomatica(p)) && ' · los pagos B1 que todavía no entraron al saldo son informativos: no entran en los totales'}
+                          Mostrando {filasConSaldos.length} de {kardexModal.rows.length - pagosBorrados.size} movimientos
                           {(kardexSearch || kardexSemanaFilter || kardexTipoFilter) && (
                             <button
                               onClick={() => { setKardexSearch(''); setKardexSemanaFilter(''); setKardexTipoFilter('') }}
