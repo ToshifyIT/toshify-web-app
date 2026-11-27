@@ -9,7 +9,8 @@
 // La transferencia queda marcada en cresium_movimientos.pago_* para que no se use dos veces.
 //
 // Opcional: recordar que esa persona paga por el conductor (cresium_pagadores_conductor), así
-// sus próximas transferencias entran solas.
+// sus próximas transferencias entran solas. El vínculo (madre, pareja...) queda anotado en el
+// pago aunque no se recuerde. Conductor en B1: el tilde decide si cuenta como pago diario.
 
 import { supabase } from '../../../lib/supabase'
 import { aplicarMovimientoSaldo } from '../../../services/controlSaldosService'
@@ -21,7 +22,7 @@ import {
   type MovimientoCruce,
 } from '../../administracion/cresium-conductores/cruceCresium'
 import { PROMO_CYBER_LICENCIA_B1 } from '../../promociones/catalogoPromociones'
-import { idSaldoConductor, semanaCerrada } from './pagosB1'
+import { idSaldoConductor, marcarTransferenciaB1, semanaCerrada } from './pagosB1'
 import { cargarIngresosConductores, periodoPagoB1 } from './promocionesFacturacion'
 
 export const DIAS_BUSQUEDA = 7
@@ -29,6 +30,8 @@ export const DIAS_BUSQUEDA = 7
 const DESDE_AUTOMATICO = '2026-11-26T15:00:00Z'
 export const CONCEPTO_TRANSFERENCIA = 'Transferencia bancaria'
 export const CONCEPTO_TRANSFERENCIA_B1 = 'Transferencia bancaria - B1'
+/** Conductor en B1 que paga otra cosa (sin el tilde de B1): va a su saldo pendiente */
+export const CONCEPTO_TRANSFERENCIA_SALDO = 'Transferencia bancaria - Saldo pendiente'
 
 export interface TransferenciaCresium {
   id: string
@@ -125,15 +128,17 @@ async function esPagoB1(conductorId: string, fecha: string): Promise<boolean> {
 }
 
 /**
- * Carga la transferencia en el saldo del conductor. Devuelve el saldo nuevo.
+ * Carga la transferencia en el saldo del conductor. Devuelve el saldo nuevo y, si no se pudo
+ * marcar en Licencia B1, el motivo (la transferencia ya entró al saldo igual).
  * Falla si alguien ya la cargó (no se usa dos veces).
+ * `esB1`: tilde "Es pago diario de Licencia B1" (undefined si el conductor no está en B1).
  */
 export async function registrarTransferencia(
   conductorId: string,
   t: TransferenciaCresium,
-  opciones: { recordar: boolean; vinculo: string | null },
+  opciones: { recordar: boolean; vinculo: string | null; esB1?: boolean },
   usuario: { id: string | null; nombre: string | null },
-): Promise<number> {
+): Promise<{ nuevoSaldo: number; avisoB1: string | null }> {
   // Reservar la transferencia (una sola escritura: solo si sigue libre)
   const { data: reservada, error: errReserva } = await (supabase.from('cresium_movimientos') as any)
     .update({ pago_cargado_en: new Date().toISOString(), pago_conductor_id: conductorId })
@@ -146,12 +151,17 @@ export async function registrarTransferencia(
   try {
     const cerrada = await semanaCerrada(conductorId, t.fecha)
     const sem = semanaISO(cerrada ? hoyART() : t.fecha)
-    const concepto = (await esPagoB1(conductorId, t.fecha)) ? CONCEPTO_TRANSFERENCIA_B1 : CONCEPTO_TRANSFERENCIA
+    const esB1 = opciones.esB1 ?? (await esPagoB1(conductorId, t.fecha))
+    const concepto = esB1 ? CONCEPTO_TRANSFERENCIA_B1
+      : opciones.esB1 === false ? CONCEPTO_TRANSFERENCIA_SALDO
+        : CONCEPTO_TRANSFERENCIA
+    // Quién pagó y su vínculo, para saber después de dónde vino (no se le muestra al conductor)
+    const detalle = opciones.vinculo ? `${t.contraparte || 'Sin nombre'} · ${opciones.vinculo}` : null
     const saldoId = await idSaldoConductor(conductorId)
 
     const { data: abono, error: errAbono } = await (supabase.from('abonos_conductores') as any)
       .insert({
-        conductor_id: conductorId, tipo: 'abono', monto: t.importe, concepto, referencia: null,
+        conductor_id: conductorId, tipo: 'abono', monto: t.importe, concepto, referencia: detalle,
         semana: sem.semana, anio: sem.anio,
         fecha_abono: t.procesado_en || `${t.fecha}T12:00:00-03:00`,
         created_by_name: usuario.nombre,
@@ -181,7 +191,7 @@ export async function registrarTransferencia(
         anio: sem.anio,
         tipo_movimiento: 'pago_manual',
         monto_movimiento: t.importe,
-        referencia: concepto,
+        referencia: detalle ? `${concepto} | ${detalle}` : concepto,
         saldo_adeudado: nuevoSaldo < 0 ? Math.abs(nuevoSaldo) : 0,
         saldo_a_favor: nuevoSaldo > 0 ? nuevoSaldo : 0,
         saldo_pendiente: nuevoSaldo,
@@ -198,7 +208,18 @@ export async function registrarTransferencia(
     if (opciones.recordar) {
       await asignarPagador(t as unknown as MovimientoCruce, conductorId, opciones.vinculo, usuario.id)
     }
-    return nuevoSaldo
+
+    // Conductor en B1: cuenta (o no) como pago diario según el tilde
+    let avisoB1: string | null = null
+    if (opciones.esB1 !== undefined) {
+      try {
+        await marcarTransferenciaB1(conductorId, t, abono.id, opciones.esB1, detalle, usuario)
+      } catch (errB1) {
+        console.error('No se pudo marcar la transferencia en Licencia B1:', errB1)
+        avisoB1 = errB1 instanceof Error ? errB1.message : 'No se pudo marcar en Licencia B1'
+      }
+    }
+    return { nuevoSaldo, avisoB1 }
   } catch (err) {
     // Si todavía no se tocó el saldo, se libera la transferencia para poder volver a intentar
     if (!saldoMovido) {

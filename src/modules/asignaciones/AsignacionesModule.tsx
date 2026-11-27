@@ -2017,18 +2017,19 @@ export function AsignacionesModule() {
       }
     })
 
-    // Ordenar: PROGRAMADOS primero, luego el resto por fecha de cita descendente
-    // Los registros sin fecha quedan al final
+    // Ordenar: PROGRAMADOS primero, por cita ascendente (la próxima entrega arriba);
+    // el resto por fecha de cita descendente. Los registros sin fecha quedan al final
     return asignacionesProcesadas.sort((a, b) => {
       // 1. PROGRAMADOS siempre primero
       const aEsProgramado = a.estado === 'programado' ? 0 : 1
       const bEsProgramado = b.estado === 'programado' ? 0 : 1
       if (aEsProgramado !== bEsProgramado) return aEsProgramado - bEsProgramado
 
-      // 2. Dentro de cada grupo, ordenar por fecha_programada descendente
-      const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : 0
-      const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : 0
-      return fechaB - fechaA
+      const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : null
+      const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : null
+      if (fechaA === null || fechaB === null) return (fechaA === null ? 1 : 0) - (fechaB === null ? 1 : 0)
+      // 2. Programados: la cita más próxima primero; el resto: la más reciente primero
+      return aEsProgramado === 0 ? fechaA - fechaB : fechaB - fechaA
     })
   }, [filteredAsignaciones])
 
